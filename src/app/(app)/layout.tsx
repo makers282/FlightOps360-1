@@ -1,8 +1,13 @@
+
 import type { PropsWithChildren } from 'react';
 import Link from 'next/link';
 import {
   Bell,
+  Calculator, // Added for New Quote
+  FileSpreadsheet, // Added for Quotes & Routing
   FileText,
+  FolderArchive, // Added for Crew Documents
+  GraduationCap, // Added for Crew Training
   LayoutDashboard,
   LogOut,
   Plane,
@@ -10,6 +15,7 @@ import {
   Settings,
   ShieldAlert,
   Users,
+  UsersRound, // Added for Crew Management
 } from 'lucide-react';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -36,7 +42,7 @@ import {
   SidebarMenuSubButton,
   SidebarInset,
   SidebarMenuBadge
-} from '@/components/ui/sidebar'; // Assuming this component exists and is set up
+} from '@/components/ui/sidebar';
 import { Icons } from '@/components/icons';
 
 
@@ -58,18 +64,48 @@ export default function AppLayout({ children }: PropsWithChildren) {
                 Dashboard
               </SidebarMenuButton>
             </SidebarMenuItem>
+
             <SidebarMenuItem>
-              <SidebarMenuButton href="/optimal-route" tooltip="Optimal Route">
-                <Route />
-                Optimal Route
+              <SidebarMenuButton isSubmenuTrigger tooltip="Quotes & Routing">
+                <FileSpreadsheet />
+                Quotes & Routing
               </SidebarMenuButton>
+              <SidebarMenuSub>
+                <SidebarMenuSubButton href="/quotes/new" tooltip="New Quote">
+                  <Calculator />
+                  New Quote
+                </SidebarMenuSubButton>
+                <SidebarMenuSubButton href="/optimal-route" tooltip="Optimal Route Planning">
+                  <Route />
+                  Optimal Route
+                </SidebarMenuSubButton>
+              </SidebarMenuSub>
             </SidebarMenuItem>
+
             <SidebarMenuItem>
               <SidebarMenuButton href="/documents" tooltip="Document Hub">
                 <FileText />
                 Document Hub
               </SidebarMenuButton>
             </SidebarMenuItem>
+
+            <SidebarMenuItem>
+              <SidebarMenuButton isSubmenuTrigger tooltip="Crew Management">
+                <UsersRound />
+                Crew Management
+              </SidebarMenuButton>
+              <SidebarMenuSub>
+                <SidebarMenuSubButton href="/crew/documents" tooltip="Crew Documents">
+                  <FolderArchive />
+                  Crew Documents
+                </SidebarMenuSubButton>
+                <SidebarMenuSubButton href="/crew/training" tooltip="Crew Training Records">
+                  <GraduationCap />
+                  Crew Training
+                </SidebarMenuSubButton>
+              </SidebarMenuSub>
+            </SidebarMenuItem>
+
             <SidebarMenuItem>
               <SidebarMenuButton href="/frat" tooltip="FRAT Integration">
                 <ShieldAlert />
