@@ -4,7 +4,7 @@ import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { List, ListItem } from '@/components/ui/list';
-import { AlertTriangle, Plane, Milestone, Users, FileText, ShieldAlert, Bell, LayoutDashboard, Megaphone, UserCheck, CalendarClock, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { AlertTriangle, Plane, Milestone, Users, FileText, ShieldAlert, Bell, LayoutDashboard, Megaphone, UserCheck, CalendarClock, AlertCircle, CheckCircle2, UsersRound } from 'lucide-react';
 import Image from 'next/image';
 import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -27,6 +27,7 @@ const aircraftData = [
 const tripData = [
   { id: 'TRP-001', origin: 'KHPN', destination: 'KMIA', aircraft: 'N123AB', status: 'Scheduled', departure: '2024-08-15 10:00 EDT' },
   { id: 'TRP-002', origin: 'KTEB', destination: 'KSDL', aircraft: 'N456CD', status: 'En Route', departure: '2024-08-14 14:30 EDT' },
+  { id: 'TRP-004', origin: 'KDAL', destination: 'KAPA', aircraft: 'N123AB', status: 'Awaiting Closeout', departure: '2024-08-15 18:00 CDT' },
   { id: 'TRP-003', origin: 'KLAX', destination: 'KLAS', aircraft: 'N789EF', status: 'Completed', departure: '2024-08-13 09:00 PDT' },
 ];
 
@@ -55,6 +56,7 @@ const getStatusBadgeVariant = (status: string) => {
       return 'secondary';
     case 'maintenance':
     case 'scheduled':
+    case 'awaiting closeout':
     case 'standby':
       return 'outline';
     default:
@@ -112,6 +114,37 @@ export default function DashboardPage() {
         </CardContent>
       </Card>
 
+      <Card className="md:col-span-2 lg:col-span-3 mb-6">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2"><Milestone className="h-5 w-5 text-primary" />Trip Status</CardTitle>
+            <CardDescription>Overview of current and upcoming trips.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Trip ID</TableHead>
+                  <TableHead>Route</TableHead>
+                  <TableHead>Aircraft</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Departure</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {tripData.map((trip) => (
+                  <TableRow key={trip.id}>
+                    <TableCell className="font-medium">{trip.id}</TableCell>
+                    <TableCell>{trip.origin} &rarr; {trip.destination}</TableCell>
+                    <TableCell>{trip.aircraft}</TableCell>
+                    <TableCell><Badge variant={getStatusBadgeVariant(trip.status)}>{trip.status}</Badge></TableCell>
+                    <TableCell>{trip.departure}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader>
@@ -161,37 +194,6 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
         
-        <Card className="md:col-span-2 lg:col-span-3">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2"><Milestone className="h-5 w-5 text-primary" />Trip Status</CardTitle>
-            <CardDescription>Overview of current and upcoming trips.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Trip ID</TableHead>
-                  <TableHead>Route</TableHead>
-                  <TableHead>Aircraft</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Departure</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {tripData.map((trip) => (
-                  <TableRow key={trip.id}>
-                    <TableCell className="font-medium">{trip.id}</TableCell>
-                    <TableCell>{trip.origin} &rarr; {trip.destination}</TableCell>
-                    <TableCell>{trip.aircraft}</TableCell>
-                    <TableCell><Badge variant={getStatusBadgeVariant(trip.status)}>{trip.status}</Badge></TableCell>
-                    <TableCell>{trip.departure}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><AlertTriangle className="h-5 w-5 text-destructive" />Active System Alerts</CardTitle>

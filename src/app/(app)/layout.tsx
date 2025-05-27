@@ -80,14 +80,6 @@ export default function AppLayout({ children }: PropsWithChildren) {
                   <Calendar />
                   Trip Calendar
                 </SidebarMenuSubButton>
-                <SidebarMenuSubButton href="/trips/crew-schedule" tooltip="Crew Schedule Calendar">
-                  <CalendarCheck2 />
-                  Crew Schedule
-                </SidebarMenuSubButton>
-                <SidebarMenuSubButton href="/trips/duty-time" tooltip="Duty Time Calendar">
-                  <CalendarClock />
-                  Duty Times
-                </SidebarMenuSubButton>
                 <SidebarMenuSubButton href="/trips/list" tooltip="Trip List View">
                   <ListChecks />
                   Trip List
@@ -136,6 +128,14 @@ export default function AppLayout({ children }: PropsWithChildren) {
                 <SidebarMenuSubButton href="/crew/training" tooltip="Crew Training Records">
                   <GraduationCap />
                   Crew Training
+                </SidebarMenuSubButton>
+                <SidebarMenuSubButton href="/trips/crew-schedule" tooltip="Crew Schedule Calendar">
+                  <CalendarCheck2 />
+                  Crew Schedule
+                </SidebarMenuSubButton>
+                <SidebarMenuSubButton href="/trips/duty-time" tooltip="Duty Time Calendar">
+                  <CalendarClock />
+                  Duty Times
                 </SidebarMenuSubButton>
               </SidebarMenuSub>
             </SidebarMenuItem>
