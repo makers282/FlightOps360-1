@@ -1,10 +1,13 @@
+
+import React from 'react';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { List, ListItem } from '@/components/ui/list'; // Assuming List components exist
-import { AlertTriangle, Plane, Milestone, Users, FileText, ShieldAlert, Bell, LayoutDashboard } from 'lucide-react';
+import { List, ListItem } from '@/components/ui/list';
+import { AlertTriangle, Plane, Milestone, Users, FileText, ShieldAlert, Bell, LayoutDashboard, Megaphone, UsersRound } from 'lucide-react';
 import Image from 'next/image';
 import { Separator } from '@/components/ui/separator';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   Table,
   TableBody,
@@ -27,17 +30,47 @@ const tripData = [
   { id: 'TRP-003', origin: 'KLAX', destination: 'KLAS', aircraft: 'N789EF', status: 'Completed', departure: '2024-08-13 09:00 PDT' },
 ];
 
+const bulletinData = [
+  { id: 'B001', title: 'Upcoming System Maintenance', message: 'Scheduled maintenance on Sunday at 02:00 UTC. Expect brief downtime.', date: '2024-08-20', type: 'warning' as 'info' | 'warning' | 'critical' },
+  { id: 'B002', title: 'New Catering Policy Effective Sept 1st', message: 'Please review the updated catering guidelines in the document hub.', date: '2024-08-18', type: 'info' as 'info' | 'warning' | 'critical' },
+  { id: 'B003', title: 'Mandatory Safety Briefing', message: 'All flight crew attend safety briefing on Aug 25th, 10:00 local.', date: '2024-08-17', type: 'critical' as 'info' | 'warning' | 'critical' },
+];
+
+const crewData = [
+  { id: 'CRW001', name: 'Capt. Ava Williams', role: 'Pilot', status: 'On Duty', assignment: 'FL123 (KMIA)', avatarUrl: 'https://placehold.co/100x100.png', dataAiHint: 'pilot portrait female' },
+  { id: 'CRW002', name: 'FO Ben Carter', role: 'First Officer', status: 'Standby', assignment: 'KHPN Base', avatarUrl: 'https://placehold.co/100x100.png', dataAiHint: 'copilot portrait male' },
+  { id: 'CRW003', name: 'FA Chloe Davis', role: 'Flight Attendant', status: 'Off Duty', assignment: '-', avatarUrl: 'https://placehold.co/100x100.png', dataAiHint: 'attendant portrait female' },
+  { id: 'CRW004', name: 'Eng. Mike Brown', role: 'Engineer', status: 'Maintenance', assignment: 'N789EF Hangar 3', avatarUrl: 'https://placehold.co/100x100.png', dataAiHint: 'engineer man serious' },
+];
+
+
 const getStatusBadgeVariant = (status: string) => {
   switch (status.toLowerCase()) {
     case 'available':
     case 'completed':
-      return 'default'; // Or a custom "success" variant if defined
+    case 'off duty':
+      return 'default';
     case 'in flight':
     case 'en route':
-      return 'secondary'; // Or a custom "active" variant
+    case 'on duty':
+      return 'secondary';
     case 'maintenance':
     case 'scheduled':
-      return 'outline'; // Or a custom "warning" variant
+    case 'standby':
+      return 'outline';
+    default:
+      return 'default';
+  }
+};
+
+const getBulletinBadgeVariant = (type: 'info' | 'warning' | 'critical') => {
+  switch (type) {
+    case 'info':
+      return 'default';
+    case 'warning':
+      return 'outline';
+    case 'critical':
+      return 'destructive';
     default:
       return 'default';
   }
@@ -49,6 +82,29 @@ export default function DashboardPage() {
     <>
       <PageHeader title="Dashboard" description="Real-time overview of flight operations." icon={LayoutDashboard} />
       
+      <Card className="mb-6 shadow-md border-primary/50">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><Megaphone className="h-5 w-5 text-primary" /> Company Bulletin Board</CardTitle>
+          <CardDescription>Latest news and announcements for all personnel.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <List>
+            {bulletinData.map((item, index) => (
+              <React.Fragment key={item.id}>
+                <ListItem className="flex flex-col sm:flex-row justify-between items-start sm:items-center py-3">
+                  <div className="flex-1 mb-2 sm:mb-0">
+                    <p className="font-semibold">{item.title} <span className="text-xs text-muted-foreground font-normal">- {item.date}</span></p>
+                    <p className="text-sm text-muted-foreground">{item.message}</p>
+                  </div>
+                  <Badge variant={getBulletinBadgeVariant(item.type)} className="capitalize">{item.type}</Badge>
+                </ListItem>
+                {index < bulletinData.length - 1 && <Separator />}
+              </React.Fragment>
+            ))}
+          </List>
+        </CardContent>
+      </Card>
+
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader>
@@ -102,6 +158,30 @@ export default function DashboardPage() {
                 <Badge variant="outline">Low</Badge>
               </ListItem>
             </List>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2"><UsersRound className="h-5 w-5 text-primary" />Crew Status</CardTitle>
+            <CardDescription>Current status and assignments of crew members.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {crewData.map((crew) => (
+                <div key={crew.id} className="flex items-center gap-4 p-3 rounded-lg hover:bg-muted/50 transition-colors">
+                  <Avatar className="h-12 w-12">
+                    <AvatarImage src={crew.avatarUrl} alt={crew.name} data-ai-hint={crew.dataAiHint} />
+                    <AvatarFallback>{crew.name.split(' ').map(n => n[0]).join('')}</AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1">
+                    <p className="font-semibold">{crew.name} <span className="text-sm text-muted-foreground font-normal">- {crew.role}</span></p>
+                    <p className="text-sm text-muted-foreground">Assignment: {crew.assignment}</p>
+                  </div>
+                  <Badge variant={getStatusBadgeVariant(crew.status)}>{crew.status}</Badge>
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
 
@@ -168,3 +248,4 @@ export default function DashboardPage() {
     </>
   );
 }
+    
