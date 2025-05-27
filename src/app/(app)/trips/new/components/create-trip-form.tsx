@@ -4,7 +4,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { z } from 'zod';
-import { useState, useTransition, useEffect } from 'react';
+import { useState, useTransition, useEffect } from 'react'; // Ensured useState and useEffect are imported
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,7 +14,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
-import { CalendarIcon, Loader2, Save, Users } from 'lucide-react';
+import { CalendarIcon, Loader2, Save } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { useToast } from '@/hooks/use-toast';
@@ -25,6 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Skeleton } from '@/components/ui/skeleton'; // Added Skeleton for placeholder
 
 const formSchema = z.object({
   tripId: z.string().min(3, "Trip ID must be at least 3 characters."),
@@ -65,6 +66,7 @@ export function CreateTripForm() {
   const [isPending, startTransition] = useTransition();
   const { toast } = useToast();
   const [minDepartureDate, setMinDepartureDate] = useState<Date | null>(null);
+  const [isClient, setIsClient] = useState(false); // State to track client-side mount
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -72,7 +74,7 @@ export function CreateTripForm() {
       tripId: '', 
       origin: '',
       destination: '',
-      // departureDateTime and arrivalDateTime will be undefined initially
+      // departureDateTime and arrivalDateTime will be undefined initially by react-hook-form if not set
       aircraftId: '',
       passengerCount: 1,
       clientName: '',
@@ -86,12 +88,13 @@ export function CreateTripForm() {
   const departureDateTimeValue = watch("departureDateTime");
 
   useEffect(() => {
-    // Generate tripId only on the client-side
+    setIsClient(true); // Component has mounted on the client
+
+    // Generate tripId only on the client-side if it's not already set
     if (!getValues('tripId')) {
       setValue('tripId', `TRP-${Math.random().toString(36).substring(2, 7).toUpperCase()}`);
     }
     
-    // Set minimum departure date on client-side
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     setMinDepartureDate(today);
@@ -172,48 +175,55 @@ export function CreateTripForm() {
                 render={({ field }) => (
                   <FormItem className="flex flex-col">
                     <FormLabel>Departure Date & Time</FormLabel>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <FormControl>
-                          <Button
-                            variant={"outline"}
-                            className={cn(
-                              "w-full pl-3 text-left font-normal",
-                              !field.value && "text-muted-foreground"
-                            )}
-                          >
-                            {field.value ? (
-                              format(field.value, "PPP HH:mm")
-                            ) : (
-                              <span>Pick a date and time</span>
-                            )}
-                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                          </Button>
-                        </FormControl>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={field.value}
-                          onSelect={field.onChange}
-                          disabled={(date) => minDepartureDate ? date < minDepartureDate : true}
-                          initialFocus
-                        />
-                         <div className="p-2 border-t border-border">
-                            <Input 
-                              type="time" 
-                              defaultValue={field.value ? format(field.value, "HH:mm") : ""}
-                              onChange={(e) => {
-                                const time = e.target.value;
-                                const [hours, minutes] = time.split(':').map(Number);
-                                const newDate = field.value ? new Date(field.value) : new Date();
-                                newDate.setHours(hours, minutes);
-                                field.onChange(newDate);
-                              }}
-                            />
-                         </div>
-                      </PopoverContent>
-                    </Popover>
+                    {isClient ? (
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <FormControl>
+                            <Button
+                              variant={"outline"}
+                              className={cn(
+                                "w-full pl-3 text-left font-normal",
+                                !field.value && "text-muted-foreground"
+                              )}
+                            >
+                              {field.value ? (
+                                format(field.value, "PPP HH:mm")
+                              ) : (
+                                <span>Pick a date and time</span>
+                              )}
+                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                            </Button>
+                          </FormControl>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={field.value}
+                            onSelect={field.onChange}
+                            disabled={(date) => minDepartureDate ? date < minDepartureDate : true}
+                            initialFocus
+                          />
+                          <div className="p-2 border-t border-border">
+                              <Input 
+                                type="time" 
+                                defaultValue={field.value ? format(new Date(field.value), "HH:mm") : ""}
+                                onChange={(e) => {
+                                  const time = e.target.value;
+                                  const [hours, minutes] = time.split(':').map(Number);
+                                  const newDate = field.value ? new Date(field.value) : new Date(); // Use current field date or new Date if not set
+                                  newDate.setHours(hours, minutes);
+                                  field.onChange(newDate);
+                                }}
+                              />
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                    ) : (
+                       <>
+                        <Skeleton className="h-10 w-full" />
+                        <span className="text-xs text-muted-foreground">Loading calendar...</span>
+                       </>
+                    )}
                     <FormMessage />
                   </FormItem>
                 )}
@@ -224,51 +234,58 @@ export function CreateTripForm() {
                 render={({ field }) => (
                   <FormItem className="flex flex-col">
                     <FormLabel>Arrival Date & Time</FormLabel>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <FormControl>
-                          <Button
-                            variant={"outline"}
-                            className={cn(
-                              "w-full pl-3 text-left font-normal",
-                              !field.value && "text-muted-foreground"
-                            )}
-                          >
-                            {field.value ? (
-                              format(field.value, "PPP HH:mm")
-                            ) : (
-                              <span>Pick a date and time</span>
-                            )}
-                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                          </Button>
-                        </FormControl>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={field.value}
-                          onSelect={field.onChange}
-                          disabled={(date) => {
-                            const depDate = departureDateTimeValue || minDepartureDate;
-                            return depDate ? date < depDate : (minDepartureDate ? date < minDepartureDate : true);
-                          }}
-                          initialFocus
-                        />
-                        <div className="p-2 border-t border-border">
-                            <Input 
-                              type="time" 
-                              defaultValue={field.value ? format(field.value, "HH:mm") : ""}
-                              onChange={(e) => {
-                                const time = e.target.value;
-                                const [hours, minutes] = time.split(':').map(Number);
-                                const newDate = field.value ? new Date(field.value) : new Date();
-                                newDate.setHours(hours, minutes);
-                                field.onChange(newDate);
-                              }}
-                            />
-                         </div>
-                      </PopoverContent>
-                    </Popover>
+                     {isClient ? (
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <FormControl>
+                            <Button
+                              variant={"outline"}
+                              className={cn(
+                                "w-full pl-3 text-left font-normal",
+                                !field.value && "text-muted-foreground"
+                              )}
+                            >
+                              {field.value ? (
+                                format(field.value, "PPP HH:mm")
+                              ) : (
+                                <span>Pick a date and time</span>
+                              )}
+                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                            </Button>
+                          </FormControl>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={field.value}
+                            onSelect={field.onChange}
+                            disabled={(date) => {
+                              const depDate = departureDateTimeValue || minDepartureDate;
+                              return depDate ? date < depDate : (minDepartureDate ? date < minDepartureDate : true);
+                            }}
+                            initialFocus
+                          />
+                          <div className="p-2 border-t border-border">
+                              <Input 
+                                type="time" 
+                                defaultValue={field.value ? format(new Date(field.value), "HH:mm") : ""}
+                                onChange={(e) => {
+                                  const time = e.target.value;
+                                  const [hours, minutes] = time.split(':').map(Number);
+                                   const newDate = field.value ? new Date(field.value) : new Date(); // Use current field date or new Date if not set
+                                  newDate.setHours(hours, minutes);
+                                  field.onChange(newDate);
+                                }}
+                              />
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                    ) : (
+                      <>
+                        <Skeleton className="h-10 w-full" />
+                        <span className="text-xs text-muted-foreground">Loading calendar...</span>
+                      </>
+                    )}
                     <FormMessage />
                   </FormItem>
                 )}
@@ -438,3 +455,4 @@ export function CreateTripForm() {
   );
 }
 
+    
