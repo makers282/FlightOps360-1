@@ -1,3 +1,4 @@
+
 "use client"
 
 import * as React from "react"
@@ -538,6 +539,7 @@ const SidebarMenuButton = React.forwardRef<
   React.ComponentProps<"button"> & {
     asChild?: boolean
     isActive?: boolean
+    isSubmenuTrigger?: boolean // Added prop to type definition
     tooltip?: string | React.ComponentProps<typeof TooltipContent>
   } & VariantProps<typeof sidebarMenuButtonVariants>
 >(
@@ -545,6 +547,7 @@ const SidebarMenuButton = React.forwardRef<
     {
       asChild = false,
       isActive = false,
+      isSubmenuTrigger, // Destructured prop
       variant = "default",
       size = "default",
       tooltip,
@@ -571,11 +574,9 @@ const SidebarMenuButton = React.forwardRef<
       return button
     }
 
-    if (typeof tooltip === "string") {
-      tooltip = {
-        children: tooltip,
-      }
-    }
+    // Ensure tooltip is an object for spreading if it's a string
+    const tooltipProps = typeof tooltip === 'string' ? { children: tooltip } : tooltip;
+
 
     return (
       <Tooltip>
@@ -584,7 +585,7 @@ const SidebarMenuButton = React.forwardRef<
           side="right"
           align="center"
           hidden={state !== "collapsed" || isMobile}
-          {...tooltip}
+          {...tooltipProps}
         />
       </Tooltip>
     )
