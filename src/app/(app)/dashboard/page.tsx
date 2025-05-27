@@ -4,7 +4,7 @@ import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { List, ListItem } from '@/components/ui/list';
-import { AlertTriangle, Plane, Milestone, Users, FileText, ShieldAlert, Bell, LayoutDashboard, Megaphone, UsersRound } from 'lucide-react';
+import { AlertTriangle, Plane, Milestone, Users, FileText, ShieldAlert, Bell, LayoutDashboard, Megaphone, UserCheck, CalendarClock, AlertCircle, CheckCircle2 } from 'lucide-react';
 import Image from 'next/image';
 import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -36,11 +36,10 @@ const bulletinData = [
   { id: 'B003', title: 'Mandatory Safety Briefing', message: 'All flight crew attend safety briefing on Aug 25th, 10:00 local.', date: '2024-08-17', type: 'critical' as 'info' | 'warning' | 'critical' },
 ];
 
-const crewData = [
-  { id: 'CRW001', name: 'Capt. Ava Williams', role: 'Pilot', status: 'On Duty', assignment: 'FL123 (KMIA)', avatarUrl: 'https://placehold.co/100x100.png', dataAiHint: 'pilot portrait female' },
-  { id: 'CRW002', name: 'FO Ben Carter', role: 'First Officer', status: 'Standby', assignment: 'KHPN Base', avatarUrl: 'https://placehold.co/100x100.png', dataAiHint: 'copilot portrait male' },
-  { id: 'CRW003', name: 'FA Chloe Davis', role: 'Flight Attendant', status: 'Off Duty', assignment: '-', avatarUrl: 'https://placehold.co/100x100.png', dataAiHint: 'attendant portrait female' },
-  { id: 'CRW004', name: 'Eng. Mike Brown', role: 'Engineer', status: 'Maintenance', assignment: 'N789EF Hangar 3', avatarUrl: 'https://placehold.co/100x100.png', dataAiHint: 'engineer man serious' },
+const crewAlertData = [
+  { id: 'CAL001', type: 'training' as 'training' | 'certification' | 'document', severity: 'warning' as 'info' | 'warning' | 'critical', title: 'Recurrency Due Soon', message: 'Capt. Ava Williams - Recurrency training due in 15 days.', icon: CalendarClock },
+  { id: 'CAL002', type: 'certification' as 'training' | 'certification' | 'document', severity: 'critical' as 'info' | 'warning' | 'critical', title: 'Medical Expired', message: 'FO Ben Carter - Medical certificate expired yesterday.', icon: AlertCircle },
+  { id: 'CAL003', type: 'document' as 'training' | 'certification' | 'document', severity: 'info' as 'info' | 'warning' | 'critical', title: 'Passport Updated', message: 'FA Chloe Davis - Passport updated in system.', icon: CheckCircle2 },
 ];
 
 
@@ -76,6 +75,14 @@ const getBulletinBadgeVariant = (type: 'info' | 'warning' | 'critical') => {
   }
 };
 
+const getAlertIcon = (alert: typeof crewAlertData[0]) => {
+  const Icon = alert.icon;
+  let iconColorClass = "text-primary";
+  if (alert.severity === 'warning') iconColorClass = "text-yellow-500";
+  if (alert.severity === 'critical') iconColorClass = "text-destructive";
+  if (alert.severity === 'info') iconColorClass = "text-blue-500";
+  return <Icon className={`h-5 w-5 ${iconColorClass}`} />;
+}
 
 export default function DashboardPage() {
   return (
@@ -129,62 +136,31 @@ export default function DashboardPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2"><AlertTriangle className="h-5 w-5 text-destructive" />Active Alerts</CardTitle>
-            <CardDescription>Critical notifications and warnings.</CardDescription>
+            <CardTitle className="flex items-center gap-2"><UserCheck className="h-5 w-5 text-primary" />Crew Alerts</CardTitle>
+            <CardDescription>Important crew notifications.</CardDescription>
           </CardHeader>
           <CardContent>
             <List>
-              <ListItem className="flex justify-between items-center">
-                <div>
-                  <p className="font-medium">N789EF Maintenance Due</p>
-                  <p className="text-sm text-muted-foreground">Scheduled A-Check approaching.</p>
-                </div>
-                <Badge variant="destructive">High</Badge>
-              </ListItem>
-              <Separator className="my-2" />
-              <ListItem className="flex justify-between items-center">
-                <div>
-                  <p className="font-medium">TRP-004 Weather Alert</p>
-                  <p className="text-sm text-muted-foreground">Thunderstorms forecasted for KDEN.</p>
-                </div>
-                <Badge variant="outline">Medium</Badge>
-              </ListItem>
-               <Separator className="my-2" />
-              <ListItem className="flex justify-between items-center">
-                <div>
-                  <p className="font-medium">Pilot Certification Expiring</p>
-                  <p className="text-sm text-muted-foreground">Capt. Smith - Recurrency due</p>
-                </div>
-                <Badge variant="outline">Low</Badge>
-              </ListItem>
+              {crewAlertData.map((alert, index) => (
+                <React.Fragment key={alert.id}>
+                  <ListItem className="flex items-start gap-3 py-2">
+                    {getAlertIcon(alert)}
+                    <div className="flex-1">
+                      <p className="font-medium text-sm">{alert.title}</p>
+                      <p className="text-xs text-muted-foreground">{alert.message}</p>
+                    </div>
+                     <Badge variant={getBulletinBadgeVariant(alert.severity)} className="capitalize text-xs">{alert.severity}</Badge>
+                  </ListItem>
+                  {index < crewAlertData.length - 1 && <Separator />}
+                </React.Fragment>
+              ))}
+               {crewAlertData.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-4">No crew alerts at this time.</p>
+              )}
             </List>
           </CardContent>
         </Card>
         
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2"><UsersRound className="h-5 w-5 text-primary" />Crew Status</CardTitle>
-            <CardDescription>Current status and assignments of crew members.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {crewData.map((crew) => (
-                <div key={crew.id} className="flex items-center gap-4 p-3 rounded-lg hover:bg-muted/50 transition-colors">
-                  <Avatar className="h-12 w-12">
-                    <AvatarImage src={crew.avatarUrl} alt={crew.name} data-ai-hint={crew.dataAiHint} />
-                    <AvatarFallback>{crew.name.split(' ').map(n => n[0]).join('')}</AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1">
-                    <p className="font-semibold">{crew.name} <span className="text-sm text-muted-foreground font-normal">- {crew.role}</span></p>
-                    <p className="text-sm text-muted-foreground">Assignment: {crew.assignment}</p>
-                  </div>
-                  <Badge variant={getStatusBadgeVariant(crew.status)}>{crew.status}</Badge>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
         <Card className="md:col-span-2 lg:col-span-3">
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><Milestone className="h-5 w-5 text-primary" />Trip Status</CardTitle>
@@ -218,13 +194,30 @@ export default function DashboardPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2"><Users className="h-5 w-5 text-primary" />User Management</CardTitle>
+            <CardTitle className="flex items-center gap-2"><AlertTriangle className="h-5 w-5 text-destructive" />Active System Alerts</CardTitle>
+            <CardDescription>Critical system notifications.</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-muted-foreground">Manage user roles and permissions.</p>
-            {/* Placeholder for user management summary */}
+            <List>
+              <ListItem className="flex justify-between items-center">
+                <div>
+                  <p className="font-medium">N789EF Maintenance Due</p>
+                  <p className="text-sm text-muted-foreground">Scheduled A-Check approaching.</p>
+                </div>
+                <Badge variant="destructive">High</Badge>
+              </ListItem>
+              <Separator className="my-2" />
+              <ListItem className="flex justify-between items-center">
+                <div>
+                  <p className="font-medium">TRP-004 Weather Alert</p>
+                  <p className="text-sm text-muted-foreground">Thunderstorms forecasted for KDEN.</p>
+                </div>
+                <Badge variant="outline">Medium</Badge>
+              </ListItem>
+            </List>
           </CardContent>
         </Card>
+
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><FileText className="h-5 w-5 text-primary" />Document Hub</CardTitle>

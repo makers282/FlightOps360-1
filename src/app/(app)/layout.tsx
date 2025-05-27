@@ -3,11 +3,11 @@ import type { PropsWithChildren } from 'react';
 import Link from 'next/link';
 import {
   Bell,
-  Calculator, // Added for New Quote
-  FileSpreadsheet, // Added for Quotes & Routing
+  Calculator, 
+  FileSpreadsheet, 
   FileText,
-  FolderArchive, // Added for Crew Documents
-  GraduationCap, // Added for Crew Training
+  FolderArchive, 
+  GraduationCap, 
   LayoutDashboard,
   LogOut,
   Plane,
@@ -15,7 +15,7 @@ import {
   Settings,
   ShieldAlert,
   Users,
-  UsersRound, // Added for Crew Management
+  UsersRound, 
 } from 'lucide-react';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -95,6 +95,10 @@ export default function AppLayout({ children }: PropsWithChildren) {
                 Crew Management
               </SidebarMenuButton>
               <SidebarMenuSub>
+                <SidebarMenuSubButton href="/crew/status" tooltip="Crew Status">
+                  <Users /> 
+                  Crew Status
+                </SidebarMenuSubButton>
                 <SidebarMenuSubButton href="/crew/documents" tooltip="Crew Documents">
                   <FolderArchive />
                   Crew Documents
