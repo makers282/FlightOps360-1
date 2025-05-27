@@ -4,7 +4,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { z } from 'zod';
-import { useState, useTransition } from 'react';
+import { useState, useTransition, useEffect } from 'react'; // Added useEffect
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -69,7 +69,7 @@ export function CreateTripForm() {
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      tripId: `TRP-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
+      tripId: '', // Initialize as empty
       origin: '',
       destination: '',
       aircraftId: '',
@@ -80,6 +80,15 @@ export function CreateTripForm() {
       notes: '',
     },
   });
+
+  const { setValue, getValues } = form;
+
+  useEffect(() => {
+    // Generate tripId only on the client-side after mount if it's not already set
+    if (!getValues('tripId')) {
+      setValue('tripId', `TRP-${Math.random().toString(36).substring(2, 7).toUpperCase()}`);
+    }
+  }, [setValue, getValues]); // Dependencies ensure effect runs correctly if form instance changes
 
   const onSubmit: SubmitHandler<FormData> = (data) => {
     startTransition(async () => {
