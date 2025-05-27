@@ -17,7 +17,6 @@ export const Icons = {
       height={height}
       className={className}
       data-ai-hint="company logo flightops360"
-      priority // Add priority as it's likely an LCP element for the sidebar
     />
   ),
 };
