@@ -8,7 +8,7 @@ import { Toaster } from "@/components/ui/toaster";
 // No need to call them as functions.
 
 export const metadata: Metadata = {
-  title: 'SkyBase - Flight Operations Management',
+  title: 'FlightOps360 - Flight Operations Management',
   description: 'Comprehensive operations management for FAA Part 135 charter operators.',
 };
 

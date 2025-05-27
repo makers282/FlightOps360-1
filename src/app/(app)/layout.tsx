@@ -59,7 +59,7 @@ export default function AppLayout({ children }: PropsWithChildren) {
         <SidebarHeader className="p-4">
           <Link href="/dashboard" className="flex items-center gap-2 text-lg font-semibold text-primary">
             <Icons.Logo className="h-7 w-7" />
-            <span>SkyBase</span>
+            <span>FlightOps360</span>
           </Link>
         </SidebarHeader>
         <SidebarContent>
