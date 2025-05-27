@@ -3,19 +3,24 @@ import type { PropsWithChildren } from 'react';
 import Link from 'next/link';
 import {
   Bell,
-  Calculator, 
-  FileSpreadsheet, 
+  Calculator,
+  Calendar,
+  CalendarCheck2,
+  CalendarClock,
+  CalendarDays,
+  FileSpreadsheet,
   FileText,
-  FolderArchive, 
-  GraduationCap, 
+  FolderArchive,
+  GraduationCap,
   LayoutDashboard,
+  ListChecks,
   LogOut,
   Plane,
   Route,
   Settings,
   ShieldAlert,
   Users,
-  UsersRound, 
+  UsersRound,
 } from 'lucide-react';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -66,6 +71,31 @@ export default function AppLayout({ children }: PropsWithChildren) {
             </SidebarMenuItem>
 
             <SidebarMenuItem>
+              <SidebarMenuButton isSubmenuTrigger tooltip="Trips">
+                <CalendarDays />
+                Trips
+              </SidebarMenuButton>
+              <SidebarMenuSub>
+                <SidebarMenuSubButton href="/trips/calendar" tooltip="Trip Calendar">
+                  <Calendar />
+                  Trip Calendar
+                </SidebarMenuSubButton>
+                <SidebarMenuSubButton href="/trips/crew-schedule" tooltip="Crew Schedule Calendar">
+                  <CalendarCheck2 />
+                  Crew Schedule
+                </SidebarMenuSubButton>
+                <SidebarMenuSubButton href="/trips/duty-time" tooltip="Duty Time Calendar">
+                  <CalendarClock />
+                  Duty Times
+                </SidebarMenuSubButton>
+                <SidebarMenuSubButton href="/trips/list" tooltip="Trip List View">
+                  <ListChecks />
+                  Trip List
+                </SidebarMenuSubButton>
+              </SidebarMenuSub>
+            </SidebarMenuItem>
+
+            <SidebarMenuItem>
               <SidebarMenuButton isSubmenuTrigger tooltip="Quotes & Routing">
                 <FileSpreadsheet />
                 Quotes & Routing
@@ -96,7 +126,7 @@ export default function AppLayout({ children }: PropsWithChildren) {
               </SidebarMenuButton>
               <SidebarMenuSub>
                 <SidebarMenuSubButton href="/crew/status" tooltip="Crew Status">
-                  <Users /> 
+                  <Users />
                   Crew Status
                 </SidebarMenuSubButton>
                 <SidebarMenuSubButton href="/crew/documents" tooltip="Crew Documents">
