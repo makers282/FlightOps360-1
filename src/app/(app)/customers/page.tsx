@@ -13,17 +13,23 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from '@/components/ui/badge';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 const customerData = [
-  { id: 'CUST001', name: 'John Doe', company: 'Doe Industries', email: 'john.doe@example.com', phone: '555-1234', notes: 'VIP Client, prefers morning flights.', lastActivity: '2024-08-10' },
-  { id: 'CUST002', name: 'Jane Smith', company: 'Smith Corp', email: 'jane.smith@example.com', phone: '555-5678', notes: 'Requires specific catering.', lastActivity: '2024-07-25' },
-  { id: 'CUST003', name: 'Robert Brown', company: 'Brown & Co.', email: 'robert.brown@example.com', phone: '555-8765', notes: 'Often books last minute.', lastActivity: '2024-08-01' },
-  { id: 'CUST004', name: 'Emily White', company: 'White Solutions', email: 'emily.white@example.com', phone: '555-4321', notes: 'Interested in block hours.', lastActivity: '2024-06-15' },
+  { id: 'CUST001', name: 'John Doe', company: 'Doe Industries', email: 'john.doe@example.com', phone: '555-1234', notes: 'VIP Client, prefers morning flights. Allergic to peanuts.', lastActivity: '2024-08-10' },
+  { id: 'CUST002', name: 'Jane Smith', company: 'Smith Corp', email: 'jane.smith@example.com', phone: '555-5678', notes: 'Requires specific catering (vegan options). Always travels with small dog.', lastActivity: '2024-07-25' },
+  { id: 'CUST003', name: 'Robert Brown', company: 'Brown & Co.', email: 'robert.brown@example.com', phone: '555-8765', notes: 'Often books last minute. Prefers aisle seat if on shared flights.', lastActivity: '2024-08-01' },
+  { id: 'CUST004', name: 'Emily White', company: 'White Solutions', email: 'emily.white@example.com', phone: '555-4321', notes: 'Interested in block hours. Usually flies with 2 assistants.', lastActivity: '2024-06-15' },
 ];
 
 export default function CustomersPage() {
   return (
-    <>
+    <TooltipProvider>
       <PageHeader 
         title="Customer Management" 
         description="View, add, and manage customer information."
@@ -53,6 +59,7 @@ export default function CustomersPage() {
                 <TableHead>Email</TableHead>
                 <TableHead>Phone</TableHead>
                 <TableHead>Last Activity</TableHead>
+                <TableHead>Notes</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -65,15 +72,43 @@ export default function CustomersPage() {
                   <TableCell>{customer.email}</TableCell>
                   <TableCell>{customer.phone}</TableCell>
                   <TableCell>{customer.lastActivity}</TableCell>
+                  <TableCell>
+                    {customer.notes.length > 50 ? (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="cursor-default">{customer.notes.substring(0, 50)}...</span>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" align="start" className="max-w-xs p-2 bg-popover text-popover-foreground border shadow-md rounded-md">
+                          <p className="text-sm">{customer.notes}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    ) : (
+                      customer.notes
+                    )}
+                  </TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" className="mr-1">
-                      <Edit3 className="h-4 w-4" />
-                      <span className="sr-only">Edit Customer</span>
-                    </Button>
-                    <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
-                      <Trash2 className="h-4 w-4" />
-                      <span className="sr-only">Delete Customer</span>
-                    </Button>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon" className="mr-1">
+                          <Edit3 className="h-4 w-4" />
+                          <span className="sr-only">Edit Customer</span>
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Edit Customer</p>
+                      </TooltipContent>
+                    </Tooltip>
+                     <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
+                            <Trash2 className="h-4 w-4" />
+                            <span className="sr-only">Delete Customer</span>
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Delete Customer</p>
+                        </TooltipContent>
+                    </Tooltip>
                   </TableCell>
                 </TableRow>
               ))}
@@ -88,6 +123,6 @@ export default function CustomersPage() {
           )}
         </CardContent>
       </Card>
-    </>
+    </TooltipProvider>
   );
 }

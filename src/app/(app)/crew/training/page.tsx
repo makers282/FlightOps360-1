@@ -14,6 +14,12 @@ import {
 } from "@/components/ui/table";
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 const trainingRecords = [
   { id: 'TRN001', crewMember: 'Capt. Ava Williams', avatarUrl: 'https://placehold.co/40x40.png', dataAiHint: 'pilot portrait', courseName: 'Recurrent Training - CJ3', status: 'Completed', completionDate: '2024-06-15', expiryDate: '2025-06-15', notes: 'Passed with high marks.' },
@@ -24,9 +30,9 @@ const trainingRecords = [
 
 const getStatusBadgeVariant = (status: string): "default" | "secondary" | "outline" | "destructive" => {
   switch (status.toLowerCase()) {
-    case 'completed': return 'default'; // Greenish or success
-    case 'scheduled': return 'secondary'; // Blueish or informational
-    case 'due': return 'destructive'; // Reddish or warning
+    case 'completed': return 'default'; 
+    case 'scheduled': return 'secondary';
+    case 'due': return 'destructive'; 
     default: return 'outline';
   }
 };
@@ -42,7 +48,7 @@ const getStatusIcon = (status: string) => {
 
 export default function CrewTrainingPage() {
   return (
-    <>
+    <TooltipProvider>
       <PageHeader 
         title="Crew Training Records" 
         description="Manage and track all crew training, qualifications, and recurrency."
@@ -71,6 +77,7 @@ export default function CrewTrainingPage() {
                 <TableHead>Status</TableHead>
                 <TableHead>Completion Date</TableHead>
                 <TableHead>Expiry Date</TableHead>
+                <TableHead>Notes</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -95,15 +102,43 @@ export default function CrewTrainingPage() {
                   </TableCell>
                   <TableCell>{record.completionDate}</TableCell>
                   <TableCell>{record.expiryDate}</TableCell>
+                  <TableCell>
+                    {record.notes && record.notes.length > 30 ? (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="cursor-default text-xs text-muted-foreground">{record.notes.substring(0, 30)}...</span>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" align="start" className="max-w-xs p-2 bg-popover text-popover-foreground border shadow-md rounded-md">
+                          <p className="text-sm">{record.notes}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">{record.notes}</span>
+                    )}
+                  </TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" className="mr-1">
-                      <Edit3 className="h-4 w-4" />
-                      <span className="sr-only">Edit Record</span>
-                    </Button>
-                    <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
-                      <Trash2 className="h-4 w-4" />
-                      <span className="sr-only">Delete Record</span>
-                    </Button>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon" className="mr-1">
+                          <Edit3 className="h-4 w-4" />
+                          <span className="sr-only">Edit Record</span>
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Edit Record</p>
+                      </TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
+                            <Trash2 className="h-4 w-4" />
+                            <span className="sr-only">Delete Record</span>
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Delete Record</p>
+                        </TooltipContent>
+                    </Tooltip>
                   </TableCell>
                 </TableRow>
               ))}
@@ -118,6 +153,6 @@ export default function CrewTrainingPage() {
           )}
         </CardContent>
       </Card>
-    </>
+    </TooltipProvider>
   );
 }
