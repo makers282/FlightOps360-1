@@ -8,6 +8,7 @@ import {
   CalendarCheck2,
   CalendarClock,
   CalendarDays,
+  CalendarPlus, // Added for New Trip
   FileSpreadsheet,
   FileText,
   FolderArchive,
@@ -76,6 +77,10 @@ export default function AppLayout({ children }: PropsWithChildren) {
                 Trips
               </SidebarMenuButton>
               <SidebarMenuSub>
+                <SidebarMenuSubButton href="/trips/new" tooltip="Create New Trip">
+                  <CalendarPlus />
+                  New Trip
+                </SidebarMenuSubButton>
                 <SidebarMenuSubButton href="/trips/calendar" tooltip="Trip Calendar">
                   <Calendar />
                   Trip Calendar
