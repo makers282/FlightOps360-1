@@ -4,7 +4,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { z } from 'zod';
-import { useState, useTransition, useEffect } from 'react'; // Added useEffect
+import { useState, useTransition, useEffect } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -34,7 +34,7 @@ const formSchema = z.object({
   arrivalDateTime: z.date({ required_error: "Arrival date and time are required." }),
   aircraftId: z.string().min(1, "Aircraft selection is required."),
   passengerCount: z.coerce.number().min(1, "At least one passenger is required.").int(),
-  clientName: z.string().min(2, "Client name is required."), // In a real app, this might be a lookup/select from Customers
+  clientName: z.string().min(2, "Client name is required."),
   status: z.enum(["Scheduled", "En Route", "Awaiting Closeout", "Completed", "Cancelled"]),
   selectedCrewIds: z.array(z.string()).refine(value => value.length > 0, {
     message: "At least one crew member must be selected.",
@@ -44,7 +44,6 @@ const formSchema = z.object({
 
 type FormData = z.infer<typeof formSchema>;
 
-// Sample data - replace with actual data fetching in a real app
 const availableAircraft = [
   { id: 'N123AB', name: 'N123AB - Cessna Citation CJ3' },
   { id: 'N456CD', name: 'N456CD - Bombardier Global 6000' },
@@ -65,13 +64,15 @@ const tripStatuses = ["Scheduled", "En Route", "Awaiting Closeout", "Completed",
 export function CreateTripForm() {
   const [isPending, startTransition] = useTransition();
   const { toast } = useToast();
+  const [minDepartureDate, setMinDepartureDate] = useState<Date | null>(null);
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      tripId: '', // Initialize as empty
+      tripId: '', 
       origin: '',
       destination: '',
+      // departureDateTime and arrivalDateTime will be undefined initially
       aircraftId: '',
       passengerCount: 1,
       clientName: '',
@@ -81,14 +82,21 @@ export function CreateTripForm() {
     },
   });
 
-  const { setValue, getValues } = form;
+  const { setValue, getValues, watch } = form;
+  const departureDateTimeValue = watch("departureDateTime");
 
   useEffect(() => {
-    // Generate tripId only on the client-side after mount if it's not already set
+    // Generate tripId only on the client-side
     if (!getValues('tripId')) {
       setValue('tripId', `TRP-${Math.random().toString(36).substring(2, 7).toUpperCase()}`);
     }
-  }, [setValue, getValues]); // Dependencies ensure effect runs correctly if form instance changes
+    
+    // Set minimum departure date on client-side
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    setMinDepartureDate(today);
+
+  }, [setValue, getValues]);
 
   const onSubmit: SubmitHandler<FormData> = (data) => {
     startTransition(async () => {
@@ -102,7 +110,7 @@ export function CreateTripForm() {
         ),
         variant: "default",
       });
-      // form.reset(); // Optionally reset form after submission
+      // form.reset(); 
     });
   };
 
@@ -122,7 +130,7 @@ export function CreateTripForm() {
                 <FormItem>
                   <FormLabel>Trip ID</FormLabel>
                   <FormControl>
-                    <Input placeholder="e.g., TRP-001" {...field} />
+                    <Input placeholder="e.g., TRP-001" {...field} value={field.value || ''} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -188,7 +196,7 @@ export function CreateTripForm() {
                           mode="single"
                           selected={field.value}
                           onSelect={field.onChange}
-                          disabled={(date) => date < new Date(new Date().setHours(0,0,0,0)) }
+                          disabled={(date) => minDepartureDate ? date < minDepartureDate : true}
                           initialFocus
                         />
                          <div className="p-2 border-t border-border">
@@ -240,7 +248,10 @@ export function CreateTripForm() {
                           mode="single"
                           selected={field.value}
                           onSelect={field.onChange}
-                          disabled={(date) => form.getValues("departureDateTime") ? date < form.getValues("departureDateTime") : date < new Date(new Date().setHours(0,0,0,0)) }
+                          disabled={(date) => {
+                            const depDate = departureDateTimeValue || minDepartureDate;
+                            return depDate ? date < depDate : (minDepartureDate ? date < minDepartureDate : true);
+                          }}
                           initialFocus
                         />
                         <div className="p-2 border-t border-border">
@@ -348,7 +359,7 @@ export function CreateTripForm() {
                                 checked={field.value?.includes(crew.id)}
                                 onCheckedChange={(checked) => {
                                   return checked
-                                    ? field.onChange([...field.value || [], crew.id])
+                                    ? field.onChange([...(field.value || []), crew.id])
                                     : field.onChange(
                                         (field.value || []).filter(
                                           (value) => value !== crew.id
@@ -426,3 +437,4 @@ export function CreateTripForm() {
     </Card>
   );
 }
+
