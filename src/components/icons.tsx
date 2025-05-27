@@ -1,22 +1,15 @@
 import React from 'react';
+import { Plane } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import Image from 'next/image';
 
 interface LogoProps {
   className?: string;
-  width?: number;
-  height?: number;
+  // width and height are removed as they are specific to next/image
 }
 
 export const Icons = {
-  Logo: ({ className, width = 115, height = 28 }: LogoProps) => (
-    <Image
-      // IMPORTANT: Replace this src with the actual URL of your hosted logo image.
-      src="https://placehold.co/115x28.png" 
-      alt="FlightOps360 Logo"
-      width={width}
-      height={height}
-      className={className}
-      data-ai-hint="company logo flightops360"
-    />
+  Logo: ({ className }: LogoProps) => (
+    <Plane className={cn("h-7 w-7", className)} />
   ),
 };

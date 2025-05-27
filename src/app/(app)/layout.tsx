@@ -17,13 +17,13 @@ import {
   LayoutDashboard,
   ListChecks,
   LogOut,
-  Plane,
+  Plane, // Keep Plane import if used elsewhere, or remove if only for the old logo
   Route,
   Settings,
   ShieldAlert,
   Users, 
   UsersRound, 
-  FileArchive, // Added if used, for crew docs
+  FileArchive,
 } from 'lucide-react';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -59,9 +59,9 @@ export default function AppLayout({ children }: PropsWithChildren) {
     <SidebarProvider defaultOpen>
       <Sidebar>
         <SidebarHeader className="p-4">
-          <Link href="/dashboard" className="flex items-center text-lg font-semibold text-primary">
+          <Link href="/dashboard" className="flex items-center gap-2 text-lg font-semibold text-primary">
             <Icons.Logo />
-            {/* The span for FlightOps360 is removed as the logo image should contain the text */}
+            <span>FlightOps360</span>
           </Link>
         </SidebarHeader>
         <SidebarContent>
