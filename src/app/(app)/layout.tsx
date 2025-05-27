@@ -20,8 +20,9 @@ import {
   Route,
   Settings,
   ShieldAlert,
-  Users, // Keep Users for general user management like roles
-  UsersRound, // Use for Customers and Crew Management main icon
+  Users, 
+  UsersRound, 
+  FileArchive, // Added if used, for crew docs
 } from 'lucide-react';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -57,9 +58,9 @@ export default function AppLayout({ children }: PropsWithChildren) {
     <SidebarProvider defaultOpen>
       <Sidebar>
         <SidebarHeader className="p-4">
-          <Link href="/dashboard" className="flex items-center gap-2 text-lg font-semibold text-primary">
-            <Icons.Logo className="h-7 w-7" />
-            <span>FlightOps360</span>
+          <Link href="/dashboard" className="flex items-center text-lg font-semibold text-primary">
+            <Icons.Logo />
+            {/* The span for FlightOps360 is removed as the logo image should contain the text */}
           </Link>
         </SidebarHeader>
         <SidebarContent>
@@ -129,7 +130,7 @@ export default function AppLayout({ children }: PropsWithChildren) {
                 Crew Management
               </SidebarMenuButton>
               <SidebarMenuSub>
-                <SidebarMenuSubButton href="/crew/status" tooltip="Crew Status">
+                 <SidebarMenuSubButton href="/crew/status" tooltip="Crew Status">
                   <Users />
                   Crew Status
                 </SidebarMenuSubButton>
