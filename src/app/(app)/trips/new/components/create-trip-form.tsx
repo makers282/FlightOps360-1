@@ -13,7 +13,8 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { CalendarIcon, Loader2, Save } from 'lucide-react';
+import { Checkbox } from "@/components/ui/checkbox";
+import { CalendarIcon, Loader2, Save, Users } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { useToast } from '@/hooks/use-toast';
@@ -33,8 +34,11 @@ const formSchema = z.object({
   arrivalDateTime: z.date({ required_error: "Arrival date and time are required." }),
   aircraftId: z.string().min(1, "Aircraft selection is required."),
   passengerCount: z.coerce.number().min(1, "At least one passenger is required.").int(),
-  clientName: z.string().min(2, "Client name is required."),
+  clientName: z.string().min(2, "Client name is required."), // In a real app, this might be a lookup/select from Customers
   status: z.enum(["Scheduled", "En Route", "Awaiting Closeout", "Completed", "Cancelled"]),
+  selectedCrewIds: z.array(z.string()).refine(value => value.length > 0, {
+    message: "At least one crew member must be selected.",
+  }).optional().default([]),
   notes: z.string().optional(),
 });
 
@@ -47,6 +51,14 @@ const availableAircraft = [
   { id: 'N789EF', name: 'N789EF - Gulfstream G650ER' },
 ];
 
+const sampleCrewData = [
+  { id: 'CRW001', name: 'Capt. Ava Williams', qualification: 'Pilot, PIC Type A' },
+  { id: 'CRW002', name: 'FO Ben Carter', qualification: 'First Officer, Type A/B' },
+  { id: 'CRW003', name: 'FA Chloe Davis', qualification: 'Flight Attendant, Lead' },
+  { id: 'CRW004', name: 'Capt. John Smith', qualification: 'Pilot, PIC Type B' },
+  { id: 'CRW005', name: 'FA Olivia Green', qualification: 'Flight Attendant' },
+];
+
 const tripStatuses = ["Scheduled", "En Route", "Awaiting Closeout", "Completed", "Cancelled"] as const;
 
 
@@ -57,22 +69,20 @@ export function CreateTripForm() {
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      tripId: `TRP-${Math.random().toString(36).substring(2, 7).toUpperCase()}`, // Auto-generate a default ID
+      tripId: `TRP-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
       origin: '',
       destination: '',
-      // departureDateTime: undefined, // Let user pick
-      // arrivalDateTime: undefined, // Let user pick
       aircraftId: '',
       passengerCount: 1,
       clientName: '',
       status: "Scheduled",
+      selectedCrewIds: [],
       notes: '',
     },
   });
 
   const onSubmit: SubmitHandler<FormData> = (data) => {
     startTransition(async () => {
-      // In a real app, you would send this data to your backend
       console.log('Trip Data:', data);
       toast({
         title: "Trip Creation Submitted",
@@ -88,7 +98,7 @@ export function CreateTripForm() {
   };
 
   return (
-    <Card className="shadow-lg max-w-2xl mx-auto">
+    <Card className="shadow-lg max-w-3xl mx-auto">
       <CardHeader>
         <CardTitle>New Trip Details</CardTitle>
         <CardDescription>Fill in the information below to log a new flight trip.</CardDescription>
@@ -169,7 +179,7 @@ export function CreateTripForm() {
                           mode="single"
                           selected={field.value}
                           onSelect={field.onChange}
-                          disabled={(date) => date < new Date(new Date().setHours(0,0,0,0)) } // Disable past dates
+                          disabled={(date) => date < new Date(new Date().setHours(0,0,0,0)) }
                           initialFocus
                         />
                          <div className="p-2 border-t border-border">
@@ -270,33 +280,88 @@ export function CreateTripForm() {
               )}
             />
 
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+              <FormField
+                control={form.control}
+                name="passengerCount"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Number of Passengers</FormLabel>
+                    <FormControl>
+                      <Input type="number" placeholder="e.g., 4" {...field} min="1" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={form.control}
+                name="clientName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Client Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g., John Doe Aviation LLC" {...field} />
+                    </FormControl>
+                    <FormDescription>For a real app, this might be a searchable select from your customer list.</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
             <FormField
               control={form.control}
-              name="passengerCount"
-              render={({ field }) => (
+              name="selectedCrewIds"
+              render={() => (
                 <FormItem>
-                  <FormLabel>Number of Passengers</FormLabel>
-                  <FormControl>
-                    <Input type="number" placeholder="e.g., 4" {...field} min="1" />
-                  </FormControl>
+                  <div className="mb-4">
+                    <FormLabel className="text-base">Assign Crew</FormLabel>
+                    <FormDescription>
+                      Select the crew members assigned to this trip.
+                    </FormDescription>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {sampleCrewData.map((crew) => (
+                    <FormField
+                      key={crew.id}
+                      control={form.control}
+                      name="selectedCrewIds"
+                      render={({ field }) => {
+                        return (
+                          <FormItem
+                            key={crew.id}
+                            className="flex flex-row items-center space-x-3 space-y-0 p-3 border rounded-md hover:bg-muted/50"
+                          >
+                            <FormControl>
+                              <Checkbox
+                                checked={field.value?.includes(crew.id)}
+                                onCheckedChange={(checked) => {
+                                  return checked
+                                    ? field.onChange([...field.value || [], crew.id])
+                                    : field.onChange(
+                                        (field.value || []).filter(
+                                          (value) => value !== crew.id
+                                        )
+                                      );
+                                }}
+                              />
+                            </FormControl>
+                            <FormLabel className="font-normal text-sm">
+                              {crew.name} <span className="text-xs text-muted-foreground">({crew.qualification})</span>
+                            </FormLabel>
+                          </FormItem>
+                        );
+                      }}
+                    />
+                  ))}
+                  </div>
                   <FormMessage />
                 </FormItem>
               )}
             />
-            
-            <FormField
-              control={form.control}
-              name="clientName"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Client Name</FormLabel>
-                  <FormControl>
-                    <Input placeholder="e.g., John Doe Aviation LLC" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+
 
             <FormField
               control={form.control}

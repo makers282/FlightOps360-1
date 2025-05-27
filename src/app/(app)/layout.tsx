@@ -8,7 +8,7 @@ import {
   CalendarCheck2,
   CalendarClock,
   CalendarDays,
-  CalendarPlus, // Added for New Trip
+  CalendarPlus,
   FileSpreadsheet,
   FileText,
   FolderArchive,
@@ -20,8 +20,8 @@ import {
   Route,
   Settings,
   ShieldAlert,
-  Users,
-  UsersRound,
+  Users, // Keep Users for general user management like roles
+  UsersRound, // Use for Customers and Crew Management main icon
 } from 'lucide-react';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -90,6 +90,13 @@ export default function AppLayout({ children }: PropsWithChildren) {
                   Trip List
                 </SidebarMenuSubButton>
               </SidebarMenuSub>
+            </SidebarMenuItem>
+
+            <SidebarMenuItem>
+              <SidebarMenuButton href="/customers" tooltip="Customers">
+                <UsersRound />
+                Customers
+              </SidebarMenuButton>
             </SidebarMenuItem>
 
             <SidebarMenuItem>
