@@ -1,7 +1,7 @@
 
 // src/services/mockFboService.ts
 
-import type { Fbo } from '@/ai/tools/get-fbos-tool'; // We'll define Fbo type in the tool file
+import type { Fbo } from '@/ai/tools/get-fbos-tool';
 
 const sampleFboData: Fbo[] = [
   // KJFK FBOs
@@ -113,22 +113,25 @@ export async function getFbosByAirportCode(airportCode: string): Promise<Fbo[]> 
   await new Promise(resolve => setTimeout(resolve, 500));
   
   const upperAirportCode = airportCode.toUpperCase();
-  const fbos = sampleFboData.filter(fbo => fbo.airportCode.toUpperCase() === upperAirportCode);
-  
-  // Simulate an API that might not find FBOs for all airports
-  if (fbos.length === 0 && !['KJFK', 'KLAX', 'KMIA', 'KTEB'].includes(upperAirportCode)) {
+  const specificFbos = sampleFboData.filter(fbo => fbo.airportCode.toUpperCase() === upperAirportCode);
+
+  if (specificFbos.length > 0) {
+    return specificFbos;
+  } else {
+    // No specific FBOs found for this airport code, return a generic one.
+    // For a real application, you might want to return an empty array if no FBOs exist,
+    // but for this mock, we'll always provide at least a generic option for any 3+ char code.
     // console.log(`MockFboService: No specific FBOs found for ${airportCode}, returning generic.`);
-    // Return a generic "Other FBO" option if no specific FBOs are mocked for the airport
     return [
       {
         id: `${upperAirportCode}-OTHER`,
         name: `Other FBO at ${upperAirportCode}`,
         airportCode: upperAirportCode,
+        contactPhone: 'N/A',
         fuelTypes: ['Jet A', 'Avgas 100LL'],
-        services: ['Basic Handling'],
-        fees: [{ type: 'Standard Handling', amount: 200}]
+        services: ['Basic Handling', 'Fueling'],
+        fees: [{ type: 'Standard Handling', amount: 200, notes: "Estimated fee"}]
       }
     ];
   }
-  return fbos;
 }
