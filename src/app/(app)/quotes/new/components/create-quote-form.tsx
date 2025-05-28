@@ -13,7 +13,8 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { CalendarIcon, Loader2, Save } from 'lucide-react';
+import { Checkbox } from "@/components/ui/checkbox";
+import { CalendarIcon, Loader2, Save, Users, Briefcase, Utensils,Landmark, BedDouble } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { useToast } from '@/hooks/use-toast';
@@ -26,16 +27,26 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from '@/components/ui/skeleton';
 
+const legTypes = [
+  "Charter", "Owner", "Positioning", "Ambulance", "Cargo", "Maintenance", "Ferry"
+] as const;
+
 const formSchema = z.object({
   quoteId: z.string().min(3, "Quote ID must be at least 3 characters."),
   clientName: z.string().min(2, "Client name is required."),
   clientEmail: z.string().email("Invalid email address."),
-  clientPhone: z.string().min(7, "Phone number seems too short.").optional(),
+  clientPhone: z.string().min(7, "Phone number seems too short.").optional().or(z.literal('')),
   origin: z.string().min(3, "Origin airport code (e.g., JFK).").max(5),
   destination: z.string().min(3, "Destination airport code (e.g., LAX).").max(5),
   departureDateTime: z.date({ required_error: "Departure date and time are required." }),
   passengerCount: z.coerce.number().min(1, "At least one passenger is required.").int(),
-  aircraftType: z.string().optional(), // Or make it required if always needed for a quote
+  aircraftType: z.string().min(1, "Aircraft type is required."), 
+  legType: z.enum(legTypes, { required_error: "Leg type is required." }),
+  medicsRequested: z.boolean().optional().default(false),
+  cateringRequested: z.boolean().optional().default(false),
+  cateringNotes: z.string().optional(),
+  includeLandingFees: z.boolean().optional().default(false),
+  estimatedOvernights: z.coerce.number().int().min(0).optional().default(0),
   notes: z.string().optional(),
 });
 
@@ -45,9 +56,9 @@ const availableAircraft = [
   { id: 'N123AB', name: 'N123AB - Cessna Citation CJ3' },
   { id: 'N456CD', name: 'N456CD - Bombardier Global 6000' },
   { id: 'N789EF', name: 'N789EF - Gulfstream G650ER' },
-  { id: 'ANY_LIGHT', name: 'Any Light Jet' },
-  { id: 'ANY_MID', name: 'Any Midsize Jet' },
-  { id: 'ANY_HEAVY', name: 'Any Heavy Jet' },
+  { id: 'LIGHT_JET', name: 'Category: Light Jet' },
+  { id: 'MID_JET', name: 'Category: Midsize Jet' },
+  { id: 'HEAVY_JET', name: 'Category: Heavy Jet' },
 ];
 
 export function CreateQuoteForm() {
@@ -67,11 +78,18 @@ export function CreateQuoteForm() {
       destination: '',
       passengerCount: 1,
       aircraftType: '',
+      legType: "Charter",
+      medicsRequested: false,
+      cateringRequested: false,
+      cateringNotes: "",
+      includeLandingFees: false,
+      estimatedOvernights: 0,
       notes: '',
     },
   });
 
-  const { setValue, getValues } = form;
+  const { setValue, getValues, watch } = form;
+  const cateringRequestedValue = watch("cateringRequested");
 
   useEffect(() => {
     setIsClient(true);
@@ -86,16 +104,21 @@ export function CreateQuoteForm() {
   const onSubmit: SubmitHandler<FormData> = (data) => {
     startTransition(async () => {
       console.log('Quote Data:', data);
+      // Filter out cateringNotes if cateringRequested is false
+      const finalData = {
+        ...data,
+        cateringNotes: data.cateringRequested ? data.cateringNotes : undefined,
+      };
       toast({
         title: "Quote Generation Submitted",
         description: (
           <pre className="mt-2 w-[340px] rounded-md bg-slate-950 p-4">
-            <code className="text-white">{JSON.stringify(data, null, 2)}</code>
+            <code className="text-white">{JSON.stringify(finalData, null, 2)}</code>
           </pre>
         ),
         variant: "default",
       });
-      // form.reset(); 
+      // form.reset(); // Consider if resetting is desired or not
     });
   };
 
@@ -213,7 +236,7 @@ export function CreateQuoteForm() {
                             )}
                           >
                             {field.value ? (
-                              format(field.value, "PPP HH:mm")
+                              format(new Date(field.value), "PPP HH:mm")
                             ) : (
                               <span>Pick a date and time</span>
                             )}
@@ -256,7 +279,7 @@ export function CreateQuoteForm() {
             />
             
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-                 <FormField
+              <FormField
                 control={form.control}
                 name="passengerCount"
                 render={({ field }) => (
@@ -274,7 +297,7 @@ export function CreateQuoteForm() {
                 name="aircraftType"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Preferred Aircraft Type (Optional)</FormLabel>
+                    <FormLabel>Aircraft Type</FormLabel>
                     <Select onValueChange={field.onChange} defaultValue={field.value}>
                       <FormControl>
                         <SelectTrigger>
@@ -294,15 +317,124 @@ export function CreateQuoteForm() {
                 )}
               />
             </div>
+             <FormField
+                control={form.control}
+                name="legType"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Leg Type</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select leg type" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {legTypes.map(type => (
+                          <SelectItem key={type} value={type}>
+                            {type}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+            <CardTitle className="text-xl border-b pb-2 pt-4">Additional Options</CardTitle>
+            <div className="space-y-4">
+              <FormField
+                control={form.control}
+                name="medicsRequested"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center space-x-3 space-y-0 p-3 border rounded-md hover:bg-muted/50">
+                    <FormControl>
+                      <Checkbox
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                    <div className="space-y-1 leading-none">
+                      <FormLabel className="flex items-center gap-2"><Users className="h-4 w-4 text-primary" /> Medics Requested</FormLabel>
+                    </div>
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="cateringRequested"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center space-x-3 space-y-0 p-3 border rounded-md hover:bg-muted/50">
+                    <FormControl>
+                      <Checkbox
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                    <div className="space-y-1 leading-none">
+                      <FormLabel className="flex items-center gap-2"><Utensils className="h-4 w-4 text-primary" /> Catering Requested</FormLabel>
+                    </div>
+                  </FormItem>
+                )}
+              />
+              {cateringRequestedValue && (
+                <FormField
+                  control={form.control}
+                  name="cateringNotes"
+                  render={({ field }) => (
+                    <FormItem className="pl-8">
+                      <FormLabel>Catering Notes</FormLabel>
+                      <FormControl>
+                        <Textarea placeholder="Specify catering details (e.g., vegan options, specific drinks)..." {...field} rows={3} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+               <FormField
+                control={form.control}
+                name="includeLandingFees"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center space-x-3 space-y-0 p-3 border rounded-md hover:bg-muted/50">
+                    <FormControl>
+                      <Checkbox
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                    <div className="space-y-1 leading-none">
+                      <FormLabel className="flex items-center gap-2"><Landmark className="h-4 w-4 text-primary" /> Include Estimated Landing Fees</FormLabel>
+                    </div>
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="estimatedOvernights"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="flex items-center gap-2"><BedDouble className="h-4 w-4 text-primary"/> Estimated Overnights</FormLabel>
+                    <FormControl>
+                      <Input type="number" placeholder="e.g., 2" {...field} min="0" />
+                    </FormControl>
+                    <FormDescription>Number of overnight stays for crew/aircraft if applicable.</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
 
             <FormField
               control={form.control}
               name="notes"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Special Requests / Notes (Optional)</FormLabel>
+                  <FormLabel>General Quote Notes (Optional)</FormLabel>
                   <FormControl>
-                    <Textarea placeholder="e.g., Catering requirements, specific FBO preference..." {...field} rows={4} />
+                    <Textarea placeholder="e.g., Specific client preferences, discount applied..." {...field} rows={4} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -324,3 +456,4 @@ export function CreateQuoteForm() {
     </Card>
   );
 }
+
