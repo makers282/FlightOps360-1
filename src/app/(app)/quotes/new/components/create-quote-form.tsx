@@ -14,7 +14,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
-import { CalendarIcon, Loader2, Save, Users, Briefcase, Utensils, Landmark, BedDouble, PlaneTakeoff, PlaneLanding, PlusCircle, Trash2, GripVertical, Wand2, Info, Eye, Send } from 'lucide-react';
+import { CalendarIcon, Loader2, Save, Users, Briefcase, Utensils, Landmark, BedDouble, PlaneTakeoff, PlaneLanding, PlusCircle, Trash2, GripVertical, Wand2, Info, Eye, Send, Building } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { useToast } from '@/hooks/use-toast';
@@ -40,6 +40,9 @@ const legSchema = z.object({
   destination: z.string().min(3, "Destination airport code (e.g., LAX).").max(5, "Destination airport code too long."),
   departureDateTime: z.date({ required_error: "Departure date and time are required." }),
   legType: z.enum(legTypes, { required_error: "Leg type is required." }),
+  passengerCount: z.coerce.number().min(0, "Passenger count cannot be negative.").int().default(1),
+  originFbo: z.string().optional(),
+  destinationFbo: z.string().optional(),
 });
 
 const formSchema = z.object({
@@ -50,7 +53,6 @@ const formSchema = z.object({
   
   legs: z.array(legSchema).min(1, "At least one flight leg is required."),
 
-  passengerCount: z.coerce.number().min(1, "At least one passenger is required.").int(),
   aircraftType: z.string().min(1, "Aircraft type is required."), 
   medicsRequested: z.boolean().optional().default(false),
   cateringRequested: z.boolean().optional().default(false),
@@ -61,6 +63,10 @@ const formSchema = z.object({
 });
 
 type FormData = z.infer<typeof formSchema>;
+
+export type LegFormData = z.infer<typeof legSchema>;
+export type FullQuoteFormData = z.infer<typeof formSchema>;
+
 
 type LegEstimate = EstimateFlightDetailsOutput & { 
   error?: string; 
@@ -100,8 +106,15 @@ export function CreateQuoteForm() {
       clientName: '',
       clientEmail: '',
       clientPhone: '',
-      legs: [{ origin: '', destination: '', legType: 'Charter', departureDateTime: undefined as Date | undefined}],
-      passengerCount: 1,
+      legs: [{ 
+        origin: '', 
+        destination: '', 
+        legType: 'Charter', 
+        departureDateTime: undefined as Date | undefined,
+        passengerCount: 1,
+        originFbo: '',
+        destinationFbo: '',
+      }],
       aircraftType: '',
       medicsRequested: false,
       cateringRequested: false,
@@ -151,7 +164,7 @@ export function CreateQuoteForm() {
 
   useEffect(() => {
     let runningTotal = 0;
-    legsArray.forEach((leg, index) => {
+    legsArray.forEach((_, index) => {
       const estimate = legEstimates[index];
       if (estimate && estimate.estimatedFlightTimeHours && !estimate.error) {
         runningTotal += estimate.estimatedFlightTimeHours * PLACEHOLDER_HOURLY_RATE;
@@ -289,11 +302,14 @@ export function CreateQuoteForm() {
   const handleAddLeg = () => {
     let newLegOrigin = '';
     let newLegDepartureDateTime: Date | undefined = undefined;
+    let previousLegPax = 1; // Default for first leg or if previous not set
 
     if (fields.length > 0) {
       const previousLegIndex = fields.length - 1;
       const previousLeg = getValues(`legs.${previousLegIndex}`);
       newLegOrigin = previousLeg.destination;
+      previousLegPax = previousLeg.passengerCount || 1;
+
 
       const previousLegEstimate = legEstimates[previousLegIndex];
       if (previousLeg.departureDateTime && previousLegEstimate && previousLegEstimate.estimatedFlightTimeHours && !previousLegEstimate.error) {
@@ -310,11 +326,20 @@ export function CreateQuoteForm() {
       destination: '',
       departureDateTime: newLegDepartureDateTime, 
       legType: 'Charter',
+      passengerCount: previousLegPax,
+      originFbo: '',
+      destinationFbo: '',
     });
   };
 
   const handleRemoveLeg = (index: number) => {
     remove(index);
+    // Also remove the estimate for the removed leg
+    setLegEstimates(prev => {
+        const newEstimates = [...prev];
+        newEstimates.splice(index, 1);
+        return newEstimates;
+    });
   };
 
 
@@ -352,8 +377,7 @@ export function CreateQuoteForm() {
             <Separator />
             <section>
               <CardTitle className="text-xl border-b pb-2 mb-4">General Quote Options</CardTitle>
-              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 mb-6">
-                <FormField control={control} name="passengerCount" render={({ field }) => ( <FormItem> <FormLabel>Number of Passengers</FormLabel> <FormControl><Input type="number" placeholder="e.g., 4" {...field} min="1" /></FormControl> <FormMessage /> </FormItem> )} />
+              <div className="grid grid-cols-1 gap-6 mb-6">
                 <FormField control={control} name="aircraftType" render={({ field }) => ( <FormItem> <FormLabel>Aircraft Type</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Select an aircraft type" /></SelectTrigger></FormControl> <SelectContent>{availableAircraft.map(aircraft => (<SelectItem key={aircraft.id} value={aircraft.id}>{aircraft.name}</SelectItem>))}</SelectContent> </Select> <FormMessage /> </FormItem> )} />
               </div>
             </section>
@@ -380,6 +404,10 @@ export function CreateQuoteForm() {
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                       <FormField control={control} name={`legs.${index}.origin`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><PlaneTakeoff className="h-4 w-4" />Origin Airport</FormLabel> <FormControl><Input placeholder="e.g., KJFK" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
                       <FormField control={control} name={`legs.${index}.destination`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><PlaneLanding className="h-4 w-4" />Destination Airport</FormLabel> <FormControl><Input placeholder="e.g., KLAX" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
+                    </div>
+                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <FormField control={control} name={`legs.${index}.originFbo`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><Building className="h-4 w-4" />Origin FBO (Optional)</FormLabel> <FormControl><Input placeholder="e.g., Signature Flight Support" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
+                        <FormField control={control} name={`legs.${index}.destinationFbo`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><Building className="h-4 w-4" />Destination FBO (Optional)</FormLabel> <FormControl><Input placeholder="e.g., Atlantic Aviation" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
                     </div>
                     <FormField
                       control={control}
@@ -409,7 +437,10 @@ export function CreateQuoteForm() {
                         </FormItem>
                       )}
                     />
-                    <FormField control={control} name={`legs.${index}.legType`} render={({ field }) => ( <FormItem> <FormLabel>Leg Type</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Select leg type" /></SelectTrigger></FormControl> <SelectContent>{legTypes.map(type => (<SelectItem key={type} value={type}>{type}</SelectItem>))}</SelectContent> </Select> <FormMessage /> </FormItem> )} />
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <FormField control={control} name={`legs.${index}.legType`} render={({ field }) => ( <FormItem> <FormLabel>Leg Type</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Select leg type" /></SelectTrigger></FormControl> <SelectContent>{legTypes.map(type => (<SelectItem key={type} value={type}>{type}</SelectItem>))}</SelectContent> </Select> <FormMessage /> </FormItem> )} />
+                        <FormField control={control} name={`legs.${index}.passengerCount`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><Users className="h-4 w-4" />Passengers</FormLabel> <FormControl><Input type="number" placeholder="e.g., 2" {...field} min="0" /></FormControl> <FormMessage /> </FormItem> )} />
+                    </div>
                     
                     <Button type="button" variant="outline" size="sm" onClick={() => handleEstimateFlightDetails(index)} disabled={estimatingLegIndex === index || !aircraftTypeValue} className="w-full sm:w-auto">
                         {estimatingLegIndex === index ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}
@@ -474,7 +505,6 @@ export function CreateQuoteForm() {
                 <LegsSummaryTable 
                   legs={legsArray} 
                   legEstimates={legEstimates} 
-                  passengerCount={getValues('passengerCount')} 
                 />
               </section>
             )}
@@ -537,3 +567,5 @@ export function CreateQuoteForm() {
     </Card>
   );
 }
+
+    
