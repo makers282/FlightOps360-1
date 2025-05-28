@@ -47,7 +47,7 @@ const legSchema = z.object({
 
 const formSchema = z.object({
   quoteId: z.string().min(3, "Quote ID must be at least 3 characters."),
-  selectedCustomerId: z.string().optional(), // For tracking selection, not direct submission usually
+  selectedCustomerId: z.string().optional(), 
   clientName: z.string().min(2, "Client name is required."),
   clientEmail: z.string().email("Invalid email address."),
   clientPhone: z.string().min(7, "Phone number seems too short.").optional().or(z.literal('')),
@@ -358,13 +358,12 @@ export function CreateQuoteForm() {
       setValue('clientName', selectedCustomer.name);
       setValue('clientEmail', selectedCustomer.email);
       setValue('clientPhone', selectedCustomer.phone || '');
-      setValue('selectedCustomerId', customerId);
+      // selectedCustomerId is already updated by field.onChange
     } else {
-      // Clear fields if "Select a client" or an invalid ID is chosen
+      // Clear fields if customerId is empty or not found (e.g., placeholder was selected)
       setValue('clientName', '');
       setValue('clientEmail', '');
       setValue('clientPhone', '');
-      setValue('selectedCustomerId', undefined);
     }
   };
 
@@ -399,11 +398,12 @@ export function CreateQuoteForm() {
                 render={({ field }) => (
                   <FormItem className="mb-4">
                     <FormLabel className="flex items-center gap-1"><UserSearch className="h-4 w-4" /> Select Existing Client (Optional)</FormLabel>
-                    <Select onValueChange={(value) => {
-                        field.onChange(value);
+                    <Select 
+                      onValueChange={(value) => {
+                        field.onChange(value); // value will be customer.id
                         handleCustomerSelect(value);
                       }} 
-                      defaultValue={field.value}
+                      value={field.value || ""} // Controlled component
                     >
                       <FormControl>
                         <SelectTrigger>
@@ -411,7 +411,7 @@ export function CreateQuoteForm() {
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="">Select a client...</SelectItem>
+                        {/* Removed: <SelectItem value="">Select a client...</SelectItem> */}
                         {sampleCustomerData.map(customer => (
                           <SelectItem key={customer.id} value={customer.id}>
                             {customer.name} ({customer.company})
@@ -624,5 +624,3 @@ export function CreateQuoteForm() {
     </Card>
   );
 }
-
-    
