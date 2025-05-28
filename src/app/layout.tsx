@@ -1,7 +1,6 @@
 
 import type { Metadata } from 'next';
-import { GeistSans } from 'geist/font/sans'; // Still import to ensure variables are available
-import { GeistMono } from 'geist/font/mono'; // Still import to ensure variables are available
+// Removed GeistSans and GeistMono imports
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 
@@ -15,11 +14,9 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // Note: GeistSans.variable and GeistMono.variable will typically apply to the <html> tag
-  // or be available as CSS variables globally when imported like this in Next.js.
-  // We are testing if the dynamic className string on <body> itself is the issue.
   return (
-    <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable}`} suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning>
+      {/* Removed Geist font variables from html className */}
       <body className="font-sans antialiased" suppressHydrationWarning>
         {children}
         <Toaster />
@@ -27,4 +24,3 @@ export default function RootLayout({
     </html>
   );
 }
-
