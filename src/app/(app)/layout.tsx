@@ -59,9 +59,9 @@ export default function AppLayout({ children }: PropsWithChildren) {
     <SidebarProvider defaultOpen>
       <Sidebar>
         <SidebarHeader className="p-4">
-          <Link href="/dashboard" className="flex items-center gap-2 text-lg font-semibold text-primary">
-            <Icons.Logo />
-            <span>FlightOps360</span>
+          <Link href="/dashboard" className="flex items-center text-lg font-semibold text-primary">
+            <Icons.Logo className="h-7 w-7" />
+            <span className="ml-2">FlightOps360</span>
           </Link>
         </SidebarHeader>
         <SidebarContent>
@@ -110,6 +110,10 @@ export default function AppLayout({ children }: PropsWithChildren) {
                 <SidebarMenuSubButton href="/quotes/new" tooltip="New Quote">
                   <Calculator />
                   New Quote
+                </SidebarMenuSubButton>
+                 <SidebarMenuSubButton href="/quotes" tooltip="All Quotes">
+                  <FileArchive />
+                  All Quotes
                 </SidebarMenuSubButton>
                 <SidebarMenuSubButton href="/optimal-route" tooltip="Optimal Route Planning">
                   <Route />
