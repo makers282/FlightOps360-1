@@ -14,7 +14,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
-import { CalendarIcon, Loader2, Save, Users, Briefcase, Utensils, Landmark, BedDouble, PlaneTakeoff, PlaneLanding, PlusCircle, Trash2, GripVertical, Wand2, Info } from 'lucide-react';
+import { CalendarIcon, Loader2, Save, Users, Briefcase, Utensils, Landmark, BedDouble, PlaneTakeoff, PlaneLanding, PlusCircle, Trash2, GripVertical, Wand2, Info, Eye, Send } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { useToast } from '@/hooks/use-toast';
@@ -29,6 +29,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
 import { estimateFlightDetails, type EstimateFlightDetailsInput, type EstimateFlightDetailsOutput } from '@/ai/flows/estimate-flight-details-flow';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { LegsSummaryTable } from './legs-summary-table';
 
 const legTypes = [
   "Charter", "Owner", "Positioning", "Ambulance", "Cargo", "Maintenance", "Ferry"
@@ -76,6 +77,11 @@ const availableAircraft = [
 ];
 
 const PLACEHOLDER_HOURLY_RATE = 3200; // Placeholder for aircraft hourly rate
+const PLACEHOLDER_LANDING_FEE_PER_LEG = 500;
+const PLACEHOLDER_OVERNIGHT_FEE_PER_NIGHT = 1000;
+const PLACEHOLDER_MEDICS_FEE = 2000;
+const PLACEHOLDER_CATERING_FEE = 500;
+
 
 export function CreateQuoteForm() {
   const [isGeneratingQuote, startQuoteGenerationTransition] = useTransition();
@@ -84,6 +90,7 @@ export function CreateQuoteForm() {
   const [minLegDepartureDate, setMinLegDepartureDate] = useState<Date | null>(null);
   const [isClient, setIsClient] = useState(false);
   const [legEstimates, setLegEstimates] = useState<Array<LegEstimate | null>>([]);
+  const [totalEstimatedQuotePrice, setTotalEstimatedQuotePrice] = useState(0);
 
 
   const form = useForm<FormData>({
@@ -108,6 +115,12 @@ export function CreateQuoteForm() {
   const { control, setValue, getValues, watch, formState: { errors } } = form;
   const cateringRequestedValue = watch("cateringRequested");
   const legsArray = watch("legs"); 
+  const aircraftTypeValue = watch("aircraftType");
+  const includeLandingFeesValue = watch("includeLandingFees");
+  const estimatedOvernightsValue = watch("estimatedOvernights");
+  const medicsRequestedValue = watch("medicsRequested");
+  const cateringRequestedWatch = watch("cateringRequested");
+
 
   const { fields, append, remove } = useFieldArray({
     control,
@@ -136,9 +149,36 @@ export function CreateQuoteForm() {
     });
   }, [legsArray.length]);
 
+  // Calculate total estimated quote price
+  useEffect(() => {
+    let runningTotal = 0;
+    legsArray.forEach((leg, index) => {
+      const estimate = legEstimates[index];
+      if (estimate && estimate.estimatedFlightTimeHours && !estimate.error) {
+        runningTotal += estimate.estimatedFlightTimeHours * PLACEHOLDER_HOURLY_RATE;
+        if (includeLandingFeesValue) {
+          runningTotal += PLACEHOLDER_LANDING_FEE_PER_LEG;
+        }
+      }
+    });
+
+    if (estimatedOvernightsValue > 0) {
+      runningTotal += estimatedOvernightsValue * PLACEHOLDER_OVERNIGHT_FEE_PER_NIGHT;
+    }
+    if (medicsRequestedValue) {
+      runningTotal += PLACEHOLDER_MEDICS_FEE;
+    }
+    if (cateringRequestedWatch) {
+      runningTotal += PLACEHOLDER_CATERING_FEE;
+    }
+    
+    setTotalEstimatedQuotePrice(runningTotal);
+
+  }, [legsArray, legEstimates, includeLandingFeesValue, estimatedOvernightsValue, medicsRequestedValue, cateringRequestedWatch]);
+
 
   const handleEstimateFlightDetails = useCallback(async (legIndex: number) => {
-    if (estimatingLegIndex === legIndex) return; // Already estimating this leg
+    if (estimatingLegIndex === legIndex) return; 
     if (estimatingLegIndex !== null && estimatingLegIndex !== legIndex) {
        toast({ title: "Estimation in Progress", description: `Still estimating leg ${estimatingLegIndex + 1}. Please wait.`, variant: "default" });
        return;
@@ -167,7 +207,6 @@ export function CreateQuoteForm() {
 
     setEstimatingLegIndex(legIndex);
     
-    // Clear previous estimate for this leg before fetching new one
     setLegEstimates(prev => {
       const newEstimates = [...prev];
       newEstimates[legIndex] = null; 
@@ -214,11 +253,12 @@ export function CreateQuoteForm() {
     }
   }, [getValues, legEstimates, toast, estimatingLegIndex]);
 
-  const onSubmit: SubmitHandler<FormData> = (data) => {
+  const onSendQuote: SubmitHandler<FormData> = (data) => {
     startQuoteGenerationTransition(async () => {
-      console.log('Quote Data:', data);
+      console.log('Quote Data (Send Quote):', data);
       const finalData = {
         ...data,
+        totalEstimatedQuotePrice,
         cateringNotes: data.cateringRequested ? data.cateringNotes : undefined,
         legsWithEstimates: data.legs.map((leg, index) => ({
           ...leg,
@@ -226,7 +266,7 @@ export function CreateQuoteForm() {
         }))
       };
       toast({
-        title: "Quote Generation Submitted",
+        title: "Quote Sent (Simulated)",
         description: (
           <pre className="mt-2 w-full max-w-[480px] rounded-md bg-slate-950 p-4 overflow-x-auto">
             <code className="text-white whitespace-pre-wrap">{JSON.stringify(finalData, null, 2)}</code>
@@ -234,6 +274,16 @@ export function CreateQuoteForm() {
         ),
         variant: "default",
       });
+    });
+  };
+
+  const handlePreviewQuote = () => {
+    console.log("Preview Quote Clicked. Current form data:", getValues());
+    console.log("Current leg estimates:", legEstimates);
+    console.log("Current total estimated price:", totalEstimatedQuotePrice);
+    toast({
+      title: "Quote Preview (Logged to Console)",
+      description: "Check the browser console for the current quote details.",
     });
   };
   
@@ -251,6 +301,9 @@ export function CreateQuoteForm() {
         const previousLegDeparture = new Date(previousLeg.departureDateTime);
         const estimatedArrivalMillis = previousLegDeparture.getTime() + (previousLegEstimate.estimatedFlightTimeHours * 60 * 60 * 1000);
         newLegDepartureDateTime = new Date(estimatedArrivalMillis + (60 * 60 * 1000)); // Add 1 hour ground time
+      } else if (previousLeg.departureDateTime) {
+        // If no estimate, but departure time exists, set new leg departure 1 hour after previous leg's departure + placeholder 2hr flight
+         newLegDepartureDateTime = new Date(new Date(previousLeg.departureDateTime).getTime() + (3 * 60 * 60 * 1000));
       }
     }
 
@@ -274,7 +327,7 @@ export function CreateQuoteForm() {
         <CardDescription>Fill in the client and trip information to generate a quote.</CardDescription>
       </CardHeader>
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)}>
+        <form onSubmit={form.handleSubmit(onSendQuote)}>
           <CardContent className="space-y-8">
             <section>
               <FormField
@@ -360,11 +413,11 @@ export function CreateQuoteForm() {
                     />
                     <FormField control={control} name={`legs.${index}.legType`} render={({ field }) => ( <FormItem> <FormLabel>Leg Type</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Select leg type" /></SelectTrigger></FormControl> <SelectContent>{legTypes.map(type => (<SelectItem key={type} value={type}>{type}</SelectItem>))}</SelectContent> </Select> <FormMessage /> </FormItem> )} />
                     
-                    <Button type="button" variant="outline" size="sm" onClick={() => handleEstimateFlightDetails(index)} disabled={estimatingLegIndex === index || !getValues('aircraftType')} className="w-full sm:w-auto">
+                    <Button type="button" variant="outline" size="sm" onClick={() => handleEstimateFlightDetails(index)} disabled={estimatingLegIndex === index || !aircraftTypeValue} className="w-full sm:w-auto">
                         {estimatingLegIndex === index ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}
                         Estimate Flight Details
                     </Button>
-                    {!getValues('aircraftType') && <FormDescription className="text-xs text-destructive">Select an aircraft type above to enable estimation.</FormDescription>}
+                    {!aircraftTypeValue && <FormDescription className="text-xs text-destructive">Select an aircraft type above to enable estimation.</FormDescription>}
 
                     {legEstimates[index] && (() => {
                       const estimate = legEstimates[index]!;
@@ -380,7 +433,6 @@ export function CreateQuoteForm() {
                         const calculatedCost = estimate.estimatedFlightTimeHours * PLACEHOLDER_HOURLY_RATE;
                         costDisplay = `$${calculatedCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
                       } else if (estimate.estimatedFlightTimeHours && !estimate.error) {
-                        // Can still calculate cost if flight time is available but departure is not
                         const calculatedCost = estimate.estimatedFlightTimeHours * PLACEHOLDER_HOURLY_RATE;
                         costDisplay = `$${calculatedCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
                       }
@@ -397,7 +449,7 @@ export function CreateQuoteForm() {
                                 <p><strong>Distance:</strong> {estimate.estimatedMileageNM?.toLocaleString()} NM</p>
                                 <p><strong>Est. Flight Time:</strong> {estimate.estimatedFlightTimeHours?.toFixed(1)} hours</p>
                                 {legData.departureDateTime && <p><strong>Est. Arrival Time:</strong> {formattedArrivalTime}</p>}
-                                <p><strong>Est. Leg Cost:</strong> {costDisplay} (at ${PLACEHOLDER_HOURLY_RATE}/hr placeholder)</p>
+                                <p><strong>Est. Leg Cost (Flight Only):</strong> {costDisplay} <em className="text-xs">(at ${PLACEHOLDER_HOURLY_RATE}/hr placeholder)</em></p>
                                 <p><strong>Assumed Speed:</strong> {estimate.assumedCruiseSpeedKts?.toLocaleString()} kts</p>
                                 <p className="text-xs mt-1"><em>{estimate.briefExplanation}</em></p>
                               </>
@@ -418,13 +470,26 @@ export function CreateQuoteForm() {
             </section>
 
             <Separator />
+            {fields.length > 0 && (
+              <section>
+                <CardTitle className="text-xl border-b pb-2 mb-4">Itinerary Summary</CardTitle>
+                <LegsSummaryTable 
+                  legs={legsArray} 
+                  legEstimates={legEstimates} 
+                  passengerCount={getValues('passengerCount')} 
+                />
+              </section>
+            )}
+            <Separator />
+
+
             <section>
                 <CardTitle className="text-xl border-b pb-2 mb-4">Additional Quote Options</CardTitle>
                 <div className="space-y-4">
                     <FormField control={control} name="medicsRequested" render={({ field }) => ( <FormItem className="flex flex-row items-center space-x-3 space-y-0 p-3 border rounded-md hover:bg-muted/50"> <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl> <div className="space-y-1 leading-none"><FormLabel className="flex items-center gap-2"><Users className="h-4 w-4 text-primary" /> Medics Requested</FormLabel></div> </FormItem> )} />
                     <FormField control={control} name="cateringRequested" render={({ field }) => ( <FormItem className="flex flex-row items-center space-x-3 space-y-0 p-3 border rounded-md hover:bg-muted/50"> <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl> <div className="space-y-1 leading-none"><FormLabel className="flex items-center gap-2"><Utensils className="h-4 w-4 text-primary" /> Catering Requested</FormLabel></div> </FormItem> )} />
                     {cateringRequestedValue && ( <FormField control={control} name="cateringNotes" render={({ field }) => ( <FormItem className="pl-8"> <FormLabel>Catering Notes</FormLabel> <FormControl><Textarea placeholder="Specify catering details..." {...field} rows={3} /></FormControl> <FormMessage /> </FormItem> )} /> )}
-                    <FormField control={control} name="includeLandingFees" render={({ field }) => ( <FormItem className="flex flex-row items-center space-x-3 space-y-0 p-3 border rounded-md hover:bg-muted/50"> <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl> <div className="space-y-1 leading-none"><FormLabel className="flex items-center gap-2"><Landmark className="h-4 w-4 text-primary" /> Include Estimated Landing Fees</FormLabel></div> </FormItem> )} />
+                    <FormField control={control} name="includeLandingFees" render={({ field }) => ( <FormItem className="flex flex-row items-center space-x-3 space-y-0 p-3 border rounded-md hover:bg-muted/50"> <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl> <div className="space-y-1 leading-none"><FormLabel className="flex items-center gap-2"><Landmark className="h-4 w-4 text-primary" /> Include Estimated Landing Fees (per leg)</FormLabel></div> </FormItem> )} />
                     <FormField control={control} name="estimatedOvernights" render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-2"><BedDouble className="h-4 w-4 text-primary"/> Estimated Overnights</FormLabel> <FormControl><Input type="number" placeholder="e.g., 2" {...field} min="0" /></FormControl> <FormDescription>Number of overnight stays for crew/aircraft.</FormDescription> <FormMessage /> </FormItem> )} />
                 </div>
             </section>
@@ -444,11 +509,29 @@ export function CreateQuoteForm() {
                 </FormItem>
               )}
             />
+            
+            <Separator className="my-6" />
+            <div className="space-y-2 text-right">
+                <p className="text-lg font-semibold text-foreground">
+                    Estimated Total Quote Price:
+                </p>
+                <p className="text-3xl font-bold text-primary">
+                    ${totalEstimatedQuotePrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                    Includes estimated flight time, selected options, and placeholder fees.
+                </p>
+            </div>
+
           </CardContent>
-          <CardFooter>
-            <Button type="submit" disabled={isGeneratingQuote} className="w-full sm:w-auto">
-              {isGeneratingQuote ? ( <Loader2 className="mr-2 h-4 w-4 animate-spin" /> ) : ( <Save className="mr-2 h-4 w-4" /> )}
-              Generate Quote
+          <CardFooter className="flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={handlePreviewQuote}>
+              <Eye className="mr-2 h-4 w-4" />
+              Preview Quote
+            </Button>
+            <Button type="submit" disabled={isGeneratingQuote}>
+              {isGeneratingQuote ? ( <Loader2 className="mr-2 h-4 w-4 animate-spin" /> ) : ( <Send className="mr-2 h-4 w-4" /> )}
+              Send Quote
             </Button>
           </CardFooter>
         </form>
