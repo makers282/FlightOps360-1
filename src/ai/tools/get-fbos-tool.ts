@@ -3,6 +3,7 @@
 'use server';
 /**
  * @fileOverview A Genkit tool to retrieve FBO information for a given airport.
+ * Defines FBO data structures and the tool to fetch FBOs.
  */
 
 import {ai} from '@/ai/genkit';
@@ -32,7 +33,9 @@ export const GetFbosForAirportInputSchema = z.object({
 });
 export type GetFbosForAirportInput = z.infer<typeof GetFbosForAirportInputSchema>;
 
-export const getFbosForAirportTool = ai.defineTool(
+// The tool is defined here but NOT exported directly.
+// It will be imported and used by flows that are also 'use server'.
+const getFbosForAirportToolDefinition = ai.defineTool(
   {
     name: 'getFbosForAirportTool',
     description: 'Retrieves a list of FBOs (Fixed-Base Operators) and their details for a given airport code.',
@@ -45,9 +48,21 @@ export const getFbosForAirportTool = ai.defineTool(
       return fbos;
     } catch (error) {
       console.error(`Error fetching FBOs for ${input.airportCode}:`, error);
-      // In a real scenario, you might throw a more specific error or return an empty array
-      // depending on how you want the LLM/flow to handle failures.
       return []; 
     }
   }
 );
+
+// Export an async function that internally uses the tool if direct invocation from client/other server actions is needed
+// For now, this tool is primarily intended to be used by other Genkit flows.
+// If a server action *needs* to call this tool directly, this is how it would be exposed:
+/*
+export async function invokeGetFbosTool(input: GetFbosForAirportInput): Promise<Fbo[]> {
+    return getFbosForAirportToolDefinition(input);
+}
+*/
+// However, since fetch-fbos-flow.ts is already using it, we don't need to export an invoker here.
+// The flow itself will be the callable server action.
+
+// To make the tool accessible to other flows that might import it:
+export { getFbosForAirportToolDefinition as getFbosForAirportTool };

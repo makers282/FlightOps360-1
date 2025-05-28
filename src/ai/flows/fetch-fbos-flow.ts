@@ -11,6 +11,7 @@
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
+// Import the tool definition and schemas directly
 import { GetFbosForAirportInputSchema, FboSchema, getFbosForAirportTool } from '@/ai/tools/get-fbos-tool';
 
 export const FetchFbosInputSchema = GetFbosForAirportInputSchema;
@@ -33,7 +34,7 @@ const fetchFbosFlow = ai.defineFlow(
   async (input) => {
     // This flow directly uses the tool. 
     // In more complex scenarios, it might involve LLM calls that decide to use the tool.
-    const fbos = await getFbosForAirportTool(input);
+    const fbos = await getFbosForAirportTool(input); // Call the imported tool definition
     return fbos;
   }
 );
