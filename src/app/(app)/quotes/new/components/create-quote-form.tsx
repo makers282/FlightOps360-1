@@ -28,7 +28,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
 import { estimateFlightDetails, type EstimateFlightDetailsInput, type EstimateFlightDetailsOutput } from '@/ai/flows/estimate-flight-details-flow';
-import { fetchFbosForAirport, type FetchFbosInput, type FetchFbosOutput } from '@/ai/flows/fetch-fbos-flow'; // Corrected type import
+import { fetchFbosForAirport, type FetchFbosInput, type FetchFbosOutput } from '@/ai/flows/fetch-fbos-flow';
 import type { Fbo } from '@/ai/tools/get-fbos-tool';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { LegsSummaryTable } from './legs-summary-table';
@@ -172,13 +172,20 @@ export function CreateQuoteForm() {
       });
       return newEstimates;
     });
-    setOriginFboOptionsPerLeg(prev => {
-      const newOptions = new Array(legsArray.length).fill([]).map((item, i) => prev[i] || []);
+     setOriginFboOptionsPerLeg(prev => {
+      const newOptions = new Array(legsArray.length).fill(undefined).map((_, i) => prev[i] || []);
       return newOptions;
     });
     setDestinationFboOptionsPerLeg(prev => {
-        const newOptions = new Array(legsArray.length).fill([]).map((item, i) => prev[i] || []);
-        return newOptions;
+      const newOptions = new Array(legsArray.length).fill(undefined).map((_, i) => prev[i] || []);
+      return newOptions;
+    });
+    setFetchingFbosForLeg(prev => {
+      const newFetchingState: Record<number, {origin?: boolean, destination?: boolean}> = {};
+      for(let i = 0; i < legsArray.length; i++) {
+        newFetchingState[i] = prev[i] || { origin: false, destination: false };
+      }
+      return newFetchingState;
     });
   }, [legsArray.length]);
 
@@ -241,7 +248,7 @@ export function CreateQuoteForm() {
 
     setLegEstimates(prev => {
       const newEstimates = [...prev];
-      newEstimates[legIndex] = null;
+      newEstimates[legIndex] = null; // Clear previous estimate for this leg
       return newEstimates;
     });
 
@@ -277,13 +284,13 @@ export function CreateQuoteForm() {
             destination: legData.destination.toUpperCase(),
             aircraftType: aircraftNameForFlow
           }
-        } as LegEstimate;
+        } as LegEstimate; // Cast to include error and inputs
         return newEstimates;
       });
     } finally {
       setEstimatingLegIndex(null);
     }
-  }, [getValues, legEstimates, toast, estimatingLegIndex]);
+  }, [getValues, legEstimates, toast, estimatingLegIndex]); // Added estimatingLegIndex
 
 
   const loadFbosForLeg = useCallback(async (legIndex: number, airportCode: string, type: 'origin' | 'destination') => {
@@ -314,30 +321,29 @@ export function CreateQuoteForm() {
 
   useEffect(() => {
     legsArray.forEach((leg, index) => {
-      const currentOriginOptions = originFboOptionsPerLeg[index];
-      const currentDestinationOptions = destinationFboOptionsPerLeg[index];
+      const currentOriginOptions = originFboOptionsPerLeg[index] || [];
+      const currentDestinationOptions = destinationFboOptionsPerLeg[index] || [];
 
-      if (leg.origin && leg.origin.length >= 3 && (!currentOriginOptions || currentOriginOptions.length === 0 || (currentOriginOptions[0] && currentOriginOptions[0].airportCode.toUpperCase() !== leg.origin.toUpperCase()))) {
+      const hasOriginChanged = !currentOriginOptions.length || (currentOriginOptions[0] && currentOriginOptions[0].airportCode.toUpperCase() !== leg.origin.toUpperCase());
+      const hasDestinationChanged = !currentDestinationOptions.length || (currentDestinationOptions[0] && currentDestinationOptions[0].airportCode.toUpperCase() !== leg.destination.toUpperCase());
+
+      if (leg.origin && leg.origin.length >= 3 && hasOriginChanged) {
           if(!(fetchingFbosForLeg[index]?.origin)) {
             loadFbosForLeg(index, leg.origin, 'origin');
           }
-      } else if (!leg.origin || leg.origin.length < 3) {
-        if (currentOriginOptions && currentOriginOptions.length > 0) {
-             setOriginFboOptionsPerLeg(prev => { const upd = [...prev]; upd[index] = []; return upd; });
-        }
+      } else if ((!leg.origin || leg.origin.length < 3) && currentOriginOptions.length > 0) {
+        setOriginFboOptionsPerLeg(prev => { const upd = [...prev]; upd[index] = []; return upd; });
       }
 
-      if (leg.destination && leg.destination.length >=3 && (!currentDestinationOptions || currentDestinationOptions.length === 0 || (currentDestinationOptions[0] && currentDestinationOptions[0].airportCode.toUpperCase() !== leg.destination.toUpperCase()))) {
+      if (leg.destination && leg.destination.length >=3 && hasDestinationChanged) {
           if(!(fetchingFbosForLeg[index]?.destination)) {
             loadFbosForLeg(index, leg.destination, 'destination');
           }
-      } else if (!leg.destination || leg.destination.length < 3) {
-         if (currentDestinationOptions && currentDestinationOptions.length > 0) {
-            setDestinationFboOptionsPerLeg(prev => { const upd = [...prev]; upd[index] = []; return upd; });
-         }
+      } else if ((!leg.destination || leg.destination.length < 3) && currentDestinationOptions.length > 0) {
+        setDestinationFboOptionsPerLeg(prev => { const upd = [...prev]; upd[index] = []; return upd; });
       }
     });
-  }, [legsArray, loadFbosForLeg, originFboOptionsPerLeg, destinationFboOptionsPerLeg, fetchingFbosForLeg]);
+  }, [legsArray, loadFbosForLeg, originFboOptionsPerLeg, destinationFboOptionsPerLeg, fetchingFbosForLeg]); // Dependencies carefully managed
 
   const onSendQuote: SubmitHandler<FormData> = (data) => {
     startQuoteGenerationTransition(async () => {
@@ -345,7 +351,7 @@ export function CreateQuoteForm() {
       const finalData = {
         ...data,
         totalEstimatedQuotePrice,
-        cateringNotes: data.cateringRequested ? data.cateringNotes : undefined,
+        cateringNotes: data.cateringRequested ? data.cateringNotes : undefined, // Only include if requested
         legsWithEstimates: data.legs.map((leg, index) => ({
           ...leg,
           estimation: legEstimates[index] && !legEstimates[index]?.error ? legEstimates[index] : undefined,
@@ -364,6 +370,7 @@ export function CreateQuoteForm() {
   };
 
   const handlePreviewQuote = () => {
+    // This function can be enhanced later to show a modal or a formatted preview
     console.log("Preview Quote Clicked. Current form data:", getValues());
     console.log("Current leg estimates:", legEstimates);
     console.log("Current total estimated price:", totalEstimatedQuotePrice);
@@ -381,16 +388,18 @@ export function CreateQuoteForm() {
     if (fields.length > 0) {
       const previousLegIndex = fields.length - 1;
       const previousLeg = getValues(`legs.${previousLegIndex}`);
-      newLegOrigin = previousLeg.destination;
-      previousLegPax = previousLeg.passengerCount || 1;
+      newLegOrigin = previousLeg.destination; // Pre-populate origin with previous destination
+      previousLegPax = previousLeg.passengerCount || 1; // Carry over passenger count
 
 
       const previousLegEstimate = legEstimates[previousLegIndex];
       if (previousLeg.departureDateTime && previousLegEstimate && previousLegEstimate.estimatedFlightTimeHours && !previousLegEstimate.error) {
         const previousLegDeparture = new Date(previousLeg.departureDateTime);
         const estimatedArrivalMillis = previousLegDeparture.getTime() + (previousLegEstimate.estimatedFlightTimeHours * 60 * 60 * 1000);
+        // Add 1 hour turnaround time
         newLegDepartureDateTime = new Date(estimatedArrivalMillis + (60 * 60 * 1000));
       } else if (previousLeg.departureDateTime) {
+         // Fallback if no estimate: add 3 hours (arbitrary, can be adjusted)
          newLegDepartureDateTime = new Date(new Date(previousLeg.departureDateTime).getTime() + (3 * 60 * 60 * 1000));
       }
     }
@@ -408,6 +417,7 @@ export function CreateQuoteForm() {
 
   const handleRemoveLeg = (index: number) => {
     remove(index);
+    // Adjust related state arrays
     setLegEstimates(prev => {
         const newEstimates = [...prev];
         newEstimates.splice(index, 1);
@@ -423,6 +433,12 @@ export function CreateQuoteForm() {
         newOptions.splice(index, 1);
         return newOptions;
     });
+    setFetchingFbosForLeg(prev => {
+        const newFetchingState = {...prev};
+        delete newFetchingState[index];
+        // Re-index subsequent entries if necessary, or manage by leg ID if more robust
+        return newFetchingState;
+    })
   };
 
   const handleCustomerSelect = (customerId: string) => {
@@ -476,7 +492,7 @@ export function CreateQuoteForm() {
                         field.onChange(value);
                         handleCustomerSelect(value);
                       }}
-                      value={field.value || ""}
+                      value={field.value || ""} // Ensure value is not undefined for Select
                     >
                       <FormControl>
                         <SelectTrigger>
@@ -484,6 +500,7 @@ export function CreateQuoteForm() {
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
+                        {/* <SelectItem value="">Select a client...</SelectItem> Removed this as it causes issues if value is empty string */}
                         {sampleCustomerData.map(customer => (
                           <SelectItem key={customer.id} value={customer.id}>
                             {customer.name} ({customer.company})
@@ -540,8 +557,10 @@ export function CreateQuoteForm() {
                                 <FormLabel className="flex items-center gap-1"><Building className="h-4 w-4" />Origin FBO</FormLabel>
                                 <Select onValueChange={field.onChange} value={field.value || ""}>
                                     <FormControl>
-                                      <SelectTrigger disabled={fetchingFbosForLeg[index]?.origin || !originFboOptionsPerLeg[index]?.length}>
-                                        <SelectValue placeholder={fetchingFbosForLeg[index]?.origin ? "Loading FBOs..." : "Select FBO"} />
+                                      <SelectTrigger
+                                        disabled={fetchingFbosForLeg[index]?.origin}
+                                      >
+                                        <SelectValue placeholder={fetchingFbosForLeg[index]?.origin ? "Loading FBOs..." : "Select Origin FBO"} />
                                       </SelectTrigger>
                                     </FormControl>
                                     <SelectContent>
@@ -549,7 +568,7 @@ export function CreateQuoteForm() {
                                             <SelectItem key={fbo.id} value={fbo.name}>{fbo.name}</SelectItem>
                                         ))}
                                         {(originFboOptionsPerLeg[index]?.length === 0 && !fetchingFbosForLeg[index]?.origin && getValues(`legs.${index}.origin`)?.length >=3) && (
-                                            <SelectItem value="no-fbos" disabled>No FBOs found or enter manually</SelectItem>
+                                            <SelectItem value="no-fbos-found-origin" disabled>No FBOs found</SelectItem>
                                         )}
                                     </SelectContent>
                                 </Select>
@@ -561,8 +580,10 @@ export function CreateQuoteForm() {
                                 <FormLabel className="flex items-center gap-1"><Building className="h-4 w-4" />Destination FBO</FormLabel>
                                 <Select onValueChange={field.onChange} value={field.value || ""}>
                                      <FormControl>
-                                      <SelectTrigger disabled={fetchingFbosForLeg[index]?.destination || !destinationFboOptionsPerLeg[index]?.length}>
-                                        <SelectValue placeholder={fetchingFbosForLeg[index]?.destination ? "Loading FBOs..." : "Select FBO"} />
+                                      <SelectTrigger
+                                        disabled={fetchingFbosForLeg[index]?.destination}
+                                      >
+                                        <SelectValue placeholder={fetchingFbosForLeg[index]?.destination ? "Loading FBOs..." : "Select Destination FBO"} />
                                       </SelectTrigger>
                                      </FormControl>
                                     <SelectContent>
@@ -570,7 +591,7 @@ export function CreateQuoteForm() {
                                             <SelectItem key={fbo.id} value={fbo.name}>{fbo.name}</SelectItem>
                                         ))}
                                         {(destinationFboOptionsPerLeg[index]?.length === 0 && !fetchingFbosForLeg[index]?.destination && getValues(`legs.${index}.destination`)?.length >=3) && (
-                                          <SelectItem value="no-fbos" disabled>No FBOs found or enter manually</SelectItem>
+                                          <SelectItem value="no-fbos-found-destination" disabled>No FBOs found</SelectItem>
                                         )}
                                     </SelectContent>
                                 </Select>
@@ -663,7 +684,7 @@ export function CreateQuoteForm() {
                 <PlusCircle className="mr-2 h-4 w-4" /> Add New Leg
               </Button>
               {errors.legs && typeof errors.legs === 'object' && !Array.isArray(errors.legs) && (
-                <FormMessage>{(errors.legs as any).message}</FormMessage>
+                <FormMessage>{(errors.legs as any).message}</FormMessage> /* Handle top-level array errors */
               )}
             </section>
 
@@ -736,4 +757,3 @@ export function CreateQuoteForm() {
     </Card>
   );
 }
-
