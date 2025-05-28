@@ -4,7 +4,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm, type SubmitHandler, useFieldArray } from 'react-hook-form';
 import { z } from 'zod';
-import { useState, useTransition, useEffect } from 'react';
+import { useState, useTransition, useEffect, useCallback } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
-import { estimateFlightDetails, type EstimateFlightDetailsOutput } from '@/ai/flows/estimate-flight-details-flow';
+import { estimateFlightDetails, type EstimateFlightDetailsInput, type EstimateFlightDetailsOutput } from '@/ai/flows/estimate-flight-details-flow';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 const legTypes = [
@@ -60,7 +60,12 @@ const formSchema = z.object({
 });
 
 type FormData = z.infer<typeof formSchema>;
-type LegEstimate = EstimateFlightDetailsOutput & { error?: string };
+
+type LegEstimate = EstimateFlightDetailsOutput & { 
+  error?: string; 
+  // Store the inputs for which this estimate was made
+  estimatedForInputs?: { origin: string; destination: string; aircraftType: string };
+};
 
 const availableAircraft = [
   { id: 'N123AB', name: 'N123AB - Cessna Citation CJ3' },
@@ -102,6 +107,7 @@ export function CreateQuoteForm() {
   const { control, setValue, getValues, watch, formState: { errors } } = form;
   const cateringRequestedValue = watch("cateringRequested");
   const legsArray = watch("legs");
+  const aircraftTypeValue = watch("aircraftType");
 
   const { fields, append, remove } = useFieldArray({
     control,
@@ -116,38 +122,53 @@ export function CreateQuoteForm() {
     const today = new Date();
     today.setHours(0, 0, 0, 0); 
     setMinLegDepartureDate(today);
-    setLegEstimates(new Array(fields.length).fill(null));
-  }, [setValue, getValues, fields.length]);
+  }, [setValue, getValues]);
+
+  useEffect(() => {
+    setLegEstimates(prevEstimates => {
+      const newEstimates = new Array(fields.length).fill(null);
+      fields.forEach((_, index) => {
+        if (prevEstimates[index]) {
+          newEstimates[index] = prevEstimates[index];
+        }
+      });
+      return newEstimates;
+    });
+  }, [fields.length]);
 
 
-  const handleEstimateFlightDetails = async (legIndex: number) => {
-    setEstimatingLegIndex(legIndex);
-    const currentLegEstimates = [...legEstimates];
-    currentLegEstimates[legIndex] = null; // Clear previous estimate or error
-    setLegEstimates(currentLegEstimates);
+  const handleEstimateFlightDetails = useCallback(async (legIndex: number) => {
+    if (estimatingLegIndex === legIndex) return; // Already estimating this one
 
     const legData = getValues(`legs.${legIndex}`);
-    const aircraftId = getValues('aircraftType');
+    const currentAircraftTypeId = getValues('aircraftType');
 
-    if (!legData.origin || !legData.destination) {
-      toast({ title: "Missing Info", description: "Please enter origin and destination for the leg.", variant: "destructive" });
-      setEstimatingLegIndex(null);
-      const updatedEstimates = [...legEstimates];
-      updatedEstimates[legIndex] = { error: "Origin and destination are required." } as LegEstimate;
-      setLegEstimates(updatedEstimates);
-      return;
-    }
-    if (!aircraftId) {
-      toast({ title: "Missing Aircraft", description: "Please select an aircraft type for the quote.", variant: "destructive" });
-      setEstimatingLegIndex(null);
-      const updatedEstimates = [...legEstimates];
-      updatedEstimates[legIndex] = { error: "Aircraft type is required." } as LegEstimate;
-      setLegEstimates(updatedEstimates);
+    if (!legData?.origin || legData.origin.length < 3 || !legData?.destination || legData.destination.length < 3 || !currentAircraftTypeId) {
+      // Don't clear estimates if inputs are just temporarily invalid during typing
       return;
     }
     
-    const selectedAircraft = availableAircraft.find(ac => ac.id === aircraftId);
-    const aircraftNameForFlow = selectedAircraft ? selectedAircraft.name : aircraftId;
+    const selectedAircraft = availableAircraft.find(ac => ac.id === currentAircraftTypeId);
+    const aircraftNameForFlow = selectedAircraft ? selectedAircraft.name : currentAircraftTypeId;
+
+    // Check if we need to fetch: if no estimate, or if inputs changed, or if previous estimate had error
+    const currentEstimate = legEstimates[legIndex];
+    if (currentEstimate && 
+        !currentEstimate.error &&
+        currentEstimate.estimatedForInputs?.origin === legData.origin &&
+        currentEstimate.estimatedForInputs?.destination === legData.destination &&
+        currentEstimate.estimatedForInputs?.aircraftType === aircraftNameForFlow) {
+      return; // Estimate already exists for current inputs
+    }
+
+    setEstimatingLegIndex(legIndex);
+    
+    // Clear previous specific estimate for this leg to show loading
+    setLegEstimates(prev => {
+      const newEstimates = [...prev];
+      newEstimates[legIndex] = null; 
+      return newEstimates;
+    });
 
     try {
       const result = await estimateFlightDetails({
@@ -155,21 +176,54 @@ export function CreateQuoteForm() {
         destination: legData.destination,
         aircraftType: aircraftNameForFlow,
       });
-      const updatedEstimates = [...legEstimates];
-      updatedEstimates[legIndex] = result;
-      setLegEstimates(updatedEstimates);
+      setLegEstimates(prev => {
+        const newEstimates = [...prev];
+        newEstimates[legIndex] = { 
+          ...result, 
+          estimatedForInputs: { 
+            origin: legData.origin, 
+            destination: legData.destination, 
+            aircraftType: aircraftNameForFlow 
+          } 
+        };
+        return newEstimates;
+      });
       toast({ title: "Flight Details Estimated", description: `Leg ${legIndex + 1}: ${result.estimatedMileageNM} NM, ${result.estimatedFlightTimeHours} hrs.` });
     } catch (e) {
       console.error("Error estimating flight details:", e);
       const errorMessage = e instanceof Error ? e.message : "AI failed to estimate details.";
       toast({ title: "Estimation Error", description: errorMessage, variant: "destructive" });
-      const updatedEstimates = [...legEstimates];
-      updatedEstimates[legIndex] = { error: errorMessage } as LegEstimate;
-      setLegEstimates(updatedEstimates);
+      setLegEstimates(prev => {
+        const newEstimates = [...prev];
+        newEstimates[legIndex] = { 
+          error: errorMessage,
+          // Store inputs that caused error to avoid re-fetching for the same erroring inputs immediately
+          estimatedForInputs: { 
+            origin: legData.origin, 
+            destination: legData.destination, 
+            aircraftType: aircraftNameForFlow
+          } 
+        } as LegEstimate; // Cast because other EstimateFlightDetailsOutput fields are missing
+        return newEstimates;
+      });
     } finally {
       setEstimatingLegIndex(null);
     }
-  };
+  }, [getValues, legEstimates, estimatingLegIndex, toast]); // Removed availableAircraft as it's constant
+
+  useEffect(() => {
+    if (!isClient) return;
+
+    legsArray.forEach((leg, index) => {
+      if (leg.origin && leg.origin.length >= 3 &&
+          leg.destination && leg.destination.length >= 3 &&
+          aircraftTypeValue) {
+        handleEstimateFlightDetails(index);
+      }
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps 
+  }, [legsArray, aircraftTypeValue, isClient, handleEstimateFlightDetails]); 
+  // We list handleEstimateFlightDetails but its deps should make it stable enough or be part of its own useCallback.
 
 
   const onSubmit: SubmitHandler<FormData> = (data) => {
@@ -202,14 +256,12 @@ export function CreateQuoteForm() {
       departureDateTime: undefined as Date | undefined, 
       legType: 'Charter',
     });
-    setLegEstimates([...legEstimates, null]);
+    // legEstimates will be expanded by its own useEffect watching fields.length
   };
 
   const handleRemoveLeg = (index: number) => {
     remove(index);
-    const updatedEstimates = [...legEstimates];
-    updatedEstimates.splice(index, 1);
-    setLegEstimates(updatedEstimates);
+    // legEstimates will be shortened by its own useEffect watching fields.length
   };
 
 
@@ -296,7 +348,7 @@ export function CreateQuoteForm() {
                                 </FormControl>
                               </PopoverTrigger>
                               <PopoverContent className="w-auto p-0" align="start">
-                                <Calendar mode="single" selected={field.value} onSelect={field.onChange} disabled={(date) => minLegDepartureDate ? date < minLegDepartureDate : true} initialFocus />
+                                <Calendar mode="single" selected={field.value ? new Date(field.value) : undefined} onSelect={field.onChange} disabled={(date) => minLegDepartureDate ? date < minLegDepartureDate : true} initialFocus />
                                 <div className="p-2 border-t border-border">
                                   <Input type="time" defaultValue={field.value ? format(new Date(field.value), "HH:mm") : ""} onChange={(e) => { const time = e.target.value; const [hours, minutes] = time.split(':').map(Number); const newDate = field.value ? new Date(field.value) : new Date(); newDate.setHours(hours, minutes); field.onChange(newDate); }} />
                                 </div>
@@ -309,10 +361,12 @@ export function CreateQuoteForm() {
                     />
                     <FormField control={control} name={`legs.${index}.legType`} render={({ field }) => ( <FormItem> <FormLabel>Leg Type</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Select leg type" /></SelectTrigger></FormControl> <SelectContent>{legTypes.map(type => (<SelectItem key={type} value={type}>{type}</SelectItem>))}</SelectContent> </Select> <FormMessage /> </FormItem> )} />
                   
-                    <Button type="button" variant="outline" size="sm" onClick={() => handleEstimateFlightDetails(index)} disabled={estimatingLegIndex === index} className="w-full sm:w-auto">
-                      {estimatingLegIndex === index ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}
-                      Estimate Flight Details for Leg {index + 1}
-                    </Button>
+                    {estimatingLegIndex === index && !legEstimates[index] && (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground p-2 bg-muted/50 rounded-md">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Estimating flight details...
+                      </div>
+                    )}
 
                     {legEstimates[index] && (
                       <Alert variant={legEstimates[index]?.error ? "destructive" : "default"} className="mt-4">
@@ -344,7 +398,6 @@ export function CreateQuoteForm() {
             </section>
 
             <Separator />
-             {/* Moved General Quote Options here */}
             <section>
                 <CardTitle className="text-xl border-b pb-2 mb-4">Additional Quote Options</CardTitle>
                 <div className="space-y-4">
@@ -383,3 +436,5 @@ export function CreateQuoteForm() {
     </Card>
   );
 }
+
+
