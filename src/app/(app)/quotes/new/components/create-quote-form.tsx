@@ -16,7 +16,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { CalendarIcon, Loader2, Save, Users, Briefcase, Utensils, Landmark, BedDouble, PlaneTakeoff, PlaneLanding, PlusCircle, Trash2, GripVertical, Wand2, Info } from 'lucide-react';
 import { cn } from "@/lib/utils";
-import { format } from "date-fns";
+import { format, addHours } from "date-fns";
 import { useToast } from '@/hooks/use-toast';
 import {
   Select,
@@ -63,7 +63,6 @@ type FormData = z.infer<typeof formSchema>;
 
 type LegEstimate = EstimateFlightDetailsOutput & { 
   error?: string; 
-  // Store the inputs for which this estimate was made
   estimatedForInputs?: { origin: string; destination: string; aircraftType: string };
 };
 
@@ -106,8 +105,7 @@ export function CreateQuoteForm() {
 
   const { control, setValue, getValues, watch, formState: { errors } } = form;
   const cateringRequestedValue = watch("cateringRequested");
-  const legsArray = watch("legs");
-  const aircraftTypeValue = watch("aircraftType");
+  const legsArray = watch("legs"); // Watching the legs array to manage legEstimates array size
 
   const { fields, append, remove } = useFieldArray({
     control,
@@ -124,46 +122,50 @@ export function CreateQuoteForm() {
     setMinLegDepartureDate(today);
   }, [setValue, getValues]);
 
+  // Effect to keep legEstimates array in sync with the number of legs
   useEffect(() => {
     setLegEstimates(prevEstimates => {
-      const newEstimates = new Array(fields.length).fill(null);
-      fields.forEach((_, index) => {
+      const newEstimates = new Array(legsArray.length).fill(null);
+      legsArray.forEach((_, index) => {
         if (prevEstimates[index]) {
           newEstimates[index] = prevEstimates[index];
         }
       });
       return newEstimates;
     });
-  }, [fields.length]);
+  }, [legsArray.length]);
 
 
-  const handleEstimateFlightDetails = useCallback(async (legIndex: number) => {
-    if (estimatingLegIndex === legIndex) return; // Already estimating this one
+  const handleEstimateFlightDetails = async (legIndex: number) => {
+    if (estimatingLegIndex !== null && estimatingLegIndex !== legIndex) {
+      toast({ title: "Estimation in Progress", description: `Still estimating leg ${estimatingLegIndex + 1}. Please wait.`, variant: "default" });
+      return;
+    }
+    if (estimatingLegIndex === legIndex) return; 
 
     const legData = getValues(`legs.${legIndex}`);
     const currentAircraftTypeId = getValues('aircraftType');
 
     if (!legData?.origin || legData.origin.length < 3 || !legData?.destination || legData.destination.length < 3 || !currentAircraftTypeId) {
-      // Don't clear estimates if inputs are just temporarily invalid during typing
+      toast({ title: "Missing Information", description: "Please provide origin, destination (min 3 chars each), and select an aircraft type before estimating.", variant: "destructive"});
       return;
     }
     
     const selectedAircraft = availableAircraft.find(ac => ac.id === currentAircraftTypeId);
     const aircraftNameForFlow = selectedAircraft ? selectedAircraft.name : currentAircraftTypeId;
 
-    // Check if we need to fetch: if no estimate, or if inputs changed, or if previous estimate had error
     const currentEstimate = legEstimates[legIndex];
     if (currentEstimate && 
         !currentEstimate.error &&
         currentEstimate.estimatedForInputs?.origin === legData.origin &&
         currentEstimate.estimatedForInputs?.destination === legData.destination &&
         currentEstimate.estimatedForInputs?.aircraftType === aircraftNameForFlow) {
-      return; // Estimate already exists for current inputs
+      toast({ title: "Estimate Exists", description: "Flight details already estimated for these inputs.", variant: "default" });
+      return;
     }
 
     setEstimatingLegIndex(legIndex);
     
-    // Clear previous specific estimate for this leg to show loading
     setLegEstimates(prev => {
       const newEstimates = [...prev];
       newEstimates[legIndex] = null; 
@@ -197,34 +199,18 @@ export function CreateQuoteForm() {
         const newEstimates = [...prev];
         newEstimates[legIndex] = { 
           error: errorMessage,
-          // Store inputs that caused error to avoid re-fetching for the same erroring inputs immediately
           estimatedForInputs: { 
             origin: legData.origin, 
             destination: legData.destination, 
             aircraftType: aircraftNameForFlow
           } 
-        } as LegEstimate; // Cast because other EstimateFlightDetailsOutput fields are missing
+        } as LegEstimate; 
         return newEstimates;
       });
     } finally {
       setEstimatingLegIndex(null);
     }
-  }, [getValues, legEstimates, estimatingLegIndex, toast]); // Removed availableAircraft as it's constant
-
-  useEffect(() => {
-    if (!isClient) return;
-
-    legsArray.forEach((leg, index) => {
-      if (leg.origin && leg.origin.length >= 3 &&
-          leg.destination && leg.destination.length >= 3 &&
-          aircraftTypeValue) {
-        handleEstimateFlightDetails(index);
-      }
-    });
-  // eslint-disable-next-line react-hooks/exhaustive-deps 
-  }, [legsArray, aircraftTypeValue, isClient, handleEstimateFlightDetails]); 
-  // We list handleEstimateFlightDetails but its deps should make it stable enough or be part of its own useCallback.
-
+  };
 
   const onSubmit: SubmitHandler<FormData> = (data) => {
     startQuoteGenerationTransition(async () => {
@@ -250,18 +236,32 @@ export function CreateQuoteForm() {
   };
   
   const handleAddLeg = () => {
+    let newLegOrigin = '';
+    let newLegDepartureDateTime: Date | undefined = undefined;
+
+    if (fields.length > 0) {
+      const previousLegIndex = fields.length - 1;
+      const previousLeg = getValues(`legs.${previousLegIndex}`);
+      newLegOrigin = previousLeg.destination;
+
+      const previousLegEstimate = legEstimates[previousLegIndex];
+      if (previousLeg.departureDateTime && previousLegEstimate && previousLegEstimate.estimatedFlightTimeHours && !previousLegEstimate.error) {
+        const previousLegDeparture = new Date(previousLeg.departureDateTime);
+        const estimatedArrivalMillis = previousLegDeparture.getTime() + (previousLegEstimate.estimatedFlightTimeHours * 60 * 60 * 1000);
+        newLegDepartureDateTime = addHours(new Date(estimatedArrivalMillis), 1);
+      }
+    }
+
     append({
-      origin: '', 
+      origin: newLegOrigin, 
       destination: '',
-      departureDateTime: undefined as Date | undefined, 
+      departureDateTime: newLegDepartureDateTime, 
       legType: 'Charter',
     });
-    // legEstimates will be expanded by its own useEffect watching fields.length
   };
 
   const handleRemoveLeg = (index: number) => {
     remove(index);
-    // legEstimates will be shortened by its own useEffect watching fields.length
   };
 
 
@@ -274,7 +274,6 @@ export function CreateQuoteForm() {
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)}>
           <CardContent className="space-y-8">
-            {/* Quote ID and Client Information */}
             <section>
               <FormField
                 control={control}
@@ -298,7 +297,6 @@ export function CreateQuoteForm() {
             </section>
 
             <Separator />
-             {/* General Trip Options First for Aircraft Selection */}
             <section>
               <CardTitle className="text-xl border-b pb-2 mb-4">General Quote Options</CardTitle>
               <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 mb-6">
@@ -308,7 +306,6 @@ export function CreateQuoteForm() {
             </section>
             <Separator />
 
-            {/* Flight Legs Section */}
             <section>
               <CardTitle className="text-xl border-b pb-2 mb-6">Flight Legs</CardTitle>
               {fields.map((legItem, index) => (
@@ -360,13 +357,13 @@ export function CreateQuoteForm() {
                       )}
                     />
                     <FormField control={control} name={`legs.${index}.legType`} render={({ field }) => ( <FormItem> <FormLabel>Leg Type</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Select leg type" /></SelectTrigger></FormControl> <SelectContent>{legTypes.map(type => (<SelectItem key={type} value={type}>{type}</SelectItem>))}</SelectContent> </Select> <FormMessage /> </FormItem> )} />
-                  
-                    {estimatingLegIndex === index && !legEstimates[index] && (
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground p-2 bg-muted/50 rounded-md">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Estimating flight details...
-                      </div>
-                    )}
+                    
+                    <Button type="button" variant="outline" size="sm" onClick={() => handleEstimateFlightDetails(index)} disabled={estimatingLegIndex === index || !getValues('aircraftType')} className="w-full sm:w-auto">
+                        {estimatingLegIndex === index ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}
+                        Estimate Flight Details
+                    </Button>
+                    {!getValues('aircraftType') && <FormDescription className="text-xs text-destructive">Select an aircraft type above to enable estimation.</FormDescription>}
+
 
                     {legEstimates[index] && (
                       <Alert variant={legEstimates[index]?.error ? "destructive" : "default"} className="mt-4">
@@ -437,4 +434,4 @@ export function CreateQuoteForm() {
   );
 }
 
-
+    
