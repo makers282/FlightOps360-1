@@ -35,6 +35,17 @@ const legTypes = [
   "Charter", "Owner", "Positioning", "Ambulance", "Cargo", "Maintenance", "Ferry"
 ] as const;
 
+const sampleFboList = [
+  "Signature Flight Support",
+  "Atlantic Aviation",
+  "Jet Aviation",
+  "Million Air",
+  "Wilson Air Center",
+  "Fixed Base Operator (Generic)",
+  "Airport Authority FBO",
+  "Other",
+];
+
 const legSchema = z.object({
   origin: z.string().min(3, "Origin airport code (e.g., JFK).").max(5, "Origin airport code too long."),
   destination: z.string().min(3, "Destination airport code (e.g., LAX).").max(5, "Destination airport code too long."),
@@ -83,7 +94,6 @@ const availableAircraft = [
   { id: 'HEAVY_JET', name: 'Category: Heavy Jet' },
 ];
 
-// Sample customer data (duplicated for now, ideally fetched)
 const sampleCustomerData = [
   { id: 'CUST001', name: 'John Doe', company: 'Doe Industries', email: 'john.doe@example.com', phone: '555-1234', notes: 'VIP Client, prefers morning flights. Allergic to peanuts.', lastActivity: '2024-08-10' },
   { id: 'CUST002', name: 'Jane Smith', company: 'Smith Corp', email: 'jane.smith@example.com', phone: '555-5678', notes: 'Requires specific catering (vegan options). Always travels with small dog.', lastActivity: '2024-07-25' },
@@ -400,10 +410,10 @@ export function CreateQuoteForm() {
                     <FormLabel className="flex items-center gap-1"><UserSearch className="h-4 w-4" /> Select Existing Client (Optional)</FormLabel>
                     <Select 
                       onValueChange={(value) => {
-                        field.onChange(value); // value will be customer.id
+                        field.onChange(value); 
                         handleCustomerSelect(value);
                       }} 
-                      value={field.value || ""} // Controlled component
+                      value={field.value || ""}
                     >
                       <FormControl>
                         <SelectTrigger>
@@ -411,7 +421,6 @@ export function CreateQuoteForm() {
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {/* Removed: <SelectItem value="">Select a client...</SelectItem> */}
                         {sampleCustomerData.map(customer => (
                           <SelectItem key={customer.id} value={customer.id}>
                             {customer.name} ({customer.company})
@@ -463,8 +472,34 @@ export function CreateQuoteForm() {
                       <FormField control={control} name={`legs.${index}.destination`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><PlaneLanding className="h-4 w-4" />Destination Airport</FormLabel> <FormControl><Input placeholder="e.g., KLAX" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
                     </div>
                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <FormField control={control} name={`legs.${index}.originFbo`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><Building className="h-4 w-4" />Origin FBO (Optional)</FormLabel> <FormControl><Input placeholder="e.g., Signature Flight Support" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
-                        <FormField control={control} name={`legs.${index}.destinationFbo`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><Building className="h-4 w-4" />Destination FBO (Optional)</FormLabel> <FormControl><Input placeholder="e.g., Atlantic Aviation" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
+                        <FormField control={control} name={`legs.${index}.originFbo`} render={({ field }) => ( 
+                            <FormItem> 
+                                <FormLabel className="flex items-center gap-1"><Building className="h-4 w-4" />Origin FBO (Optional)</FormLabel> 
+                                <Select onValueChange={field.onChange} value={field.value || ""}>
+                                    <FormControl><SelectTrigger><SelectValue placeholder="Select FBO (Optional)" /></SelectTrigger></FormControl>
+                                    <SelectContent>
+                                        {sampleFboList.map(fboName => (
+                                            <SelectItem key={fboName} value={fboName}>{fboName}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                <FormMessage /> 
+                            </FormItem> 
+                        )} />
+                        <FormField control={control} name={`legs.${index}.destinationFbo`} render={({ field }) => ( 
+                            <FormItem> 
+                                <FormLabel className="flex items-center gap-1"><Building className="h-4 w-4" />Destination FBO (Optional)</FormLabel> 
+                                <Select onValueChange={field.onChange} value={field.value || ""}>
+                                     <FormControl><SelectTrigger><SelectValue placeholder="Select FBO (Optional)" /></SelectTrigger></FormControl>
+                                    <SelectContent>
+                                        {sampleFboList.map(fboName => (
+                                            <SelectItem key={fboName} value={fboName}>{fboName}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                <FormMessage /> 
+                            </FormItem> 
+                        )} />
                     </div>
                     <FormField
                       control={control}
@@ -624,3 +659,5 @@ export function CreateQuoteForm() {
     </Card>
   );
 }
+
+    
