@@ -8,7 +8,7 @@ const sampleFboData: Fbo[] = [
   {
     id: 'KJFK-FBO1',
     name: 'Sheltair JFK',
-    airportCode: 'KJFK',
+    airportCode: 'KJFK', // Ensure this is uppercase
     contactPhone: '718-995-9176',
     fuelTypes: ['Jet A', 'Avgas 100LL'],
     services: ['Handling', 'De-icing', 'Catering', 'Hangar', 'Customs'],
@@ -21,7 +21,7 @@ const sampleFboData: Fbo[] = [
   {
     id: 'KJFK-FBO2',
     name: 'Modern Aviation JFK',
-    airportCode: 'KJFK',
+    airportCode: 'KJFK', // Ensure this is uppercase
     contactPhone: '718-553-8500',
     fuelTypes: ['Jet A'],
     services: ['Ground Handling', 'Fueling', 'Lavatory Service', 'GPU'],
@@ -34,7 +34,7 @@ const sampleFboData: Fbo[] = [
   {
     id: 'KLAX-FBO1',
     name: 'Atlantic Aviation LAX',
-    airportCode: 'KLAX',
+    airportCode: 'KLAX', // Ensure this is uppercase
     contactPhone: '310-646-9500',
     fuelTypes: ['Jet A', 'Avgas 100LL', 'Sustainable Aviation Fuel (SAF)'],
     services: ['Full Service FBO', 'Customs', 'Gourmet Catering', 'Rental Cars'],
@@ -46,7 +46,7 @@ const sampleFboData: Fbo[] = [
   {
     id: 'KLAX-FBO2',
     name: 'Signature Flight Support LAX',
-    airportCode: 'KLAX',
+    airportCode: 'KLAX', // Ensure this is uppercase
     contactPhone: '310-646-6100',
     fuelTypes: ['Jet A', 'SAF'],
     services: ['Executive Terminal', 'Pilot Lounge', 'Conference Rooms', 'Aircraft Detailing'],
@@ -59,7 +59,7 @@ const sampleFboData: Fbo[] = [
   {
     id: 'KMIA-FBO1',
     name: 'Signature Flight Support MIA',
-    airportCode: 'KMIA',
+    airportCode: 'KMIA', // Ensure this is uppercase
     contactPhone: '305-871-3200',
     fuelTypes: ['Jet A'],
     services: ['24/7 Operations', 'Customs On-Site', 'VIP Lounges', 'Secured Parking'],
@@ -72,7 +72,7 @@ const sampleFboData: Fbo[] = [
   {
     id: 'KMIA-FBO2',
     name: 'Reliance Aviation MIA',
-    airportCode: 'KMIA',
+    airportCode: 'KMIA', // Ensure this is uppercase
     contactPhone: '305-869-3500',
     fuelTypes: ['Jet A', 'Avgas 100LL'],
     services: ['Aircraft Maintenance (Part 145)', 'Avionics', 'Fueling', 'Passenger Lobby'],
@@ -85,7 +85,7 @@ const sampleFboData: Fbo[] = [
   {
     id: 'KTEB-FBO1',
     name: 'Meridian Teterboro',
-    airportCode: 'KTEB',
+    airportCode: 'KTEB', // Ensure this is uppercase
     contactPhone: '201-288-5040',
     fuelTypes: ['Jet A', 'Avgas 100LL'],
     services: ['Award Winning FBO', 'Hangar', 'Customs', 'Catering', 'Maintenance'],
@@ -97,7 +97,7 @@ const sampleFboData: Fbo[] = [
   {
     id: 'KTEB-FBO2',
     name: 'Jet Aviation Teterboro',
-    airportCode: 'KTEB',
+    airportCode: 'KTEB', // Ensure this is uppercase
     contactPhone: '201-462-4000',
     fuelTypes: ['Jet A', 'SAF'],
     services: ['Global FBO Network', 'Maintenance', 'Completions', 'Staffing'],
@@ -110,21 +110,24 @@ const sampleFboData: Fbo[] = [
 
 export async function getFbosByAirportCode(airportCode: string): Promise<Fbo[]> {
   // Simulate API call delay
-  await new Promise(resolve => setTimeout(resolve, 500));
+  await new Promise(resolve => setTimeout(resolve, 100)); // Reduced delay
   
   const upperAirportCode = airportCode.toUpperCase();
-  const specificFbos = sampleFboData.filter(fbo => fbo.airportCode.toUpperCase() === upperAirportCode);
+  console.log(`[MockFboService] Request for FBOs at: ${upperAirportCode}`);
+
+  // Ensure airportCode in sampleFboData is consistently uppercase for matching
+  const specificFbos = sampleFboData.filter(fbo => fbo.airportCode === upperAirportCode);
+  console.log(`[MockFboService] Filtered specific FBOs for ${upperAirportCode}:`, JSON.stringify(specificFbos));
+
 
   if (specificFbos.length > 0) {
+    console.log(`[MockFboService] Returning ${specificFbos.length} specific FBOs for ${upperAirportCode}.`);
     return specificFbos;
   } else {
-    // No specific FBOs found for this airport code, return a generic one.
-    // For a real application, you might want to return an empty array if no FBOs exist,
-    // but for this mock, we'll always provide at least a generic option for any 3+ char code.
-    // console.log(`MockFboService: No specific FBOs found for ${airportCode}, returning generic.`);
+    console.log(`[MockFboService] No specific FBOs found for ${upperAirportCode}, returning generic FBO.`);
     return [
       {
-        id: `${upperAirportCode}-OTHER`,
+        id: `${upperAirportCode}-OTHER-FBO`, // Made ID more unique
         name: `Other FBO at ${upperAirportCode}`,
         airportCode: upperAirportCode,
         contactPhone: 'N/A',
@@ -135,3 +138,4 @@ export async function getFbosByAirportCode(airportCode: string): Promise<Fbo[]> 
     ];
   }
 }
+
