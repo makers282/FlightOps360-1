@@ -14,7 +14,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
-import { CalendarIcon, Loader2, Save, Users, Briefcase, Utensils, Landmark, BedDouble, PlaneTakeoff, PlaneLanding, PlusCircle, Trash2, GripVertical, Wand2, Info, Eye, Send, Building } from 'lucide-react';
+import { CalendarIcon, Loader2, Users, Briefcase, Utensils, Landmark, BedDouble, PlaneTakeoff, PlaneLanding, PlusCircle, Trash2, GripVertical, Wand2, Info, Eye, Send, Building, UserSearch } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { useToast } from '@/hooks/use-toast';
@@ -47,6 +47,7 @@ const legSchema = z.object({
 
 const formSchema = z.object({
   quoteId: z.string().min(3, "Quote ID must be at least 3 characters."),
+  selectedCustomerId: z.string().optional(), // For tracking selection, not direct submission usually
   clientName: z.string().min(2, "Client name is required."),
   clientEmail: z.string().email("Invalid email address."),
   clientPhone: z.string().min(7, "Phone number seems too short.").optional().or(z.literal('')),
@@ -82,6 +83,15 @@ const availableAircraft = [
   { id: 'HEAVY_JET', name: 'Category: Heavy Jet' },
 ];
 
+// Sample customer data (duplicated for now, ideally fetched)
+const sampleCustomerData = [
+  { id: 'CUST001', name: 'John Doe', company: 'Doe Industries', email: 'john.doe@example.com', phone: '555-1234', notes: 'VIP Client, prefers morning flights. Allergic to peanuts.', lastActivity: '2024-08-10' },
+  { id: 'CUST002', name: 'Jane Smith', company: 'Smith Corp', email: 'jane.smith@example.com', phone: '555-5678', notes: 'Requires specific catering (vegan options). Always travels with small dog.', lastActivity: '2024-07-25' },
+  { id: 'CUST003', name: 'Robert Brown', company: 'Brown & Co.', email: 'robert.brown@example.com', phone: '555-8765', notes: 'Often books last minute. Prefers aisle seat if on shared flights.', lastActivity: '2024-08-01' },
+  { id: 'CUST004', name: 'Emily White', company: 'White Solutions', email: 'emily.white@example.com', phone: '555-4321', notes: 'Interested in block hours. Usually flies with 2 assistants.', lastActivity: '2024-06-15' },
+];
+
+
 const PLACEHOLDER_HOURLY_RATE = 3200; 
 const PLACEHOLDER_LANDING_FEE_PER_LEG = 500;
 const PLACEHOLDER_OVERNIGHT_FEE_PER_NIGHT = 1000;
@@ -103,6 +113,7 @@ export function CreateQuoteForm() {
     resolver: zodResolver(formSchema),
     defaultValues: {
       quoteId: '', 
+      selectedCustomerId: undefined,
       clientName: '',
       clientEmail: '',
       clientPhone: '',
@@ -302,7 +313,7 @@ export function CreateQuoteForm() {
   const handleAddLeg = () => {
     let newLegOrigin = '';
     let newLegDepartureDateTime: Date | undefined = undefined;
-    let previousLegPax = 1; // Default for first leg or if previous not set
+    let previousLegPax = 1;
 
     if (fields.length > 0) {
       const previousLegIndex = fields.length - 1;
@@ -334,12 +345,27 @@ export function CreateQuoteForm() {
 
   const handleRemoveLeg = (index: number) => {
     remove(index);
-    // Also remove the estimate for the removed leg
     setLegEstimates(prev => {
         const newEstimates = [...prev];
         newEstimates.splice(index, 1);
         return newEstimates;
     });
+  };
+
+  const handleCustomerSelect = (customerId: string) => {
+    const selectedCustomer = sampleCustomerData.find(c => c.id === customerId);
+    if (selectedCustomer) {
+      setValue('clientName', selectedCustomer.name);
+      setValue('clientEmail', selectedCustomer.email);
+      setValue('clientPhone', selectedCustomer.phone || '');
+      setValue('selectedCustomerId', customerId);
+    } else {
+      // Clear fields if "Select a client" or an invalid ID is chosen
+      setValue('clientName', '');
+      setValue('clientEmail', '');
+      setValue('clientPhone', '');
+      setValue('selectedCustomerId', undefined);
+    }
   };
 
 
@@ -352,26 +378,57 @@ export function CreateQuoteForm() {
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSendQuote)}>
           <CardContent className="space-y-8">
+            <FormField
+              control={control}
+              name="quoteId"
+              render={({ field }) => (
+                <FormItem className="mb-6">
+                  <FormLabel>Quote ID</FormLabel>
+                  <FormControl>
+                    <Input placeholder="e.g., QT-ABCDE" {...field} value={field.value || ''} readOnly className="bg-muted/50" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             <section>
+              <CardTitle className="text-xl border-b pb-2 mb-4">Client Information</CardTitle>
               <FormField
                 control={control}
-                name="quoteId"
+                name="selectedCustomerId" 
                 render={({ field }) => (
-                  <FormItem className="mb-6">
-                    <FormLabel>Quote ID</FormLabel>
-                    <FormControl>
-                      <Input placeholder="e.g., QT-ABCDE" {...field} value={field.value || ''} readOnly className="bg-muted/50" />
-                    </FormControl>
+                  <FormItem className="mb-4">
+                    <FormLabel className="flex items-center gap-1"><UserSearch className="h-4 w-4" /> Select Existing Client (Optional)</FormLabel>
+                    <Select onValueChange={(value) => {
+                        field.onChange(value);
+                        handleCustomerSelect(value);
+                      }} 
+                      defaultValue={field.value}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a client to auto-fill details" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="">Select a client...</SelectItem>
+                        {sampleCustomerData.map(customer => (
+                          <SelectItem key={customer.id} value={customer.id}>
+                            {customer.name} ({customer.company})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>Choosing a client will auto-populate their details below.</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-              <CardTitle className="text-xl border-b pb-2 mb-4">Client Information</CardTitle>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 mb-4">
                 <FormField control={control} name="clientName" render={({ field }) => ( <FormItem> <FormLabel>Client Name</FormLabel> <FormControl><Input placeholder="e.g., John Doe" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
                 <FormField control={control} name="clientEmail" render={({ field }) => ( <FormItem> <FormLabel>Client Email</FormLabel> <FormControl><Input type="email" placeholder="e.g., john.doe@example.com" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
               </div>
-              <FormField control={control} name="clientPhone" render={({ field }) => ( <FormItem> <FormLabel>Client Phone (Optional)</FormLabel> <FormControl><Input type="tel" placeholder="e.g., (555) 123-4567" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
+              <FormField control={control} name="clientPhone" render={({ field }) => ( <FormItem> <FormLabel>Client Phone</FormLabel> <FormControl><Input type="tel" placeholder="e.g., (555) 123-4567" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
             </section>
 
             <Separator />
