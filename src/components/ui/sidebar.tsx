@@ -35,6 +35,7 @@ type SidebarContext = {
   setOpenMobile: (open: boolean) => void
   isMobile: boolean
   toggleSidebar: () => void
+  isClientMounted: boolean; // Added for hydration safety
 }
 
 const SidebarContext = React.createContext<SidebarContext | null>(null)
@@ -70,6 +71,11 @@ const SidebarProvider = React.forwardRef<
   ) => {
     const isMobile = useIsMobile()
     const [openMobile, setOpenMobile] = React.useState(false)
+    const [isClientMounted, setIsClientMounted] = React.useState(false); // New state
+
+    React.useEffect(() => {
+      setIsClientMounted(true); // Set after mount
+    }, []);
 
     // This is the internal state of the sidebar.
     // We use openProp and setOpenProp for control from outside the component.
@@ -126,8 +132,9 @@ const SidebarProvider = React.forwardRef<
         openMobile,
         setOpenMobile,
         toggleSidebar,
+        isClientMounted, // Pass to context
       }),
-      [state, open, setOpen, isMobile, openMobile, setOpenMobile, toggleSidebar]
+      [state, open, setOpen, isMobile, openMobile, setOpenMobile, toggleSidebar, isClientMounted]
     )
 
     return (
@@ -176,7 +183,7 @@ const Sidebar = React.forwardRef<
     },
     ref
   ) => {
-    const { isMobile, state, openMobile, setOpenMobile } = useSidebar()
+    const { isMobile, state, openMobile, setOpenMobile, isClientMounted } = useSidebar()
 
     if (collapsible === "none") {
       return (
@@ -193,7 +200,7 @@ const Sidebar = React.forwardRef<
       )
     }
 
-    if (isMobile) {
+    if (isClientMounted && isMobile) { // Check isClientMounted here
       return (
         <Sheet open={openMobile} onOpenChange={setOpenMobile} {...props}>
           <SheetContent
@@ -213,6 +220,8 @@ const Sidebar = React.forwardRef<
       )
     }
 
+    // Fallback for server render and initial client render (before isClientMounted is true or if not mobile)
+    // This ensures the desktop structure is rendered initially, matching server output.
     return (
       <div
         ref={ref}
@@ -539,7 +548,7 @@ const SidebarMenuButton = React.forwardRef<
   React.ComponentProps<"button"> & {
     asChild?: boolean
     isActive?: boolean
-    isSubmenuTrigger?: boolean // Added prop to type definition
+    isSubmenuTrigger?: boolean
     tooltip?: string | React.ComponentProps<typeof TooltipContent>
   } & VariantProps<typeof sidebarMenuButtonVariants>
 >(
@@ -547,11 +556,12 @@ const SidebarMenuButton = React.forwardRef<
     {
       asChild = false,
       isActive = false,
-      isSubmenuTrigger, // Destructured prop
+      isSubmenuTrigger,
       variant = "default",
       size = "default",
       tooltip,
       className,
+      children, // Ensure children is destructured
       ...props
     },
     ref
@@ -559,19 +569,22 @@ const SidebarMenuButton = React.forwardRef<
     const Comp = asChild ? Slot : "button"
     const { isMobile, state } = useSidebar()
 
-    const button = (
+    const buttonContent = (
       <Comp
         ref={ref}
         data-sidebar="menu-button"
         data-size={size}
         data-active={isActive}
         className={cn(sidebarMenuButtonVariants({ variant, size }), className)}
-        {...props}
-      />
-    )
+        {...props} // Spread remaining props here
+      >
+        {children} 
+      </Comp>
+    );
+    
 
     if (!tooltip) {
-      return button
+      return buttonContent
     }
 
     // Ensure tooltip is an object for spreading if it's a string
@@ -580,7 +593,7 @@ const SidebarMenuButton = React.forwardRef<
 
     return (
       <Tooltip>
-        <TooltipTrigger asChild>{button}</TooltipTrigger>
+        <TooltipTrigger asChild>{buttonContent}</TooltipTrigger>
         <TooltipContent
           side="right"
           align="center"
@@ -762,3 +775,5 @@ export {
   SidebarTrigger,
   useSidebar,
 }
+
+    
