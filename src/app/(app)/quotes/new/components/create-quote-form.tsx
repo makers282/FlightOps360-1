@@ -28,7 +28,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
 import { estimateFlightDetails, type EstimateFlightDetailsInput, type EstimateFlightDetailsOutput } from '@/ai/flows/estimate-flight-details-flow';
-import { fetchFbosForAirport, type FetchFbosInput } from '@/ai/flows/fetch-fbos-flow';
+import { fetchFbosForAirport, type FetchFbosInput, type FetchFbosOutput } from '@/ai/flows/fetch-fbos-flow'; // Corrected type import
 import type { Fbo } from '@/ai/tools/get-fbos-tool';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { LegsSummaryTable } from './legs-summary-table';
@@ -38,8 +38,8 @@ const legTypes = [
 ] as const;
 
 const legSchema = z.object({
-  origin: z.string().min(3, "Origin airport code (e.g., JFK).").max(5, "Origin airport code too long."),
-  destination: z.string().min(3, "Destination airport code (e.g., LAX).").max(5, "Destination airport code too long."),
+  origin: z.string().min(3, "Origin airport code (e.g., JFK).").max(5, "Origin airport code too long.").toUpperCase(),
+  destination: z.string().min(3, "Destination airport code (e.g., LAX).").max(5, "Destination airport code too long.").toUpperCase(),
   departureDateTime: z.date({ required_error: "Departure date and time are required." }),
   legType: z.enum(legTypes, { required_error: "Leg type is required." }),
   passengerCount: z.coerce.number().min(0, "Passenger count cannot be negative.").int().default(1),
@@ -49,14 +49,14 @@ const legSchema = z.object({
 
 const formSchema = z.object({
   quoteId: z.string().min(3, "Quote ID must be at least 3 characters."),
-  selectedCustomerId: z.string().optional(), 
+  selectedCustomerId: z.string().optional(),
   clientName: z.string().min(2, "Client name is required."),
   clientEmail: z.string().email("Invalid email address."),
   clientPhone: z.string().min(7, "Phone number seems too short.").optional().or(z.literal('')),
-  
+
   legs: z.array(legSchema).min(1, "At least one flight leg is required."),
 
-  aircraftType: z.string().min(1, "Aircraft type is required."), 
+  aircraftType: z.string().min(1, "Aircraft type is required."),
   medicsRequested: z.boolean().optional().default(false),
   cateringRequested: z.boolean().optional().default(false),
   cateringNotes: z.string().optional(),
@@ -71,8 +71,8 @@ export type LegFormData = z.infer<typeof legSchema>;
 export type FullQuoteFormData = z.infer<typeof formSchema>;
 
 
-type LegEstimate = EstimateFlightDetailsOutput & { 
-  error?: string; 
+type LegEstimate = EstimateFlightDetailsOutput & {
+  error?: string;
   estimatedForInputs?: { origin: string; destination: string; aircraftType: string };
 };
 
@@ -92,7 +92,7 @@ const sampleCustomerData = [
   { id: 'CUST004', name: 'Emily White', company: 'White Solutions', email: 'emily.white@example.com', phone: '555-4321', notes: 'Interested in block hours. Usually flies with 2 assistants.', lastActivity: '2024-06-15' },
 ];
 
-const PLACEHOLDER_HOURLY_RATE = 3200; 
+const PLACEHOLDER_HOURLY_RATE = 3200;
 const PLACEHOLDER_LANDING_FEE_PER_LEG = 500;
 const PLACEHOLDER_OVERNIGHT_FEE_PER_NIGHT = 1000;
 const PLACEHOLDER_MEDICS_FEE = 2000;
@@ -110,21 +110,21 @@ export function CreateQuoteForm() {
 
   const [originFboOptionsPerLeg, setOriginFboOptionsPerLeg] = useState<Array<Fbo[]>>([]);
   const [destinationFboOptionsPerLeg, setDestinationFboOptionsPerLeg] = useState<Array<Fbo[]>>([]);
-  const [fetchingFbosForLeg, setFetchingFbosForLeg] = useState<Record<string, {origin?: boolean, destination?: boolean}>>({});
+  const [fetchingFbosForLeg, setFetchingFbosForLeg] = useState<Record<number, {origin?: boolean, destination?: boolean}>>({});
 
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      quoteId: '', 
+      quoteId: '',
       selectedCustomerId: undefined,
       clientName: '',
       clientEmail: '',
       clientPhone: '',
-      legs: [{ 
-        origin: '', 
-        destination: '', 
-        legType: 'Charter', 
+      legs: [{
+        origin: '',
+        destination: '',
+        legType: 'Charter',
         departureDateTime: undefined as Date | undefined,
         passengerCount: 1,
         originFbo: '',
@@ -142,7 +142,7 @@ export function CreateQuoteForm() {
 
   const { control, setValue, getValues, watch, trigger, formState: { errors } } = form;
   const cateringRequestedValue = watch("cateringRequested");
-  const legsArray = watch("legs"); 
+  const legsArray = watch("legs");
   const aircraftTypeValue = watch("aircraftType");
   const includeLandingFeesValue = watch("includeLandingFees");
   const estimatedOvernightsValue = watch("estimatedOvernights");
@@ -160,7 +160,7 @@ export function CreateQuoteForm() {
       setValue('quoteId', `QT-${Math.random().toString(36).substring(2, 7).toUpperCase()}`);
     }
     const today = new Date();
-    today.setHours(0, 0, 0, 0); 
+    today.setHours(0, 0, 0, 0);
     setMinLegDepartureDate(today);
   }, [setValue, getValues]);
 
@@ -173,17 +173,11 @@ export function CreateQuoteForm() {
       return newEstimates;
     });
     setOriginFboOptionsPerLeg(prev => {
-      const newOptions = new Array(legsArray.length).fill([]);
-      legsArray.forEach((_, index) => {
-        if (prev[index]) newOptions[index] = prev[index];
-      });
+      const newOptions = new Array(legsArray.length).fill([]).map((item, i) => prev[i] || []);
       return newOptions;
     });
     setDestinationFboOptionsPerLeg(prev => {
-        const newOptions = new Array(legsArray.length).fill([]);
-        legsArray.forEach((_, index) => {
-          if (prev[index]) newOptions[index] = prev[index];
-        });
+        const newOptions = new Array(legsArray.length).fill([]).map((item, i) => prev[i] || []);
         return newOptions;
     });
   }, [legsArray.length]);
@@ -209,14 +203,14 @@ export function CreateQuoteForm() {
     if (cateringRequestedWatch) {
       runningTotal += PLACEHOLDER_CATERING_FEE;
     }
-    
+
     setTotalEstimatedQuotePrice(runningTotal);
 
   }, [legsArray, legEstimates, includeLandingFeesValue, estimatedOvernightsValue, medicsRequestedValue, cateringRequestedWatch]);
 
 
   const handleEstimateFlightDetails = useCallback(async (legIndex: number) => {
-    if (estimatingLegIndex === legIndex) return; 
+    if (estimatingLegIndex === legIndex) return;
     if (estimatingLegIndex !== null && estimatingLegIndex !== legIndex) {
        toast({ title: "Estimation in Progress", description: `Still estimating leg ${estimatingLegIndex + 1}. Please wait.`, variant: "default" });
        return;
@@ -229,43 +223,43 @@ export function CreateQuoteForm() {
       toast({ title: "Missing Information", description: "Please provide origin, destination (min 3 chars each), and select an aircraft type before estimating.", variant: "destructive"});
       return;
     }
-    
+
     const selectedAircraft = availableAircraft.find(ac => ac.id === currentAircraftTypeId);
     const aircraftNameForFlow = selectedAircraft ? selectedAircraft.name : currentAircraftTypeId;
 
     const currentEstimate = legEstimates[legIndex];
-    if (currentEstimate && 
+    if (currentEstimate &&
         !currentEstimate.error &&
-        currentEstimate.estimatedForInputs?.origin === legData.origin &&
-        currentEstimate.estimatedForInputs?.destination === legData.destination &&
+        currentEstimate.estimatedForInputs?.origin === legData.origin.toUpperCase() &&
+        currentEstimate.estimatedForInputs?.destination === legData.destination.toUpperCase() &&
         currentEstimate.estimatedForInputs?.aircraftType === aircraftNameForFlow) {
       toast({ title: "Estimate Exists", description: "Flight details already estimated for these inputs.", variant: "default" });
       return;
     }
 
     setEstimatingLegIndex(legIndex);
-    
+
     setLegEstimates(prev => {
       const newEstimates = [...prev];
-      newEstimates[legIndex] = null; 
+      newEstimates[legIndex] = null;
       return newEstimates;
     });
 
     try {
       const result = await estimateFlightDetails({
-        origin: legData.origin,
-        destination: legData.destination,
+        origin: legData.origin.toUpperCase(),
+        destination: legData.destination.toUpperCase(),
         aircraftType: aircraftNameForFlow,
       });
       setLegEstimates(prev => {
         const newEstimates = [...prev];
-        newEstimates[legIndex] = { 
-          ...result, 
-          estimatedForInputs: { 
-            origin: legData.origin, 
-            destination: legData.destination, 
-            aircraftType: aircraftNameForFlow 
-          } 
+        newEstimates[legIndex] = {
+          ...result,
+          estimatedForInputs: {
+            origin: legData.origin.toUpperCase(),
+            destination: legData.destination.toUpperCase(),
+            aircraftType: aircraftNameForFlow
+          }
         };
         return newEstimates;
       });
@@ -276,14 +270,14 @@ export function CreateQuoteForm() {
       toast({ title: "Estimation Error", description: errorMessage, variant: "destructive" });
       setLegEstimates(prev => {
         const newEstimates = [...prev];
-        newEstimates[legIndex] = { 
+        newEstimates[legIndex] = {
           error: errorMessage,
-          estimatedForInputs: { 
-            origin: legData.origin, 
-            destination: legData.destination, 
+          estimatedForInputs: {
+            origin: legData.origin.toUpperCase(),
+            destination: legData.destination.toUpperCase(),
             aircraftType: aircraftNameForFlow
-          } 
-        } as LegEstimate; 
+          }
+        } as LegEstimate;
         return newEstimates;
       });
     } finally {
@@ -301,7 +295,7 @@ export function CreateQuoteForm() {
 
     setFetchingFbosForLeg(prev => ({ ...prev, [legIndex]: { ...prev[legIndex], [type]: true } }));
     try {
-      const fbos = await fetchFbosForAirport({ airportCode });
+      const fbos = await fetchFbosForAirport({ airportCode: airportCode.toUpperCase() });
       if (type === 'origin') {
         setOriginFboOptionsPerLeg(prev => { const upd = [...prev]; upd[legIndex] = fbos; return upd; });
       } else {
@@ -315,35 +309,35 @@ export function CreateQuoteForm() {
     } finally {
       setFetchingFbosForLeg(prev => ({ ...prev, [legIndex]: { ...prev[legIndex], [type]: false } }));
     }
-  }, [toast]);
+  }, [toast, setOriginFboOptionsPerLeg, setDestinationFboOptionsPerLeg, setFetchingFbosForLeg]);
 
-  // Effect to load FBOs when origin/destination changes for any leg
+
   useEffect(() => {
     legsArray.forEach((leg, index) => {
-      // Check if origin has changed and needs fetching
-      if (leg.origin && leg.origin.length >= 3 && (!originFboOptionsPerLeg[index] || originFboOptionsPerLeg[index].length === 0 || originFboOptionsPerLeg[index][0]?.airportCode !== leg.origin)) {
+      const currentOriginOptions = originFboOptionsPerLeg[index];
+      const currentDestinationOptions = destinationFboOptionsPerLeg[index];
+
+      if (leg.origin && leg.origin.length >= 3 && (!currentOriginOptions || currentOriginOptions.length === 0 || (currentOriginOptions[0] && currentOriginOptions[0].airportCode.toUpperCase() !== leg.origin.toUpperCase()))) {
           if(!(fetchingFbosForLeg[index]?.origin)) {
             loadFbosForLeg(index, leg.origin, 'origin');
           }
       } else if (!leg.origin || leg.origin.length < 3) {
-        if (originFboOptionsPerLeg[index] && originFboOptionsPerLeg[index].length > 0) {
+        if (currentOriginOptions && currentOriginOptions.length > 0) {
              setOriginFboOptionsPerLeg(prev => { const upd = [...prev]; upd[index] = []; return upd; });
         }
       }
 
-      // Check if destination has changed and needs fetching
-      if (leg.destination && leg.destination.length >=3 && (!destinationFboOptionsPerLeg[index] || destinationFboOptionsPerLeg[index].length === 0 || destinationFboOptionsPerLeg[index][0]?.airportCode !== leg.destination)) {
+      if (leg.destination && leg.destination.length >=3 && (!currentDestinationOptions || currentDestinationOptions.length === 0 || (currentDestinationOptions[0] && currentDestinationOptions[0].airportCode.toUpperCase() !== leg.destination.toUpperCase()))) {
           if(!(fetchingFbosForLeg[index]?.destination)) {
             loadFbosForLeg(index, leg.destination, 'destination');
           }
       } else if (!leg.destination || leg.destination.length < 3) {
-         if (destinationFboOptionsPerLeg[index] && destinationFboOptionsPerLeg[index].length > 0) {
+         if (currentDestinationOptions && currentDestinationOptions.length > 0) {
             setDestinationFboOptionsPerLeg(prev => { const upd = [...prev]; upd[index] = []; return upd; });
          }
       }
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps 
-  }, [legsArray, loadFbosForLeg]); // Careful with dependencies here to avoid infinite loops
+  }, [legsArray, loadFbosForLeg, originFboOptionsPerLeg, destinationFboOptionsPerLeg, fetchingFbosForLeg]);
 
   const onSendQuote: SubmitHandler<FormData> = (data) => {
     startQuoteGenerationTransition(async () => {
@@ -378,7 +372,7 @@ export function CreateQuoteForm() {
       description: "Check the browser console for the current quote details.",
     });
   };
-  
+
   const handleAddLeg = () => {
     let newLegOrigin = '';
     let newLegDepartureDateTime: Date | undefined = undefined;
@@ -395,16 +389,16 @@ export function CreateQuoteForm() {
       if (previousLeg.departureDateTime && previousLegEstimate && previousLegEstimate.estimatedFlightTimeHours && !previousLegEstimate.error) {
         const previousLegDeparture = new Date(previousLeg.departureDateTime);
         const estimatedArrivalMillis = previousLegDeparture.getTime() + (previousLegEstimate.estimatedFlightTimeHours * 60 * 60 * 1000);
-        newLegDepartureDateTime = new Date(estimatedArrivalMillis + (60 * 60 * 1000)); 
+        newLegDepartureDateTime = new Date(estimatedArrivalMillis + (60 * 60 * 1000));
       } else if (previousLeg.departureDateTime) {
          newLegDepartureDateTime = new Date(new Date(previousLeg.departureDateTime).getTime() + (3 * 60 * 60 * 1000));
       }
     }
 
     append({
-      origin: newLegOrigin, 
+      origin: newLegOrigin.toUpperCase(),
       destination: '',
-      departureDateTime: newLegDepartureDateTime, 
+      departureDateTime: newLegDepartureDateTime,
       legType: 'Charter',
       passengerCount: previousLegPax,
       originFbo: '',
@@ -473,15 +467,15 @@ export function CreateQuoteForm() {
               <CardTitle className="text-xl border-b pb-2 mb-4">Client Information</CardTitle>
               <FormField
                 control={control}
-                name="selectedCustomerId" 
+                name="selectedCustomerId"
                 render={({ field }) => (
                   <FormItem className="mb-4">
                     <FormLabel className="flex items-center gap-1"><UserSearch className="h-4 w-4" /> Select Existing Client (Optional)</FormLabel>
-                    <Select 
+                    <Select
                       onValueChange={(value) => {
-                        field.onChange(value); 
+                        field.onChange(value);
                         handleCustomerSelect(value);
-                      }} 
+                      }}
                       value={field.value || ""}
                     >
                       <FormControl>
@@ -537,13 +531,13 @@ export function CreateQuoteForm() {
                   </CardHeader>
                   <CardContent className="p-0 space-y-4">
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                      <FormField control={control} name={`legs.${index}.origin`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><PlaneTakeoff className="h-4 w-4" />Origin Airport</FormLabel> <FormControl><Input placeholder="e.g., KJFK" {...field} onChange={(e) => { field.onChange(e); trigger(`legs.${index}.origin`); }} /></FormControl> <FormMessage /> </FormItem> )} />
-                      <FormField control={control} name={`legs.${index}.destination`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><PlaneLanding className="h-4 w-4" />Destination Airport</FormLabel> <FormControl><Input placeholder="e.g., KLAX" {...field} onChange={(e) => { field.onChange(e); trigger(`legs.${index}.destination`); }} /></FormControl> <FormMessage /> </FormItem> )} />
+                      <FormField control={control} name={`legs.${index}.origin`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><PlaneTakeoff className="h-4 w-4" />Origin Airport</FormLabel> <FormControl><Input placeholder="e.g., KJFK" {...field} onChange={(e) => { field.onChange(e.target.value.toUpperCase()); trigger(`legs.${index}.origin`); }} /></FormControl> <FormMessage /> </FormItem> )} />
+                      <FormField control={control} name={`legs.${index}.destination`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><PlaneLanding className="h-4 w-4" />Destination Airport</FormLabel> <FormControl><Input placeholder="e.g., KLAX" {...field} onChange={(e) => { field.onChange(e.target.value.toUpperCase()); trigger(`legs.${index}.destination`); }} /></FormControl> <FormMessage /> </FormItem> )} />
                     </div>
                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <FormField control={control} name={`legs.${index}.originFbo`} render={({ field }) => ( 
-                            <FormItem> 
-                                <FormLabel className="flex items-center gap-1"><Building className="h-4 w-4" />Origin FBO</FormLabel> 
+                        <FormField control={control} name={`legs.${index}.originFbo`} render={({ field }) => (
+                            <FormItem>
+                                <FormLabel className="flex items-center gap-1"><Building className="h-4 w-4" />Origin FBO</FormLabel>
                                 <Select onValueChange={field.onChange} value={field.value || ""}>
                                     <FormControl>
                                       <SelectTrigger disabled={fetchingFbosForLeg[index]?.origin || !originFboOptionsPerLeg[index]?.length}>
@@ -551,20 +545,20 @@ export function CreateQuoteForm() {
                                       </SelectTrigger>
                                     </FormControl>
                                     <SelectContent>
-                                        {originFboOptionsPerLeg[index]?.map(fbo => (
+                                        {(originFboOptionsPerLeg[index] || []).map(fbo => (
                                             <SelectItem key={fbo.id} value={fbo.name}>{fbo.name}</SelectItem>
                                         ))}
-                                        {originFboOptionsPerLeg[index]?.length === 0 && !fetchingFbosForLeg[index]?.origin && getValues(`legs.${index}.origin`)?.length >=3 && (
+                                        {(originFboOptionsPerLeg[index]?.length === 0 && !fetchingFbosForLeg[index]?.origin && getValues(`legs.${index}.origin`)?.length >=3) && (
                                             <SelectItem value="no-fbos" disabled>No FBOs found or enter manually</SelectItem>
                                         )}
                                     </SelectContent>
                                 </Select>
-                                <FormMessage /> 
-                            </FormItem> 
+                                <FormMessage />
+                            </FormItem>
                         )} />
-                        <FormField control={control} name={`legs.${index}.destinationFbo`} render={({ field }) => ( 
-                            <FormItem> 
-                                <FormLabel className="flex items-center gap-1"><Building className="h-4 w-4" />Destination FBO</FormLabel> 
+                        <FormField control={control} name={`legs.${index}.destinationFbo`} render={({ field }) => (
+                            <FormItem>
+                                <FormLabel className="flex items-center gap-1"><Building className="h-4 w-4" />Destination FBO</FormLabel>
                                 <Select onValueChange={field.onChange} value={field.value || ""}>
                                      <FormControl>
                                       <SelectTrigger disabled={fetchingFbosForLeg[index]?.destination || !destinationFboOptionsPerLeg[index]?.length}>
@@ -572,16 +566,16 @@ export function CreateQuoteForm() {
                                       </SelectTrigger>
                                      </FormControl>
                                     <SelectContent>
-                                        {destinationFboOptionsPerLeg[index]?.map(fbo => (
+                                        {(destinationFboOptionsPerLeg[index] || []).map(fbo => (
                                             <SelectItem key={fbo.id} value={fbo.name}>{fbo.name}</SelectItem>
                                         ))}
-                                        {destinationFboOptionsPerLeg[index]?.length === 0 && !fetchingFbosForLeg[index]?.destination && getValues(`legs.${index}.destination`)?.length >=3 && (
+                                        {(destinationFboOptionsPerLeg[index]?.length === 0 && !fetchingFbosForLeg[index]?.destination && getValues(`legs.${index}.destination`)?.length >=3) && (
                                           <SelectItem value="no-fbos" disabled>No FBOs found or enter manually</SelectItem>
                                         )}
                                     </SelectContent>
                                 </Select>
-                                <FormMessage /> 
-                            </FormItem> 
+                                <FormMessage />
+                            </FormItem>
                         )} />
                     </div>
                     <FormField
@@ -616,7 +610,7 @@ export function CreateQuoteForm() {
                         <FormField control={control} name={`legs.${index}.legType`} render={({ field }) => ( <FormItem> <FormLabel>Leg Type</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Select leg type" /></SelectTrigger></FormControl> <SelectContent>{legTypes.map(type => (<SelectItem key={type} value={type}>{type}</SelectItem>))}</SelectContent> </Select> <FormMessage /> </FormItem> )} />
                         <FormField control={control} name={`legs.${index}.passengerCount`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><Users className="h-4 w-4" />Passengers</FormLabel> <FormControl><Input type="number" placeholder="e.g., 2" {...field} min="0" /></FormControl> <FormMessage /> </FormItem> )} />
                     </div>
-                    
+
                     <Button type="button" variant="outline" size="sm" onClick={() => handleEstimateFlightDetails(index)} disabled={estimatingLegIndex === index || !aircraftTypeValue} className="w-full sm:w-auto">
                         {estimatingLegIndex === index ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}
                         Estimate Flight Details
@@ -633,7 +627,7 @@ export function CreateQuoteForm() {
                         const departureTime = new Date(legData.departureDateTime);
                         const arrivalTimeMillis = departureTime.getTime() + (estimate.estimatedFlightTimeHours * 60 * 60 * 1000);
                         formattedArrivalTime = format(new Date(arrivalTimeMillis), "PPP HH:mm");
-                        
+
                         const calculatedCost = estimate.estimatedFlightTimeHours * PLACEHOLDER_HOURLY_RATE;
                         costDisplay = `$${calculatedCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
                       } else if (estimate.estimatedFlightTimeHours && !estimate.error) {
@@ -677,9 +671,9 @@ export function CreateQuoteForm() {
             {fields.length > 0 && (
               <section>
                 <CardTitle className="text-xl border-b pb-2 mb-4">Itinerary Summary</CardTitle>
-                <LegsSummaryTable 
-                  legs={legsArray} 
-                  legEstimates={legEstimates} 
+                <LegsSummaryTable
+                  legs={legsArray}
+                  legEstimates={legEstimates}
                 />
               </section>
             )}
@@ -696,7 +690,7 @@ export function CreateQuoteForm() {
                     <FormField control={control} name="estimatedOvernights" render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-2"><BedDouble className="h-4 w-4 text-primary"/> Estimated Overnights</FormLabel> <FormControl><Input type="number" placeholder="e.g., 2" {...field} min="0" /></FormControl> <FormDescription>Number of overnight stays for crew/aircraft.</FormDescription> <FormMessage /> </FormItem> )} />
                 </div>
             </section>
-            
+
             <Separator />
 
             <FormField
@@ -712,7 +706,7 @@ export function CreateQuoteForm() {
                 </FormItem>
               )}
             />
-            
+
             <Separator className="my-6" />
             <div className="space-y-2 text-right">
                 <p className="text-lg font-semibold text-foreground">
@@ -742,3 +736,4 @@ export function CreateQuoteForm() {
     </Card>
   );
 }
+
