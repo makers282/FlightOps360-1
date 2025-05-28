@@ -14,7 +14,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
-import { CalendarIcon, Loader2, Save, Users, Briefcase, Utensils, Landmark, BedDouble, PlaneTakeoff, PlaneLanding, PlusCircle, Trash2, GripVertical } from 'lucide-react';
+import { CalendarIcon, Loader2, Save, Users, Briefcase, Utensils, Landmark, BedDouble, PlaneTakeoff, PlaneLanding, PlusCircle, Trash2, GripVertical, Wand2, Info } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { useToast } from '@/hooks/use-toast';
@@ -27,6 +27,8 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
+import { estimateFlightDetails, type EstimateFlightDetailsOutput } from '@/ai/flows/estimate-flight-details-flow';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 const legTypes = [
   "Charter", "Owner", "Positioning", "Ambulance", "Cargo", "Maintenance", "Ferry"
@@ -58,6 +60,7 @@ const formSchema = z.object({
 });
 
 type FormData = z.infer<typeof formSchema>;
+type LegEstimate = EstimateFlightDetailsOutput & { error?: string };
 
 const availableAircraft = [
   { id: 'N123AB', name: 'N123AB - Cessna Citation CJ3' },
@@ -69,10 +72,13 @@ const availableAircraft = [
 ];
 
 export function CreateQuoteForm() {
-  const [isPending, startTransition] = useTransition();
+  const [isGeneratingQuote, startQuoteGenerationTransition] = useTransition();
+  const [estimatingLegIndex, setEstimatingLegIndex] = useState<number | null>(null);
   const { toast } = useToast();
   const [minLegDepartureDate, setMinLegDepartureDate] = useState<Date | null>(null);
   const [isClient, setIsClient] = useState(false);
+  const [legEstimates, setLegEstimates] = useState<Array<LegEstimate | null>>([]);
+
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -93,8 +99,9 @@ export function CreateQuoteForm() {
     },
   });
 
-  const { control, setValue, getValues, watch } = form;
+  const { control, setValue, getValues, watch, formState: { errors } } = form;
   const cateringRequestedValue = watch("cateringRequested");
+  const legsArray = watch("legs");
 
   const { fields, append, remove } = useFieldArray({
     control,
@@ -107,21 +114,79 @@ export function CreateQuoteForm() {
       setValue('quoteId', `QT-${Math.random().toString(36).substring(2, 7).toUpperCase()}`);
     }
     const today = new Date();
-    today.setHours(0, 0, 0, 0); // Start of today for comparison
+    today.setHours(0, 0, 0, 0); 
     setMinLegDepartureDate(today);
-  }, [setValue, getValues]);
+    setLegEstimates(new Array(fields.length).fill(null));
+  }, [setValue, getValues, fields.length]);
+
+
+  const handleEstimateFlightDetails = async (legIndex: number) => {
+    setEstimatingLegIndex(legIndex);
+    const currentLegEstimates = [...legEstimates];
+    currentLegEstimates[legIndex] = null; // Clear previous estimate or error
+    setLegEstimates(currentLegEstimates);
+
+    const legData = getValues(`legs.${legIndex}`);
+    const aircraftId = getValues('aircraftType');
+
+    if (!legData.origin || !legData.destination) {
+      toast({ title: "Missing Info", description: "Please enter origin and destination for the leg.", variant: "destructive" });
+      setEstimatingLegIndex(null);
+      const updatedEstimates = [...legEstimates];
+      updatedEstimates[legIndex] = { error: "Origin and destination are required." } as LegEstimate;
+      setLegEstimates(updatedEstimates);
+      return;
+    }
+    if (!aircraftId) {
+      toast({ title: "Missing Aircraft", description: "Please select an aircraft type for the quote.", variant: "destructive" });
+      setEstimatingLegIndex(null);
+      const updatedEstimates = [...legEstimates];
+      updatedEstimates[legIndex] = { error: "Aircraft type is required." } as LegEstimate;
+      setLegEstimates(updatedEstimates);
+      return;
+    }
+    
+    const selectedAircraft = availableAircraft.find(ac => ac.id === aircraftId);
+    const aircraftNameForFlow = selectedAircraft ? selectedAircraft.name : aircraftId;
+
+    try {
+      const result = await estimateFlightDetails({
+        origin: legData.origin,
+        destination: legData.destination,
+        aircraftType: aircraftNameForFlow,
+      });
+      const updatedEstimates = [...legEstimates];
+      updatedEstimates[legIndex] = result;
+      setLegEstimates(updatedEstimates);
+      toast({ title: "Flight Details Estimated", description: `Leg ${legIndex + 1}: ${result.estimatedMileageNM} NM, ${result.estimatedFlightTimeHours} hrs.` });
+    } catch (e) {
+      console.error("Error estimating flight details:", e);
+      const errorMessage = e instanceof Error ? e.message : "AI failed to estimate details.";
+      toast({ title: "Estimation Error", description: errorMessage, variant: "destructive" });
+      const updatedEstimates = [...legEstimates];
+      updatedEstimates[legIndex] = { error: errorMessage } as LegEstimate;
+      setLegEstimates(updatedEstimates);
+    } finally {
+      setEstimatingLegIndex(null);
+    }
+  };
+
 
   const onSubmit: SubmitHandler<FormData> = (data) => {
-    startTransition(async () => {
+    startQuoteGenerationTransition(async () => {
       console.log('Quote Data:', data);
       const finalData = {
         ...data,
         cateringNotes: data.cateringRequested ? data.cateringNotes : undefined,
+        legsWithEstimates: data.legs.map((leg, index) => ({
+          ...leg,
+          estimation: legEstimates[index] && !legEstimates[index]?.error ? legEstimates[index] : undefined,
+        }))
       };
       toast({
         title: "Quote Generation Submitted",
         description: (
-          <pre className="mt-2 w-full max-w-[340px] rounded-md bg-slate-950 p-4 overflow-x-auto">
+          <pre className="mt-2 w-full max-w-[480px] rounded-md bg-slate-950 p-4 overflow-x-auto">
             <code className="text-white whitespace-pre-wrap">{JSON.stringify(finalData, null, 2)}</code>
           </pre>
         ),
@@ -131,14 +196,22 @@ export function CreateQuoteForm() {
   };
   
   const handleAddLeg = () => {
-    const lastLeg = fields[fields.length - 1];
     append({
-      origin: '', // Start with empty or last destination
+      origin: '', 
       destination: '',
-      departureDateTime: undefined as Date | undefined, // Or based on last leg's arrival if implemented
+      departureDateTime: undefined as Date | undefined, 
       legType: 'Charter',
     });
+    setLegEstimates([...legEstimates, null]);
   };
+
+  const handleRemoveLeg = (index: number) => {
+    remove(index);
+    const updatedEstimates = [...legEstimates];
+    updatedEstimates.splice(index, 1);
+    setLegEstimates(updatedEstimates);
+  };
+
 
   return (
     <Card className="shadow-lg max-w-4xl mx-auto">
@@ -173,6 +246,15 @@ export function CreateQuoteForm() {
             </section>
 
             <Separator />
+             {/* General Trip Options First for Aircraft Selection */}
+            <section>
+              <CardTitle className="text-xl border-b pb-2 mb-4">General Quote Options</CardTitle>
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 mb-6">
+                <FormField control={control} name="passengerCount" render={({ field }) => ( <FormItem> <FormLabel>Number of Passengers</FormLabel> <FormControl><Input type="number" placeholder="e.g., 4" {...field} min="1" /></FormControl> <FormMessage /> </FormItem> )} />
+                <FormField control={control} name="aircraftType" render={({ field }) => ( <FormItem> <FormLabel>Aircraft Type</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Select an aircraft type" /></SelectTrigger></FormControl> <SelectContent>{availableAircraft.map(aircraft => (<SelectItem key={aircraft.id} value={aircraft.id}>{aircraft.name}</SelectItem>))}</SelectContent> </Select> <FormMessage /> </FormItem> )} />
+              </div>
+            </section>
+            <Separator />
 
             {/* Flight Legs Section */}
             <section>
@@ -185,7 +267,7 @@ export function CreateQuoteForm() {
                         <GripVertical className="h-5 w-5 text-muted-foreground" /> Leg {index + 1}
                       </CardTitle>
                       {fields.length > 1 && (
-                        <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)} className="text-destructive hover:text-destructive">
+                        <Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveLeg(index)} className="text-destructive hover:text-destructive">
                           <Trash2 className="h-4 w-4" />
                           <span className="sr-only">Remove Leg</span>
                         </Button>
@@ -226,31 +308,52 @@ export function CreateQuoteForm() {
                       )}
                     />
                     <FormField control={control} name={`legs.${index}.legType`} render={({ field }) => ( <FormItem> <FormLabel>Leg Type</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Select leg type" /></SelectTrigger></FormControl> <SelectContent>{legTypes.map(type => (<SelectItem key={type} value={type}>{type}</SelectItem>))}</SelectContent> </Select> <FormMessage /> </FormItem> )} />
+                  
+                    <Button type="button" variant="outline" size="sm" onClick={() => handleEstimateFlightDetails(index)} disabled={estimatingLegIndex === index} className="w-full sm:w-auto">
+                      {estimatingLegIndex === index ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}
+                      Estimate Flight Details for Leg {index + 1}
+                    </Button>
+
+                    {legEstimates[index] && (
+                      <Alert variant={legEstimates[index]?.error ? "destructive" : "default"} className="mt-4">
+                        <Info className={`h-4 w-4 ${legEstimates[index]?.error ? '' : 'text-primary'}`} />
+                        <AlertTitle>{legEstimates[index]?.error ? `Error Estimating Leg ${index + 1}` : `Leg ${index + 1} Estimate`}</AlertTitle>
+                        <AlertDescription>
+                          {legEstimates[index]?.error ? (
+                            <p>{legEstimates[index]?.error}</p>
+                          ) : (
+                            <>
+                              <p><strong>Distance:</strong> {legEstimates[index]?.estimatedMileageNM?.toLocaleString()} NM</p>
+                              <p><strong>Flight Time:</strong> {legEstimates[index]?.estimatedFlightTimeHours?.toFixed(1)} hours</p>
+                              <p><strong>Assumed Speed:</strong> {legEstimates[index]?.assumedCruiseSpeedKts?.toLocaleString()} kts</p>
+                              <p className="text-xs mt-1"><em>{legEstimates[index]?.briefExplanation}</em></p>
+                            </>
+                          )}
+                        </AlertDescription>
+                      </Alert>
+                    )}
                   </CardContent>
                 </Card>
               ))}
               <Button type="button" variant="outline" onClick={handleAddLeg} className="w-full sm:w-auto">
                 <PlusCircle className="mr-2 h-4 w-4" /> Add New Leg
               </Button>
-              <FormField name="legs" control={control} render={() => <FormMessage />} /> {/* For array-level errors */}
+              {errors.legs && typeof errors.legs === 'object' && !Array.isArray(errors.legs) && (
+                <FormMessage>{(errors.legs as any).message}</FormMessage>
+              )}
             </section>
 
             <Separator />
-
-            {/* General Trip Options */}
+             {/* Moved General Quote Options here */}
             <section>
-              <CardTitle className="text-xl border-b pb-2 mb-4">General Quote Options</CardTitle>
-              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 mb-6">
-                <FormField control={control} name="passengerCount" render={({ field }) => ( <FormItem> <FormLabel>Number of Passengers</FormLabel> <FormControl><Input type="number" placeholder="e.g., 4" {...field} min="1" /></FormControl> <FormMessage /> </FormItem> )} />
-                <FormField control={control} name="aircraftType" render={({ field }) => ( <FormItem> <FormLabel>Aircraft Type</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Select an aircraft type" /></SelectTrigger></FormControl> <SelectContent>{availableAircraft.map(aircraft => (<SelectItem key={aircraft.id} value={aircraft.id}>{aircraft.name}</SelectItem>))}</SelectContent> </Select> <FormMessage /> </FormItem> )} />
-              </div>
-              <div className="space-y-4">
-                <FormField control={control} name="medicsRequested" render={({ field }) => ( <FormItem className="flex flex-row items-center space-x-3 space-y-0 p-3 border rounded-md hover:bg-muted/50"> <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl> <div className="space-y-1 leading-none"><FormLabel className="flex items-center gap-2"><Users className="h-4 w-4 text-primary" /> Medics Requested</FormLabel></div> </FormItem> )} />
-                <FormField control={control} name="cateringRequested" render={({ field }) => ( <FormItem className="flex flex-row items-center space-x-3 space-y-0 p-3 border rounded-md hover:bg-muted/50"> <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl> <div className="space-y-1 leading-none"><FormLabel className="flex items-center gap-2"><Utensils className="h-4 w-4 text-primary" /> Catering Requested</FormLabel></div> </FormItem> )} />
-                {cateringRequestedValue && ( <FormField control={control} name="cateringNotes" render={({ field }) => ( <FormItem className="pl-8"> <FormLabel>Catering Notes</FormLabel> <FormControl><Textarea placeholder="Specify catering details..." {...field} rows={3} /></FormControl> <FormMessage /> </FormItem> )} /> )}
-                <FormField control={control} name="includeLandingFees" render={({ field }) => ( <FormItem className="flex flex-row items-center space-x-3 space-y-0 p-3 border rounded-md hover:bg-muted/50"> <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl> <div className="space-y-1 leading-none"><FormLabel className="flex items-center gap-2"><Landmark className="h-4 w-4 text-primary" /> Include Estimated Landing Fees</FormLabel></div> </FormItem> )} />
-                <FormField control={control} name="estimatedOvernights" render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-2"><BedDouble className="h-4 w-4 text-primary"/> Estimated Overnights</FormLabel> <FormControl><Input type="number" placeholder="e.g., 2" {...field} min="0" /></FormControl> <FormDescription>Number of overnight stays for crew/aircraft.</FormDescription> <FormMessage /> </FormItem> )} />
-              </div>
+                <CardTitle className="text-xl border-b pb-2 mb-4">Additional Quote Options</CardTitle>
+                <div className="space-y-4">
+                    <FormField control={control} name="medicsRequested" render={({ field }) => ( <FormItem className="flex flex-row items-center space-x-3 space-y-0 p-3 border rounded-md hover:bg-muted/50"> <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl> <div className="space-y-1 leading-none"><FormLabel className="flex items-center gap-2"><Users className="h-4 w-4 text-primary" /> Medics Requested</FormLabel></div> </FormItem> )} />
+                    <FormField control={control} name="cateringRequested" render={({ field }) => ( <FormItem className="flex flex-row items-center space-x-3 space-y-0 p-3 border rounded-md hover:bg-muted/50"> <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl> <div className="space-y-1 leading-none"><FormLabel className="flex items-center gap-2"><Utensils className="h-4 w-4 text-primary" /> Catering Requested</FormLabel></div> </FormItem> )} />
+                    {cateringRequestedValue && ( <FormField control={control} name="cateringNotes" render={({ field }) => ( <FormItem className="pl-8"> <FormLabel>Catering Notes</FormLabel> <FormControl><Textarea placeholder="Specify catering details..." {...field} rows={3} /></FormControl> <FormMessage /> </FormItem> )} /> )}
+                    <FormField control={control} name="includeLandingFees" render={({ field }) => ( <FormItem className="flex flex-row items-center space-x-3 space-y-0 p-3 border rounded-md hover:bg-muted/50"> <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl> <div className="space-y-1 leading-none"><FormLabel className="flex items-center gap-2"><Landmark className="h-4 w-4 text-primary" /> Include Estimated Landing Fees</FormLabel></div> </FormItem> )} />
+                    <FormField control={control} name="estimatedOvernights" render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-2"><BedDouble className="h-4 w-4 text-primary"/> Estimated Overnights</FormLabel> <FormControl><Input type="number" placeholder="e.g., 2" {...field} min="0" /></FormControl> <FormDescription>Number of overnight stays for crew/aircraft.</FormDescription> <FormMessage /> </FormItem> )} />
+                </div>
             </section>
             
             <Separator />
@@ -270,8 +373,8 @@ export function CreateQuoteForm() {
             />
           </CardContent>
           <CardFooter>
-            <Button type="submit" disabled={isPending} className="w-full sm:w-auto">
-              {isPending ? ( <Loader2 className="mr-2 h-4 w-4 animate-spin" /> ) : ( <Save className="mr-2 h-4 w-4" /> )}
+            <Button type="submit" disabled={isGeneratingQuote} className="w-full sm:w-auto">
+              {isGeneratingQuote ? ( <Loader2 className="mr-2 h-4 w-4 animate-spin" /> ) : ( <Save className="mr-2 h-4 w-4" /> )}
               Generate Quote
             </Button>
           </CardFooter>
@@ -280,4 +383,3 @@ export function CreateQuoteForm() {
     </Card>
   );
 }
-
