@@ -14,11 +14,11 @@ import {z} from 'genkit';
 // Import the tool definition and schemas directly
 import { GetFbosForAirportInputSchema, FboSchema, getFbosForAirportTool } from '@/ai/tools/get-fbos-tool';
 
-export const FetchFbosInputSchema = GetFbosForAirportInputSchema;
-export type FetchFbosInput = z.infer<typeof FetchFbosInputSchema>;
+// Define the input type based on the imported schema
+export type FetchFbosInput = z.infer<typeof GetFbosForAirportInputSchema>;
 
-export const FetchFbosOutputSchema = z.array(FboSchema);
-export type FetchFbosOutput = z.infer<typeof FetchFbosOutputSchema>;
+// Define the output type based on an array of the imported FboSchema
+export type FetchFbosOutput = z.infer<ReturnType<typeof z.array<typeof FboSchema>>>;
 
 
 export async function fetchFbosForAirport(input: FetchFbosInput): Promise<FetchFbosOutput> {
@@ -28,8 +28,8 @@ export async function fetchFbosForAirport(input: FetchFbosInput): Promise<FetchF
 const fetchFbosFlow = ai.defineFlow(
   {
     name: 'fetchFbosFlow',
-    inputSchema: FetchFbosInputSchema,
-    outputSchema: FetchFbosOutputSchema,
+    inputSchema: GetFbosForAirportInputSchema, // Use the imported schema directly
+    outputSchema: z.array(FboSchema),      // Use the imported schema directly
   },
   async (input) => {
     // This flow directly uses the tool. 
@@ -38,3 +38,4 @@ const fetchFbosFlow = ai.defineFlow(
     return fbos;
   }
 );
+
