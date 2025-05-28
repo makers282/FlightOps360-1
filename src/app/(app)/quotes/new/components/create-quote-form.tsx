@@ -290,7 +290,7 @@ export function CreateQuoteForm() {
     } finally {
       setEstimatingLegIndex(null);
     }
-  }, [getValues, legEstimates, toast, estimatingLegIndex]); // Added estimatingLegIndex
+  }, [getValues, legEstimates, toast, estimatingLegIndex, setOriginFboOptionsPerLeg, setDestinationFboOptionsPerLeg, setFetchingFbosForLeg]);
 
 
   const loadFbosForLeg = useCallback(async (legIndex: number, airportCode: string, type: 'origin' | 'destination') => {
@@ -301,20 +301,28 @@ export function CreateQuoteForm() {
     }
 
     setFetchingFbosForLeg(prev => ({ ...prev, [legIndex]: { ...prev[legIndex], [type]: true } }));
+    let fbos: FetchFbosOutput = [];
+    let fetchError: any = null;
     try {
-      const fbos = await fetchFbosForAirport({ airportCode: airportCode.toUpperCase() });
+      fbos = await fetchFbosForAirport({ airportCode: airportCode.toUpperCase() });
       if (type === 'origin') {
         setOriginFboOptionsPerLeg(prev => { const upd = [...prev]; upd[legIndex] = fbos; return upd; });
       } else {
         setDestinationFboOptionsPerLeg(prev => { const upd = [...prev]; upd[legIndex] = fbos; return upd; });
       }
     } catch (error) {
-      console.error(`Error fetching ${type} FBOs for leg ${legIndex + 1}:`, error);
+      fetchError = error;
+      console.error(`Error fetching ${type} FBOs for leg ${legIndex + 1} (${airportCode}):`, error);
       toast({ title: `Failed to load ${type} FBOs`, description: (error as Error).message, variant: "destructive" });
       if (type === 'origin') setOriginFboOptionsPerLeg(prev => { const upd = [...prev]; upd[legIndex] = []; return upd; });
       else setDestinationFboOptionsPerLeg(prev => { const upd = [...prev]; upd[legIndex] = []; return upd; });
     } finally {
       setFetchingFbosForLeg(prev => ({ ...prev, [legIndex]: { ...prev[legIndex], [type]: false } }));
+      console.log(`[CLIENT DEBUG] FBO Fetch Complete for Leg ${legIndex + 1}, Airport: ${airportCode}, Type: ${type}`);
+      console.log(`[CLIENT DEBUG] Fetched FBOs:`, fbos);
+      if (fetchError) {
+        console.log(`[CLIENT DEBUG] Fetch Error:`, fetchError);
+      }
     }
   }, [toast, setOriginFboOptionsPerLeg, setDestinationFboOptionsPerLeg, setFetchingFbosForLeg]);
 
@@ -343,7 +351,7 @@ export function CreateQuoteForm() {
         setDestinationFboOptionsPerLeg(prev => { const upd = [...prev]; upd[index] = []; return upd; });
       }
     });
-  }, [legsArray, loadFbosForLeg, originFboOptionsPerLeg, destinationFboOptionsPerLeg, fetchingFbosForLeg]); // Dependencies carefully managed
+  }, [legsArray, loadFbosForLeg, originFboOptionsPerLeg, destinationFboOptionsPerLeg, fetchingFbosForLeg]);
 
   const onSendQuote: SubmitHandler<FormData> = (data) => {
     startQuoteGenerationTransition(async () => {
@@ -370,7 +378,6 @@ export function CreateQuoteForm() {
   };
 
   const handlePreviewQuote = () => {
-    // This function can be enhanced later to show a modal or a formatted preview
     console.log("Preview Quote Clicked. Current form data:", getValues());
     console.log("Current leg estimates:", legEstimates);
     console.log("Current total estimated price:", totalEstimatedQuotePrice);
@@ -388,18 +395,16 @@ export function CreateQuoteForm() {
     if (fields.length > 0) {
       const previousLegIndex = fields.length - 1;
       const previousLeg = getValues(`legs.${previousLegIndex}`);
-      newLegOrigin = previousLeg.destination; // Pre-populate origin with previous destination
-      previousLegPax = previousLeg.passengerCount || 1; // Carry over passenger count
+      newLegOrigin = previousLeg.destination; 
+      previousLegPax = previousLeg.passengerCount || 1; 
 
 
       const previousLegEstimate = legEstimates[previousLegIndex];
       if (previousLeg.departureDateTime && previousLegEstimate && previousLegEstimate.estimatedFlightTimeHours && !previousLegEstimate.error) {
         const previousLegDeparture = new Date(previousLeg.departureDateTime);
         const estimatedArrivalMillis = previousLegDeparture.getTime() + (previousLegEstimate.estimatedFlightTimeHours * 60 * 60 * 1000);
-        // Add 1 hour turnaround time
         newLegDepartureDateTime = new Date(estimatedArrivalMillis + (60 * 60 * 1000));
       } else if (previousLeg.departureDateTime) {
-         // Fallback if no estimate: add 3 hours (arbitrary, can be adjusted)
          newLegDepartureDateTime = new Date(new Date(previousLeg.departureDateTime).getTime() + (3 * 60 * 60 * 1000));
       }
     }
@@ -417,7 +422,6 @@ export function CreateQuoteForm() {
 
   const handleRemoveLeg = (index: number) => {
     remove(index);
-    // Adjust related state arrays
     setLegEstimates(prev => {
         const newEstimates = [...prev];
         newEstimates.splice(index, 1);
@@ -436,7 +440,6 @@ export function CreateQuoteForm() {
     setFetchingFbosForLeg(prev => {
         const newFetchingState = {...prev};
         delete newFetchingState[index];
-        // Re-index subsequent entries if necessary, or manage by leg ID if more robust
         return newFetchingState;
     })
   };
@@ -447,9 +450,7 @@ export function CreateQuoteForm() {
       setValue('clientName', selectedCustomer.name);
       setValue('clientEmail', selectedCustomer.email);
       setValue('clientPhone', selectedCustomer.phone || '');
-      // selectedCustomerId is already updated by field.onChange
     } else {
-      // Clear fields if customerId is empty or not found (e.g., placeholder was selected)
       setValue('clientName', '');
       setValue('clientEmail', '');
       setValue('clientPhone', '');
@@ -492,7 +493,7 @@ export function CreateQuoteForm() {
                         field.onChange(value);
                         handleCustomerSelect(value);
                       }}
-                      value={field.value || ""} // Ensure value is not undefined for Select
+                      value={field.value || ""} 
                     >
                       <FormControl>
                         <SelectTrigger>
@@ -500,7 +501,6 @@ export function CreateQuoteForm() {
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {/* <SelectItem value="">Select a client...</SelectItem> Removed this as it causes issues if value is empty string */}
                         {sampleCustomerData.map(customer => (
                           <SelectItem key={customer.id} value={customer.id}>
                             {customer.name} ({customer.company})
@@ -684,7 +684,7 @@ export function CreateQuoteForm() {
                 <PlusCircle className="mr-2 h-4 w-4" /> Add New Leg
               </Button>
               {errors.legs && typeof errors.legs === 'object' && !Array.isArray(errors.legs) && (
-                <FormMessage>{(errors.legs as any).message}</FormMessage> /* Handle top-level array errors */
+                <FormMessage>{(errors.legs as any).message}</FormMessage> 
               )}
             </section>
 
