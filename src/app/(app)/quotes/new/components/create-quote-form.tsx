@@ -16,7 +16,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { CalendarIcon, Loader2, Save, Users, Briefcase, Utensils, Landmark, BedDouble, PlaneTakeoff, PlaneLanding, PlusCircle, Trash2, GripVertical, Wand2, Info } from 'lucide-react';
 import { cn } from "@/lib/utils";
-import { format, addHours } from "date-fns";
+import { format } from "date-fns";
 import { useToast } from '@/hooks/use-toast';
 import {
   Select,
@@ -75,6 +75,8 @@ const availableAircraft = [
   { id: 'HEAVY_JET', name: 'Category: Heavy Jet' },
 ];
 
+const PLACEHOLDER_HOURLY_RATE = 3200; // Placeholder for aircraft hourly rate
+
 export function CreateQuoteForm() {
   const [isGeneratingQuote, startQuoteGenerationTransition] = useTransition();
   const [estimatingLegIndex, setEstimatingLegIndex] = useState<number | null>(null);
@@ -105,7 +107,7 @@ export function CreateQuoteForm() {
 
   const { control, setValue, getValues, watch, formState: { errors } } = form;
   const cateringRequestedValue = watch("cateringRequested");
-  const legsArray = watch("legs"); // Watching the legs array to manage legEstimates array size
+  const legsArray = watch("legs"); 
 
   const { fields, append, remove } = useFieldArray({
     control,
@@ -122,7 +124,6 @@ export function CreateQuoteForm() {
     setMinLegDepartureDate(today);
   }, [setValue, getValues]);
 
-  // Effect to keep legEstimates array in sync with the number of legs
   useEffect(() => {
     setLegEstimates(prevEstimates => {
       const newEstimates = new Array(legsArray.length).fill(null);
@@ -136,12 +137,12 @@ export function CreateQuoteForm() {
   }, [legsArray.length]);
 
 
-  const handleEstimateFlightDetails = async (legIndex: number) => {
+  const handleEstimateFlightDetails = useCallback(async (legIndex: number) => {
+    if (estimatingLegIndex === legIndex) return; // Already estimating this leg
     if (estimatingLegIndex !== null && estimatingLegIndex !== legIndex) {
-      toast({ title: "Estimation in Progress", description: `Still estimating leg ${estimatingLegIndex + 1}. Please wait.`, variant: "default" });
-      return;
+       toast({ title: "Estimation in Progress", description: `Still estimating leg ${estimatingLegIndex + 1}. Please wait.`, variant: "default" });
+       return;
     }
-    if (estimatingLegIndex === legIndex) return; 
 
     const legData = getValues(`legs.${legIndex}`);
     const currentAircraftTypeId = getValues('aircraftType');
@@ -166,6 +167,7 @@ export function CreateQuoteForm() {
 
     setEstimatingLegIndex(legIndex);
     
+    // Clear previous estimate for this leg before fetching new one
     setLegEstimates(prev => {
       const newEstimates = [...prev];
       newEstimates[legIndex] = null; 
@@ -210,7 +212,7 @@ export function CreateQuoteForm() {
     } finally {
       setEstimatingLegIndex(null);
     }
-  };
+  }, [getValues, legEstimates, toast, estimatingLegIndex]);
 
   const onSubmit: SubmitHandler<FormData> = (data) => {
     startQuoteGenerationTransition(async () => {
@@ -248,7 +250,7 @@ export function CreateQuoteForm() {
       if (previousLeg.departureDateTime && previousLegEstimate && previousLegEstimate.estimatedFlightTimeHours && !previousLegEstimate.error) {
         const previousLegDeparture = new Date(previousLeg.departureDateTime);
         const estimatedArrivalMillis = previousLegDeparture.getTime() + (previousLegEstimate.estimatedFlightTimeHours * 60 * 60 * 1000);
-        newLegDepartureDateTime = addHours(new Date(estimatedArrivalMillis), 1);
+        newLegDepartureDateTime = new Date(estimatedArrivalMillis + (60 * 60 * 1000)); // Add 1 hour ground time
       }
     }
 
@@ -364,25 +366,46 @@ export function CreateQuoteForm() {
                     </Button>
                     {!getValues('aircraftType') && <FormDescription className="text-xs text-destructive">Select an aircraft type above to enable estimation.</FormDescription>}
 
+                    {legEstimates[index] && (() => {
+                      const estimate = legEstimates[index]!;
+                      const legData = getValues(`legs.${index}`);
+                      let formattedArrivalTime = 'N/A';
+                      let costDisplay = 'N/A';
 
-                    {legEstimates[index] && (
-                      <Alert variant={legEstimates[index]?.error ? "destructive" : "default"} className="mt-4">
-                        <Info className={`h-4 w-4 ${legEstimates[index]?.error ? '' : 'text-primary'}`} />
-                        <AlertTitle>{legEstimates[index]?.error ? `Error Estimating Leg ${index + 1}` : `Leg ${index + 1} Estimate`}</AlertTitle>
-                        <AlertDescription>
-                          {legEstimates[index]?.error ? (
-                            <p>{legEstimates[index]?.error}</p>
-                          ) : (
-                            <>
-                              <p><strong>Distance:</strong> {legEstimates[index]?.estimatedMileageNM?.toLocaleString()} NM</p>
-                              <p><strong>Flight Time:</strong> {legEstimates[index]?.estimatedFlightTimeHours?.toFixed(1)} hours</p>
-                              <p><strong>Assumed Speed:</strong> {legEstimates[index]?.assumedCruiseSpeedKts?.toLocaleString()} kts</p>
-                              <p className="text-xs mt-1"><em>{legEstimates[index]?.briefExplanation}</em></p>
-                            </>
-                          )}
-                        </AlertDescription>
-                      </Alert>
-                    )}
+                      if (legData.departureDateTime && estimate.estimatedFlightTimeHours && !estimate.error) {
+                        const departureTime = new Date(legData.departureDateTime);
+                        const arrivalTimeMillis = departureTime.getTime() + (estimate.estimatedFlightTimeHours * 60 * 60 * 1000);
+                        formattedArrivalTime = format(new Date(arrivalTimeMillis), "PPP HH:mm");
+                        
+                        const calculatedCost = estimate.estimatedFlightTimeHours * PLACEHOLDER_HOURLY_RATE;
+                        costDisplay = `$${calculatedCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                      } else if (estimate.estimatedFlightTimeHours && !estimate.error) {
+                        // Can still calculate cost if flight time is available but departure is not
+                        const calculatedCost = estimate.estimatedFlightTimeHours * PLACEHOLDER_HOURLY_RATE;
+                        costDisplay = `$${calculatedCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                      }
+
+                      return (
+                        <Alert variant={estimate.error ? "destructive" : "default"} className="mt-4">
+                          <Info className={`h-4 w-4 ${estimate.error ? '' : 'text-primary'}`} />
+                          <AlertTitle>{estimate.error ? `Error Estimating Leg ${index + 1}` : `Leg ${index + 1} Estimate`}</AlertTitle>
+                          <AlertDescription>
+                            {estimate.error ? (
+                              <p>{estimate.error}</p>
+                            ) : (
+                              <>
+                                <p><strong>Distance:</strong> {estimate.estimatedMileageNM?.toLocaleString()} NM</p>
+                                <p><strong>Est. Flight Time:</strong> {estimate.estimatedFlightTimeHours?.toFixed(1)} hours</p>
+                                {legData.departureDateTime && <p><strong>Est. Arrival Time:</strong> {formattedArrivalTime}</p>}
+                                <p><strong>Est. Leg Cost:</strong> {costDisplay} (at ${PLACEHOLDER_HOURLY_RATE}/hr placeholder)</p>
+                                <p><strong>Assumed Speed:</strong> {estimate.assumedCruiseSpeedKts?.toLocaleString()} kts</p>
+                                <p className="text-xs mt-1"><em>{estimate.briefExplanation}</em></p>
+                              </>
+                            )}
+                          </AlertDescription>
+                        </Alert>
+                      );
+                    })()}
                   </CardContent>
                 </Card>
               ))}
