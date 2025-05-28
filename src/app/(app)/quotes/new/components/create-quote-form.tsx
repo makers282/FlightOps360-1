@@ -76,7 +76,7 @@ const availableAircraft = [
   { id: 'HEAVY_JET', name: 'Category: Heavy Jet' },
 ];
 
-const PLACEHOLDER_HOURLY_RATE = 3200; // Placeholder for aircraft hourly rate
+const PLACEHOLDER_HOURLY_RATE = 3200; 
 const PLACEHOLDER_LANDING_FEE_PER_LEG = 500;
 const PLACEHOLDER_OVERNIGHT_FEE_PER_NIGHT = 1000;
 const PLACEHOLDER_MEDICS_FEE = 2000;
@@ -149,7 +149,6 @@ export function CreateQuoteForm() {
     });
   }, [legsArray.length]);
 
-  // Calculate total estimated quote price
   useEffect(() => {
     let runningTotal = 0;
     legsArray.forEach((leg, index) => {
@@ -300,9 +299,8 @@ export function CreateQuoteForm() {
       if (previousLeg.departureDateTime && previousLegEstimate && previousLegEstimate.estimatedFlightTimeHours && !previousLegEstimate.error) {
         const previousLegDeparture = new Date(previousLeg.departureDateTime);
         const estimatedArrivalMillis = previousLegDeparture.getTime() + (previousLegEstimate.estimatedFlightTimeHours * 60 * 60 * 1000);
-        newLegDepartureDateTime = new Date(estimatedArrivalMillis + (60 * 60 * 1000)); // Add 1 hour ground time
+        newLegDepartureDateTime = new Date(estimatedArrivalMillis + (60 * 60 * 1000)); 
       } else if (previousLeg.departureDateTime) {
-        // If no estimate, but departure time exists, set new leg departure 1 hour after previous leg's departure + placeholder 2hr flight
          newLegDepartureDateTime = new Date(new Date(previousLeg.departureDateTime).getTime() + (3 * 60 * 60 * 1000));
       }
     }
@@ -539,5 +537,3 @@ export function CreateQuoteForm() {
     </Card>
   );
 }
-
-    
