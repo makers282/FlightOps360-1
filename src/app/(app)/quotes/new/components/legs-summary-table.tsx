@@ -2,56 +2,57 @@
 // src/app/(app)/quotes/new/components/legs-summary-table.tsx
 "use client";
 
-import type { EstimateFlightDetailsOutput } from '@/ai/flows/estimate-flight-details-flow';
 import type { LegFormData } from './create-quote-form'; 
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { format } from "date-fns";
 
-
-interface LegEstimateForSummary extends EstimateFlightDetailsOutput {
-  error?: string;
-  estimatedForInputs?: { origin: string; destination: string; aircraftType: string };
-}
-
 interface LegsSummaryTableProps {
   legs: LegFormData[];
-  legEstimates: Array<LegEstimateForSummary | null>;
 }
 
-export function LegsSummaryTable({ legs, legEstimates }: LegsSummaryTableProps) {
-  let totalRevenueFlightTime = 0;
-  let totalPositioningFlightTime = 0;
+export function LegsSummaryTable({ legs }: LegsSummaryTableProps) {
+  let totalRevenueFlightTimeHours = 0;
+  let totalPositioningFlightTimeHours = 0;
+  let totalRevenueBlockTimeHours = 0;
+  let totalPositioningBlockTimeHours = 0;
 
   const formattedLegs = legs.map((leg, index) => {
-    const estimate = legEstimates[index];
     let estimatedArrivalTime = "N/A";
-    let estimatedTimeEnrouteHours = 0;
+    const flightTimeHours = leg.flightTimeHours || 0;
+    
+    const originTaxiMinutes = leg.originTaxiTimeMinutes || 0;
+    const destinationTaxiMinutes = leg.destinationTaxiTimeMinutes || 0;
+    const blockTimeTotalMinutes = originTaxiMinutes + (flightTimeHours * 60) + destinationTaxiMinutes;
+    const blockTimeHoursCalculated = parseFloat((blockTimeTotalMinutes / 60).toFixed(2));
 
-    if (leg.departureDateTime && estimate && estimate.estimatedFlightTimeHours && !estimate.error) {
+
+    if (leg.departureDateTime && flightTimeHours > 0) {
       const departureTime = new Date(leg.departureDateTime);
-      const arrivalTimeMillis = departureTime.getTime() + (estimate.estimatedFlightTimeHours * 60 * 60 * 1000);
+      const arrivalTimeMillis = departureTime.getTime() + (flightTimeHours * 60 * 60 * 1000);
       estimatedArrivalTime = format(new Date(arrivalTimeMillis), "MM/dd HH:mm");
-      estimatedTimeEnrouteHours = estimate.estimatedFlightTimeHours;
 
       if (leg.legType === "Charter" || leg.legType === "Owner" || leg.legType === "Ambulance" || leg.legType === "Cargo") {
-        totalRevenueFlightTime += estimatedTimeEnrouteHours;
+        totalRevenueFlightTimeHours += flightTimeHours;
+        totalRevenueBlockTimeHours += blockTimeHoursCalculated;
       } else if (leg.legType === "Positioning" || leg.legType === "Ferry" || leg.legType === "Maintenance") {
-        totalPositioningFlightTime += estimatedTimeEnrouteHours;
+        totalPositioningFlightTimeHours += flightTimeHours;
+        totalPositioningBlockTimeHours += blockTimeHoursCalculated;
       }
-    } else if (estimate && estimate.estimatedFlightTimeHours && !estimate.error) {
-        estimatedTimeEnrouteHours = estimate.estimatedFlightTimeHours;
-         if (leg.legType === "Charter" || leg.legType === "Owner" || leg.legType === "Ambulance" || leg.legType === "Cargo") {
-            totalRevenueFlightTime += estimatedTimeEnrouteHours;
+    } else if (flightTimeHours > 0) {
+        if (leg.legType === "Charter" || leg.legType === "Owner" || leg.legType === "Ambulance" || leg.legType === "Cargo") {
+            totalRevenueFlightTimeHours += flightTimeHours;
+            totalRevenueBlockTimeHours += blockTimeHoursCalculated;
         } else if (leg.legType === "Positioning" || leg.legType === "Ferry" || leg.legType === "Maintenance") {
-            totalPositioningFlightTime += estimatedTimeEnrouteHours;
+            totalPositioningFlightTimeHours += flightTimeHours;
+            totalPositioningBlockTimeHours += blockTimeHoursCalculated;
         }
     }
     
-    const formatETE = (hours: number) => {
-      if (hours <= 0 || isNaN(hours)) return "N/A"; 
-      const h = Math.floor(hours);
-      const m = Math.round((hours - h) * 60);
-      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    const formatTimeDecimalToHHMM = (timeDecimal: number | undefined) => {
+      if (timeDecimal === undefined || timeDecimal <= 0 || isNaN(timeDecimal)) return "00:00";
+      const hours = Math.floor(timeDecimal);
+      const minutes = Math.round((timeDecimal - hours) * 60);
+      return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
     };
 
     return {
@@ -64,12 +65,16 @@ export function LegsSummaryTable({ legs, legEstimates }: LegsSummaryTableProps) 
       destination: leg.destination ? leg.destination.toUpperCase() : "N/A",
       destinationFbo: leg.destinationFbo || "N/A",
       pax: leg.passengerCount,
-      distance: estimate && !estimate.error && estimate.estimatedMileageNM ? estimate.estimatedMileageNM.toLocaleString() : "N/A",
-      ete: formatETE(estimatedTimeEnrouteHours),
+      // Distance is part of legEstimates, not leg form data directly. We'll omit it here for simplicity
+      // or pass legEstimates if needed for a more complex summary.
+      // distance: estimate && !estimate.error && estimate.estimatedMileageNM ? estimate.estimatedMileageNM.toLocaleString() : "N/A",
+      flightTime: formatTimeDecimalToHHMM(leg.flightTimeHours),
+      blockTime: formatTimeDecimalToHHMM(blockTimeHoursCalculated),
     };
   });
 
-  const totalFlightTime = totalRevenueFlightTime + totalPositioningFlightTime;
+  const totalOverallFlightTimeHours = totalRevenueFlightTimeHours + totalPositioningFlightTimeHours;
+  const totalOverallBlockTimeHours = totalRevenueBlockTimeHours + totalPositioningBlockTimeHours;
 
   const formatTotalTime = (hours: number) => {
     if (hours <= 0 || isNaN(hours)) return "0h 0m";
@@ -86,15 +91,16 @@ export function LegsSummaryTable({ legs, legEstimates }: LegsSummaryTableProps) 
           <TableRow>
             <TableHead className="w-[30px] px-2 py-2 text-xs">#</TableHead>
             <TableHead className="px-2 py-2 text-xs">Type</TableHead>
-            <TableHead className="px-2 py-2 text-xs">Depart</TableHead>
+            <TableHead className="px-2 py-2 text-xs">Depart (Local)</TableHead>
             <TableHead className="px-2 py-2 text-xs">From</TableHead>
             <TableHead className="px-2 py-2 text-xs">Origin FBO</TableHead>
-            <TableHead className="px-2 py-2 text-xs">Arrive</TableHead>
+            <TableHead className="px-2 py-2 text-xs">Arrive (Local)</TableHead>
             <TableHead className="px-2 py-2 text-xs">At</TableHead>
             <TableHead className="px-2 py-2 text-xs">Dest. FBO</TableHead>
             <TableHead className="px-2 py-2 text-xs text-center">Pax</TableHead>
-            <TableHead className="px-2 py-2 text-xs text-right">Dist (NM)</TableHead>
-            <TableHead className="px-2 py-2 text-xs text-right">ETE</TableHead>
+            {/* <TableHead className="px-2 py-2 text-xs text-right">Dist (NM)</TableHead> */}
+            <TableHead className="px-2 py-2 text-xs text-right">Flight Time</TableHead>
+            <TableHead className="px-2 py-2 text-xs text-right">Block Time</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -109,8 +115,9 @@ export function LegsSummaryTable({ legs, legEstimates }: LegsSummaryTableProps) 
               <TableCell className="px-2 py-2 text-xs">{leg.destination}</TableCell>
               <TableCell className="px-2 py-2 text-xs">{leg.destinationFbo}</TableCell>
               <TableCell className="px-2 py-2 text-xs text-center">{leg.pax}</TableCell>
-              <TableCell className="px-2 py-2 text-xs text-right">{leg.distance}</TableCell>
-              <TableCell className="px-2 py-2 text-xs text-right">{leg.ete}</TableCell>
+              {/* <TableCell className="px-2 py-2 text-xs text-right">{leg.distance}</TableCell> */}
+              <TableCell className="px-2 py-2 text-xs text-right">{leg.flightTime}</TableCell>
+              <TableCell className="px-2 py-2 text-xs text-right">{leg.blockTime}</TableCell>
             </TableRow>
           ))}
           {legs.length === 0 && (
@@ -124,22 +131,28 @@ export function LegsSummaryTable({ legs, legEstimates }: LegsSummaryTableProps) 
         {legs.length > 0 && (
           <TableFooter>
             <TableRow>
-              <TableCell colSpan={10} className="px-2 py-2 text-xs text-right font-semibold">Total Flight Time:</TableCell>
-              <TableCell className="px-2 py-2 text-xs text-right font-semibold">
-                  {formatTotalTime(totalFlightTime)}
-              </TableCell>
+              <TableCell colSpan={10} className="px-2 py-2 text-xs text-right font-semibold">Total Revenue Flight Time:</TableCell>
+              <TableCell className="px-2 py-2 text-xs text-right font-semibold">{formatTotalTime(totalRevenueFlightTimeHours)}</TableCell>
             </TableRow>
-            <TableRow>
-              <TableCell colSpan={10} className="px-2 py-2 text-xs text-right text-muted-foreground">Revenue Flight Time:</TableCell>
-              <TableCell className="px-2 py-2 text-xs text-right text-muted-foreground">
-                  {formatTotalTime(totalRevenueFlightTime)}
-              </TableCell>
+             <TableRow>
+              <TableCell colSpan={10} className="px-2 py-2 text-xs text-right text-muted-foreground">Total Positioning Flight Time:</TableCell>
+              <TableCell className="px-2 py-2 text-xs text-right text-muted-foreground">{formatTotalTime(totalPositioningFlightTimeHours)}</TableCell>
             </TableRow>
-            <TableRow>
-              <TableCell colSpan={10} className="px-2 py-2 text-xs text-right text-muted-foreground">Positioning/Other Flight Time:</TableCell>
-              <TableCell className="px-2 py-2 text-xs text-right text-muted-foreground">
-                  {formatTotalTime(totalPositioningFlightTime)}
-              </TableCell>
+            <TableRow className="border-t-2 border-primary">
+              <TableCell colSpan={10} className="px-2 py-2 text-xs text-right font-bold">TOTAL OVERALL FLIGHT TIME:</TableCell>
+              <TableCell className="px-2 py-2 text-xs text-right font-bold">{formatTotalTime(totalOverallFlightTimeHours)}</TableCell>
+            </TableRow>
+             <TableRow>
+              <TableCell colSpan={10} className="px-2 py-2 text-xs text-right font-semibold">Total Revenue Block Time:</TableCell>
+              <TableCell className="px-2 py-2 text-xs text-right font-semibold">{formatTotalTime(totalRevenueBlockTimeHours)}</TableCell>
+            </TableRow>
+             <TableRow>
+              <TableCell colSpan={10} className="px-2 py-2 text-xs text-right text-muted-foreground">Total Positioning Block Time:</TableCell>
+              <TableCell className="px-2 py-2 text-xs text-right text-muted-foreground">{formatTotalTime(totalPositioningBlockTimeHours)}</TableCell>
+            </TableRow>
+            <TableRow className="border-t-2 border-primary">
+              <TableCell colSpan={10} className="px-2 py-2 text-xs text-right font-bold">TOTAL OVERALL BLOCK TIME:</TableCell>
+              <TableCell className="px-2 py-2 text-xs text-right font-bold">{formatTotalTime(totalOverallBlockTimeHours)}</TableCell>
             </TableRow>
           </TableFooter>
         )}
