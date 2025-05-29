@@ -30,7 +30,6 @@ import { Separator } from '@/components/ui/separator';
 import { estimateFlightDetails, type EstimateFlightDetailsInput, type EstimateFlightDetailsOutput } from '@/ai/flows/estimate-flight-details-flow';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { LegsSummaryTable } from './legs-summary-table';
-// import { fetchFbosForAirport, type FetchFbosInput, type FetchFbosOutput, type Fbo as FetchedFbo } from '@/ai/flows/fetch-fbos-flow';
 
 
 const legTypes = [
@@ -100,7 +99,7 @@ const OTHER_COSTS = {
   LANDING_FEE_PER_LEG: 500,
   OVERNIGHT_FEE_PER_NIGHT: 1500,
   MEDICS_FEE: 2500,
-  CATERING_FEE: 500,
+  CATERING_FEE: 500, // Per quote, not per leg currently
 };
 
 
@@ -111,14 +110,6 @@ const sampleCustomerData = [
   { id: 'CUST004', name: 'Emily White', company: 'White Solutions', email: 'emily.white@example.com', phone: '555-4321' },
 ];
 
-// const sampleFboOptions = [
-//   { id: 'SIG', name: 'Signature Flight Support' },
-//   { id: 'ATL', name: 'Atlantic Aviation' },
-//   { id: 'JET', name: 'Jet Aviation' },
-//   { id: 'TAC', name: 'TAC Air' },
-//   { id: 'OTHER', name: 'Other / To Be Determined' },
-// ];
-
 
 export function CreateQuoteForm() {
   const [isGeneratingQuote, startQuoteGenerationTransition] = useTransition();
@@ -128,12 +119,6 @@ export function CreateQuoteForm() {
   const [isClient, setIsClient] = useState(false);
   const [legEstimates, setLegEstimates] = useState<Array<LegEstimate | null>>([]);
   const [totalEstimatedQuotePrice, setTotalEstimatedQuotePrice] = useState(0);
-
-  // FBO state (reverted to text input for stability)
-  // const [originFboOptionsPerLeg, setOriginFboOptionsPerLeg] = useState<FetchedFbo[][]>([]);
-  // const [destinationFboOptionsPerLeg, setDestinationFboOptionsPerLeg] = useState<FetchedFbo[][]>([]);
-  // const [fetchingFbosForLeg, setFetchingFbosForLeg] = useState<{origin: boolean[], destination: boolean[]}>({origin: [], destination: []});
-
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -197,13 +182,6 @@ export function CreateQuoteForm() {
       });
       return newEstimates;
     });
-    // FBO state management (reverted)
-    // setFetchingFbosForLeg(prev => ({
-    //   origin: new Array(legsArray.length).fill(false).map((val, i) => prev.origin[i] || val),
-    //   destination: new Array(legsArray.length).fill(false).map((val, i) => prev.destination[i] || val),
-    // }));
-    // setOriginFboOptionsPerLeg(prev => new Array(legsArray.length).fill([]).map((val, i) => prev[i] || val));
-    // setDestinationFboOptionsPerLeg(prev => new Array(legsArray.length).fill([]).map((val, i) => prev[i] || val));
   }, [legsArray.length]);
 
   useEffect(() => {
@@ -326,83 +304,6 @@ export function CreateQuoteForm() {
     }
   }, [getValues, legEstimates, toast, estimatingLegIndex, setValue, setLegEstimates, setEstimatingLegIndex]);
 
-  // FBO Fetching (reverted to text input)
-  // const loadFbosForLeg = useCallback(async (legIndex: number, airportCode: string, type: 'origin' | 'destination') => {
-  //   if (!airportCode || airportCode.length < 3) {
-  //     if (type === 'origin') {
-  //       setOriginFboOptionsPerLeg(prev => { const newState = [...prev]; newState[legIndex] = []; return newState; });
-  //     } else {
-  //       setDestinationFboOptionsPerLeg(prev => { const newState = [...prev]; newState[legIndex] = []; return newState; });
-  //     }
-  //     return;
-  //   }
-
-  //   setFetchingFbosForLeg(prev => {
-  //     const newFetchingState = { ...prev };
-  //     if (type === 'origin') newFetchingState.origin[legIndex] = true;
-  //     else newFetchingState.destination[legIndex] = true;
-  //     return newFetchingState;
-  //   });
-
-  //   console.log(`[CLIENT DEBUG] FBO Fetch Start for Leg ${legIndex + 1} (${type}): ${airportCode}`);
-  //   try {
-  //     const result = await fetchFbosForAirport({ airportCode });
-  //     console.log(`[CLIENT DEBUG] RAW RESULT from fetchFbosForAirport for Leg ${legIndex + 1} (${type}):`, JSON.stringify(result));
-      
-  //     let fetchedFbos: FetchedFbo[] = [];
-  //     if (Array.isArray(result)) {
-  //       fetchedFbos = result;
-  //     } else {
-  //       console.warn(`[CLIENT DEBUG] fetchFbosForAirport returned non-array for ${airportCode}:`, result);
-  //     }
-      
-  //     console.log(`[CLIENT DEBUG] Fetched FBOs for Leg ${legIndex + 1} (${type}) (processed as 'fetchedFbos'):`, fetchedFbos);
-
-  //     if (type === 'origin') {
-  //       console.log(`[CLIENT DEBUG] SETTING Origin FBO Options for leg ${legIndex + 1} with:`, fetchedFbos);
-  //       setOriginFboOptionsPerLeg(prev => { const newState = [...prev]; newState[legIndex] = fetchedFbos; return newState; });
-  //     } else {
-  //       console.log(`[CLIENT DEBUG] SETTING Destination FBO Options for leg ${legIndex + 1} with:`, fetchedFbos);
-  //       setDestinationFboOptionsPerLeg(prev => { const newState = [...prev]; newState[legIndex] = fetchedFbos; return newState; });
-  //     }
-  //   } catch (error) {
-  //     console.error(`[CLIENT DEBUG] FBO Fetch Error for Leg ${legIndex + 1} (${type}) ${airportCode}:`, error);
-  //     toast({ title: `Error Fetching FBOs for ${airportCode}`, description: (error as Error).message, variant: "destructive" });
-  //     if (type === 'origin') {
-  //       setOriginFboOptionsPerLeg(prev => { const newState = [...prev]; newState[legIndex] = []; return newState; });
-  //     } else {
-  //       setDestinationFboOptionsPerLeg(prev => { const newState = [...prev]; newState[legIndex] = []; return newState; });
-  //     }
-  //   } finally {
-  //     setFetchingFbosForLeg(prev => {
-  //       const newFetchingState = { ...prev };
-  //       if (type === 'origin') newFetchingState.origin[legIndex] = false;
-  //       else newFetchingState.destination[legIndex] = false;
-  //       return newFetchingState;
-  //     });
-  //   }
-  // }, [toast, setOriginFboOptionsPerLeg, setDestinationFboOptionsPerLeg, setFetchingFbosForLeg]);
-
-
-  // useEffect(() => {
-  //   legsArray.forEach((leg, index) => {
-  //     const currentOriginOptions = originFboOptionsPerLeg[index];
-  //     const currentDestinationOptions = destinationFboOptionsPerLeg[index];
-
-  //     if (leg.origin && leg.origin.length >= 3 && (!currentOriginOptions || currentOriginOptions.length === 0 || (currentOriginOptions[0] && currentOriginOptions[0].airportCode !== leg.origin.toUpperCase())) && !fetchingFbosForLeg.origin[index]) {
-  //       loadFbosForLeg(index, leg.origin, 'origin');
-  //     } else if ((!leg.origin || leg.origin.length < 3) && currentOriginOptions && currentOriginOptions.length > 0) {
-  //       setOriginFboOptionsPerLeg(prev => { const newState = [...prev]; newState[index] = []; return newState; });
-  //     }
-
-  //     if (leg.destination && leg.destination.length >= 3 && (!currentDestinationOptions || currentDestinationOptions.length === 0 || (currentDestinationOptions[0] && currentDestinationOptions[0].airportCode !== leg.destination.toUpperCase())) && !fetchingFbosForLeg.destination[index]) {
-  //       loadFbosForLeg(index, leg.destination, 'destination');
-  //     } else if ((!leg.destination || leg.destination.length < 3) && currentDestinationOptions && currentDestinationOptions.length > 0) {
-  //       setDestinationFboOptionsPerLeg(prev => { const newState = [...prev]; newState[index] = []; return newState; });
-  //     }
-  //   });
-  // }, [legsArray, loadFbosForLeg, originFboOptionsPerLeg, destinationFboOptionsPerLeg, fetchingFbosForLeg]);
-
 
   const onSendQuote: SubmitHandler<FormData> = (data) => {
     startQuoteGenerationTransition(async () => {
@@ -474,7 +375,6 @@ export function CreateQuoteForm() {
     let previousLegOriginTaxi = 15;
     let previousLegDestTaxi = 15;
     let previousLegOriginFbo = '';
-    // let previousLegDestinationFbo = ''; // Not needed for new leg's origin FBO
 
 
     if (fields.length > 0) {
@@ -516,13 +416,6 @@ export function CreateQuoteForm() {
   const handleRemoveLeg = (index: number) => {
     remove(index);
     setLegEstimates(prev => { const newEstimates = [...prev]; newEstimates.splice(index, 1); return newEstimates; });
-    // FBO state removal (reverted)
-    // setOriginFboOptionsPerLeg(prev => { const newState = [...prev]; newState.splice(index, 1); return newState; });
-    // setDestinationFboOptionsPerLeg(prev => { const newState = [...prev]; newState.splice(index, 1); return newState; });
-    // setFetchingFbosForLeg(prev => ({
-    //   origin: prev.origin.filter((_, i) => i !== index),
-    //   destination: prev.destination.filter((_, i) => i !== index),
-    // }));
   };
 
   const handleCustomerSelect = (customerId: string) => {
@@ -591,7 +484,47 @@ export function CreateQuoteForm() {
                         <FormField control={control} name={`legs.${index}.originFbo`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><Building className="h-4 w-4" />Origin FBO (Optional)</FormLabel> <FormControl><Input placeholder="e.g., Signature, Atlantic" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
                         <FormField control={control} name={`legs.${index}.destinationFbo`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><Building className="h-4 w-4" />Destination FBO (Optional)</FormLabel> <FormControl><Input placeholder="e.g., Signature, Atlantic" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
                     </div>
-                    <FormField control={control} name={`legs.${index}.departureDateTime`} render={({ field }) => ( <FormItem className="flex flex-col"> <FormLabel>Desired Departure Date & Time</FormLabel> {isClient ? ( <Popover> <PopoverTrigger asChild> <FormControl> <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !(field.value && field.value instanceof Date && !isNaN(field.value.getTime())) && "text-muted-foreground")}> <span>{field.value && field.value instanceof Date && !isNaN(field.value.getTime()) ? format(field.value, "PPP HH:mm") : "Pick a date and time"}</span> <CalendarIcon className="ml-auto h-4 w-4 opacity-50" /> </Button> </FormControl> </PopoverTrigger> <PopoverContent className="w-auto p-0" align="start"> <Calendar mode="single" selected={field.value && field.value instanceof Date && !isNaN(field.value.getTime()) ? field.value : undefined} onSelect={field.onChange} disabled={(date) => minLegDepartureDate ? date < minLegDepartureDate : true} initialFocus /> <div className="p-2 border-t border-border"> <Input type="time" defaultValue={field.value && field.value instanceof Date && !isNaN(field.value.getTime()) ? format(field.value, "HH:mm") : ""} onChange={(e) => { const time = e.target.value; const [hours, minutes] = time.split(':').map(Number); let newDate = field.value && field.value instanceof Date && !isNaN(field.value.getTime()) ? new Date(field.value) : new Date(); if (isNaN(newDate.getTime())) newDate = new Date(); newDate.setHours(hours, minutes,0,0); field.onChange(newDate); }} /> </div> </PopoverContent> </Popover> ) : ( <Skeleton className="h-10 w-full" /> )} <FormMessage /> </FormItem> )} />
+                    <FormField control={control} name={`legs.${index}.departureDateTime`} render={({ field }) => ( <FormItem className="flex flex-col"> <FormLabel>Desired Departure Date & Time</FormLabel> 
+                        {isClient ? ( 
+                            <Popover> 
+                                <PopoverTrigger asChild> 
+                                    <FormControl> 
+                                        {/* TEMPORARILY STATIC BUTTON TO ISOLATE ERROR */}
+                                        <Button variant={"outline"} className="w-full pl-3 text-left font-normal">
+                                            <span>Pick a date and time (Static)</span>
+                                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                        </Button>
+                                    </FormControl> 
+                                </PopoverTrigger> 
+                                <PopoverContent className="w-auto p-0" align="start"> 
+                                    <Calendar 
+                                        mode="single" 
+                                        selected={field.value && field.value instanceof Date && !isNaN(field.value.getTime()) ? field.value : undefined} 
+                                        onSelect={field.onChange} 
+                                        disabled={(date) => minLegDepartureDate ? date < minLegDepartureDate : true} 
+                                        initialFocus 
+                                    /> 
+                                    <div className="p-2 border-t border-border"> 
+                                        <Input 
+                                            type="time" 
+                                            defaultValue={field.value && field.value instanceof Date && !isNaN(field.value.getTime()) ? format(field.value, "HH:mm") : ""} 
+                                            onChange={(e) => { 
+                                                const time = e.target.value; 
+                                                const [hours, minutes] = time.split(':').map(Number); 
+                                                let newDate = field.value && field.value instanceof Date && !isNaN(field.value.getTime()) ? new Date(field.value) : new Date(); 
+                                                if (isNaN(newDate.getTime())) newDate = new Date(); 
+                                                newDate.setHours(hours, minutes,0,0); 
+                                                field.onChange(newDate); 
+                                            }} 
+                                        /> 
+                                    </div> 
+                                </PopoverContent> 
+                            </Popover> 
+                        ) : ( 
+                            <Skeleton className="h-10 w-full" /> 
+                        )} 
+                        <FormMessage /> 
+                    </FormItem> )} />
                     
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <FormField control={control} name={`legs.${index}.legType`} render={({ field }) => ( <FormItem> <FormLabel>Leg Type</FormLabel> <Select onValueChange={field.onChange} value={field.value || ""} name={field.name}> <FormControl><SelectTrigger><SelectValue placeholder="Select leg type" /></SelectTrigger></FormControl> <SelectContent>{legTypes.map(type => (<SelectItem key={type} value={type}>{type}</SelectItem>))}</SelectContent> </Select> <FormMessage /> </FormItem> )} />
