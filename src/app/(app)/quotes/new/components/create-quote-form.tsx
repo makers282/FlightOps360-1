@@ -39,7 +39,7 @@ const legTypes = [
 const legSchema = z.object({
   origin: z.string().min(3, "Origin airport code (e.g., JFK).").max(5, "Origin airport code too long.").toUpperCase(),
   destination: z.string().min(3, "Destination airport code (e.g., LAX).").max(5, "Destination airport code too long.").toUpperCase(),
-  departureDateTime: z.date({ required_error: "Departure date and time are required." }),
+  departureDateTime: z.date({ required_error: "Departure date and time are required." }).optional(),
   legType: z.enum(legTypes, { required_error: "Leg type is required." }),
   passengerCount: z.coerce.number().min(0, "Passenger count cannot be negative.").int().default(1),
   originFbo: z.string().optional(),
@@ -82,6 +82,10 @@ const availableAircraft = [
   { id: 'LIGHT_JET', name: 'Category: Light Jet' },
   { id: 'MID_JET', name: 'Category: Midsize Jet' },
   { id: 'HEAVY_JET', name: 'Category: Heavy Jet' },
+];
+
+const sampleFboOptions = [
+  "Signature Flight Support", "Atlantic Aviation", "Jet Aviation", "Million Air", "Other"
 ];
 
 // Placeholder Cost Settings
@@ -192,8 +196,8 @@ export function CreateQuoteForm() {
     const hourlyRate = aircraftName ? (AIRCRAFT_HOURLY_RATES[aircraftName] || DEFAULT_AIRCRAFT_HOURLY_RATE) : DEFAULT_AIRCRAFT_HOURLY_RATE;
 
     legsArray.forEach((leg) => {
-      const flightTime = leg.flightTimeHours;
-      if (flightTime && flightTime > 0) {
+      const flightTime = Number(leg.flightTimeHours || 0);
+      if (flightTime > 0) {
         runningTotal += flightTime * hourlyRate;
       }
       if (includeLandingFeesValue) {
@@ -201,8 +205,8 @@ export function CreateQuoteForm() {
       }
     });
 
-    if (estimatedOvernightsValue > 0) {
-      runningTotal += estimatedOvernightsValue * OTHER_COSTS.OVERNIGHT_FEE_PER_NIGHT;
+    if (Number(estimatedOvernightsValue) > 0) {
+      runningTotal += Number(estimatedOvernightsValue) * OTHER_COSTS.OVERNIGHT_FEE_PER_NIGHT;
     }
     if (medicsRequestedValue) {
       runningTotal += OTHER_COSTS.MEDICS_FEE;
@@ -261,9 +265,9 @@ export function CreateQuoteForm() {
         setValue(`legs.${legIndex}.flightTimeHours`, result.estimatedFlightTimeHours);
       }
       
-      const originTaxi = legData.originTaxiTimeMinutes || 0;
-      const destTaxi = legData.destinationTaxiTimeMinutes || 0;
-      const flightTime = result.estimatedFlightTimeHours || 0;
+      const originTaxi = Number(legData.originTaxiTimeMinutes || 0);
+      const destTaxi = Number(legData.destinationTaxiTimeMinutes || 0);
+      const flightTime = Number(result.estimatedFlightTimeHours || 0); // Ensure this is a number
       const blockTimeTotalMinutes = originTaxi + (flightTime * 60) + destTaxi;
       const blockTimeHours = parseFloat((blockTimeTotalMinutes / 60).toFixed(2));
 
@@ -313,9 +317,9 @@ export function CreateQuoteForm() {
         cateringNotes: data.cateringRequested ? data.cateringNotes : undefined, 
         legsWithEstimatesAndBlockTime: data.legs.map((leg, index) => {
           const estimate = legEstimates[index];
-          const originTaxi = leg.originTaxiTimeMinutes || 0;
-          const destTaxi = leg.destinationTaxiTimeMinutes || 0;
-          const flightTime = leg.flightTimeHours || 0;
+          const originTaxi = Number(leg.originTaxiTimeMinutes || 0);
+          const destTaxi = Number(leg.destinationTaxiTimeMinutes || 0);
+          const flightTime = Number(leg.flightTimeHours || 0);
           const blockTimeTotalMinutes = originTaxi + (flightTime * 60) + destTaxi;
           const blockTimeHours = parseFloat((blockTimeTotalMinutes / 60).toFixed(2));
           
@@ -348,9 +352,9 @@ export function CreateQuoteForm() {
         cateringNotes: data.cateringRequested ? data.cateringNotes : undefined, 
         legsWithEstimatesAndBlockTime: data.legs.map((leg, index) => {
           const estimate = legEstimates[index];
-          const originTaxi = leg.originTaxiTimeMinutes || 0;
-          const destTaxi = leg.destinationTaxiTimeMinutes || 0;
-          const flightTime = leg.flightTimeHours || 0;
+          const originTaxi = Number(leg.originTaxiTimeMinutes || 0);
+          const destTaxi = Number(leg.destinationTaxiTimeMinutes || 0);
+          const flightTime = Number(leg.flightTimeHours || 0);
           const blockTimeTotalMinutes = originTaxi + (flightTime * 60) + destTaxi;
           const blockTimeHours = parseFloat((blockTimeTotalMinutes / 60).toFixed(2));
           
@@ -386,11 +390,11 @@ export function CreateQuoteForm() {
       previousLegDestTaxi = previousLeg.destinationTaxiTimeMinutes || 15;
       previousLegOriginFbo = previousLeg.destinationFbo || ''; 
 
-      const previousLegFlightTime = previousLeg.flightTimeHours;
-      if (previousLeg.departureDateTime instanceof Date && !isNaN(previousLeg.departureDateTime.getTime()) && previousLegFlightTime && previousLegFlightTime > 0) {
+      const previousLegFlightTime = Number(previousLeg.flightTimeHours || 0);
+      if (previousLeg.departureDateTime instanceof Date && !isNaN(previousLeg.departureDateTime.getTime()) && previousLegFlightTime > 0) {
         const previousLegDeparture = new Date(previousLeg.departureDateTime);
         const previousLegFlightMillis = previousLegFlightTime * 60 * 60 * 1000;
-        const previousLegDestTaxiMillis = (previousLeg.destinationTaxiTimeMinutes || 0) * 60 * 1000;
+        const previousLegDestTaxiMillis = (Number(previousLeg.destinationTaxiTimeMinutes || 0)) * 60 * 1000;
         
         const estimatedArrivalMillis = previousLegDeparture.getTime() + previousLegFlightMillis + previousLegDestTaxiMillis;
         newLegDepartureDateTime = addHours(new Date(estimatedArrivalMillis), 1); 
@@ -481,17 +485,30 @@ export function CreateQuoteForm() {
                       <FormField control={control} name={`legs.${index}.destination`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><PlaneLanding className="h-4 w-4" />Destination Airport</FormLabel> <FormControl><Input placeholder="e.g., KLAX" {...field} onChange={(e) => { field.onChange(e.target.value.toUpperCase()); trigger(`legs.${index}.destination`); }} /></FormControl> <FormMessage /> </FormItem> )} />
                     </div>
                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <FormField control={control} name={`legs.${index}.originFbo`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><Building className="h-4 w-4" />Origin FBO (Optional)</FormLabel> <FormControl><Input placeholder="e.g., Signature, Atlantic" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
-                        <FormField control={control} name={`legs.${index}.destinationFbo`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><Building className="h-4 w-4" />Destination FBO (Optional)</FormLabel> <FormControl><Input placeholder="e.g., Signature, Atlantic" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
+                        <FormField control={control} name={`legs.${index}.originFbo`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><Building className="h-4 w-4" />Origin FBO (Optional)</FormLabel> 
+                          <Select onValueChange={field.onChange} value={field.value || ""} name={field.name}>
+                            <FormControl><SelectTrigger><SelectValue placeholder="Select FBO (Optional)" /></SelectTrigger></FormControl>
+                            <SelectContent>
+                              {sampleFboOptions.map(fboName => (<SelectItem key={fboName} value={fboName}>{fboName}</SelectItem>))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage /> </FormItem> )} />
+                        <FormField control={control} name={`legs.${index}.destinationFbo`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><Building className="h-4 w-4" />Destination FBO (Optional)</FormLabel> 
+                          <Select onValueChange={field.onChange} value={field.value || ""} name={field.name}>
+                            <FormControl><SelectTrigger><SelectValue placeholder="Select FBO (Optional)" /></SelectTrigger></FormControl>
+                            <SelectContent>
+                              {sampleFboOptions.map(fboName => (<SelectItem key={fboName} value={fboName}>{fboName}</SelectItem>))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage /> </FormItem> )} />
                     </div>
                     <FormField control={control} name={`legs.${index}.departureDateTime`} render={({ field }) => ( <FormItem className="flex flex-col"> <FormLabel>Desired Departure Date & Time</FormLabel> 
                         {isClient ? ( 
                             <Popover> 
                                 <PopoverTrigger asChild> 
                                     <FormControl> 
-                                        {/* TEMPORARILY STATIC BUTTON TO ISOLATE ERROR */}
-                                        <Button variant={"outline"} className="w-full pl-3 text-left font-normal">
-                                            <span>Pick a date and time (Static)</span>
+                                        <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !(field.value && field.value instanceof Date && !isNaN(field.value.getTime())) && "text-muted-foreground")}>
+                                           <span>{field.value && field.value instanceof Date && !isNaN(field.value.getTime()) ? format(field.value, "PPP HH:mm") : "Pick a date and time"}</span>
                                             <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
                                         </Button>
                                     </FormControl> 
@@ -512,7 +529,7 @@ export function CreateQuoteForm() {
                                                 const time = e.target.value; 
                                                 const [hours, minutes] = time.split(':').map(Number); 
                                                 let newDate = field.value && field.value instanceof Date && !isNaN(field.value.getTime()) ? new Date(field.value) : new Date(); 
-                                                if (isNaN(newDate.getTime())) newDate = new Date(); 
+                                                if (isNaN(newDate.getTime())) newDate = new Date(); // Ensure newDate is a valid Date
                                                 newDate.setHours(hours, minutes,0,0); 
                                                 field.onChange(newDate); 
                                             }} 
@@ -546,18 +563,21 @@ export function CreateQuoteForm() {
                       let formattedBlockTime = 'N/A';
                       let legCost = 0;
 
-                      if (legData.departureDateTime && legData.departureDateTime instanceof Date && !isNaN(legData.departureDateTime.getTime()) && legData.flightTimeHours && legData.flightTimeHours > 0) {
-                        const departureTime = new Date(legData.departureDateTime);
-                        const flightTimeMillis = (legData.flightTimeHours || 0) * 60 * 60 * 1000;
+                      const legDepartureDateTime = legData.departureDateTime;
+                      const legFlightTimeHours = Number(legData.flightTimeHours || 0);
+
+                      if (legDepartureDateTime && legDepartureDateTime instanceof Date && !isNaN(legDepartureDateTime.getTime()) && legFlightTimeHours > 0) {
+                        const departureTime = new Date(legDepartureDateTime);
+                        const flightTimeMillis = legFlightTimeHours * 60 * 60 * 1000;
                         const arrivalTimeMillis = departureTime.getTime() + flightTimeMillis;
                         formattedArrivalTime = format(new Date(arrivalTimeMillis), "PPP HH:mm");
                       }
 
-                      const originTaxiMins = legData.originTaxiTimeMinutes || 0;
-                      const destTaxiMins = legData.destinationTaxiTimeMinutes || 0;
-                      const flightTimeHoursForBlock = legData.flightTimeHours || 0;
-                      if (flightTimeHoursForBlock > 0) {
-                        const blockTimeTotalMinutes = originTaxiMins + (flightTimeHoursForBlock * 60) + destTaxiMins;
+                      const originTaxiMins = Number(legData.originTaxiTimeMinutes || 0);
+                      const destTaxiMins = Number(legData.destinationTaxiTimeMinutes || 0);
+                      
+                      if (legFlightTimeHours > 0 || originTaxiMins > 0 || destTaxiMins > 0) {
+                        const blockTimeTotalMinutes = originTaxiMins + (legFlightTimeHours * 60) + destTaxiMins;
                         const blockHours = Math.floor(blockTimeTotalMinutes / 60);
                         const blockMinutes = Math.round(blockTimeTotalMinutes % 60);
                         formattedBlockTime = `${String(blockHours).padStart(2, '0')}:${String(blockMinutes).padStart(2, '0')} hrs`;
@@ -567,8 +587,8 @@ export function CreateQuoteForm() {
                       const selectedAircraftDetails = availableAircraft.find(ac => ac.id === selectedAircraftId);
                       const aircraftNameForRate = selectedAircraftDetails?.name;
                       const hourlyRateForLeg = aircraftNameForRate ? (AIRCRAFT_HOURLY_RATES[aircraftNameForRate] || DEFAULT_AIRCRAFT_HOURLY_RATE) : DEFAULT_AIRCRAFT_HOURLY_RATE;
-                      if (legData.flightTimeHours && legData.flightTimeHours > 0) {
-                        legCost = legData.flightTimeHours * hourlyRateForLeg;
+                      if (legFlightTimeHours > 0) {
+                        legCost = legFlightTimeHours * hourlyRateForLeg;
                       }
 
 
@@ -581,7 +601,7 @@ export function CreateQuoteForm() {
                               <>
                                 <p><strong>AI Est. Distance:</strong> {estimate.estimatedMileageNM?.toLocaleString()} NM</p>
                                 <p><strong>AI Est. Flight Time:</strong> {estimate.estimatedFlightTimeHours?.toFixed(1)} hours (Used to populate editable field above)</p>
-                                {(legData.departureDateTime && legData.departureDateTime instanceof Date && !isNaN(legData.departureDateTime.getTime())) && <p><strong>Calc. Arrival Time:</strong> {formattedArrivalTime}</p>}
+                                {(legDepartureDateTime && legDepartureDateTime instanceof Date && !isNaN(legDepartureDateTime.getTime())) && <p><strong>Calc. Arrival Time:</strong> {formattedArrivalTime}</p>}
                                 <p><strong>Calc. Block Time:</strong> {formattedBlockTime}</p>
                                 <p><strong>Assumed Speed (AI):</strong> {estimate.assumedCruiseSpeedKts?.toLocaleString()} kts</p>
                                 <p className="mt-1"><em>AI Explanation: {estimate.briefExplanation}</em></p>
@@ -640,4 +660,3 @@ export function CreateQuoteForm() {
     </Card>
   );
 }
-

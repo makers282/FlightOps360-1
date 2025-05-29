@@ -18,10 +18,10 @@ export function LegsSummaryTable({ legs }: LegsSummaryTableProps) {
 
   const formattedLegs = legs.map((leg, index) => {
     let estimatedArrivalTime = "N/A";
-    const flightTimeHours = leg.flightTimeHours || 0;
+    const flightTimeHours = Number(leg.flightTimeHours || 0);
     
-    const originTaxiMinutes = leg.originTaxiTimeMinutes || 0;
-    const destinationTaxiMinutes = leg.destinationTaxiTimeMinutes || 0;
+    const originTaxiMinutes = Number(leg.originTaxiTimeMinutes || 0);
+    const destinationTaxiMinutes = Number(leg.destinationTaxiTimeMinutes || 0);
     const blockTimeTotalMinutes = originTaxiMinutes + (flightTimeHours * 60) + destinationTaxiMinutes;
     const blockTimeHoursCalculated = parseFloat((blockTimeTotalMinutes / 60).toFixed(2));
 
@@ -38,7 +38,7 @@ export function LegsSummaryTable({ legs }: LegsSummaryTableProps) {
         totalPositioningFlightTimeHours += flightTimeHours;
         totalPositioningBlockTimeHours += blockTimeHoursCalculated;
       }
-    } else if (flightTimeHours > 0) {
+    } else if (flightTimeHours > 0) { // Still add to totals if flight time exists but no departure date
         if (leg.legType === "Charter" || leg.legType === "Owner" || leg.legType === "Ambulance" || leg.legType === "Cargo") {
             totalRevenueFlightTimeHours += flightTimeHours;
             totalRevenueBlockTimeHours += blockTimeHoursCalculated;
@@ -46,6 +46,12 @@ export function LegsSummaryTable({ legs }: LegsSummaryTableProps) {
             totalPositioningFlightTimeHours += flightTimeHours;
             totalPositioningBlockTimeHours += blockTimeHoursCalculated;
         }
+    } else if (blockTimeHoursCalculated > 0) { // Add to block time totals if only taxi times exist
+      if (leg.legType === "Charter" || leg.legType === "Owner" || leg.legType === "Ambulance" || leg.legType === "Cargo") {
+        totalRevenueBlockTimeHours += blockTimeHoursCalculated;
+      } else if (leg.legType === "Positioning" || leg.legType === "Ferry" || leg.legType === "Maintenance") {
+        totalPositioningBlockTimeHours += blockTimeHoursCalculated;
+      }
     }
     
     const formatTimeDecimalToHHMM = (timeDecimal: number | undefined) => {
@@ -58,16 +64,13 @@ export function LegsSummaryTable({ legs }: LegsSummaryTableProps) {
     return {
       legNumber: index + 1,
       legType: leg.legType,
-      departure: leg.departureDateTime ? format(new Date(leg.departureDateTime), "MM/dd HH:mm") : "N/A",
+      departure: leg.departureDateTime && leg.departureDateTime instanceof Date && !isNaN(leg.departureDateTime.getTime()) ? format(leg.departureDateTime, "MM/dd HH:mm") : "N/A",
       origin: leg.origin ? leg.origin.toUpperCase() : "N/A",
       originFbo: leg.originFbo || "N/A",
       arrival: estimatedArrivalTime,
       destination: leg.destination ? leg.destination.toUpperCase() : "N/A",
       destinationFbo: leg.destinationFbo || "N/A",
       pax: leg.passengerCount,
-      // Distance is part of legEstimates, not leg form data directly. We'll omit it here for simplicity
-      // or pass legEstimates if needed for a more complex summary.
-      // distance: estimate && !estimate.error && estimate.estimatedMileageNM ? estimate.estimatedMileageNM.toLocaleString() : "N/A",
       flightTime: formatTimeDecimalToHHMM(leg.flightTimeHours),
       blockTime: formatTimeDecimalToHHMM(blockTimeHoursCalculated),
     };
@@ -98,7 +101,6 @@ export function LegsSummaryTable({ legs }: LegsSummaryTableProps) {
             <TableHead className="px-2 py-2 text-xs">At</TableHead>
             <TableHead className="px-2 py-2 text-xs">Dest. FBO</TableHead>
             <TableHead className="px-2 py-2 text-xs text-center">Pax</TableHead>
-            {/* <TableHead className="px-2 py-2 text-xs text-right">Dist (NM)</TableHead> */}
             <TableHead className="px-2 py-2 text-xs text-right">Flight Time</TableHead>
             <TableHead className="px-2 py-2 text-xs text-right">Block Time</TableHead>
           </TableRow>
@@ -115,7 +117,6 @@ export function LegsSummaryTable({ legs }: LegsSummaryTableProps) {
               <TableCell className="px-2 py-2 text-xs">{leg.destination}</TableCell>
               <TableCell className="px-2 py-2 text-xs">{leg.destinationFbo}</TableCell>
               <TableCell className="px-2 py-2 text-xs text-center">{leg.pax}</TableCell>
-              {/* <TableCell className="px-2 py-2 text-xs text-right">{leg.distance}</TableCell> */}
               <TableCell className="px-2 py-2 text-xs text-right">{leg.flightTime}</TableCell>
               <TableCell className="px-2 py-2 text-xs text-right">{leg.blockTime}</TableCell>
             </TableRow>
@@ -160,3 +161,4 @@ export function LegsSummaryTable({ legs }: LegsSummaryTableProps) {
     </div>
   );
 }
+
