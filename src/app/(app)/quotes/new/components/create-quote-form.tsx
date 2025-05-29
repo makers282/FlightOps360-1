@@ -248,7 +248,7 @@ export function CreateQuoteForm() {
 
     setLegEstimates(prev => {
       const newEstimates = [...prev];
-      newEstimates[legIndex] = null; // Clear previous estimate for this leg
+      newEstimates[legIndex] = null; 
       return newEstimates;
     });
 
@@ -284,7 +284,7 @@ export function CreateQuoteForm() {
             destination: legData.destination.toUpperCase(),
             aircraftType: aircraftNameForFlow
           }
-        } as LegEstimate; // Cast to include error and inputs
+        } as LegEstimate; 
         return newEstimates;
       });
     } finally {
@@ -306,8 +306,10 @@ export function CreateQuoteForm() {
     try {
       fbos = await fetchFbosForAirport({ airportCode: airportCode.toUpperCase() });
       if (type === 'origin') {
+        console.log(`[CLIENT DEBUG] SETTING Origin FBO Options for leg ${legIndex + 1}:`, fbos);
         setOriginFboOptionsPerLeg(prev => { const upd = [...prev]; upd[legIndex] = fbos; return upd; });
       } else {
+        console.log(`[CLIENT DEBUG] SETTING Destination FBO Options for leg ${legIndex + 1}:`, fbos);
         setDestinationFboOptionsPerLeg(prev => { const upd = [...prev]; upd[legIndex] = fbos; return upd; });
       }
     } catch (error) {
@@ -319,7 +321,7 @@ export function CreateQuoteForm() {
     } finally {
       setFetchingFbosForLeg(prev => ({ ...prev, [legIndex]: { ...prev[legIndex], [type]: false } }));
       console.log(`[CLIENT DEBUG] FBO Fetch Complete for Leg ${legIndex + 1}, Airport: ${airportCode}, Type: ${type}`);
-      console.log(`[CLIENT DEBUG] Fetched FBOs for Leg ${legIndex + 1}:`, fbos);
+      console.log(`[CLIENT DEBUG] Fetched FBOs for Leg ${legIndex + 1}:`, fbos); 
       if (fetchError) {
         console.log(`[CLIENT DEBUG] Fetch Error for Leg ${legIndex + 1}:`, fetchError);
       }
@@ -360,7 +362,7 @@ export function CreateQuoteForm() {
       const finalData = {
         ...data,
         totalEstimatedQuotePrice,
-        cateringNotes: data.cateringRequested ? data.cateringNotes : undefined, // Only include if requested
+        cateringNotes: data.cateringRequested ? data.cateringNotes : undefined, 
         legsWithEstimates: data.legs.map((leg, index) => ({
           ...leg,
           estimation: legEstimates[index] && !legEstimates[index]?.error ? legEstimates[index] : undefined,
@@ -441,7 +443,6 @@ export function CreateQuoteForm() {
     setFetchingFbosForLeg(prev => {
         const newFetchingState = {...prev};
         delete newFetchingState[index];
-        // Adjust keys for subsequent legs if necessary (though typically not needed for object keys)
         return newFetchingState;
     })
   };
@@ -567,12 +568,24 @@ export function CreateQuoteForm() {
                                       </SelectTrigger>
                                     </FormControl>
                                     <SelectContent>
-                                        {(originFboOptionsPerLeg[index] || []).map(fbo => (
+                                        {(() => {
+                                          const options = originFboOptionsPerLeg[index] || [];
+                                          const isLoading = fetchingFbosForLeg[index]?.origin;
+                                          const currentAirportCode = getValues(`legs.${index}.origin`);
+                                          console.log(`[CLIENT DEBUG RENDER] Leg ${index + 1} Origin FBO SelectContent:`, { options, isLoading, currentAirportCode });
+                                          if (isLoading) {
+                                            return <SelectItem value="loading" disabled>Loading FBOs...</SelectItem>;
+                                          }
+                                          if (!options || options.length === 0) {
+                                            if (currentAirportCode && currentAirportCode.length >= 3) {
+                                              return <SelectItem value="no-fbos" disabled>No FBOs found</SelectItem>;
+                                            }
+                                            return <SelectItem value="enter-airport" disabled>Enter airport code</SelectItem>;
+                                          }
+                                          return options.map(fbo => (
                                             <SelectItem key={fbo.id} value={fbo.name}>{fbo.name}</SelectItem>
-                                        ))}
-                                        {(originFboOptionsPerLeg[index]?.length === 0 && !fetchingFbosForLeg[index]?.origin && getValues(`legs.${index}.origin`)?.length >=3) && (
-                                            <SelectItem value="no-fbos-found-origin" disabled>No FBOs found</SelectItem>
-                                        )}
+                                          ));
+                                        })()}
                                     </SelectContent>
                                 </Select>
                                 <FormMessage />
@@ -590,12 +603,24 @@ export function CreateQuoteForm() {
                                       </SelectTrigger>
                                      </FormControl>
                                     <SelectContent>
-                                        {(destinationFboOptionsPerLeg[index] || []).map(fbo => (
+                                      {(() => {
+                                          const options = destinationFboOptionsPerLeg[index] || [];
+                                          const isLoading = fetchingFbosForLeg[index]?.destination;
+                                          const currentAirportCode = getValues(`legs.${index}.destination`);
+                                          console.log(`[CLIENT DEBUG RENDER] Leg ${index + 1} Destination FBO SelectContent:`, { options, isLoading, currentAirportCode });
+                                          if (isLoading) {
+                                            return <SelectItem value="loading" disabled>Loading FBOs...</SelectItem>;
+                                          }
+                                          if (!options || options.length === 0) {
+                                            if (currentAirportCode && currentAirportCode.length >= 3) {
+                                              return <SelectItem value="no-fbos" disabled>No FBOs found</SelectItem>;
+                                            }
+                                            return <SelectItem value="enter-airport" disabled>Enter airport code</SelectItem>;
+                                          }
+                                          return options.map(fbo => (
                                             <SelectItem key={fbo.id} value={fbo.name}>{fbo.name}</SelectItem>
-                                        ))}
-                                        {(destinationFboOptionsPerLeg[index]?.length === 0 && !fetchingFbosForLeg[index]?.destination && getValues(`legs.${index}.destination`)?.length >=3) && (
-                                          <SelectItem value="no-fbos-found-destination" disabled>No FBOs found</SelectItem>
-                                        )}
+                                          ));
+                                        })()}
                                     </SelectContent>
                                 </Select>
                                 <FormMessage />
@@ -760,4 +785,3 @@ export function CreateQuoteForm() {
     </Card>
   );
 }
-
