@@ -8,7 +8,7 @@ const sampleFboData: Fbo[] = [
   {
     id: 'KJFK-FBO1',
     name: 'Sheltair JFK',
-    airportCode: 'KJFK', 
+    airportCode: 'KJFK',
     contactPhone: '718-995-9176',
     fuelTypes: ['Jet A', 'Avgas 100LL'],
     services: ['Handling', 'De-icing', 'Catering', 'Hangar', 'Customs'],
@@ -34,7 +34,7 @@ const sampleFboData: Fbo[] = [
   {
     id: 'KLAX-FBO1',
     name: 'Atlantic Aviation LAX',
-    airportCode: 'KLAX', 
+    airportCode: 'KLAX',
     contactPhone: '310-646-9500',
     fuelTypes: ['Jet A', 'Avgas 100LL', 'Sustainable Aviation Fuel (SAF)'],
     services: ['Full Service FBO', 'Customs', 'Gourmet Catering', 'Rental Cars'],
@@ -59,7 +59,7 @@ const sampleFboData: Fbo[] = [
   {
     id: 'KMIA-FBO1',
     name: 'Signature Flight Support MIA',
-    airportCode: 'KMIA', 
+    airportCode: 'KMIA',
     contactPhone: '305-871-3200',
     fuelTypes: ['Jet A'],
     services: ['24/7 Operations', 'Customs On-Site', 'VIP Lounges', 'Secured Parking'],
@@ -85,7 +85,7 @@ const sampleFboData: Fbo[] = [
   {
     id: 'KTEB-FBO1',
     name: 'Meridian Teterboro',
-    airportCode: 'KTEB', 
+    airportCode: 'KTEB',
     contactPhone: '201-288-5040',
     fuelTypes: ['Jet A', 'Avgas 100LL'],
     services: ['Award Winning FBO', 'Hangar', 'Customs', 'Catering', 'Maintenance'],
@@ -117,13 +117,13 @@ const genericFboBase: Omit<Fbo, 'id' | 'airportCode' | 'name'> = {
 
 export async function getFbosByAirportCode(airportCode: string): Promise<Fbo[]> {
   // Simulate API call delay
-  await new Promise(resolve => setTimeout(resolve, 50)); 
-  
+  await new Promise(resolve => setTimeout(resolve, 50));
+
   const upperAirportCode = airportCode.toUpperCase();
   console.log(`[MockFboService DEBUG] Request for FBOs at: ${upperAirportCode}`);
 
   const specificFbos = sampleFboData.filter(fbo => fbo.airportCode === upperAirportCode);
-  
+
   console.log(`[MockFboService DEBUG] Filtered specific FBOs for ${upperAirportCode}:`, JSON.stringify(specificFbos));
 
   if (specificFbos.length > 0) {
@@ -136,7 +136,7 @@ export async function getFbosByAirportCode(airportCode: string): Promise<Fbo[]> 
       {
         ...genericFboBase,
         id: `${upperAirportCode}-GENERIC-FBO`,
-        name: `Generic FBO at ${upperAirportCode}`,
+        name: `Generic FBO at ${upperAirportCode}`, // Changed from "Other FBO" to be more specific
         airportCode: upperAirportCode,
       }
     ];
