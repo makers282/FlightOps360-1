@@ -14,7 +14,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
-import { CalendarIcon, Loader2, Users, Briefcase, Utensils, Landmark, BedDouble, PlaneTakeoff, PlaneLanding, PlusCircle, Trash2, GripVertical, Wand2, Info, Eye, Send, Building, UserSearch, DollarSign, Clock } from 'lucide-react';
+import { CalendarIcon, Loader2, Users, Briefcase, Utensils, Landmark, BedDouble, PlaneTakeoff, PlaneLanding, PlusCircle, Trash2, GripVertical, Wand2, Info, Eye, Send, Building, UserSearch, DollarSign, Clock, Fuel, Edit } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { format, addHours } from "date-fns";
 import { useToast } from '@/hooks/use-toast';
@@ -30,6 +30,7 @@ import { Separator } from '@/components/ui/separator';
 import { estimateFlightDetails, type EstimateFlightDetailsInput, type EstimateFlightDetailsOutput } from '@/ai/flows/estimate-flight-details-flow';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { LegsSummaryTable } from './legs-summary-table';
+import { CostsSummaryDisplay, type LineItem } from './costs-summary-display';
 
 
 const legTypes = [
@@ -57,15 +58,25 @@ const formSchema = z.object({
   clientPhone: z.string().min(7, "Phone number seems too short.").optional().or(z.literal('')),
   legs: z.array(legSchema).min(1, "At least one flight leg is required."),
   aircraftType: z.string().min(1, "Aircraft type is required."),
+  
+  // Options that affect line items
   medicsRequested: z.boolean().optional().default(false),
   cateringRequested: z.boolean().optional().default(false),
-  cateringNotes: z.string().optional(),
   includeLandingFees: z.boolean().optional().default(true),
   estimatedOvernights: z.coerce.number().int().min(0).optional().default(0),
+  fuelSurchargeRequested: z.boolean().optional().default(true), // Assuming fuel surcharge is typically included
+
+  // Adjustable sell prices for options
+  sellPriceFuelSurchargePerHour: z.coerce.number().optional(),
+  sellPriceMedics: z.coerce.number().optional(),
+  sellPriceCatering: z.coerce.number().optional(),
+  sellPriceLandingFeePerLeg: z.coerce.number().optional(),
+  sellPriceOvernight: z.coerce.number().optional(),
+  
+  cateringNotes: z.string().optional(),
   notes: z.string().optional(),
 });
 
-type FormData = z.infer<typeof formSchema>;
 export type LegFormData = z.infer<typeof legSchema>;
 export type FullQuoteFormData = z.infer<typeof formSchema>;
 
@@ -84,26 +95,23 @@ const availableAircraft = [
   { id: 'HEAVY_JET', name: 'Category: Heavy Jet' },
 ];
 
-const sampleFboOptions = [
-  "Signature Flight Support", "Atlantic Aviation", "Jet Aviation", "Million Air", "Other"
-];
-
 // Placeholder Cost Settings
-const AIRCRAFT_HOURLY_RATES: { [key: string]: number } = {
-  'N123AB - Cessna Citation CJ3': 3200,
-  'N456CD - Bombardier Global 6000': 6500,
-  'N789EF - Gulfstream G650ER': 8500,
-  'Category: Light Jet': 2800,
-  'Category: Midsize Jet': 4500,
-  'Category: Heavy Jet': 7500,
+const AIRCRAFT_RATES: { [key: string]: { buy: number; sell: number } } = {
+  'N123AB - Cessna Citation CJ3': { buy: 2800, sell: 3200 },
+  'N456CD - Bombardier Global 6000': { buy: 5800, sell: 6500 },
+  'N789EF - Gulfstream G650ER': { buy: 7500, sell: 8500 },
+  'Category: Light Jet': { buy: 2400, sell: 2800 },
+  'Category: Midsize Jet': { buy: 4000, sell: 4500 },
+  'Category: Heavy Jet': { buy: 7000, sell: 7500 },
 };
-const DEFAULT_AIRCRAFT_HOURLY_RATE = 4000;
+const DEFAULT_AIRCRAFT_RATES = { buy: 3500, sell: 4000 };
 
-const OTHER_COSTS = {
-  LANDING_FEE_PER_LEG: 500,
-  OVERNIGHT_FEE_PER_NIGHT: 1500,
-  MEDICS_FEE: 2500,
-  CATERING_FEE: 500, // Per quote, not per leg currently
+const OTHER_COST_RATES = {
+  FUEL_SURCHARGE_PER_BLOCK_HOUR: { buy: 300, sell: 400, unitDescription: "Block Hour" },
+  LANDING_FEE_PER_LEG: { buy: 400, sell: 500, unitDescription: "Per Leg" },
+  OVERNIGHT_FEE_PER_NIGHT: { buy: 1000, sell: 1300, unitDescription: "Per Night"},
+  MEDICS_FEE_FLAT: { buy: 1800, sell: 2500, unitDescription: "Day" }, // Assuming flat for now
+  CATERING_FEE_FLAT: { buy: 350, sell: 500, unitDescription: "Service" }, // Assuming flat for now
 };
 
 
@@ -122,7 +130,7 @@ export function CreateQuoteForm() {
   const [minLegDepartureDate, setMinLegDepartureDate] = useState<Date | null>(null);
   const [isClient, setIsClient] = useState(false);
   const [legEstimates, setLegEstimates] = useState<Array<LegEstimate | null>>([]);
-  const [totalEstimatedQuotePrice, setTotalEstimatedQuotePrice] = useState(0);
+  const [calculatedLineItems, setCalculatedLineItems] = useState<LineItem[]>([]);
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -147,21 +155,25 @@ export function CreateQuoteForm() {
       aircraftType: '',
       medicsRequested: false,
       cateringRequested: false,
-      cateringNotes: "",
       includeLandingFees: true,
       estimatedOvernights: 0,
+      fuelSurchargeRequested: true,
+      cateringNotes: "",
       notes: '',
+      // Default sell prices can be undefined, meaning system defaults will be used
+      sellPriceFuelSurchargePerHour: undefined,
+      sellPriceMedics: undefined,
+      sellPriceCatering: undefined,
+      sellPriceLandingFeePerLeg: undefined,
+      sellPriceOvernight: undefined,
     },
   });
 
   const { control, setValue, getValues, watch, trigger, formState: { errors } } = form;
   const cateringRequestedValue = watch("cateringRequested");
   const legsArray = watch("legs");
-  const aircraftTypeValue = watch("aircraftType");
-  const includeLandingFeesValue = watch("includeLandingFees");
-  const estimatedOvernightsValue = watch("estimatedOvernights");
-  const medicsRequestedValue = watch("medicsRequested");
-  const cateringRequestedWatch = watch("cateringRequested");
+  const aircraftTypeId = watch("aircraftType");
+  const formValues = watch(); // Watch all form values for line item calculation
 
   const { fields, append, remove } = useFieldArray({
     control,
@@ -188,36 +200,123 @@ export function CreateQuoteForm() {
     });
   }, [legsArray.length]);
 
+  // Effect to calculate line items
   useEffect(() => {
-    let runningTotal = 0;
-    const selectedAircraftId = getValues('aircraftType');
-    const selectedAircraft = availableAircraft.find(ac => ac.id === selectedAircraftId);
-    const aircraftName = selectedAircraft?.name;
-    const hourlyRate = aircraftName ? (AIRCRAFT_HOURLY_RATES[aircraftName] || DEFAULT_AIRCRAFT_HOURLY_RATE) : DEFAULT_AIRCRAFT_HOURLY_RATE;
+    const newItems: LineItem[] = [];
+    const formData = getValues(); // Get current form values
 
-    legsArray.forEach((leg) => {
+    // 1. Revenue Flight Time
+    let totalRevenueFlightHours = 0;
+    let totalBlockHours = 0;
+
+    legsArray.forEach(leg => {
       const flightTime = Number(leg.flightTimeHours || 0);
-      if (flightTime > 0) {
-        runningTotal += flightTime * hourlyRate;
-      }
-      if (includeLandingFeesValue) {
-        runningTotal += OTHER_COSTS.LANDING_FEE_PER_LEG;
+      const originTaxi = Number(leg.originTaxiTimeMinutes || 0);
+      const destTaxi = Number(leg.destinationTaxiTimeMinutes || 0);
+      const legBlockMinutes = originTaxi + (flightTime * 60) + destTaxi;
+      totalBlockHours += parseFloat((legBlockMinutes / 60).toFixed(2));
+
+      if (flightTime > 0 && ["Charter", "Owner", "Ambulance", "Cargo"].includes(leg.legType)) {
+        totalRevenueFlightHours += flightTime;
       }
     });
+    
+    const selectedAircraft = availableAircraft.find(ac => ac.id === formData.aircraftType);
+    const aircraftName = selectedAircraft?.name;
+    const aircraftRates = aircraftName ? (AIRCRAFT_RATES[aircraftName] || DEFAULT_AIRCRAFT_RATES) : DEFAULT_AIRCRAFT_RATES;
 
-    if (Number(estimatedOvernightsValue) > 0) {
-      runningTotal += Number(estimatedOvernightsValue) * OTHER_COSTS.OVERNIGHT_FEE_PER_NIGHT;
-    }
-    if (medicsRequestedValue) {
-      runningTotal += OTHER_COSTS.MEDICS_FEE;
-    }
-    if (cateringRequestedWatch) {
-      runningTotal += OTHER_COSTS.CATERING_FEE;
+    if (totalRevenueFlightHours > 0) {
+      newItems.push({
+        id: 'revenueFlightTime',
+        description: 'Revenue Flight Time',
+        buyRate: aircraftRates.buy,
+        sellRate: aircraftRates.sell,
+        unitDescription: 'Flight Hour',
+        quantity: parseFloat(totalRevenueFlightHours.toFixed(2)),
+        buyTotal: aircraftRates.buy * totalRevenueFlightHours,
+        sellTotal: aircraftRates.sell * totalRevenueFlightHours,
+      });
     }
 
-    setTotalEstimatedQuotePrice(runningTotal);
+    // 2. Fuel Surcharge
+    if (formData.fuelSurchargeRequested && totalBlockHours > 0) {
+      const sellRate = formData.sellPriceFuelSurchargePerHour ?? OTHER_COST_RATES.FUEL_SURCHARGE_PER_BLOCK_HOUR.sell;
+      newItems.push({
+        id: 'fuelSurcharge',
+        description: 'Fuel Surcharge',
+        buyRate: OTHER_COST_RATES.FUEL_SURCHARGE_PER_BLOCK_HOUR.buy,
+        sellRate: sellRate,
+        unitDescription: OTHER_COST_RATES.FUEL_SURCHARGE_PER_BLOCK_HOUR.unitDescription,
+        quantity: parseFloat(totalBlockHours.toFixed(2)),
+        buyTotal: OTHER_COST_RATES.FUEL_SURCHARGE_PER_BLOCK_HOUR.buy * totalBlockHours,
+        sellTotal: sellRate * totalBlockHours,
+      });
+    }
+    
+    // 3. Medics
+    if (formData.medicsRequested) {
+      const sellRate = formData.sellPriceMedics ?? OTHER_COST_RATES.MEDICS_FEE_FLAT.sell;
+      newItems.push({
+        id: 'medicsFee',
+        description: 'Medical Team',
+        buyRate: OTHER_COST_RATES.MEDICS_FEE_FLAT.buy,
+        sellRate: sellRate,
+        unitDescription: OTHER_COST_RATES.MEDICS_FEE_FLAT.unitDescription,
+        quantity: 1,
+        buyTotal: OTHER_COST_RATES.MEDICS_FEE_FLAT.buy,
+        sellTotal: sellRate,
+      });
+    }
 
-  }, [legsArray, aircraftTypeValue, includeLandingFeesValue, estimatedOvernightsValue, medicsRequestedValue, cateringRequestedWatch, getValues]);
+    // 4. Catering
+    if (formData.cateringRequested) {
+      const sellRate = formData.sellPriceCatering ?? OTHER_COST_RATES.CATERING_FEE_FLAT.sell;
+      newItems.push({
+        id: 'cateringFee',
+        description: 'Catering',
+        buyRate: OTHER_COST_RATES.CATERING_FEE_FLAT.buy,
+        sellRate: sellRate,
+        unitDescription: OTHER_COST_RATES.CATERING_FEE_FLAT.unitDescription,
+        quantity: 1,
+        buyTotal: OTHER_COST_RATES.CATERING_FEE_FLAT.buy,
+        sellTotal: sellRate,
+      });
+    }
+
+    // 5. Landing Fees
+    if (formData.includeLandingFees && legsArray.length > 0) {
+      const sellRate = formData.sellPriceLandingFeePerLeg ?? OTHER_COST_RATES.LANDING_FEE_PER_LEG.sell;
+      newItems.push({
+        id: 'landingFees',
+        description: 'Landing Fees',
+        buyRate: OTHER_COST_RATES.LANDING_FEE_PER_LEG.buy,
+        sellRate: sellRate,
+        unitDescription: OTHER_COST_RATES.LANDING_FEE_PER_LEG.unitDescription,
+        quantity: legsArray.length,
+        buyTotal: OTHER_COST_RATES.LANDING_FEE_PER_LEG.buy * legsArray.length,
+        sellTotal: sellRate * legsArray.length,
+      });
+    }
+
+    // 6. Overnights
+    const estimatedOvernights = Number(formData.estimatedOvernights || 0);
+    if (estimatedOvernights > 0) {
+      const sellRate = formData.sellPriceOvernight ?? OTHER_COST_RATES.OVERNIGHT_FEE_PER_NIGHT.sell;
+      newItems.push({
+        id: 'overnightFees',
+        description: 'Overnight Fees',
+        buyRate: OTHER_COST_RATES.OVERNIGHT_FEE_PER_NIGHT.buy,
+        sellRate: sellRate,
+        unitDescription: OTHER_COST_RATES.OVERNIGHT_FEE_PER_NIGHT.unitDescription,
+        quantity: estimatedOvernights,
+        buyTotal: OTHER_COST_RATES.OVERNIGHT_FEE_PER_NIGHT.buy * estimatedOvernights,
+        sellTotal: sellRate * estimatedOvernights,
+      });
+    }
+    
+    setCalculatedLineItems(newItems);
+
+  }, [formValues, legsArray, aircraftTypeId, getValues]);
 
 
   const handleEstimateFlightDetails = useCallback(async (legIndex: number) => {
@@ -261,13 +360,11 @@ export function CreateQuoteForm() {
         aircraftType: aircraftNameForFlow,
       });
       
-      if(result.estimatedFlightTimeHours !== undefined) {
-        setValue(`legs.${legIndex}.flightTimeHours`, result.estimatedFlightTimeHours);
-      }
+      setValue(`legs.${legIndex}.flightTimeHours`, result.estimatedFlightTimeHours);
       
       const originTaxi = Number(legData.originTaxiTimeMinutes || 0);
       const destTaxi = Number(legData.destinationTaxiTimeMinutes || 0);
-      const flightTime = Number(result.estimatedFlightTimeHours || 0); // Ensure this is a number
+      const flightTime = Number(result.estimatedFlightTimeHours || 0);
       const blockTimeTotalMinutes = originTaxi + (flightTime * 60) + destTaxi;
       const blockTimeHours = parseFloat((blockTimeTotalMinutes / 60).toFixed(2));
 
@@ -313,7 +410,7 @@ export function CreateQuoteForm() {
     startQuoteGenerationTransition(async () => {
       const finalData = {
         ...data,
-        totalEstimatedQuotePrice,
+        calculatedLineItems, // Include the detailed line items
         cateringNotes: data.cateringRequested ? data.cateringNotes : undefined, 
         legsWithEstimatesAndBlockTime: data.legs.map((leg, index) => {
           const estimate = legEstimates[index];
@@ -348,7 +445,7 @@ export function CreateQuoteForm() {
     const data = getValues();
      const finalData = {
         ...data,
-        totalEstimatedQuotePrice,
+        calculatedLineItems, // Include the detailed line items
         cateringNotes: data.cateringRequested ? data.cateringNotes : undefined, 
         legsWithEstimatesAndBlockTime: data.legs.map((leg, index) => {
           const estimate = legEstimates[index];
@@ -385,20 +482,20 @@ export function CreateQuoteForm() {
       const previousLegIndex = fields.length - 1;
       const previousLeg = getValues(`legs.${previousLegIndex}`);
       newLegOrigin = previousLeg.destination; 
-      previousLegPax = previousLeg.passengerCount || 1; 
-      previousLegOriginTaxi = previousLeg.originTaxiTimeMinutes || 15;
-      previousLegDestTaxi = previousLeg.destinationTaxiTimeMinutes || 15;
+      previousLegPax = Number(previousLeg.passengerCount || 1); 
+      previousLegOriginTaxi = Number(previousLeg.originTaxiTimeMinutes || 15);
+      previousLegDestTaxi = Number(previousLeg.destinationTaxiTimeMinutes || 15);
       previousLegOriginFbo = previousLeg.destinationFbo || ''; 
 
       const previousLegFlightTime = Number(previousLeg.flightTimeHours || 0);
-      if (previousLeg.departureDateTime instanceof Date && !isNaN(previousLeg.departureDateTime.getTime()) && previousLegFlightTime > 0) {
+      if (previousLeg.departureDateTime && previousLeg.departureDateTime instanceof Date && !isNaN(previousLeg.departureDateTime.getTime()) && previousLegFlightTime > 0) {
         const previousLegDeparture = new Date(previousLeg.departureDateTime);
         const previousLegFlightMillis = previousLegFlightTime * 60 * 60 * 1000;
         const previousLegDestTaxiMillis = (Number(previousLeg.destinationTaxiTimeMinutes || 0)) * 60 * 1000;
         
         const estimatedArrivalMillis = previousLegDeparture.getTime() + previousLegFlightMillis + previousLegDestTaxiMillis;
         newLegDepartureDateTime = addHours(new Date(estimatedArrivalMillis), 1); 
-      } else if (previousLeg.departureDateTime instanceof Date && !isNaN(previousLeg.departureDateTime.getTime())) {
+      } else if (previousLeg.departureDateTime && previousLeg.departureDateTime instanceof Date && !isNaN(previousLeg.departureDateTime.getTime())) {
          newLegDepartureDateTime = addHours(new Date(previousLeg.departureDateTime), 3); 
       }
     }
@@ -485,22 +582,8 @@ export function CreateQuoteForm() {
                       <FormField control={control} name={`legs.${index}.destination`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><PlaneLanding className="h-4 w-4" />Destination Airport</FormLabel> <FormControl><Input placeholder="e.g., KLAX" {...field} onChange={(e) => { field.onChange(e.target.value.toUpperCase()); trigger(`legs.${index}.destination`); }} /></FormControl> <FormMessage /> </FormItem> )} />
                     </div>
                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <FormField control={control} name={`legs.${index}.originFbo`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><Building className="h-4 w-4" />Origin FBO (Optional)</FormLabel> 
-                          <Select onValueChange={field.onChange} value={field.value || ""} name={field.name}>
-                            <FormControl><SelectTrigger><SelectValue placeholder="Select FBO (Optional)" /></SelectTrigger></FormControl>
-                            <SelectContent>
-                              {sampleFboOptions.map(fboName => (<SelectItem key={fboName} value={fboName}>{fboName}</SelectItem>))}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage /> </FormItem> )} />
-                        <FormField control={control} name={`legs.${index}.destinationFbo`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><Building className="h-4 w-4" />Destination FBO (Optional)</FormLabel> 
-                          <Select onValueChange={field.onChange} value={field.value || ""} name={field.name}>
-                            <FormControl><SelectTrigger><SelectValue placeholder="Select FBO (Optional)" /></SelectTrigger></FormControl>
-                            <SelectContent>
-                              {sampleFboOptions.map(fboName => (<SelectItem key={fboName} value={fboName}>{fboName}</SelectItem>))}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage /> </FormItem> )} />
+                        <FormField control={control} name={`legs.${index}.originFbo`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><Building className="h-4 w-4" />Origin FBO (Optional)</FormLabel> <FormControl><Input placeholder="e.g., Signature, Atlantic" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
+                        <FormField control={control} name={`legs.${index}.destinationFbo`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><Building className="h-4 w-4" />Destination FBO (Optional)</FormLabel> <FormControl><Input placeholder="e.g., Signature, Atlantic" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
                     </div>
                     <FormField control={control} name={`legs.${index}.departureDateTime`} render={({ field }) => ( <FormItem className="flex flex-col"> <FormLabel>Desired Departure Date & Time</FormLabel> 
                         {isClient ? ( 
@@ -529,7 +612,7 @@ export function CreateQuoteForm() {
                                                 const time = e.target.value; 
                                                 const [hours, minutes] = time.split(':').map(Number); 
                                                 let newDate = field.value && field.value instanceof Date && !isNaN(field.value.getTime()) ? new Date(field.value) : new Date(); 
-                                                if (isNaN(newDate.getTime())) newDate = new Date(); // Ensure newDate is a valid Date
+                                                if (isNaN(newDate.getTime())) newDate = new Date(); 
                                                 newDate.setHours(hours, minutes,0,0); 
                                                 field.onChange(newDate); 
                                             }} 
@@ -553,8 +636,8 @@ export function CreateQuoteForm() {
                         <FormField control={control} name={`legs.${index}.destinationTaxiTimeMinutes`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><Clock className="h-4 w-4" />Dest. Taxi (mins)</FormLabel> <FormControl><Input type="number" placeholder="e.g., 15" {...field} min="0" /></FormControl> <FormMessage /> </FormItem> )} />
                     </div>
 
-                    <Button type="button" variant="outline" size="sm" onClick={() => handleEstimateFlightDetails(index)} disabled={estimatingLegIndex === index || !aircraftTypeValue} className="w-full sm:w-auto"> {estimatingLegIndex === index ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />} Estimate Flight Details </Button>
-                    {!aircraftTypeValue && <FormDescription className="text-xs text-destructive">Select an aircraft type above to enable estimation.</FormDescription>}
+                    <Button type="button" variant="outline" size="sm" onClick={() => handleEstimateFlightDetails(index)} disabled={estimatingLegIndex === index || !aircraftTypeId} className="w-full sm:w-auto"> {estimatingLegIndex === index ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />} Estimate Flight Details </Button>
+                    {!aircraftTypeId && <FormDescription className="text-xs text-destructive">Select an aircraft type above to enable estimation.</FormDescription>}
 
                     {legEstimates[index] && (() => {
                       const estimate = legEstimates[index]!;
@@ -583,10 +666,9 @@ export function CreateQuoteForm() {
                         formattedBlockTime = `${String(blockHours).padStart(2, '0')}:${String(blockMinutes).padStart(2, '0')} hrs`;
                       }
                       
-                      const selectedAircraftId = getValues('aircraftType');
-                      const selectedAircraftDetails = availableAircraft.find(ac => ac.id === selectedAircraftId);
+                      const selectedAircraftDetails = availableAircraft.find(ac => ac.id === aircraftTypeId);
                       const aircraftNameForRate = selectedAircraftDetails?.name;
-                      const hourlyRateForLeg = aircraftNameForRate ? (AIRCRAFT_HOURLY_RATES[aircraftNameForRate] || DEFAULT_AIRCRAFT_HOURLY_RATE) : DEFAULT_AIRCRAFT_HOURLY_RATE;
+                      const hourlyRateForLeg = aircraftNameForRate ? (AIRCRAFT_RATES[aircraftNameForRate]?.sell || DEFAULT_AIRCRAFT_RATES.sell) : DEFAULT_AIRCRAFT_RATES.sell;
                       if (legFlightTimeHours > 0) {
                         legCost = legFlightTimeHours * hourlyRateForLeg;
                       }
@@ -605,7 +687,7 @@ export function CreateQuoteForm() {
                                 <p><strong>Calc. Block Time:</strong> {formattedBlockTime}</p>
                                 <p><strong>Assumed Speed (AI):</strong> {estimate.assumedCruiseSpeedKts?.toLocaleString()} kts</p>
                                 <p className="mt-1"><em>AI Explanation: {estimate.briefExplanation}</em></p>
-                                <p className="mt-1 font-semibold"><strong>Est. Leg Flight Cost:</strong> ${legCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (at ${hourlyRateForLeg.toLocaleString()}/hr flight time - placeholder rate)</p>
+                                <p className="mt-1 font-semibold"><strong>Est. Leg Sell Cost:</strong> ${legCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (at ${hourlyRateForLeg.toLocaleString()}/hr flight time)</p>
                               </>
                             )}
                           </AlertDescription>
@@ -624,13 +706,23 @@ export function CreateQuoteForm() {
             <Separator />
 
             <section>
-                <CardTitle className="text-xl border-b pb-2 mb-4">Additional Quote Options</CardTitle>
+                <CardTitle className="text-xl border-b pb-2 mb-4">Additional Quote Options & Pricing</CardTitle>
                 <div className="space-y-4">
-                    <FormField control={control} name="medicsRequested" render={({ field }) => ( <FormItem className="flex flex-row items-center space-x-3 space-y-0 p-3 border rounded-md hover:bg-muted/50"> <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl> <div className="space-y-1 leading-none"><FormLabel className="flex items-center gap-2"><Users className="h-4 w-4 text-primary" /> Medics Requested (+${OTHER_COSTS.MEDICS_FEE.toLocaleString()})</FormLabel></div> </FormItem> )} />
-                    <FormField control={control} name="cateringRequested" render={({ field }) => ( <FormItem className="flex flex-row items-center space-x-3 space-y-0 p-3 border rounded-md hover:bg-muted/50"> <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl> <div className="space-y-1 leading-none"><FormLabel className="flex items-center gap-2"><Utensils className="h-4 w-4 text-primary" /> Catering Requested (+${OTHER_COSTS.CATERING_FEE.toLocaleString()})</FormLabel></div> </FormItem> )} />
+                    <FormField control={control} name="fuelSurchargeRequested" render={({ field }) => ( <FormItem className="flex flex-row items-center space-x-3 space-y-0 p-3 border rounded-md hover:bg-muted/50"> <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl> <div className="space-y-1 leading-none"><FormLabel className="flex items-center gap-2"><Fuel className="h-4 w-4 text-primary" /> Include Fuel Surcharge</FormLabel></div> </FormItem> )} />
+                    {formValues.fuelSurchargeRequested && <FormField control={control} name="sellPriceFuelSurchargePerHour" render={({ field }) => (<FormItem className="pl-8"> <FormLabel>Fuel Surcharge Sell Price (per Block Hour)</FormLabel> <FormControl><Input type="number" placeholder={`Default: $${OTHER_COST_RATES.FUEL_SURCHARGE_PER_BLOCK_HOUR.sell.toLocaleString()}`} {...field} onChange={e => field.onChange(parseFloat(e.target.value))} /></FormControl> <FormMessage /> </FormItem> )} />}
+
+                    <FormField control={control} name="medicsRequested" render={({ field }) => ( <FormItem className="flex flex-row items-center space-x-3 space-y-0 p-3 border rounded-md hover:bg-muted/50"> <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl> <div className="space-y-1 leading-none"><FormLabel className="flex items-center gap-2"><Users className="h-4 w-4 text-primary" /> Medics Requested</FormLabel></div> </FormItem> )} />
+                    {formValues.medicsRequested && <FormField control={control} name="sellPriceMedics" render={({ field }) => (<FormItem className="pl-8"> <FormLabel>Medics Fee Sell Price</FormLabel> <FormControl><Input type="number" placeholder={`Default: $${OTHER_COST_RATES.MEDICS_FEE_FLAT.sell.toLocaleString()}`} {...field} onChange={e => field.onChange(parseFloat(e.target.value))} /></FormControl> <FormMessage /> </FormItem> )} />}
+                    
+                    <FormField control={control} name="cateringRequested" render={({ field }) => ( <FormItem className="flex flex-row items-center space-x-3 space-y-0 p-3 border rounded-md hover:bg-muted/50"> <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl> <div className="space-y-1 leading-none"><FormLabel className="flex items-center gap-2"><Utensils className="h-4 w-4 text-primary" /> Catering Requested</FormLabel></div> </FormItem> )} />
                     {cateringRequestedValue && ( <FormField control={control} name="cateringNotes" render={({ field }) => ( <FormItem className="pl-8"> <FormLabel>Catering Notes</FormLabel> <FormControl><Textarea placeholder="Specify catering details..." {...field} rows={3} /></FormControl> <FormMessage /> </FormItem> )} /> )}
-                    <FormField control={control} name="includeLandingFees" render={({ field }) => ( <FormItem className="flex flex-row items-center space-x-3 space-y-0 p-3 border rounded-md hover:bg-muted/50"> <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl> <div className="space-y-1 leading-none"><FormLabel className="flex items-center gap-2"><Landmark className="h-4 w-4 text-primary" /> Include Landing Fees (+${OTHER_COSTS.LANDING_FEE_PER_LEG.toLocaleString()} per leg)</FormLabel></div> </FormItem> )} />
-                    <FormField control={control} name="estimatedOvernights" render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-2"><BedDouble className="h-4 w-4 text-primary"/> Estimated Overnights (+${OTHER_COSTS.OVERNIGHT_FEE_PER_NIGHT.toLocaleString()} per night)</FormLabel> <FormControl><Input type="number" placeholder="e.g., 2" {...field} min="0" /></FormControl> <FormDescription>Number of overnight stays for crew/aircraft.</FormDescription> <FormMessage /> </FormItem> )} />
+                    {formValues.cateringRequested && <FormField control={control} name="sellPriceCatering" render={({ field }) => (<FormItem className="pl-8"> <FormLabel>Catering Fee Sell Price</FormLabel> <FormControl><Input type="number" placeholder={`Default: $${OTHER_COST_RATES.CATERING_FEE_FLAT.sell.toLocaleString()}`} {...field} onChange={e => field.onChange(parseFloat(e.target.value))} /></FormControl> <FormMessage /> </FormItem> )} />}
+
+                    <FormField control={control} name="includeLandingFees" render={({ field }) => ( <FormItem className="flex flex-row items-center space-x-3 space-y-0 p-3 border rounded-md hover:bg-muted/50"> <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl> <div className="space-y-1 leading-none"><FormLabel className="flex items-center gap-2"><Landmark className="h-4 w-4 text-primary" /> Include Landing Fees</FormLabel></div> </FormItem> )} />
+                    {formValues.includeLandingFees && <FormField control={control} name="sellPriceLandingFeePerLeg" render={({ field }) => (<FormItem className="pl-8"> <FormLabel>Landing Fee Sell Price (per Leg)</FormLabel> <FormControl><Input type="number" placeholder={`Default: $${OTHER_COST_RATES.LANDING_FEE_PER_LEG.sell.toLocaleString()}`} {...field} onChange={e => field.onChange(parseFloat(e.target.value))} /></FormControl> <FormMessage /> </FormItem> )} />}
+
+                    <FormField control={control} name="estimatedOvernights" render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-2"><BedDouble className="h-4 w-4 text-primary"/> Estimated Overnights</FormLabel> <FormControl><Input type="number" placeholder="e.g., 0" {...field} min="0" onChange={e => field.onChange(parseInt(e.target.value, 10))} /></FormControl> <FormDescription>Number of overnight stays for crew/aircraft.</FormDescription> <FormMessage /> </FormItem> )} />
+                    {Number(formValues.estimatedOvernights || 0) > 0 && <FormField control={control} name="sellPriceOvernight" render={({ field }) => (<FormItem className="pl-8"> <FormLabel>Overnight Fee Sell Price (per Night)</FormLabel> <FormControl><Input type="number" placeholder={`Default: $${OTHER_COST_RATES.OVERNIGHT_FEE_PER_NIGHT.sell.toLocaleString()}`} {...field} onChange={e => field.onChange(parseFloat(e.target.value))} /></FormControl> <FormMessage /> </FormItem> )} />}
                 </div>
             </section>
 
@@ -638,17 +730,7 @@ export function CreateQuoteForm() {
             <FormField control={control} name="notes" render={({ field }) => ( <FormItem> <FormLabel>General Quote Notes (Optional)</FormLabel> <FormControl><Textarea placeholder="e.g., Specific client preferences, discount applied..." {...field} rows={4} /></FormControl> <FormMessage /> </FormItem> )} />
 
             <Separator className="my-6" />
-            <div className="space-y-2 text-right p-4 bg-muted/30 rounded-lg shadow">
-                <p className="text-lg font-semibold text-foreground flex justify-between items-center">
-                    <span>Estimated Total Quote Price:</span>
-                    <span className="text-3xl font-bold text-primary flex items-center gap-1">
-                       <DollarSign className="h-7 w-7" /> {totalEstimatedQuotePrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
-                </p>
-                <p className="text-xs text-muted-foreground">
-                    Includes estimated flight time, selected options, and placeholder fees.
-                </p>
-            </div>
+            <CostsSummaryDisplay lineItems={calculatedLineItems} />
 
           </CardContent>
           <CardFooter className="flex justify-end gap-2">
