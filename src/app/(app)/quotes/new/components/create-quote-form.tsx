@@ -28,8 +28,8 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
 import { estimateFlightDetails, type EstimateFlightDetailsInput, type EstimateFlightDetailsOutput } from '@/ai/flows/estimate-flight-details-flow';
-import { fetchFbosForAirport, type FetchFbosInput, type FetchFbosOutput } from '@/ai/flows/fetch-fbos-flow';
-import type { Fbo } from '@/ai/tools/get-fbos-tool';
+// Removed: import { fetchFbosForAirport, type FetchFbosInput, type FetchFbosOutput } from '@/ai/flows/fetch-fbos-flow';
+// Removed: import type { Fbo } from '@/ai/tools/get-fbos-tool';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { LegsSummaryTable } from './legs-summary-table';
 
@@ -108,11 +108,6 @@ export function CreateQuoteForm() {
   const [legEstimates, setLegEstimates] = useState<Array<LegEstimate | null>>([]);
   const [totalEstimatedQuotePrice, setTotalEstimatedQuotePrice] = useState(0);
 
-  const [originFboOptionsPerLeg, setOriginFboOptionsPerLeg] = useState<Array<Fbo[]>>([]);
-  const [destinationFboOptionsPerLeg, setDestinationFboOptionsPerLeg] = useState<Array<Fbo[]>>([]);
-  const [fetchingFbosForLeg, setFetchingFbosForLeg] = useState<Record<number, {origin?: boolean, destination?: boolean}>>({});
-
-
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -171,21 +166,6 @@ export function CreateQuoteForm() {
         if (prevEstimates[index]) newEstimates[index] = prevEstimates[index];
       });
       return newEstimates;
-    });
-     setOriginFboOptionsPerLeg(prev => {
-      const newOptions = new Array(legsArray.length).fill(undefined).map((_, i) => prev[i] || []);
-      return newOptions;
-    });
-    setDestinationFboOptionsPerLeg(prev => {
-      const newOptions = new Array(legsArray.length).fill(undefined).map((_, i) => prev[i] || []);
-      return newOptions;
-    });
-    setFetchingFbosForLeg(prev => {
-      const newFetchingState: Record<number, {origin?: boolean, destination?: boolean}> = {};
-      for(let i = 0; i < legsArray.length; i++) {
-        newFetchingState[i] = prev[i] || { origin: false, destination: false };
-      }
-      return newFetchingState;
     });
   }, [legsArray.length]);
 
@@ -292,93 +272,6 @@ export function CreateQuoteForm() {
     }
   }, [getValues, legEstimates, toast, estimatingLegIndex]);
 
-
-  const loadFbosForLeg = useCallback(async (legIndex: number, airportCode: string, type: 'origin' | 'destination') => {
-    console.log(`[CLIENT DEBUG] loadFbosForLeg CALLED for leg ${legIndex + 1}, airport ${airportCode}, type ${type}`);
-
-    if (!airportCode || airportCode.length < 3) {
-      if (type === 'origin') setOriginFboOptionsPerLeg(prev => { const upd = [...prev]; upd[legIndex] = []; return upd; });
-      else setDestinationFboOptionsPerLeg(prev => { const upd = [...prev]; upd[legIndex] = []; return upd; });
-      return;
-    }
-    
-    console.log(`[CLIENT DEBUG] loadFbosForLeg - Setting fetching to true for leg ${legIndex + 1}, type ${type}`);
-    setFetchingFbosForLeg(prev => ({ ...prev, [legIndex]: { ...prev[legIndex], [type]: true } }));
-    
-    let fetchedFbos: FetchFbosOutput = [];
-    let fetchError: any = null;
-
-    try {
-      console.log(`[CLIENT DEBUG] FBO Fetch Start for Leg ${legIndex + 1}, Airport: ${airportCode.toUpperCase()}, Type: ${type}`);
-      const result = await fetchFbosForAirport({ airportCode: airportCode.toUpperCase() });
-      // CRITICAL LOG: What is the raw result from the flow?
-      console.log(`[CLIENT DEBUG] RAW RESULT from fetchFbosForAirport for Leg ${legIndex + 1} (${type}):`, JSON.stringify(result));
-
-
-      if (Array.isArray(result)) {
-        fetchedFbos = result;
-      } else {
-        console.error(`[CLIENT DEBUG] fetchFbosForAirport returned non-array for Leg ${legIndex + 1} (${type}):`, result);
-        fetchedFbos = []; 
-      }
-      // CRITICAL LOG: What is fetchedFbos after processing?
-      console.log(`[CLIENT DEBUG] Fetched FBOs for Leg ${legIndex + 1} (${type}), (processed as 'fetchedFbos'):`, JSON.stringify(fetchedFbos));
-
-    } catch (error) {
-      fetchError = error;
-      console.error(`[CLIENT DEBUG] FBO Fetch Error for Leg ${legIndex + 1}, Airport: ${airportCode}, Type: ${type}:`, error);
-      toast({ title: `Failed to load ${type} FBOs for ${airportCode}`, description: (error as Error).message, variant: "destructive" });
-      fetchedFbos = []; 
-    } finally {
-      if (type === 'origin') {
-        console.log(`[CLIENT DEBUG] About to setOriginFboOptionsPerLeg for leg ${legIndex}. Current fetchedFbos:`, JSON.stringify(fetchedFbos));
-        setOriginFboOptionsPerLeg(prev => {
-          const newOptionsArray = [...prev];
-          newOptionsArray[legIndex] = fetchedFbos; 
-          console.log(`[CLIENT DEBUG] Inside setOriginFboOptionsPerLeg for leg ${legIndex}. New state would be:`, JSON.stringify(newOptionsArray));
-          return newOptionsArray;
-        });
-      } else {
-        console.log(`[CLIENT DEBUG] About to setDestinationFboOptionsPerLeg for leg ${legIndex}. Current fetchedFbos:`, JSON.stringify(fetchedFbos));
-        setDestinationFboOptionsPerLeg(prev => {
-          const newOptionsArray = [...prev];
-          newOptionsArray[legIndex] = fetchedFbos;
-          console.log(`[CLIENT DEBUG] Inside setDestinationFboOptionsPerLeg for leg ${legIndex}. New state would be:`, JSON.stringify(newOptionsArray));
-          return newOptionsArray;
-        });
-      }
-      setFetchingFbosForLeg(prev => ({ ...prev, [legIndex]: { ...prev[legIndex], [type]: false } }));
-      console.log(`[CLIENT DEBUG] FBO Fetch Complete for Leg ${legIndex + 1}, Airport: ${airportCode}, Type: ${type}`);
-    }
-  }, [toast, getValues, setFetchingFbosForLeg, setOriginFboOptionsPerLeg, setDestinationFboOptionsPerLeg]);
-
-
-  useEffect(() => {
-    legsArray.forEach((leg, index) => {
-      const currentOriginOptions = originFboOptionsPerLeg[index] || [];
-      const needsOriginFetch = leg.origin && leg.origin.length >= 3 && 
-                              (!(fetchingFbosForLeg[index]?.origin)) && 
-                              (currentOriginOptions.length === 0 || (currentOriginOptions[0]?.airportCode?.toUpperCase() !== leg.origin.toUpperCase())); 
-
-      if (needsOriginFetch) {
-        loadFbosForLeg(index, leg.origin, 'origin');
-      } else if ((!leg.origin || leg.origin.length < 3) && currentOriginOptions.length > 0) {
-        setOriginFboOptionsPerLeg(prev => { const upd = [...prev]; upd[index] = []; return upd; });
-      }
-
-      const currentDestinationOptions = destinationFboOptionsPerLeg[index] || [];
-      const needsDestinationFetch = leg.destination && leg.destination.length >=3 &&
-                                    (!(fetchingFbosForLeg[index]?.destination)) && 
-                                    (currentDestinationOptions.length === 0 || (currentDestinationOptions[0]?.airportCode?.toUpperCase() !== leg.destination.toUpperCase())); 
-      
-      if (needsDestinationFetch) {
-        loadFbosForLeg(index, leg.destination, 'destination');
-      } else if ((!leg.destination || leg.destination.length < 3) && currentDestinationOptions.length > 0) {
-        setDestinationFboOptionsPerLeg(prev => { const upd = [...prev]; upd[index] = []; return upd; });
-      }
-    });
-  }, [legsArray, loadFbosForLeg, originFboOptionsPerLeg, destinationFboOptionsPerLeg, fetchingFbosForLeg]); 
-
   const onSendQuote: SubmitHandler<FormData> = (data) => {
     startQuoteGenerationTransition(async () => {
       console.log('Quote Data (Send Quote):', data);
@@ -453,21 +346,6 @@ export function CreateQuoteForm() {
         newEstimates.splice(index, 1);
         return newEstimates;
     });
-     setOriginFboOptionsPerLeg(prev => {
-        const newOptions = [...prev];
-        newOptions.splice(index, 1);
-        return newOptions;
-    });
-    setDestinationFboOptionsPerLeg(prev => {
-        const newOptions = [...prev];
-        newOptions.splice(index, 1);
-        return newOptions;
-    });
-    setFetchingFbosForLeg(prev => {
-        const newFetchingState = {...prev};
-        delete newFetchingState[index];
-        return newFetchingState;
-    })
   };
 
   const handleCustomerSelect = (customerId: string) => {
@@ -580,72 +458,20 @@ export function CreateQuoteForm() {
                       <FormField control={control} name={`legs.${index}.destination`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><PlaneLanding className="h-4 w-4" />Destination Airport</FormLabel> <FormControl><Input placeholder="e.g., KLAX" {...field} onChange={(e) => { field.onChange(e.target.value.toUpperCase()); trigger(`legs.${index}.destination`); }} /></FormControl> <FormMessage /> </FormItem> )} />
                     </div>
                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <FormField control={control} name={`legs.${index}.originFbo`} render={({ field }) => {
-                            const options = originFboOptionsPerLeg[index] || [];
-                            const isLoading = fetchingFbosForLeg[index]?.origin;
-                            const currentAirportCode = getValues(`legs.${index}.origin`);
-                            console.log(`[CLIENT DEBUG RENDER] Leg ${index + 1} Origin FBO SelectContent:`, { options: options, isLoading, currentAirportCode });
-                            return (
+                        <FormField control={control} name={`legs.${index}.originFbo`} render={({ field }) => (
                             <FormItem>
-                                <FormLabel className="flex items-center gap-1"><Building className="h-4 w-4" />Origin FBO</FormLabel>
-                                <Select onValueChange={field.onChange} value={field.value || ""} name={field.name}>
-                                    <FormControl>
-                                      <SelectTrigger disabled={isLoading} >
-                                        <SelectValue placeholder={isLoading ? "Loading FBOs..." : "Select Origin FBO"} />
-                                      </SelectTrigger>
-                                    </FormControl>
-                                    <SelectContent>
-                                        {isLoading ? (
-                                            <SelectItem value="loading" disabled>Loading FBOs...</SelectItem>
-                                          ) : !options || options.length === 0 ? (
-                                            currentAirportCode && currentAirportCode.length >= 3 ? (
-                                              <SelectItem value="no-fbos" disabled>No FBOs found</SelectItem>
-                                            ) : (
-                                              <SelectItem value="enter-airport" disabled>Enter airport code</SelectItem>
-                                            )
-                                          ) : (
-                                            options.map(fbo => (
-                                              <SelectItem key={fbo.id} value={fbo.name}>{fbo.name}</SelectItem>
-                                            ))
-                                          )}
-                                    </SelectContent>
-                                </Select>
+                                <FormLabel className="flex items-center gap-1"><Building className="h-4 w-4" />Origin FBO (Optional)</FormLabel>
+                                <FormControl><Input placeholder="e.g., Signature, Atlantic" {...field} /></FormControl>
                                 <FormMessage />
                             </FormItem>
-                        )}} />
-                        <FormField control={control} name={`legs.${index}.destinationFbo`} render={({ field }) => {
-                            const options = destinationFboOptionsPerLeg[index] || [];
-                            const isLoading = fetchingFbosForLeg[index]?.destination;
-                            const currentAirportCode = getValues(`legs.${index}.destination`);
-                            console.log(`[CLIENT DEBUG RENDER] Leg ${index + 1} Destination FBO SelectContent:`, { options: options, isLoading, currentAirportCode });
-                            return (
+                        )} />
+                        <FormField control={control} name={`legs.${index}.destinationFbo`} render={({ field }) => (
                             <FormItem>
-                                <FormLabel className="flex items-center gap-1"><Building className="h-4 w-4" />Destination FBO</FormLabel>
-                                <Select onValueChange={field.onChange} value={field.value || ""} name={field.name}>
-                                     <FormControl>
-                                      <SelectTrigger disabled={isLoading}>
-                                        <SelectValue placeholder={isLoading ? "Loading FBOs..." : "Select Destination FBO"} />
-                                      </SelectTrigger>
-                                     </FormControl>
-                                    <SelectContent>
-                                     {isLoading ? (
-                                        <SelectItem value="loading" disabled>Loading FBOs...</SelectItem>
-                                      ) : !options || options.length === 0 ? (
-                                        currentAirportCode && currentAirportCode.length >= 3 ? (
-                                          <SelectItem value="no-fbos" disabled>No FBOs found</SelectItem>
-                                        ) : (
-                                          <SelectItem value="enter-airport" disabled>Enter airport code</SelectItem>
-                                        )
-                                      ) : (
-                                        options.map(fbo => (
-                                          <SelectItem key={fbo.id} value={fbo.name}>{fbo.name}</SelectItem>
-                                        ))
-                                      )}
-                                    </SelectContent>
-                                </Select>
+                                <FormLabel className="flex items-center gap-1"><Building className="h-4 w-4" />Destination FBO (Optional)</FormLabel>
+                                 <FormControl><Input placeholder="e.g., Signature, Atlantic" {...field} /></FormControl>
                                 <FormMessage />
                             </FormItem>
-                        )}} />
+                        )} />
                     </div>
                     <FormField
                       control={control}
@@ -805,3 +631,4 @@ export function CreateQuoteForm() {
     </Card>
   );
 }
+

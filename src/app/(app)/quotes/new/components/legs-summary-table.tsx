@@ -3,7 +3,7 @@
 "use client";
 
 import type { EstimateFlightDetailsOutput } from '@/ai/flows/estimate-flight-details-flow';
-import type { LegFormData } from './create-quote-form'; // Assuming LegFormData is exported
+import type { LegFormData } from './create-quote-form'; 
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { format } from "date-fns";
 
@@ -147,5 +147,3 @@ export function LegsSummaryTable({ legs, legEstimates }: LegsSummaryTableProps) 
     </div>
   );
 }
-
-    
