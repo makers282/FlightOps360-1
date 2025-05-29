@@ -20,55 +20,54 @@ export type FetchFbosInput = z.infer<typeof GetFbosForAirportInputSchema>;
 export type FetchFbosOutput = z.infer<ReturnType<typeof z.array<typeof FboSchema>>>;
 
 
+// The exported wrapper function that client calls
 export async function fetchFbosForAirport(input: FetchFbosInput): Promise<FetchFbosOutput> {
-  console.log('[fetchFbosForAirport DEBUG FLOW] Input:', JSON.stringify(input));
-  // TEMPORARY: Directly return mock data to isolate the issue
-  const mockFboResponse: FetchFbosOutput = [
-    {
-      id: `${input.airportCode}-DEBUG-FBO-1`,
-      name: `Debug FBO One for ${input.airportCode}`,
-      airportCode: input.airportCode.toUpperCase(),
-      contactPhone: '555-DEBUG-1',
-      fuelTypes: ['Jet A-Debug'],
-      services: ['Debugging Service'],
-      fees: [{ type: 'Debug Fee', amount: 10, notes: "For testing" }],
-    },
-    {
-      id: `${input.airportCode}-DEBUG-FBO-2`,
-      name: `Debug FBO Two for ${input.airportCode}`,
-      airportCode: input.airportCode.toUpperCase(),
-      contactPhone: '555-DEBUG-2',
-      fuelTypes: ['100LL-Debug'],
-      services: ['More Debugging Services'],
-      fees: [{ type: 'Debug Fee', amount: 20 }],
-    }
-  ];
-  console.log('[fetchFbosForAirport DEBUG FLOW] Returning MOCK:', JSON.stringify(mockFboResponse));
-  return Promise.resolve(mockFboResponse); // Ensure it's a promise; it would be anyway with async
+  console.log('[fetchFbosForAirport WRAPPER SERVER DEBUG] Entered wrapper with input:', JSON.stringify(input));
+  try {
+    // Directly call the flow, which now internally returns mock data
+    const result = await fetchFbosFlow(input); 
+    console.log('[fetchFbosForAirport WRAPPER SERVER DEBUG] Result from flow:', JSON.stringify(result));
+    return result;
+  } catch (error) {
+    console.error('[fetchFbosForAirport WRAPPER SERVER DEBUG] Error calling flow:', error);
+    // It's crucial to return something that matches FetchFbosOutput type on error
+    // or throw the error if the client is expected to handle it.
+    // For now, returning empty array to match expected output type.
+    return []; 
+  }
 }
 
-// Original flow definition commented out for debugging:
-/*
+// Define the Genkit flow
 const fetchFbosFlow = ai.defineFlow(
   {
-    name: 'fetchFbosFlow',
-    inputSchema: GetFbosForAirportInputSchema, // Use the imported schema directly
-    outputSchema: z.array(FboSchema),      // Use the imported schema directly
+    name: 'fetchFbosFlowInternal', // Renamed to avoid potential conflicts if an old version is cached
+    inputSchema: GetFbosForAirportInputSchema, 
+    outputSchema: z.array(FboSchema),      
   },
   async (input) => {
-    console.log('[fetchFbosFlow ORIGINAL] Received input:', JSON.stringify(input));
-    try {
-      const fbos = await getFbosForAirportTool(input); // Call the imported tool definition
-      console.log('[fetchFbosFlow ORIGINAL] FBOs from tool:', JSON.stringify(fbos));
-      if (fbos === undefined) {
-        console.error('[fetchFbosFlow ORIGINAL] Tool returned undefined! Returning empty array instead.');
-        return [];
+    console.log('[fetchFbosFlow GENKIT FLOW SERVER DEBUG] Flow handler entered with input:', JSON.stringify(input));
+    // TEMPORARY: Directly return mock data from within the flow's handler
+    const mockFboResponse: FetchFbosOutput = [
+      {
+        id: `${input.airportCode}-FLOW-DEBUG-FBO-1`,
+        name: `Flow Debug FBO One for ${input.airportCode}`,
+        airportCode: input.airportCode.toUpperCase(),
+        contactPhone: '555-FLOW-1',
+        fuelTypes: ['Jet A-FlowDebug'],
+        services: ['Flow Debugging Service'],
+        fees: [{ type: 'Flow Debug Fee', amount: 100, notes: "For flow testing" }],
+      },
+      {
+        id: `${input.airportCode}-FLOW-DEBUG-FBO-2`,
+        name: `Flow Debug FBO Two for ${input.airportCode}`,
+        airportCode: input.airportCode.toUpperCase(),
+        contactPhone: '555-FLOW-2',
+        fuelTypes: ['100LL-FlowDebug'],
+        services: ['More Flow Debugging'],
+        fees: [{ type: 'Flow Debug Fee', amount: 200 }],
       }
-      return fbos;
-    } catch (flowError) {
-        console.error('[fetchFbosFlow ORIGINAL] Error executing flow:', flowError);
-        return []; // Return empty array on flow error
-    }
+    ];
+    console.log('[fetchFbosFlow GENKIT FLOW SERVER DEBUG] Flow handler returning MOCK:', JSON.stringify(mockFboResponse));
+    return mockFboResponse;
   }
 );
-*/
