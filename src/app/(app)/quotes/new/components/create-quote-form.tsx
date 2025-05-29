@@ -14,7 +14,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
-import { CalendarIcon, Loader2, Users, Briefcase, Utensils, Landmark, BedDouble, PlaneTakeoff, PlaneLanding, PlusCircle, Trash2, GripVertical, Wand2, Info, Eye, Send, Building, UserSearch, Clock, DollarSign } from 'lucide-react';
+import { CalendarIcon, Loader2, Users, Briefcase, Utensils, Landmark, BedDouble, PlaneTakeoff, PlaneLanding, PlusCircle, Trash2, GripVertical, Wand2, Info, Eye, Send, Building, UserSearch, DollarSign, Clock } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { format, addHours } from "date-fns";
 import { useToast } from '@/hooks/use-toast';
@@ -30,6 +30,8 @@ import { Separator } from '@/components/ui/separator';
 import { estimateFlightDetails, type EstimateFlightDetailsInput, type EstimateFlightDetailsOutput } from '@/ai/flows/estimate-flight-details-flow';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { LegsSummaryTable } from './legs-summary-table';
+// import { fetchFbosForAirport, type FetchFbosInput, type FetchFbosOutput, type Fbo as FetchedFbo } from '@/ai/flows/fetch-fbos-flow';
+
 
 const legTypes = [
   "Charter", "Owner", "Positioning", "Ambulance", "Cargo", "Maintenance", "Ferry"
@@ -83,7 +85,7 @@ const availableAircraft = [
   { id: 'HEAVY_JET', name: 'Category: Heavy Jet' },
 ];
 
-// Placeholder Cost Settings (to be moved to a dedicated settings page later)
+// Placeholder Cost Settings
 const AIRCRAFT_HOURLY_RATES: { [key: string]: number } = {
   'N123AB - Cessna Citation CJ3': 3200,
   'N456CD - Bombardier Global 6000': 6500,
@@ -92,7 +94,7 @@ const AIRCRAFT_HOURLY_RATES: { [key: string]: number } = {
   'Category: Midsize Jet': 4500,
   'Category: Heavy Jet': 7500,
 };
-const DEFAULT_AIRCRAFT_HOURLY_RATE = 4000; // Fallback if specific type not found
+const DEFAULT_AIRCRAFT_HOURLY_RATE = 4000;
 
 const OTHER_COSTS = {
   LANDING_FEE_PER_LEG: 500,
@@ -109,13 +111,13 @@ const sampleCustomerData = [
   { id: 'CUST004', name: 'Emily White', company: 'White Solutions', email: 'emily.white@example.com', phone: '555-4321' },
 ];
 
-const sampleFboOptions = [
-  { id: 'SIG', name: 'Signature Flight Support' },
-  { id: 'ATL', name: 'Atlantic Aviation' },
-  { id: 'JET', name: 'Jet Aviation' },
-  { id: 'TAC', name: 'TAC Air' },
-  { id: 'OTHER', name: 'Other / To Be Determined' },
-];
+// const sampleFboOptions = [
+//   { id: 'SIG', name: 'Signature Flight Support' },
+//   { id: 'ATL', name: 'Atlantic Aviation' },
+//   { id: 'JET', name: 'Jet Aviation' },
+//   { id: 'TAC', name: 'TAC Air' },
+//   { id: 'OTHER', name: 'Other / To Be Determined' },
+// ];
 
 
 export function CreateQuoteForm() {
@@ -126,6 +128,12 @@ export function CreateQuoteForm() {
   const [isClient, setIsClient] = useState(false);
   const [legEstimates, setLegEstimates] = useState<Array<LegEstimate | null>>([]);
   const [totalEstimatedQuotePrice, setTotalEstimatedQuotePrice] = useState(0);
+
+  // FBO state (reverted to text input for stability)
+  // const [originFboOptionsPerLeg, setOriginFboOptionsPerLeg] = useState<FetchedFbo[][]>([]);
+  // const [destinationFboOptionsPerLeg, setDestinationFboOptionsPerLeg] = useState<FetchedFbo[][]>([]);
+  // const [fetchingFbosForLeg, setFetchingFbosForLeg] = useState<{origin: boolean[], destination: boolean[]}>({origin: [], destination: []});
+
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -189,6 +197,13 @@ export function CreateQuoteForm() {
       });
       return newEstimates;
     });
+    // FBO state management (reverted)
+    // setFetchingFbosForLeg(prev => ({
+    //   origin: new Array(legsArray.length).fill(false).map((val, i) => prev.origin[i] || val),
+    //   destination: new Array(legsArray.length).fill(false).map((val, i) => prev.destination[i] || val),
+    // }));
+    // setOriginFboOptionsPerLeg(prev => new Array(legsArray.length).fill([]).map((val, i) => prev[i] || val));
+    // setDestinationFboOptionsPerLeg(prev => new Array(legsArray.length).fill([]).map((val, i) => prev[i] || val));
   }, [legsArray.length]);
 
   useEffect(() => {
@@ -272,14 +287,14 @@ export function CreateQuoteForm() {
       const destTaxi = legData.destinationTaxiTimeMinutes || 0;
       const flightTime = result.estimatedFlightTimeHours || 0;
       const blockTimeTotalMinutes = originTaxi + (flightTime * 60) + destTaxi;
-      const blockTimeHours = parseFloat(blockTimeTotalMinutes.toFixed(2)) / 60;
+      const blockTimeHours = parseFloat((blockTimeTotalMinutes / 60).toFixed(2));
 
 
       setLegEstimates(prev => {
         const newEstimates = [...prev];
         newEstimates[legIndex] = {
           ...result,
-          blockTimeHours: parseFloat(blockTimeHours.toFixed(2)),
+          blockTimeHours: blockTimeHours,
           estimatedForInputs: {
             origin: legData.origin.toUpperCase(),
             destination: legData.destination.toUpperCase(),
@@ -310,6 +325,84 @@ export function CreateQuoteForm() {
       setEstimatingLegIndex(null);
     }
   }, [getValues, legEstimates, toast, estimatingLegIndex, setValue, setLegEstimates, setEstimatingLegIndex]);
+
+  // FBO Fetching (reverted to text input)
+  // const loadFbosForLeg = useCallback(async (legIndex: number, airportCode: string, type: 'origin' | 'destination') => {
+  //   if (!airportCode || airportCode.length < 3) {
+  //     if (type === 'origin') {
+  //       setOriginFboOptionsPerLeg(prev => { const newState = [...prev]; newState[legIndex] = []; return newState; });
+  //     } else {
+  //       setDestinationFboOptionsPerLeg(prev => { const newState = [...prev]; newState[legIndex] = []; return newState; });
+  //     }
+  //     return;
+  //   }
+
+  //   setFetchingFbosForLeg(prev => {
+  //     const newFetchingState = { ...prev };
+  //     if (type === 'origin') newFetchingState.origin[legIndex] = true;
+  //     else newFetchingState.destination[legIndex] = true;
+  //     return newFetchingState;
+  //   });
+
+  //   console.log(`[CLIENT DEBUG] FBO Fetch Start for Leg ${legIndex + 1} (${type}): ${airportCode}`);
+  //   try {
+  //     const result = await fetchFbosForAirport({ airportCode });
+  //     console.log(`[CLIENT DEBUG] RAW RESULT from fetchFbosForAirport for Leg ${legIndex + 1} (${type}):`, JSON.stringify(result));
+      
+  //     let fetchedFbos: FetchedFbo[] = [];
+  //     if (Array.isArray(result)) {
+  //       fetchedFbos = result;
+  //     } else {
+  //       console.warn(`[CLIENT DEBUG] fetchFbosForAirport returned non-array for ${airportCode}:`, result);
+  //     }
+      
+  //     console.log(`[CLIENT DEBUG] Fetched FBOs for Leg ${legIndex + 1} (${type}) (processed as 'fetchedFbos'):`, fetchedFbos);
+
+  //     if (type === 'origin') {
+  //       console.log(`[CLIENT DEBUG] SETTING Origin FBO Options for leg ${legIndex + 1} with:`, fetchedFbos);
+  //       setOriginFboOptionsPerLeg(prev => { const newState = [...prev]; newState[legIndex] = fetchedFbos; return newState; });
+  //     } else {
+  //       console.log(`[CLIENT DEBUG] SETTING Destination FBO Options for leg ${legIndex + 1} with:`, fetchedFbos);
+  //       setDestinationFboOptionsPerLeg(prev => { const newState = [...prev]; newState[legIndex] = fetchedFbos; return newState; });
+  //     }
+  //   } catch (error) {
+  //     console.error(`[CLIENT DEBUG] FBO Fetch Error for Leg ${legIndex + 1} (${type}) ${airportCode}:`, error);
+  //     toast({ title: `Error Fetching FBOs for ${airportCode}`, description: (error as Error).message, variant: "destructive" });
+  //     if (type === 'origin') {
+  //       setOriginFboOptionsPerLeg(prev => { const newState = [...prev]; newState[legIndex] = []; return newState; });
+  //     } else {
+  //       setDestinationFboOptionsPerLeg(prev => { const newState = [...prev]; newState[legIndex] = []; return newState; });
+  //     }
+  //   } finally {
+  //     setFetchingFbosForLeg(prev => {
+  //       const newFetchingState = { ...prev };
+  //       if (type === 'origin') newFetchingState.origin[legIndex] = false;
+  //       else newFetchingState.destination[legIndex] = false;
+  //       return newFetchingState;
+  //     });
+  //   }
+  // }, [toast, setOriginFboOptionsPerLeg, setDestinationFboOptionsPerLeg, setFetchingFbosForLeg]);
+
+
+  // useEffect(() => {
+  //   legsArray.forEach((leg, index) => {
+  //     const currentOriginOptions = originFboOptionsPerLeg[index];
+  //     const currentDestinationOptions = destinationFboOptionsPerLeg[index];
+
+  //     if (leg.origin && leg.origin.length >= 3 && (!currentOriginOptions || currentOriginOptions.length === 0 || (currentOriginOptions[0] && currentOriginOptions[0].airportCode !== leg.origin.toUpperCase())) && !fetchingFbosForLeg.origin[index]) {
+  //       loadFbosForLeg(index, leg.origin, 'origin');
+  //     } else if ((!leg.origin || leg.origin.length < 3) && currentOriginOptions && currentOriginOptions.length > 0) {
+  //       setOriginFboOptionsPerLeg(prev => { const newState = [...prev]; newState[index] = []; return newState; });
+  //     }
+
+  //     if (leg.destination && leg.destination.length >= 3 && (!currentDestinationOptions || currentDestinationOptions.length === 0 || (currentDestinationOptions[0] && currentDestinationOptions[0].airportCode !== leg.destination.toUpperCase())) && !fetchingFbosForLeg.destination[index]) {
+  //       loadFbosForLeg(index, leg.destination, 'destination');
+  //     } else if ((!leg.destination || leg.destination.length < 3) && currentDestinationOptions && currentDestinationOptions.length > 0) {
+  //       setDestinationFboOptionsPerLeg(prev => { const newState = [...prev]; newState[index] = []; return newState; });
+  //     }
+  //   });
+  // }, [legsArray, loadFbosForLeg, originFboOptionsPerLeg, destinationFboOptionsPerLeg, fetchingFbosForLeg]);
+
 
   const onSendQuote: SubmitHandler<FormData> = (data) => {
     startQuoteGenerationTransition(async () => {
@@ -346,8 +439,9 @@ export function CreateQuoteForm() {
   };
 
   const handlePreviewQuote = () => {
+    trigger(); // Trigger validation before previewing
     const data = getValues();
-    const finalData = {
+     const finalData = {
         ...data,
         totalEstimatedQuotePrice,
         cateringNotes: data.cateringRequested ? data.cateringNotes : undefined, 
@@ -379,6 +473,9 @@ export function CreateQuoteForm() {
     let previousLegPax = 1;
     let previousLegOriginTaxi = 15;
     let previousLegDestTaxi = 15;
+    let previousLegOriginFbo = '';
+    // let previousLegDestinationFbo = ''; // Not needed for new leg's origin FBO
+
 
     if (fields.length > 0) {
       const previousLegIndex = fields.length - 1;
@@ -387,6 +484,7 @@ export function CreateQuoteForm() {
       previousLegPax = previousLeg.passengerCount || 1; 
       previousLegOriginTaxi = previousLeg.originTaxiTimeMinutes || 15;
       previousLegDestTaxi = previousLeg.destinationTaxiTimeMinutes || 15;
+      previousLegOriginFbo = previousLeg.destinationFbo || ''; 
 
       const previousLegFlightTime = previousLeg.flightTimeHours;
       if (previousLeg.departureDateTime instanceof Date && !isNaN(previousLeg.departureDateTime.getTime()) && previousLegFlightTime && previousLegFlightTime > 0) {
@@ -395,9 +493,9 @@ export function CreateQuoteForm() {
         const previousLegDestTaxiMillis = (previousLeg.destinationTaxiTimeMinutes || 0) * 60 * 1000;
         
         const estimatedArrivalMillis = previousLegDeparture.getTime() + previousLegFlightMillis + previousLegDestTaxiMillis;
-        newLegDepartureDateTime = addHours(new Date(estimatedArrivalMillis), 1);
+        newLegDepartureDateTime = addHours(new Date(estimatedArrivalMillis), 1); 
       } else if (previousLeg.departureDateTime instanceof Date && !isNaN(previousLeg.departureDateTime.getTime())) {
-         newLegDepartureDateTime = addHours(new Date(previousLeg.departureDateTime), 3);
+         newLegDepartureDateTime = addHours(new Date(previousLeg.departureDateTime), 3); 
       }
     }
 
@@ -407,7 +505,7 @@ export function CreateQuoteForm() {
       departureDateTime: newLegDepartureDateTime,
       legType: 'Charter',
       passengerCount: previousLegPax,
-      originFbo: '',
+      originFbo: previousLegOriginFbo, 
       destinationFbo: '',
       originTaxiTimeMinutes: previousLegOriginTaxi,
       destinationTaxiTimeMinutes: previousLegDestTaxi,
@@ -418,6 +516,13 @@ export function CreateQuoteForm() {
   const handleRemoveLeg = (index: number) => {
     remove(index);
     setLegEstimates(prev => { const newEstimates = [...prev]; newEstimates.splice(index, 1); return newEstimates; });
+    // FBO state removal (reverted)
+    // setOriginFboOptionsPerLeg(prev => { const newState = [...prev]; newState.splice(index, 1); return newState; });
+    // setDestinationFboOptionsPerLeg(prev => { const newState = [...prev]; newState.splice(index, 1); return newState; });
+    // setFetchingFbosForLeg(prev => ({
+    //   origin: prev.origin.filter((_, i) => i !== index),
+    //   destination: prev.destination.filter((_, i) => i !== index),
+    // }));
   };
 
   const handleCustomerSelect = (customerId: string) => {
@@ -486,7 +591,7 @@ export function CreateQuoteForm() {
                         <FormField control={control} name={`legs.${index}.originFbo`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><Building className="h-4 w-4" />Origin FBO (Optional)</FormLabel> <FormControl><Input placeholder="e.g., Signature, Atlantic" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
                         <FormField control={control} name={`legs.${index}.destinationFbo`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><Building className="h-4 w-4" />Destination FBO (Optional)</FormLabel> <FormControl><Input placeholder="e.g., Signature, Atlantic" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
                     </div>
-                    <FormField control={control} name={`legs.${index}.departureDateTime`} render={({ field }) => ( <FormItem className="flex flex-col"> <FormLabel>Desired Departure Date & Time</FormLabel> {isClient ? ( <Popover> <PopoverTrigger asChild> <FormControl> <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !(field.value instanceof Date && !isNaN(field.value.getTime())) && "text-muted-foreground")}> {field.value instanceof Date && !isNaN(field.value.getTime()) ? format(field.value, "PPP HH:mm") : <span>Pick a date and time</span>} <CalendarIcon className="ml-auto h-4 w-4 opacity-50" /> </Button> </FormControl> </PopoverTrigger> <PopoverContent className="w-auto p-0" align="start"> <Calendar mode="single" selected={field.value instanceof Date && !isNaN(field.value.getTime()) ? field.value : undefined} onSelect={field.onChange} disabled={(date) => minLegDepartureDate ? date < minLegDepartureDate : true} initialFocus /> <div className="p-2 border-t border-border"> <Input type="time" defaultValue={field.value instanceof Date && !isNaN(field.value.getTime()) ? format(field.value, "HH:mm") : ""} onChange={(e) => { const time = e.target.value; const [hours, minutes] = time.split(':').map(Number); let newDate = field.value instanceof Date && !isNaN(field.value.getTime()) ? new Date(field.value) : new Date(); if (isNaN(newDate.getTime())) newDate = new Date(); newDate.setHours(hours, minutes,0,0); field.onChange(newDate); }} /> </div> </PopoverContent> </Popover> ) : ( <Skeleton className="h-10 w-full" /> )} <FormMessage /> </FormItem> )} />
+                    <FormField control={control} name={`legs.${index}.departureDateTime`} render={({ field }) => ( <FormItem className="flex flex-col"> <FormLabel>Desired Departure Date & Time</FormLabel> {isClient ? ( <Popover> <PopoverTrigger asChild> <FormControl> <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !(field.value && field.value instanceof Date && !isNaN(field.value.getTime())) && "text-muted-foreground")}> <span>{field.value && field.value instanceof Date && !isNaN(field.value.getTime()) ? format(field.value, "PPP HH:mm") : "Pick a date and time"}</span> <CalendarIcon className="ml-auto h-4 w-4 opacity-50" /> </Button> </FormControl> </PopoverTrigger> <PopoverContent className="w-auto p-0" align="start"> <Calendar mode="single" selected={field.value && field.value instanceof Date && !isNaN(field.value.getTime()) ? field.value : undefined} onSelect={field.onChange} disabled={(date) => minLegDepartureDate ? date < minLegDepartureDate : true} initialFocus /> <div className="p-2 border-t border-border"> <Input type="time" defaultValue={field.value && field.value instanceof Date && !isNaN(field.value.getTime()) ? format(field.value, "HH:mm") : ""} onChange={(e) => { const time = e.target.value; const [hours, minutes] = time.split(':').map(Number); let newDate = field.value && field.value instanceof Date && !isNaN(field.value.getTime()) ? new Date(field.value) : new Date(); if (isNaN(newDate.getTime())) newDate = new Date(); newDate.setHours(hours, minutes,0,0); field.onChange(newDate); }} /> </div> </PopoverContent> </Popover> ) : ( <Skeleton className="h-10 w-full" /> )} <FormMessage /> </FormItem> )} />
                     
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <FormField control={control} name={`legs.${index}.legType`} render={({ field }) => ( <FormItem> <FormLabel>Leg Type</FormLabel> <Select onValueChange={field.onChange} value={field.value || ""} name={field.name}> <FormControl><SelectTrigger><SelectValue placeholder="Select leg type" /></SelectTrigger></FormControl> <SelectContent>{legTypes.map(type => (<SelectItem key={type} value={type}>{type}</SelectItem>))}</SelectContent> </Select> <FormMessage /> </FormItem> )} />
@@ -508,26 +613,29 @@ export function CreateQuoteForm() {
                       let formattedBlockTime = 'N/A';
                       let legCost = 0;
 
-                      if (legData.departureDateTime instanceof Date && !isNaN(legData.departureDateTime.getTime()) && legData.flightTimeHours && legData.flightTimeHours > 0) {
+                      if (legData.departureDateTime && legData.departureDateTime instanceof Date && !isNaN(legData.departureDateTime.getTime()) && legData.flightTimeHours && legData.flightTimeHours > 0) {
                         const departureTime = new Date(legData.departureDateTime);
                         const flightTimeMillis = (legData.flightTimeHours || 0) * 60 * 60 * 1000;
                         const arrivalTimeMillis = departureTime.getTime() + flightTimeMillis;
                         formattedArrivalTime = format(new Date(arrivalTimeMillis), "PPP HH:mm");
+                      }
 
-                        const originTaxiMins = legData.originTaxiTimeMinutes || 0;
-                        const destTaxiMins = legData.destinationTaxiTimeMinutes || 0;
-                        const blockTimeTotalMinutes = originTaxiMins + (legData.flightTimeHours * 60) + destTaxiMins;
+                      const originTaxiMins = legData.originTaxiTimeMinutes || 0;
+                      const destTaxiMins = legData.destinationTaxiTimeMinutes || 0;
+                      const flightTimeHoursForBlock = legData.flightTimeHours || 0;
+                      if (flightTimeHoursForBlock > 0) {
+                        const blockTimeTotalMinutes = originTaxiMins + (flightTimeHoursForBlock * 60) + destTaxiMins;
                         const blockHours = Math.floor(blockTimeTotalMinutes / 60);
                         const blockMinutes = Math.round(blockTimeTotalMinutes % 60);
                         formattedBlockTime = `${String(blockHours).padStart(2, '0')}:${String(blockMinutes).padStart(2, '0')} hrs`;
                       }
                       
                       const selectedAircraftId = getValues('aircraftType');
-                      const selectedAircraft = availableAircraft.find(ac => ac.id === selectedAircraftId);
-                      const aircraftName = selectedAircraft?.name;
-                      const hourlyRate = aircraftName ? (AIRCRAFT_HOURLY_RATES[aircraftName] || DEFAULT_AIRCRAFT_HOURLY_RATE) : DEFAULT_AIRCRAFT_HOURLY_RATE;
+                      const selectedAircraftDetails = availableAircraft.find(ac => ac.id === selectedAircraftId);
+                      const aircraftNameForRate = selectedAircraftDetails?.name;
+                      const hourlyRateForLeg = aircraftNameForRate ? (AIRCRAFT_HOURLY_RATES[aircraftNameForRate] || DEFAULT_AIRCRAFT_HOURLY_RATE) : DEFAULT_AIRCRAFT_HOURLY_RATE;
                       if (legData.flightTimeHours && legData.flightTimeHours > 0) {
-                        legCost = legData.flightTimeHours * hourlyRate;
+                        legCost = legData.flightTimeHours * hourlyRateForLeg;
                       }
 
 
@@ -540,11 +648,11 @@ export function CreateQuoteForm() {
                               <>
                                 <p><strong>AI Est. Distance:</strong> {estimate.estimatedMileageNM?.toLocaleString()} NM</p>
                                 <p><strong>AI Est. Flight Time:</strong> {estimate.estimatedFlightTimeHours?.toFixed(1)} hours (Used to populate editable field above)</p>
-                                {(legData.departureDateTime instanceof Date && !isNaN(legData.departureDateTime.getTime())) && <p><strong>Calc. Arrival Time:</strong> {formattedArrivalTime}</p>}
+                                {(legData.departureDateTime && legData.departureDateTime instanceof Date && !isNaN(legData.departureDateTime.getTime())) && <p><strong>Calc. Arrival Time:</strong> {formattedArrivalTime}</p>}
                                 <p><strong>Calc. Block Time:</strong> {formattedBlockTime}</p>
                                 <p><strong>Assumed Speed (AI):</strong> {estimate.assumedCruiseSpeedKts?.toLocaleString()} kts</p>
                                 <p className="mt-1"><em>AI Explanation: {estimate.briefExplanation}</em></p>
-                                <p className="mt-1 font-semibold"><strong>Est. Leg Flight Cost:</strong> ${legCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (at ${hourlyRate.toLocaleString()}/hr flight time)</p>
+                                <p className="mt-1 font-semibold"><strong>Est. Leg Flight Cost:</strong> ${legCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (at ${hourlyRateForLeg.toLocaleString()}/hr flight time - placeholder rate)</p>
                               </>
                             )}
                           </AlertDescription>
@@ -599,3 +707,4 @@ export function CreateQuoteForm() {
     </Card>
   );
 }
+
