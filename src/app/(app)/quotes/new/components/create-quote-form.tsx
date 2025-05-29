@@ -290,7 +290,7 @@ export function CreateQuoteForm() {
     } finally {
       setEstimatingLegIndex(null);
     }
-  }, [getValues, legEstimates, toast, estimatingLegIndex, setOriginFboOptionsPerLeg, setDestinationFboOptionsPerLeg, setFetchingFbosForLeg]);
+  }, [getValues, legEstimates, toast, estimatingLegIndex]);
 
 
   const loadFbosForLeg = useCallback(async (legIndex: number, airportCode: string, type: 'origin' | 'destination') => {
@@ -299,7 +299,7 @@ export function CreateQuoteForm() {
       else setDestinationFboOptionsPerLeg(prev => { const upd = [...prev]; upd[legIndex] = []; return upd; });
       return;
     }
-
+    console.log(`[CLIENT DEBUG] FBO Fetch Start for Leg ${legIndex + 1}, Airport: ${airportCode}, Type: ${type}`);
     setFetchingFbosForLeg(prev => ({ ...prev, [legIndex]: { ...prev[legIndex], [type]: true } }));
     let fbos: FetchFbosOutput = [];
     let fetchError: any = null;
@@ -312,16 +312,16 @@ export function CreateQuoteForm() {
       }
     } catch (error) {
       fetchError = error;
-      console.error(`Error fetching ${type} FBOs for leg ${legIndex + 1} (${airportCode}):`, error);
+      console.error(`[CLIENT DEBUG] FBO Fetch Error for Leg ${legIndex + 1}, Airport: ${airportCode}, Type: ${type}:`, error);
       toast({ title: `Failed to load ${type} FBOs`, description: (error as Error).message, variant: "destructive" });
       if (type === 'origin') setOriginFboOptionsPerLeg(prev => { const upd = [...prev]; upd[legIndex] = []; return upd; });
       else setDestinationFboOptionsPerLeg(prev => { const upd = [...prev]; upd[legIndex] = []; return upd; });
     } finally {
       setFetchingFbosForLeg(prev => ({ ...prev, [legIndex]: { ...prev[legIndex], [type]: false } }));
       console.log(`[CLIENT DEBUG] FBO Fetch Complete for Leg ${legIndex + 1}, Airport: ${airportCode}, Type: ${type}`);
-      console.log(`[CLIENT DEBUG] Fetched FBOs:`, fbos);
+      console.log(`[CLIENT DEBUG] Fetched FBOs for Leg ${legIndex + 1}:`, fbos);
       if (fetchError) {
-        console.log(`[CLIENT DEBUG] Fetch Error:`, fetchError);
+        console.log(`[CLIENT DEBUG] Fetch Error for Leg ${legIndex + 1}:`, fetchError);
       }
     }
   }, [toast, setOriginFboOptionsPerLeg, setDestinationFboOptionsPerLeg, setFetchingFbosForLeg]);
@@ -332,8 +332,9 @@ export function CreateQuoteForm() {
       const currentOriginOptions = originFboOptionsPerLeg[index] || [];
       const currentDestinationOptions = destinationFboOptionsPerLeg[index] || [];
 
-      const hasOriginChanged = !currentOriginOptions.length || (currentOriginOptions[0] && currentOriginOptions[0].airportCode.toUpperCase() !== leg.origin.toUpperCase());
-      const hasDestinationChanged = !currentDestinationOptions.length || (currentDestinationOptions[0] && currentDestinationOptions[0].airportCode.toUpperCase() !== leg.destination.toUpperCase());
+      const hasOriginChanged = !currentOriginOptions.length || (currentOriginOptions.length > 0 && currentOriginOptions[0] && currentOriginOptions[0].airportCode && leg.origin && currentOriginOptions[0].airportCode.toUpperCase() !== leg.origin.toUpperCase());
+      const hasDestinationChanged = !currentDestinationOptions.length || (currentDestinationOptions.length > 0 && currentDestinationOptions[0] && currentDestinationOptions[0].airportCode && leg.destination && currentDestinationOptions[0].airportCode.toUpperCase() !== leg.destination.toUpperCase());
+
 
       if (leg.origin && leg.origin.length >= 3 && hasOriginChanged) {
           if(!(fetchingFbosForLeg[index]?.origin)) {
@@ -440,6 +441,7 @@ export function CreateQuoteForm() {
     setFetchingFbosForLeg(prev => {
         const newFetchingState = {...prev};
         delete newFetchingState[index];
+        // Adjust keys for subsequent legs if necessary (though typically not needed for object keys)
         return newFetchingState;
     })
   };
@@ -494,6 +496,7 @@ export function CreateQuoteForm() {
                         handleCustomerSelect(value);
                       }}
                       value={field.value || ""} 
+                      name={field.name}
                     >
                       <FormControl>
                         <SelectTrigger>
@@ -524,7 +527,7 @@ export function CreateQuoteForm() {
             <section>
               <CardTitle className="text-xl border-b pb-2 mb-4">General Quote Options</CardTitle>
               <div className="grid grid-cols-1 gap-6 mb-6">
-                <FormField control={control} name="aircraftType" render={({ field }) => ( <FormItem> <FormLabel>Aircraft Type</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Select an aircraft type" /></SelectTrigger></FormControl> <SelectContent>{availableAircraft.map(aircraft => (<SelectItem key={aircraft.id} value={aircraft.id}>{aircraft.name}</SelectItem>))}</SelectContent> </Select> <FormMessage /> </FormItem> )} />
+                <FormField control={control} name="aircraftType" render={({ field }) => ( <FormItem> <FormLabel>Aircraft Type</FormLabel> <Select onValueChange={field.onChange} value={field.value || ""} name={field.name}> <FormControl><SelectTrigger><SelectValue placeholder="Select an aircraft type" /></SelectTrigger></FormControl> <SelectContent>{availableAircraft.map(aircraft => (<SelectItem key={aircraft.id} value={aircraft.id}>{aircraft.name}</SelectItem>))}</SelectContent> </Select> <FormMessage /> </FormItem> )} />
               </div>
             </section>
             <Separator />
@@ -555,7 +558,7 @@ export function CreateQuoteForm() {
                         <FormField control={control} name={`legs.${index}.originFbo`} render={({ field }) => (
                             <FormItem>
                                 <FormLabel className="flex items-center gap-1"><Building className="h-4 w-4" />Origin FBO</FormLabel>
-                                <Select onValueChange={field.onChange} value={field.value || ""}>
+                                <Select onValueChange={field.onChange} value={field.value || ""} name={field.name}>
                                     <FormControl>
                                       <SelectTrigger
                                         disabled={fetchingFbosForLeg[index]?.origin}
@@ -578,7 +581,7 @@ export function CreateQuoteForm() {
                         <FormField control={control} name={`legs.${index}.destinationFbo`} render={({ field }) => (
                             <FormItem>
                                 <FormLabel className="flex items-center gap-1"><Building className="h-4 w-4" />Destination FBO</FormLabel>
-                                <Select onValueChange={field.onChange} value={field.value || ""}>
+                                <Select onValueChange={field.onChange} value={field.value || ""} name={field.name}>
                                      <FormControl>
                                       <SelectTrigger
                                         disabled={fetchingFbosForLeg[index]?.destination}
@@ -628,7 +631,7 @@ export function CreateQuoteForm() {
                       )}
                     />
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <FormField control={control} name={`legs.${index}.legType`} render={({ field }) => ( <FormItem> <FormLabel>Leg Type</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Select leg type" /></SelectTrigger></FormControl> <SelectContent>{legTypes.map(type => (<SelectItem key={type} value={type}>{type}</SelectItem>))}</SelectContent> </Select> <FormMessage /> </FormItem> )} />
+                        <FormField control={control} name={`legs.${index}.legType`} render={({ field }) => ( <FormItem> <FormLabel>Leg Type</FormLabel> <Select onValueChange={field.onChange} defaultValue={field.value} name={field.name}> <FormControl><SelectTrigger><SelectValue placeholder="Select leg type" /></SelectTrigger></FormControl> <SelectContent>{legTypes.map(type => (<SelectItem key={type} value={type}>{type}</SelectItem>))}</SelectContent> </Select> <FormMessage /> </FormItem> )} />
                         <FormField control={control} name={`legs.${index}.passengerCount`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><Users className="h-4 w-4" />Passengers</FormLabel> <FormControl><Input type="number" placeholder="e.g., 2" {...field} min="0" /></FormControl> <FormMessage /> </FormItem> )} />
                     </div>
 
@@ -757,3 +760,4 @@ export function CreateQuoteForm() {
     </Card>
   );
 }
+
