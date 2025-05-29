@@ -3,43 +3,30 @@
 
 import type { Fbo } from '@/ai/tools/get-fbos-tool';
 
-// Simplified: Always return this list for any airport code for testing
-const alwaysReturnFbos: Fbo[] = [
-  {
-    id: 'GENERIC-FBO-1',
-    name: 'Test FBO One',
-    airportCode: 'ANY', // Placeholder, not used for filtering in this simplified version
-    contactPhone: '555-1234',
-    fuelTypes: ['Jet A'],
-    services: ['Fueling', 'Parking'],
-    fees: [{ type: 'Parking', amount: 50 }],
-  },
-  {
-    id: 'GENERIC-FBO-2',
-    name: 'Test FBO Two',
-    airportCode: 'ANY',
-    contactPhone: '555-5678',
-    fuelTypes: ['Jet A', '100LL'],
-    services: ['Handling', 'Catering'],
-    fees: [{ type: 'Handling', amount: 200 }],
-  },
-];
+// ABSOLUTELY SIMPLIFIED MOCK
+const ultraSimpleFbo: Fbo = {
+  id: 'ULTRA-SIMPLE-FBO',
+  name: 'Ultra Simple Test FBO',
+  airportCode: 'ANY', // This will be updated
+  contactPhone: '123-456-7890',
+  fuelTypes: ['Jet A', '100LL'],
+  services: ['Fueling', 'Parking', 'Coffee'],
+  fees: [{ type: 'Ramp Fee', amount: 100, notes: "Waived with fuel" }],
+};
 
 export async function getFbosByAirportCode(airportCode: string): Promise<Fbo[]> {
   // Simulate API call delay
-  await new Promise(resolve => setTimeout(resolve, 50));
-
+  await new Promise(resolve => setTimeout(resolve, 20));
   const upperAirportCode = airportCode.toUpperCase();
-  console.log(`[MockFboService SIMPLIFIED] Request for FBOs at: ${upperAirportCode}. Returning fixed list.`);
   
-  // In this simplified version, always return the test list
-  return alwaysReturnFbos.map(fbo => ({ ...fbo, airportCode: upperAirportCode, id: `${upperAirportCode}-${fbo.name.replace(/\s+/g, '')}` }));
+  console.log(`[MockFboService ULTRA-SIMPLIFIED] Request for FBOs at: ${upperAirportCode}.`);
+  
+  const result: Fbo[] = [{ 
+    ...ultraSimpleFbo, 
+    airportCode: upperAirportCode, 
+    id: `${upperAirportCode}-UltraSimple` 
+  }];
+  
+  console.log(`[MockFboService ULTRA-SIMPLIFIED] RETURNING: ${JSON.stringify(result)}`);
+  return result;
 }
-
-// Keep genericFboBase for potential future use if needed, but it's not used by the simplified getFbosByAirportCode above.
-// const genericFboBase: Omit<Fbo, 'id' | 'airportCode' | 'name'> = {
-//   contactPhone: 'N/A',
-//   fuelTypes: ['Jet A', 'Avgas 100LL'],
-//   services: ['Basic Handling', 'Fueling'],
-//   fees: [{ type: 'Standard Handling', amount: 200, notes: "Estimated fee"}],
-// };
