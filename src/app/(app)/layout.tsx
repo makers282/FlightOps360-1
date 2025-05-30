@@ -17,14 +17,15 @@ import {
   LayoutDashboard,
   ListChecks,
   LogOut,
-  Plane, // Keep Plane import if used elsewhere, or remove if only for the old logo
+  Plane,
   Route,
   Settings,
   ShieldAlert,
   Users, 
   UsersRound, 
   FileArchive,
-  SlidersHorizontal, // Added for Quote Config
+  SlidersHorizontal,
+  PlaneTakeoff, // Added for Aircraft Performance
 } from 'lucide-react';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -60,8 +61,8 @@ export default function AppLayout({ children }: PropsWithChildren) {
     <SidebarProvider defaultOpen>
       <Sidebar>
         <SidebarHeader className="p-4">
-          <Link href="/dashboard" className="flex items-center text-lg font-semibold text-primary">
-            <Icons.Logo className="h-7 w-7 mr-2" /> 
+          <Link href="/dashboard" className="flex items-center gap-2 text-lg font-semibold text-primary">
+            <Icons.Logo className="h-7 w-7" /> 
             <span>FlightOps360</span>
           </Link>
         </SidebarHeader>
@@ -184,7 +185,9 @@ export default function AppLayout({ children }: PropsWithChildren) {
                 <SidebarMenuSubButton href="/settings/quote-config">
                   <SlidersHorizontal /> Quote Configuration
                 </SidebarMenuSubButton>
-                 {/* Add more settings sub-items here if needed */}
+                 <SidebarMenuSubButton href="/settings/aircraft-performance">
+                  <PlaneTakeoff /> Aircraft Performance
+                </SidebarMenuSubButton>
               </SidebarMenuSub>
             </SidebarMenuItem>
           </SidebarMenu>
