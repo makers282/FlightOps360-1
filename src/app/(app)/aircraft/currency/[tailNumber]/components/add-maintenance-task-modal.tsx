@@ -32,7 +32,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 
 const itemTypes = ["Inspection", "Service Bulletin", "Airworthiness Directive", "Component Replacement", "Overhaul", "Life Limited Part", "Other"] as const;
 const trackTypes = ["Interval", "One Time", "Dont Alert"] as const;
-const daysIntervalTypes = ["days", "calendar_months_eom", "calendar_years"] as const;
+const daysIntervalTypes = ["days", "months_specific_day", "months_eom", "years_specific_day"] as const;
 
 // Default values for the form, extracted for reuse
 const defaultMaintenanceTaskFormValues = {
@@ -59,8 +59,8 @@ const defaultMaintenanceTaskFormValues = {
   cyclesTolerance: 0,
   alertCyclesPrior: 0,
   isDaysDueEnabled: false,
-  daysIntervalType: 'days' as typeof daysIntervalTypes[number], // New default
-  daysDueValue: '', // Overloaded: number string for interval, date string for one time
+  daysIntervalType: 'days' as typeof daysIntervalTypes[number],
+  daysDueValue: '', 
   daysTolerance: 0,
   alertDaysPrior: 0,
 };
@@ -96,7 +96,7 @@ const maintenanceTaskSchema = z.object({
 
   isDaysDueEnabled: z.boolean().default(false),
   daysIntervalType: z.enum(daysIntervalTypes).optional(),
-  daysDueValue: z.string().optional(), // Will be validated conditionally
+  daysDueValue: z.string().optional(), 
   daysTolerance: z.coerce.number({invalid_type_error: "Must be a number"}).min(0, "Cannot be negative").int("Must be an integer").optional().or(z.literal(0)).or(z.nan()),
   alertDaysPrior: z.coerce.number({invalid_type_error: "Must be a number"}).min(0, "Cannot be negative").int("Must be an integer").optional().or(z.literal(0)).or(z.nan()),
 })
@@ -194,12 +194,13 @@ export function AddMaintenanceTaskModal({ aircraft, onSave, children, isOpen, se
     if (trackType === 'Interval') {
       switch (daysIntervalType) {
         case 'days': return 'Due In (days)';
-        case 'calendar_months_eom': return 'Due In (months)';
-        case 'calendar_years': return 'Due In (years)';
+        case 'months_specific_day': return 'Due In (months)';
+        case 'months_eom': return 'Due In (months)';
+        case 'years_specific_day': return 'Due In (years)';
         default: return 'Due In';
       }
     }
-    return 'Specific Due Date'; // Should not happen if trackType is not 'One Time'
+    return 'Specific Due Date'; 
   };
 
   return (
@@ -335,8 +336,9 @@ export function AddMaintenanceTaskModal({ aircraft, onSave, children, isOpen, se
                             <FormControl><SelectTrigger><SelectValue placeholder="Select interval type" /></SelectTrigger></FormControl>
                             <SelectContent>
                               <SelectItem value="days">Days</SelectItem>
-                              <SelectItem value="calendar_months_eom">Calendar Months (End of Month)</SelectItem>
-                              <SelectItem value="calendar_years">Calendar Years</SelectItem>
+                              <SelectItem value="months_specific_day">Months (Specific Day)</SelectItem>
+                              <SelectItem value="months_eom">Calendar Months (End of Month)</SelectItem>
+                              <SelectItem value="years_specific_day">Years (Specific Day)</SelectItem>
                             </SelectContent>
                           </Select>
                           <FormMessage />

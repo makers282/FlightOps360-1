@@ -60,7 +60,6 @@ type AircraftInfoEditFormData = z.infer<typeof aircraftInfoEditSchema>;
 const createOrUpdateMaintenanceItem = (
   formData: MaintenanceTaskFormData,
   aircraft: FleetAircraft,
-  componentValues: typeof MOCK_COMPONENT_VALUES_DATA, // Still here but not used for due date calc
   existingItemId?: string
 ): MaintenanceItem => {
   let dueAtDate: string | undefined = undefined;
@@ -69,7 +68,7 @@ const createOrUpdateMaintenanceItem = (
 
   const actualLastCompletedDateObj = formData.lastCompletedDate && isValid(parse(formData.lastCompletedDate, 'yyyy-MM-dd', new Date()))
     ? parse(formData.lastCompletedDate, 'yyyy-MM-dd', new Date())
-    : new Date(); // Default to today if no valid date, critical for interval calcs
+    : new Date(); 
   const actualLastCompletedHours = Number(formData.lastCompletedHours || 0);
   const actualLastCompletedCycles = Number(formData.lastCompletedCycles || 0);
 
@@ -77,12 +76,19 @@ const createOrUpdateMaintenanceItem = (
     if (formData.isDaysDueEnabled && formData.daysDueValue && formData.daysIntervalType) {
       const intervalValue = Number(formData.daysDueValue);
       if (!isNaN(intervalValue) && intervalValue > 0) {
-        if (formData.daysIntervalType === 'days') {
-          dueAtDate = format(addDays(actualLastCompletedDateObj, intervalValue), 'yyyy-MM-dd');
-        } else if (formData.daysIntervalType === 'calendar_months_eom') {
-          dueAtDate = format(endOfMonth(addMonths(actualLastCompletedDateObj, intervalValue)), 'yyyy-MM-dd');
-        } else if (formData.daysIntervalType === 'calendar_years') {
-          dueAtDate = format(addYears(actualLastCompletedDateObj, intervalValue), 'yyyy-MM-dd');
+        switch (formData.daysIntervalType) {
+          case 'days':
+            dueAtDate = format(addDays(actualLastCompletedDateObj, intervalValue), 'yyyy-MM-dd');
+            break;
+          case 'months_specific_day':
+            dueAtDate = format(addMonths(actualLastCompletedDateObj, intervalValue), 'yyyy-MM-dd');
+            break;
+          case 'months_eom':
+            dueAtDate = format(endOfMonth(addMonths(actualLastCompletedDateObj, intervalValue)), 'yyyy-MM-dd');
+            break;
+          case 'years_specific_day':
+            dueAtDate = format(addYears(actualLastCompletedDateObj, intervalValue), 'yyyy-MM-dd');
+            break;
         }
       }
     }
@@ -111,8 +117,6 @@ const createOrUpdateMaintenanceItem = (
   }
 
   const aircraftKey = aircraft.id || aircraft.tailNumber;
-  // Use the current airframe time/cycles from the MOCK_COMPONENT_VALUES_DATA for display, 
-  // not for calculating the 'dueAt' values which are based on last completion + interval.
   const currentAirframeTimeForTask = MOCK_COMPONENT_VALUES_DATA[aircraftKey]?.['Airframe']?.time || 0;
   const currentAirframeCyclesForTask = MOCK_COMPONENT_VALUES_DATA[aircraftKey]?.['Airframe']?.cycles || 0;
 
@@ -121,12 +125,12 @@ const createOrUpdateMaintenanceItem = (
     id: existingItemId || `MX-${Date.now()}`,
     tailNumber: aircraft.tailNumber,
     aircraftModel: aircraft.model,
-    currentAirframeTime: currentAirframeTimeForTask, // This is the current state of the aircraft
-    currentAirframeCycles: currentAirframeCyclesForTask, // This is the current state of the aircraft
+    currentAirframeTime: currentAirframeTimeForTask, 
+    currentAirframeCycles: currentAirframeCyclesForTask, 
     nextDueItemDescription: formData.itemTitle,
-    dueAtDate, // Calculated based on last completed + interval or specific date
-    dueAtHours, // Calculated based on last completed + interval or specific hours
-    dueAtCycles, // Calculated based on last completed + interval or specific cycles
+    dueAtDate, 
+    dueAtHours, 
+    dueAtCycles, 
     notes: formData.details || formData.lastCompletedNotes || '',
   };
 };
@@ -165,9 +169,8 @@ export default function AircraftMaintenanceDetailPage() {
       setOriginalComponentTimes([]);
       return;
     }
-    const aircraftKeyInMock = aircraft.id || aircraft.tailNumber; // Use ID first, then tailNumber
+    const aircraftKeyInMock = aircraft.id || aircraft.tailNumber; 
     const componentValuesForAircraft = MOCK_COMPONENT_VALUES_DATA[aircraftKeyInMock] || {};
-    // Use trackedComponentNames from the aircraft object to build the table
     const trackedComponents = aircraft.trackedComponentNames || ['Airframe', 'Engine 1']; 
     
     const initialTimes = trackedComponents.map(name => ({
@@ -176,8 +179,8 @@ export default function AircraftMaintenanceDetailPage() {
       currentCycles: componentValuesForAircraft[name]?.cycles ?? 0,
     }));
     
-    setEditableComponentTimes(JSON.parse(JSON.stringify(initialTimes))); // Deep copy
-    setOriginalComponentTimes(JSON.parse(JSON.stringify(initialTimes))); // Deep copy
+    setEditableComponentTimes(JSON.parse(JSON.stringify(initialTimes))); 
+    setOriginalComponentTimes(JSON.parse(JSON.stringify(initialTimes))); 
   }, []);
 
 
@@ -202,8 +205,6 @@ export default function AircraftMaintenanceDetailPage() {
           });
 
           initializeComponentTimes(foundAircraft);
-
-          // Filter sampleMaintenanceData for tasks related to this specific tailNumber
           const tasksForAircraft = sampleMaintenanceData.filter(item => item.tailNumber === tailNumber);
           setMaintenanceTasks(tasksForAircraft);
 
@@ -229,12 +230,12 @@ export default function AircraftMaintenanceDetailPage() {
 
   const handleComponentTimeChange = (componentName: string, field: 'currentTime' | 'currentCycles', value: string) => {
     const numericValue = parseFloat(value);
-    if (isNaN(numericValue) && value !== "") return; // Allow empty string to clear, but not invalid chars
+    if (isNaN(numericValue) && value !== "") return; 
 
     setEditableComponentTimes(prevTimes =>
       prevTimes.map(comp =>
         comp.componentName === componentName
-          ? { ...comp, [field]: isNaN(numericValue) ? 0 : numericValue } // Default to 0 if cleared or invalid
+          ? { ...comp, [field]: isNaN(numericValue) ? 0 : numericValue } 
           : comp
       )
     );
@@ -243,8 +244,6 @@ export default function AircraftMaintenanceDetailPage() {
   const handleSaveComponentTimes = () => {
     if (!currentAircraft) return;
     startSavingComponentTimesTransition(() => {
-      // In a real app, this would be an API call.
-      // For now, we update the MOCK_AIRCRAFT_COMPONENT_TIMES_DATA client-side.
       const currentAircraftId = currentAircraft.id || currentAircraft.tailNumber;
       if (currentAircraftId) {
         const newComponentValues: Record<string, { time?: number; cycles?: number }> = {};
@@ -252,7 +251,7 @@ export default function AircraftMaintenanceDetailPage() {
           newComponentValues[comp.componentName] = { time: comp.currentTime, cycles: comp.currentCycles };
         });
         MOCK_COMPONENT_VALUES_DATA[currentAircraftId] = newComponentValues;
-        setOriginalComponentTimes(JSON.parse(JSON.stringify(editableComponentTimes))); // Update original on save
+        setOriginalComponentTimes(JSON.parse(JSON.stringify(editableComponentTimes))); 
       }
       setIsEditingComponentTimes(false);
       toast({
@@ -263,7 +262,7 @@ export default function AircraftMaintenanceDetailPage() {
   };
 
   const handleCancelEditComponentTimes = () => {
-    setEditableComponentTimes(JSON.parse(JSON.stringify(originalComponentTimes))); // Revert to original
+    setEditableComponentTimes(JSON.parse(JSON.stringify(originalComponentTimes))); 
     setIsEditingComponentTimes(false);
   };
 
@@ -277,7 +276,7 @@ export default function AircraftMaintenanceDetailPage() {
           ...data,
         };
         await saveFleetAircraft(updatedAircraftData);
-        setCurrentAircraft(updatedAircraftData); // Update local state
+        setCurrentAircraft(updatedAircraftData); 
         setIsEditingAircraftInfo(false);
         toast({ title: "Success", description: "Aircraft information updated." });
       } catch (error) {
@@ -295,15 +294,9 @@ export default function AircraftMaintenanceDetailPage() {
 
   const handleOpenEditTaskModal = (taskToEdit: MaintenanceItem) => {
     setEditingTaskOriginalId(taskToEdit.id);
-    // For MVP edit, we primarily pre-fill descriptive fields.
-    // Complex reverse-engineering of due criteria is avoided for now.
-    // User will need to re-enter due criteria if they wish to change them.
     const formData: Partial<MaintenanceTaskFormData> = {
       itemTitle: taskToEdit.nextDueItemDescription,
       details: taskToEdit.notes,
-      // TODO: Potentially add more fields here if they are stored on MaintenanceItem
-      // and can be easily mapped back to MaintenanceTaskFormData.
-      // For now, rely on defaultMaintenanceTaskFormValues for most tracking settings.
     };
     setInitialModalFormData(formData);
     setIsTaskModalOpen(true);
@@ -316,7 +309,6 @@ export default function AircraftMaintenanceDetailPage() {
     const newItem = createOrUpdateMaintenanceItem(
       taskFormData,
       currentAircraft,
-      MOCK_COMPONENT_VALUES_DATA,
       editingTaskOriginalId || undefined 
     );
 
@@ -324,7 +316,6 @@ export default function AircraftMaintenanceDetailPage() {
       setMaintenanceTasks(prevTasks =>
         prevTasks.map(task => (task.id === editingTaskOriginalId ? newItem : task))
       );
-      // Update the global sampleMaintenanceData as well if it's the source of truth for this view
       const globalIndex = sampleMaintenanceData.findIndex(t => t.id === editingTaskOriginalId);
       if (globalIndex > -1) sampleMaintenanceData[globalIndex] = newItem;
 
@@ -333,7 +324,6 @@ export default function AircraftMaintenanceDetailPage() {
         description: `Task "${newItem.nextDueItemDescription}" updated for ${currentAircraft.tailNumber}.`,
       });
     } else {
-      // Add to global sample data for persistence in this demo session
       sampleMaintenanceData.push(newItem); 
       setMaintenanceTasks(prev => [...prev, newItem]);
       toast({
