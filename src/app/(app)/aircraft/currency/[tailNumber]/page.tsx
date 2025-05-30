@@ -5,7 +5,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { PageHeader } from '@/components/page-header';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import {
   Table,
   TableBody,
@@ -15,8 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Wrench, PlusCircle, ArrowLeft, PlaneIcon, Save } from 'lucide-react';
+import { Wrench, PlusCircle, ArrowLeft, PlaneIcon, Edit } from 'lucide-react'; // Added Edit
 import { format, parse } from 'date-fns';
 import { sampleMaintenanceData, calculateToGo, getReleaseStatus, type MaintenanceItem } from '../page';
 import { useToast } from '@/hooks/use-toast';
@@ -68,12 +67,13 @@ export default function AircraftMaintenanceDetailPage() {
   const tailNumber = typeof params.tailNumber === 'string' ? decodeURIComponent(params.tailNumber) : undefined;
   const { toast } = useToast();
 
-  const [editableComponentTimes, setEditableComponentTimes] = useState<AircraftComponentTime[]>([]);
+  // State to hold component times, could be made editable later
+  const [componentTimes, setComponentTimes] = useState<AircraftComponentTime[]>([]);
 
   useEffect(() => {
     if (tailNumber) {
       const initialTimes = MOCK_AIRCRAFT_COMPONENT_TIMES_DATA[tailNumber] || MOCK_AIRCRAFT_COMPONENT_TIMES_DATA['DEFAULT'];
-      setEditableComponentTimes(JSON.parse(JSON.stringify(initialTimes))); // Deep copy
+      setComponentTimes(JSON.parse(JSON.stringify(initialTimes))); // Deep copy
     }
   }, [tailNumber]);
 
@@ -83,25 +83,15 @@ export default function AircraftMaintenanceDetailPage() {
   
   const aircraftDisplayDetails = aircraftMaintenanceTasks.length > 0 ? aircraftMaintenanceTasks[0] : null;
 
-  const handleComponentTimeChange = (index: number, field: 'currentTime' | 'currentCycles', value: string) => {
-    const numericValue = parseFloat(value);
-    if (!isNaN(numericValue) || value === '') {
-      setEditableComponentTimes(prevTimes => {
-        const newTimes = [...prevTimes];
-        newTimes[index] = { ...newTimes[index], [field]: value === '' ? 0 : numericValue };
-        return newTimes;
-      });
-    }
-  };
-
-  const handleSaveComponentTimes = () => {
-    // In a real app, this would save to a backend.
-    console.log("Saving component times for", tailNumber, editableComponentTimes);
+  const handleEditComponentTimes = () => {
+    // Placeholder for edit functionality
+    console.log("Edit Component Times clicked for", tailNumber);
     toast({
-      title: "Component Times Saved (Simulated)",
-      description: `Times for ${tailNumber} logged to console.`,
+      title: "Edit Component Times (Placeholder)",
+      description: `Functionality to edit times for ${tailNumber} will be implemented here.`,
     });
   };
+
 
   if (!tailNumber) {
     return (
@@ -121,7 +111,7 @@ export default function AircraftMaintenanceDetailPage() {
     );
   }
   
-  if (!aircraftDisplayDetails && editableComponentTimes.length === 0) {
+  if (!aircraftDisplayDetails && componentTimes.length === 0) {
      return (
       <>
         <PageHeader title={`Data for ${tailNumber}`} icon={Wrench} />
@@ -153,8 +143,8 @@ export default function AircraftMaintenanceDetailPage() {
                 <ArrowLeft className="mr-2 h-4 w-4" /> Back to Overview
               </Link>
             </Button>
-            <Button>
-              <PlusCircle className="mr-2 h-4 w-4" /> Add New Item for {tailNumber}
+            <Button> {/* This button can be used for adding a new maintenance *task* */}
+              <PlusCircle className="mr-2 h-4 w-4" /> Add New Task for {tailNumber}
             </Button>
           </div>
         }
@@ -166,38 +156,29 @@ export default function AircraftMaintenanceDetailPage() {
                 <PlaneIcon className="h-6 w-6 text-primary" />
                 <CardTitle>Current Hours & Cycles</CardTitle>
             </div>
+             <Button variant="outline" size="sm" onClick={handleEditComponentTimes}>
+                <Edit className="mr-2 h-4 w-4" /> Edit Component Times
+            </Button>
         </CardHeader>
         <CardContent>
-          {editableComponentTimes.length > 0 ? (
+          {componentTimes.length > 0 ? (
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Component</TableHead>
-                  <TableHead className="w-1/3 text-right">Current Time (hrs)</TableHead>
-                  <TableHead className="w-1/3 text-right">Current Cycles</TableHead>
+                  <TableHead className="text-right">Current Time (hrs)</TableHead>
+                  <TableHead className="text-right">Current Cycles</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {editableComponentTimes.map((comp, index) => (
+                {componentTimes.map((comp, index) => (
                   <TableRow key={comp.componentName}>
                     <TableCell className="font-medium">{comp.componentName}</TableCell>
                     <TableCell className="text-right">
-                      <Input 
-                        type="number"
-                        step="0.1"
-                        value={comp.currentTime}
-                        onChange={(e) => handleComponentTimeChange(index, 'currentTime', e.target.value)}
-                        className="text-right"
-                      />
+                      {comp.currentTime.toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1})}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Input 
-                        type="number"
-                        step="1"
-                        value={comp.currentCycles}
-                        onChange={(e) => handleComponentTimeChange(index, 'currentCycles', e.target.value)}
-                        className="text-right"
-                      />
+                      {comp.currentCycles.toLocaleString()}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -207,13 +188,6 @@ export default function AircraftMaintenanceDetailPage() {
             <p className="text-muted-foreground">No component time data available for this aircraft. Configure in Company Settings.</p>
           )}
         </CardContent>
-        {editableComponentTimes.length > 0 && (
-            <div className="p-6 pt-0 flex justify-end">
-                <Button onClick={handleSaveComponentTimes}>
-                    <Save className="mr-2 h-4 w-4" /> Save Component Times
-                </Button>
-            </div>
-        )}
       </Card>
 
       <Card className="shadow-lg">
@@ -293,6 +267,5 @@ export default function AircraftMaintenanceDetailPage() {
     </>
   );
 }
-
 
     
