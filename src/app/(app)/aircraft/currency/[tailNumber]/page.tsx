@@ -80,19 +80,19 @@ const createOrUpdateMaintenanceItem = (
   if (formData.trackType === "Interval") {
     if (formData.isDaysDueEnabled && formData.daysDueValue) {
       const intervalDays = Number(formData.daysDueValue);
-      if (!isNaN(intervalDays)) {
+      if (!isNaN(intervalDays) && intervalDays > 0) {
         dueAtDate = format(addDays(actualLastCompletedDate, intervalDays), 'yyyy-MM-dd');
       }
     }
     if (formData.isHoursDueEnabled && formData.hoursDue) {
       const intervalHours = Number(formData.hoursDue);
-      if (!isNaN(intervalHours)) {
+      if (!isNaN(intervalHours) && intervalHours > 0) {
         dueAtHours = actualLastCompletedHours + intervalHours;
       }
     }
     if (formData.isCyclesDueEnabled && formData.cyclesDue) {
       const intervalCycles = Number(formData.cyclesDue);
-      if (!isNaN(intervalCycles)) {
+      if (!isNaN(intervalCycles) && intervalCycles > 0) {
         dueAtCycles = actualLastCompletedCycles + intervalCycles;
       }
     }
@@ -175,8 +175,9 @@ export default function AircraftMaintenanceDetailPage() {
 
           const aircraftKeyInMock = foundAircraft.id || foundAircraft.tailNumber;
           const componentValuesForAircraft = MOCK_COMPONENT_VALUES_DATA[aircraftKeyInMock] || {};
-
-          const initialTimes = (foundAircraft.trackedComponentNames || ['Airframe', 'Engine 1']).map(name => ({
+          
+          const trackedComponents = foundAircraft.trackedComponentNames || ['Airframe', 'Engine 1'];
+          const initialTimes = trackedComponents.map(name => ({
             componentName: name,
             currentTime: componentValuesForAircraft[name]?.time ?? 0,
             currentCycles: componentValuesForAircraft[name]?.cycles ?? 0,
@@ -259,21 +260,15 @@ export default function AircraftMaintenanceDetailPage() {
 
   const handleOpenAddTaskModal = () => {
     setEditingTaskOriginalId(null);
-    setInitialModalFormData(null); // Or set to default empty form values
+    setInitialModalFormData(null); 
     setIsTaskModalOpen(true);
   };
 
   const handleOpenEditTaskModal = (taskToEdit: MaintenanceItem) => {
     setEditingTaskOriginalId(taskToEdit.id);
-    // Simplification: For now, only pre-fill basic info. User re-enters due criteria.
     const formData: Partial<MaintenanceTaskFormData> = {
       itemTitle: taskToEdit.nextDueItemDescription,
       details: taskToEdit.notes,
-      // itemType: taskToEdit.itemType, // if itemType was on MaintenanceItem
-      // associatedComponent: taskToEdit.associatedComponent, // if stored
-      // isActive: taskToEdit.isActive, // if stored
-      // lastCompletedDate, lastCompletedHours, lastCompletedCycles would be blank
-      // trackType and due parameters would be blank or default
     };
     setInitialModalFormData(formData);
     setIsTaskModalOpen(true);
@@ -287,15 +282,13 @@ export default function AircraftMaintenanceDetailPage() {
       taskFormData,
       currentAircraft,
       MOCK_COMPONENT_VALUES_DATA,
-      editingTaskOriginalId || undefined // Pass existing ID if editing
+      editingTaskOriginalId || undefined 
     );
 
     if (editingTaskOriginalId) {
-      // Update existing task
       setMaintenanceTasks(prevTasks =>
         prevTasks.map(task => (task.id === editingTaskOriginalId ? newItem : task))
       );
-      // Also update the global mock data if it's being used elsewhere (careful with this)
       const globalIndex = sampleMaintenanceData.findIndex(t => t.id === editingTaskOriginalId);
       if (globalIndex > -1) sampleMaintenanceData[globalIndex] = newItem;
 
@@ -304,8 +297,7 @@ export default function AircraftMaintenanceDetailPage() {
         description: `Task "${newItem.nextDueItemDescription}" updated for ${currentAircraft.tailNumber}.`,
       });
     } else {
-      // Add new task
-      sampleMaintenanceData.push(newItem); // Modifying global mock data
+      sampleMaintenanceData.push(newItem); 
       setMaintenanceTasks(prev => [...prev, newItem]);
       toast({
         title: "New Task Added (Client-Side)",
@@ -389,11 +381,11 @@ export default function AircraftMaintenanceDetailPage() {
             </Button>
             <AddMaintenanceTaskModal
               aircraft={currentAircraft}
-              onSave={handleSaveTask} // Use the new unified save handler
+              onSave={handleSaveTask}
               isOpen={isTaskModalOpen}
               setIsOpen={setIsTaskModalOpen}
-              initialData={initialModalFormData} // Pass initial data for editing
-              isEditing={!!editingTaskOriginalId} // Pass editing flag
+              initialData={initialModalFormData} 
+              isEditing={!!editingTaskOriginalId} 
             >
               <Button className="w-full sm:w-auto" onClick={handleOpenAddTaskModal}>
                 <PlusCircle className="mr-2 h-4 w-4" /> Add New Task
@@ -409,11 +401,6 @@ export default function AircraftMaintenanceDetailPage() {
               <PlaneIcon className="h-6 w-6 text-primary" />
               <CardTitle>Current Hours & Cycles</CardTitle>
             </div>
-            {/* Placeholder for Edit Times Button
-             <Button variant="outline" size="sm" onClick={() => toast({ title: "Edit Times Clicked", description: "Functionality to edit component times will be here."})}>
-                <Edit className="mr-2 h-4 w-4" /> Edit Times
-            </Button>
-            */}
           </CardHeader>
           <CardContent>
             {editableComponentTimes.length > 0 ? (
@@ -470,11 +457,6 @@ export default function AircraftMaintenanceDetailPage() {
               <InfoIcon className="h-6 w-6 text-primary" />
               <CardTitle>Aircraft Information</CardTitle>
             </div>
-            {!isEditingAircraftInfo && (
-              <Button variant="outline" size="sm" onClick={() => setIsEditingAircraftInfo(true)}>
-                <Edit className="mr-2 h-4 w-4" /> Edit Aircraft Info
-              </Button>
-            )}
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
             {isEditingAircraftInfo ? (
@@ -595,6 +577,11 @@ export default function AircraftMaintenanceDetailPage() {
                     )}
                   </div>
                 )}
+                <div className="mt-4 flex justify-end">
+                  <Button variant="outline" size="sm" onClick={() => setIsEditingAircraftInfo(true)}>
+                    <Edit className="mr-2 h-4 w-4" /> Edit Aircraft Info
+                  </Button>
+                </div>
               </>
             )}
           </CardContent>
@@ -707,3 +694,4 @@ export default function AircraftMaintenanceDetailPage() {
     </>
   );
 }
+
