@@ -470,7 +470,7 @@ export function CreateQuoteForm() {
         currentEstimate.estimatedForInputs?.aircraftType === aircraftNameForFlow) {
       toast({ title: "Estimate Exists", description: "Flight details already estimated for these inputs.", variant: "default" });
       if(currentEstimate.estimatedFlightTimeHours !== undefined) {
-        setValue(`legs.${index}.flightTimeHours`, currentEstimate.estimatedFlightTimeHours);
+        setValue(`legs.${legIndex}.flightTimeHours`, currentEstimate.estimatedFlightTimeHours);
       }
       return;
     }
@@ -702,7 +702,7 @@ export function CreateQuoteForm() {
                             <FormLabel>Aircraft Type</FormLabel> 
                             <Select 
                                 onValueChange={field.onChange} 
-                                value={field.value || ""} // Ensure value is "" when undefined for placeholder
+                                value={field.value || ""}
                                 name={field.name}
                             > 
                                 <FormControl>
@@ -746,7 +746,6 @@ export function CreateQuoteForm() {
                         <FormField control={control} name={`legs.${index}.destinationFbo`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><Building className="h-4 w-4" />Destination FBO (Optional)</FormLabel> <FormControl><Input placeholder="e.g., Signature, Atlantic" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
                     </div>
                      <FormField control={control} name={`legs.${index}.departureDateTime`} render={({ field }) => ( <FormItem className="flex flex-col"> <FormLabel>Desired Departure Date & Time</FormLabel> {isClient ? ( <Popover> <PopoverTrigger asChild> 
-                        {/* FormControl removed as direct child of PopoverTrigger */}
                         <Button 
                           variant={"outline"} 
                           className="w-full pl-3 text-left font-normal" // Static className
@@ -761,9 +760,9 @@ export function CreateQuoteForm() {
                         <FormField control={control} name={`legs.${index}.passengerCount`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><Users className="h-4 w-4" />Passengers</FormLabel> <FormControl><Input type="number" placeholder="e.g., 2" {...field} min="0" onChange={e => field.onChange(parseInt(e.target.value, 10))} /></FormControl> <FormMessage /> </FormItem> )} />
                     </div>
                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                        <FormField control={control} name={`legs.${index}.originTaxiTimeMinutes`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><Users className="h-4 w-4" />Origin Taxi (mins)</FormLabel> <FormControl><Input type="number" placeholder="e.g., 15" {...field} min="0" onChange={e => field.onChange(parseInt(e.target.value, 10))} /></FormControl> <FormMessage /> </FormItem> )} />
+                        <FormField control={control} name={`legs.${index}.originTaxiTimeMinutes`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1">Origin Taxi (mins)</FormLabel> <FormControl><Input type="number" placeholder="e.g., 15" {...field} min="0" onChange={e => field.onChange(parseInt(e.target.value, 10))} /></FormControl> <FormMessage /> </FormItem> )} />
                         <FormField control={control} name={`legs.${index}.flightTimeHours`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><PlaneTakeoff className="h-4 w-4" />Flight Time (hrs)</FormLabel> <FormControl><Input type="number" step="0.1" placeholder="e.g., 2.5" {...field} onChange={e => field.onChange(parseFloat(e.target.value))} /></FormControl> <FormDescription className="text-xs">Populated by AI, editable.</FormDescription><FormMessage /> </FormItem> )} />
-                        <FormField control={control} name={`legs.${index}.destinationTaxiTimeMinutes`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><Users className="h-4 w-4" />Dest. Taxi (mins)</FormLabel> <FormControl><Input type="number" placeholder="e.g., 15" {...field} min="0" onChange={e => field.onChange(parseInt(e.target.value, 10))} /></FormControl> <FormMessage /> </FormItem> )} />
+                        <FormField control={control} name={`legs.${index}.destinationTaxiTimeMinutes`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1">Dest. Taxi (mins)</FormLabel> <FormControl><Input type="number" placeholder="e.g., 15" {...field} min="0" onChange={e => field.onChange(parseInt(e.target.value, 10))} /></FormControl> <FormMessage /> </FormItem> )} />
                     </div>
 
                     <Button type="button" variant="outline" size="sm" onClick={() => handleEstimateFlightDetails(index)} disabled={estimatingLegIndex === index || !aircraftTypeId} className="w-full sm:w-auto"> {estimatingLegIndex === index ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />} Estimate Flight Details </Button>
@@ -801,7 +800,7 @@ export function CreateQuoteForm() {
                       const currentAircraftDetails = availableAircraft.find(ac => ac.id === aircraftTypeId);
                       const currentAircraftName = currentAircraftDetails?.name;
                       const hourlyRateForLeg = currentAircraftName ? (AIRCRAFT_RATES[currentAircraftName]?.sell || DEFAULT_AIRCRAFT_RATES.sell) : DEFAULT_AIRCRAFT_RATES.sell;
-                      if (legFlightTimeHours > 0 && ["Charter", "Owner", "Ambulance", "Cargo"].includes(leg.legType)) {
+                      if (legFlightTimeHours > 0 && ["Charter", "Owner", "Ambulance", "Cargo"].includes(legData.legType)) {
                         legCost = legFlightTimeHours * hourlyRateForLeg;
                       }
 
