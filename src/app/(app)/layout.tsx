@@ -24,6 +24,7 @@ import {
   Users, 
   UsersRound, 
   FileArchive,
+  SlidersHorizontal, // Added for Quote Config
 } from 'lucide-react';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -60,8 +61,8 @@ export default function AppLayout({ children }: PropsWithChildren) {
       <Sidebar>
         <SidebarHeader className="p-4">
           <Link href="/dashboard" className="flex items-center text-lg font-semibold text-primary">
-            <Icons.Logo className="h-7 w-7" />
-            <span className="ml-2">FlightOps360</span>
+            <Icons.Logo className="h-7 w-7 mr-2" /> 
+            <span>FlightOps360</span>
           </Link>
         </SidebarHeader>
         <SidebarContent>
@@ -179,6 +180,9 @@ export default function AppLayout({ children }: PropsWithChildren) {
               <SidebarMenuSub>
                 <SidebarMenuSubButton href="/settings/roles">
                   <Users /> User Roles
+                </SidebarMenuSubButton>
+                <SidebarMenuSubButton href="/settings/quote-config">
+                  <SlidersHorizontal /> Quote Configuration
                 </SidebarMenuSubButton>
                  {/* Add more settings sub-items here if needed */}
               </SidebarMenuSub>
