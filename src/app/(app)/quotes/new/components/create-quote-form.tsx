@@ -16,7 +16,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { CalendarIcon, Loader2, Users, Briefcase, Utensils, Landmark, BedDouble, PlaneTakeoff, PlaneLanding, PlusCircle, Trash2, GripVertical, Wand2, Info, Eye, Send, Building, UserSearch, DollarSign, Clock, Fuel, Edit } from 'lucide-react';
 import { cn } from "@/lib/utils";
-import { format, addHours } from "date-fns";
+import { format, addHours } from "date-fns"; // Keep format for now, but will replace its usage in problematic spots
 import { useToast } from '@/hooks/use-toast';
 import {
   Select,
@@ -127,7 +127,7 @@ export function CreateQuoteForm() {
   const [legEstimates, setLegEstimates] = useState<Array<LegEstimate | null>>([]);
   const [calculatedLineItems, setCalculatedLineItems] = useState<LineItem[]>([]);
 
-  const form = useForm<FullQuoteFormData>({ // Use FullQuoteFormData here
+  const form = useForm<FullQuoteFormData>({ 
     resolver: zodResolver(formSchema),
     defaultValues: {
       quoteId: '',
@@ -356,6 +356,7 @@ export function CreateQuoteForm() {
       const blockTimeTotalMinutes = originTaxi + (flightTime * 60) + destTaxi;
       const blockTimeHours = parseFloat((blockTimeTotalMinutes / 60).toFixed(2));
 
+
       setLegEstimates(prev => {
         const newEstimates = [...prev];
         newEstimates[legIndex] = {
@@ -393,7 +394,7 @@ export function CreateQuoteForm() {
   }, [getValues, legEstimates, toast, estimatingLegIndex, setValue, setLegEstimates, setEstimatingLegIndex]);
 
 
-  const onSendQuote: SubmitHandler<FullQuoteFormData> = (data) => { // Use FullQuoteFormData here
+  const onSendQuote: SubmitHandler<FullQuoteFormData> = (data) => { 
     startQuoteGenerationTransition(async () => {
       const finalData = {
         ...data,
@@ -577,7 +578,13 @@ export function CreateQuoteForm() {
                         <FormField control={control} name={`legs.${index}.originFbo`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><Building className="h-4 w-4" />Origin FBO (Optional)</FormLabel> <FormControl><Input placeholder="e.g., Signature, Atlantic" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
                         <FormField control={control} name={`legs.${index}.destinationFbo`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><Building className="h-4 w-4" />Destination FBO (Optional)</FormLabel> <FormControl><Input placeholder="e.g., Signature, Atlantic" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
                     </div>
-                    <FormField control={control} name={`legs.${index}.departureDateTime`} render={({ field }) => ( <FormItem className="flex flex-col"> <FormLabel>Desired Departure Date & Time</FormLabel> {isClient ? ( <Popover> <PopoverTrigger asChild> <FormControl> <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !(field.value && field.value instanceof Date && !isNaN(field.value.getTime())) && "text-muted-foreground")}> <span>{field.value && field.value instanceof Date && !isNaN(field.value.getTime()) ? format(field.value, "PPP HH:mm") : "Pick a date and time"}</span> <CalendarIcon className="ml-auto h-4 w-4 opacity-50" /> </Button> </FormControl> </PopoverTrigger> <PopoverContent className="w-auto p-0" align="start"> <Calendar mode="single" selected={field.value && field.value instanceof Date && !isNaN(field.value.getTime()) ? field.value : undefined} onSelect={field.onChange} disabled={(date) => minLegDepartureDate ? date < minLegDepartureDate : true} initialFocus /> <div className="p-2 border-t border-border"> <Input type="time" defaultValue={field.value && field.value instanceof Date && !isNaN(field.value.getTime()) ? format(field.value, "HH:mm") : ""} onChange={(e) => { const time = e.target.value; const [hours, minutes] = time.split(':').map(Number); let newDate = field.value && field.value instanceof Date && !isNaN(field.value.getTime()) ? new Date(field.value) : new Date(); if (isNaN(newDate.getTime())) newDate = new Date(); newDate.setHours(hours, minutes,0,0); field.onChange(newDate); }} /> </div> </PopoverContent> </Popover> ) : ( <Skeleton className="h-10 w-full" /> )} <FormMessage /> </FormItem> )} />
+                    <FormField control={control} name={`legs.${index}.departureDateTime`} render={({ field }) => ( <FormItem className="flex flex-col"> <FormLabel>Desired Departure Date & Time</FormLabel> {isClient ? ( <Popover> <PopoverTrigger asChild> <FormControl> 
+                        <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !(field.value && field.value instanceof Date && !isNaN(field.value.getTime())) && "text-muted-foreground")}>
+                          {/* TEMPORARY SIMPLIFICATION FOR DEBUGGING */}
+                          <span>{field.value && field.value instanceof Date && !isNaN(field.value.getTime()) ? field.value.toLocaleDateString() + " " + field.value.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : "Pick a date and time"}</span>
+                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                        </Button> 
+                    </FormControl> </PopoverTrigger> <PopoverContent className="w-auto p-0" align="start"> <Calendar mode="single" selected={field.value && field.value instanceof Date && !isNaN(field.value.getTime()) ? field.value : undefined} onSelect={field.onChange} disabled={(date) => minLegDepartureDate ? date < minLegDepartureDate : true} initialFocus /> <div className="p-2 border-t border-border"> <Input type="time" defaultValue={field.value && field.value instanceof Date && !isNaN(field.value.getTime()) ? format(field.value, "HH:mm") : ""} onChange={(e) => { const time = e.target.value; const [hours, minutes] = time.split(':').map(Number); let newDate = field.value && field.value instanceof Date && !isNaN(field.value.getTime()) ? new Date(field.value) : new Date(); if (isNaN(newDate.getTime())) newDate = new Date(); newDate.setHours(hours, minutes,0,0); field.onChange(newDate); }} /> </div> </PopoverContent> </Popover> ) : ( <Skeleton className="h-10 w-full" /> )} <FormMessage /> </FormItem> )} />
                     
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <FormField control={control} name={`legs.${index}.legType`} render={({ field }) => ( <FormItem> <FormLabel>Leg Type</FormLabel> <Select onValueChange={field.onChange} value={field.value || ""} name={field.name}> <FormControl><SelectTrigger><SelectValue placeholder="Select leg type" /></SelectTrigger></FormControl> <SelectContent>{legTypes.map(type => (<SelectItem key={type} value={type}>{type}</SelectItem>))}</SelectContent> </Select> <FormMessage /> </FormItem> )} />
