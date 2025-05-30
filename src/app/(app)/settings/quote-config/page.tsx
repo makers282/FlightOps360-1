@@ -1,26 +1,18 @@
 
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useTransition } from 'react';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { SlidersHorizontal, DollarSign, Edit, Percent, PlusCircle, Trash2, Save, XCircle } from 'lucide-react';
+import { SlidersHorizontal, DollarSign, Edit, Percent, PlusCircle, Trash2, Save, XCircle, Loader2 } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import { fetchAircraftRates, saveAircraftRate, deleteAircraftRate, type AircraftRate } from '@/ai/flows/manage-aircraft-rates-flow';
 
-// Initial data (will be moved to state)
-const INITIAL_AIRCRAFT_RATES_DATA: { [key: string]: { buy: number; sell: number } } = {
-  'N123AB - Cessna Citation CJ3': { buy: 2800, sell: 3200 },
-  'N456CD - Bombardier Global 6000': { buy: 5800, sell: 6500 },
-  'N789EF - Gulfstream G650ER': { buy: 7500, sell: 8500 },
-  'Category: Light Jet': { buy: 2400, sell: 2800 },
-  'Category: Midsize Jet': { buy: 4000, sell: 4500 },
-  'Category: Heavy Jet': { buy: 7000, sell: 7500 },
-  'DEFAULT_AIRCRAFT_RATES': { buy: 3500, sell: 4000 },
-};
-
+// ServiceFeeRate structure (still client-side for now)
 interface ServiceFeeRate {
   displayDescription: string;
   buy: number;
@@ -41,14 +33,19 @@ const formatCurrency = (amount: number) => {
 };
 
 export default function QuoteConfigPage() {
-  const [aircraftRates, setAircraftRates] = useState<{ [key: string]: { buy: number; sell: number } }>(INITIAL_AIRCRAFT_RATES_DATA);
+  const [aircraftRates, setAircraftRates] = useState<AircraftRate[]>([]);
   const [otherCostRates, setOtherCostRates] = useState<{ [key: string]: ServiceFeeRate }>(INITIAL_OTHER_COST_RATES_DATA);
 
+  const [isLoadingAircraftRates, setIsLoadingAircraftRates] = useState(true);
+  const [isSavingAircraftRate, startSavingTransition] = useTransition();
+  const [isDeletingAircraftRate, startDeletingTransition] = useTransition();
+  const { toast } = useToast();
+
   const [showAddAircraftForm, setShowAddAircraftForm] = useState(false);
-  const [newAircraftName, setNewAircraftName] = useState('');
+  const [newAircraftId, setNewAircraftId] = useState(''); // Renamed from newAircraftName to newAircraftId for clarity
   const [newAircraftBuyRate, setNewAircraftBuyRate] = useState('');
   const [newAircraftSellRate, setNewAircraftSellRate] = useState('');
-  const [editingAircraftKey, setEditingAircraftKey] = useState<string | null>(null);
+  const [editingAircraftId, setEditingAircraftId] = useState<string | null>(null);
 
 
   const [showAddServiceForm, setShowAddServiceForm] = useState(false);
@@ -59,77 +56,94 @@ export default function QuoteConfigPage() {
   const [newServiceSellRate, setNewServiceSellRate] = useState('');
   const [editingServiceKey, setEditingServiceKey] = useState<string | null>(null);
 
+  useEffect(() => {
+    const loadRates = async () => {
+      setIsLoadingAircraftRates(true);
+      try {
+        const rates = await fetchAircraftRates();
+        setAircraftRates(rates);
+      } catch (error) {
+        console.error("Failed to fetch aircraft rates:", error);
+        toast({ title: "Error", description: "Could not load aircraft rates.", variant: "destructive" });
+      } finally {
+        setIsLoadingAircraftRates(false);
+      }
+    };
+    loadRates();
+  }, [toast]);
 
-  const handleEditAircraftClick = (key: string) => {
-    const aircraftToEdit = aircraftRates[key];
-    if (aircraftToEdit) {
-      setEditingAircraftKey(key);
-      setNewAircraftName(key); 
-      setNewAircraftBuyRate(String(aircraftToEdit.buy));
-      setNewAircraftSellRate(String(aircraftToEdit.sell));
-      setShowAddAircraftForm(true);
-    }
+  const handleEditAircraftClick = (rate: AircraftRate) => {
+    setEditingAircraftId(rate.id);
+    setNewAircraftId(rate.id); 
+    setNewAircraftBuyRate(String(rate.buy));
+    setNewAircraftSellRate(String(rate.sell));
+    setShowAddAircraftForm(true);
   };
 
   const handleAddOrUpdateAircraftRate = () => {
-    if (!newAircraftName || !newAircraftBuyRate || !newAircraftSellRate) {
-      alert("Please fill in all fields for the aircraft rate.");
+    if (!newAircraftId || !newAircraftBuyRate || !newAircraftSellRate) {
+      toast({ title: "Missing Fields", description: "Please fill in all fields for the aircraft rate.", variant: "destructive" });
       return;
     }
     const buyRateNum = parseFloat(newAircraftBuyRate);
     const sellRateNum = parseFloat(newAircraftSellRate);
     if (isNaN(buyRateNum) || isNaN(sellRateNum)) {
-        alert("Buy and Sell rates must be valid numbers.");
+        toast({ title: "Invalid Rates", description: "Buy and Sell rates must be valid numbers.", variant: "destructive" });
         return;
     }
 
-    if (editingAircraftKey) { 
-      setAircraftRates(prev => {
-        const updated = { ...prev };
-        if (newAircraftName !== editingAircraftKey) {
-          delete updated[editingAircraftKey];
-        }
-        updated[newAircraftName] = { buy: buyRateNum, sell: sellRateNum };
-        return updated;
-      });
-      setEditingAircraftKey(null);
-    } else { 
-      setAircraftRates(prev => ({
-        ...prev,
-        [newAircraftName]: { buy: buyRateNum, sell: sellRateNum }
-      }));
-    }
+    const rateData: AircraftRate = {
+      id: newAircraftId.trim(), // Use newAircraftId as the ID
+      buy: buyRateNum,
+      sell: sellRateNum,
+    };
 
-    setNewAircraftName('');
-    setNewAircraftBuyRate('');
-    setNewAircraftSellRate('');
-    setShowAddAircraftForm(false);
+    startSavingTransition(async () => {
+      try {
+        const savedRate = await saveAircraftRate(rateData);
+        if (editingAircraftId) { // Editing existing
+          setAircraftRates(prev => prev.map(r => r.id === editingAircraftId ? savedRate : r));
+        } else { // Adding new
+          setAircraftRates(prev => [...prev, savedRate]);
+        }
+        toast({ title: "Success", description: `Aircraft rate ${editingAircraftId ? 'updated' : 'added'}.` });
+        handleCancelEditAircraft();
+      } catch (error) {
+        console.error("Failed to save aircraft rate:", error);
+        toast({ title: "Error", description: `Could not ${editingAircraftId ? 'update' : 'add'} aircraft rate.`, variant: "destructive" });
+      }
+    });
   };
   
   const handleCancelEditAircraft = () => {
-    setEditingAircraftKey(null);
-    setNewAircraftName('');
+    setEditingAircraftId(null);
+    setNewAircraftId('');
     setNewAircraftBuyRate('');
     setNewAircraftSellRate('');
     setShowAddAircraftForm(false);
   };
 
-  const handleDeleteAircraftRate = (key: string) => {
-    setAircraftRates(prev => {
-      const updated = { ...prev };
-      delete updated[key];
-      return updated;
+  const handleDeleteAircraftRate = (aircraftIdToDelete: string) => {
+    startDeletingTransition(async () => {
+      try {
+        await deleteAircraftRate({ aircraftId: aircraftIdToDelete });
+        setAircraftRates(prev => prev.filter(rate => rate.id !== aircraftIdToDelete));
+        toast({ title: "Success", description: "Aircraft rate deleted." });
+        if (editingAircraftId === aircraftIdToDelete) { 
+          handleCancelEditAircraft();
+        }
+      } catch (error) {
+        console.error("Failed to delete aircraft rate:", error);
+        toast({ title: "Error", description: "Could not delete aircraft rate.", variant: "destructive" });
+      }
     });
-    if (editingAircraftKey === key) { 
-      handleCancelEditAircraft();
-    }
   };
 
   const handleEditServiceFeeClick = (key: string) => {
     const serviceToEdit = otherCostRates[key];
     if (serviceToEdit) {
       setEditingServiceKey(key);
-      setNewServiceKey(key); // Key is not editable visually
+      setNewServiceKey(key); 
       setNewServiceDisplayDescription(serviceToEdit.displayDescription);
       setNewServiceUnit(serviceToEdit.unitDescription);
       setNewServiceBuyRate(String(serviceToEdit.buy));
@@ -141,16 +155,18 @@ export default function QuoteConfigPage() {
   const handleAddOrUpdateServiceFee = () => {
     const keyToUse = editingServiceKey || newServiceKey.toUpperCase().replace(/\s+/g, '_');
     if (!keyToUse || !newServiceDisplayDescription || !newServiceUnit || !newServiceBuyRate || !newServiceSellRate) {
-        alert("Please fill in all fields for the service/fee.");
+        toast({ title: "Missing Fields", description: "Please fill in all fields for the service/fee.", variant: "destructive" });
         return;
     }
     const buyRateNum = parseFloat(newServiceBuyRate);
     const sellRateNum = parseFloat(newServiceSellRate);
      if (isNaN(buyRateNum) || isNaN(sellRateNum)) {
-        alert("Buy and Sell rates must be valid numbers.");
+        toast({ title: "Invalid Rates", description: "Buy and Sell rates must be valid numbers.", variant: "destructive" });
         return;
     }
 
+    // For now, this still manipulates client-side state.
+    // TODO: Implement backend calls for service fees similar to aircraft rates.
     setOtherCostRates(prev => ({
         ...prev,
         [keyToUse]: { 
@@ -168,6 +184,7 @@ export default function QuoteConfigPage() {
     setNewServiceSellRate('');
     setShowAddServiceForm(false);
     setEditingServiceKey(null);
+    toast({ title: "Success", description: `Service/Fee ${editingServiceKey ? 'updated' : 'added'} (client-side).` });
   };
 
   const handleCancelEditServiceFee = () => {
@@ -181,6 +198,7 @@ export default function QuoteConfigPage() {
   };
 
   const handleDeleteServiceFee = (key: string) => {
+    // TODO: Implement backend call for deleting service fees.
     setOtherCostRates(prev => {
       const updated = { ...prev };
       delete updated[key];
@@ -189,13 +207,14 @@ export default function QuoteConfigPage() {
      if (editingServiceKey === key) {
       handleCancelEditServiceFee();
     }
+    toast({ title: "Success", description: "Service/Fee deleted (client-side)." });
   };
 
   return (
     <>
       <PageHeader 
         title="Quote Configuration" 
-        description="Manage default rates and costs for flight quotes. Changes are client-side only for this demo."
+        description="Manage default rates and costs for flight quotes."
         icon={SlidersHorizontal}
       />
 
@@ -205,10 +224,10 @@ export default function QuoteConfigPage() {
             <div className="flex justify-between items-center">
                 <div>
                     <CardTitle className="flex items-center gap-2"><DollarSign className="h-5 w-5 text-primary"/> Aircraft Hourly Rates</CardTitle>
-                    <CardDescription>Default buy and sell rates per flight hour.</CardDescription>
+                    <CardDescription>Default buy and sell rates per flight hour. Backend connected (Firestore placeholders).</CardDescription>
                 </div>
                 {!showAddAircraftForm && (
-                    <Button variant="outline" size="sm" onClick={() => { setEditingAircraftKey(null); setShowAddAircraftForm(true); setNewAircraftName(''); setNewAircraftBuyRate(''); setNewAircraftSellRate(''); }}>
+                    <Button variant="outline" size="sm" onClick={() => { setEditingAircraftId(null); setShowAddAircraftForm(true); setNewAircraftId(''); setNewAircraftBuyRate(''); setNewAircraftSellRate(''); }}>
                         <PlusCircle className="mr-2 h-4 w-4" /> Add Aircraft Rate
                     </Button>
                 )}
@@ -218,12 +237,13 @@ export default function QuoteConfigPage() {
             {showAddAircraftForm && (
               <Card className="p-4 mb-4 bg-muted/50 border-dashed">
                 <CardTitle className="text-lg mb-2">
-                    {editingAircraftKey ? `Edit Aircraft Rate: ${editingAircraftKey}` : 'Add New Aircraft Rate'}
+                    {editingAircraftId ? `Edit Aircraft Rate: ${editingAircraftId}` : 'Add New Aircraft Rate'}
                 </CardTitle>
                 <div className="space-y-3">
                   <div>
-                    <Label htmlFor="newAircraftName">Aircraft Type / Category Name</Label>
-                    <Input id="newAircraftName" value={newAircraftName} onChange={(e) => setNewAircraftName(e.target.value)} placeholder="e.g., Category: Super Mid Jet" />
+                    <Label htmlFor="newAircraftId">Aircraft ID / Name (Unique Key)</Label>
+                    <Input id="newAircraftId" value={newAircraftId} onChange={(e) => setNewAircraftId(e.target.value)} placeholder="e.g., Category: Super Mid Jet" disabled={!!editingAircraftId && newAircraftId !== editingAircraftId} />
+                     {editingAircraftId && newAircraftId !== editingAircraftId && <p className="text-xs text-muted-foreground">Renaming ID is disabled during edit. Delete and re-add if ID change is needed.</p>}
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
@@ -236,53 +256,66 @@ export default function QuoteConfigPage() {
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    <Button onClick={handleAddOrUpdateAircraftRate} size="sm">
-                        <Save className="mr-2 h-4 w-4"/>{editingAircraftKey ? 'Update Aircraft Rate' : 'Save New Aircraft'}
+                    <Button onClick={handleAddOrUpdateAircraftRate} size="sm" disabled={isSavingAircraftRate}>
+                        {isSavingAircraftRate ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4"/>}
+                        {editingAircraftId ? 'Update Rate' : 'Save New Rate'}
                     </Button>
-                    <Button variant="outline" onClick={handleCancelEditAircraft} size="sm">
+                    <Button variant="outline" onClick={handleCancelEditAircraft} size="sm" disabled={isSavingAircraftRate}>
                         <XCircle className="mr-2 h-4 w-4"/>Cancel
                     </Button>
                   </div>
                 </div>
               </Card>
             )}
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Aircraft Type / Category</TableHead>
-                  <TableHead className="text-right">Buy Rate (/hr)</TableHead>
-                  <TableHead className="text-right">Sell Rate (/hr)</TableHead>
-                  <TableHead className="text-right">Default Margin</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {Object.entries(aircraftRates).map(([aircraftKey, rates]) => {
-                  const margin = rates.sell - rates.buy;
-                  const marginPercent = rates.buy > 0 && rates.buy !== 0 ? (margin / rates.buy) * 100 : 0;
-                  return (
-                    <TableRow key={aircraftKey}>
-                      <TableCell className="font-medium">{aircraftKey.replace('DEFAULT_AIRCRAFT_RATES', 'Default Fallback Rates')}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(rates.buy)}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(rates.sell)}</TableCell>
-                      <TableCell className="text-right">
-                        {formatCurrency(margin)} ({marginPercent.toFixed(1)}%)
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="ghost" size="icon" onClick={() => handleEditAircraftClick(aircraftKey)} className="mr-1 hover:text-primary">
-                            <Edit className="h-4 w-4" />
-                            <span className="sr-only">Edit {aircraftKey}</span>
-                        </Button>
-                        <Button variant="ghost" size="icon" onClick={() => handleDeleteAircraftRate(aircraftKey)} className="text-destructive hover:text-destructive">
-                          <Trash2 className="h-4 w-4" />
-                          <span className="sr-only">Delete {aircraftKey}</span>
-                        </Button>
-                      </TableCell>
+            {isLoadingAircraftRates ? (
+                 <div className="flex items-center justify-center py-6">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    <p className="ml-2 text-muted-foreground">Loading aircraft rates...</p>
+                </div>
+            ) : (
+                <Table>
+                <TableHeader>
+                    <TableRow>
+                    <TableHead>Aircraft ID / Name</TableHead>
+                    <TableHead className="text-right">Buy Rate (/hr)</TableHead>
+                    <TableHead className="text-right">Sell Rate (/hr)</TableHead>
+                    <TableHead className="text-right">Default Margin</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                    {aircraftRates.length === 0 && !isLoadingAircraftRates && (
+                        <TableRow>
+                            <TableCell colSpan={5} className="text-center text-muted-foreground py-4">No aircraft rates configured yet.</TableCell>
+                        </TableRow>
+                    )}
+                    {aircraftRates.map((rate) => {
+                    const margin = rate.sell - rate.buy;
+                    const marginPercent = rate.buy > 0 ? (margin / rate.buy) * 100 : 0;
+                    return (
+                        <TableRow key={rate.id}>
+                        <TableCell className="font-medium">{rate.id.replace('DEFAULT_AIRCRAFT_RATES', 'Default Fallback Rates')}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(rate.buy)}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(rate.sell)}</TableCell>
+                        <TableCell className="text-right">
+                            {formatCurrency(margin)} ({marginPercent.toFixed(1)}%)
+                        </TableCell>
+                        <TableCell className="text-right">
+                            <Button variant="ghost" size="icon" onClick={() => handleEditAircraftClick(rate)} className="mr-1 hover:text-primary" disabled={isSavingAircraftRate || isDeletingAircraftRate}>
+                                <Edit className="h-4 w-4" />
+                                <span className="sr-only">Edit {rate.id}</span>
+                            </Button>
+                            <Button variant="ghost" size="icon" onClick={() => handleDeleteAircraftRate(rate.id)} className="text-destructive hover:text-destructive" disabled={isSavingAircraftRate || isDeletingAircraftRate}>
+                            {isDeletingAircraftRate && editingAircraftId === rate.id ? <Loader2 className="h-4 w-4 animate-spin"/> : <Trash2 className="h-4 w-4" />}
+                            <span className="sr-only">Delete {rate.id}</span>
+                            </Button>
+                        </TableCell>
+                        </TableRow>
+                    );
+                    })}
+                </TableBody>
+                </Table>
+            )}
           </CardContent>
         </Card>
 
@@ -291,7 +324,7 @@ export default function QuoteConfigPage() {
              <div className="flex justify-between items-center">
                 <div>
                     <CardTitle className="flex items-center gap-2"><Percent className="h-5 w-5 text-primary"/> Standard Service & Fee Rates</CardTitle>
-                    <CardDescription>Default buy and sell rates for various services and fees.</CardDescription>
+                    <CardDescription>Default buy and sell rates for various services and fees. (Client-side only for this demo)</CardDescription>
                 </div>
                 {!showAddServiceForm && (
                   <Button variant="outline" size="sm" onClick={() => { setEditingServiceKey(null); setShowAddServiceForm(true); setNewServiceKey(''); setNewServiceDisplayDescription(''); setNewServiceUnit(''); setNewServiceBuyRate(''); setNewServiceSellRate(''); }}>
@@ -384,13 +417,17 @@ export default function QuoteConfigPage() {
         
         <Card className="shadow-md border-primary/30">
             <CardHeader>
-                <CardTitle>Notes</CardTitle>
-                <CardDescription>These configurations are currently client-side only and will reset on page refresh. Full persistence would require backend integration.</CardDescription>
+                <CardTitle>Backend Implementation Notes</CardTitle>
+                <CardDescription>
+                    Aircraft rates are now connected to backend flows (with Firestore placeholders). 
+                    You will need to implement the Firestore read/write logic in <code>src/ai/flows/manage-aircraft-rates-flow.ts</code>.
+                    Service & Fee rates are still client-side only for this demo.
+                </CardDescription>
             </CardHeader>
             <CardContent>
-                <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
-                    <li>The "Unique Key" for services/fees is not editable once created; delete and re-add if a key change is needed.</li>
-                    <li>No robust input validation is performed on the "add new" forms beyond basic checks.</li>
+                 <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
+                    <li>When editing aircraft rates, changing the "Aircraft ID / Name" is disabled if the new ID is different from the original, to prevent accidental key changes. To change an ID, delete and re-add.</li>
+                    <li>For service fees, the "Unique Key" is not editable once created.</li>
                 </ul>
             </CardContent>
         </Card>
