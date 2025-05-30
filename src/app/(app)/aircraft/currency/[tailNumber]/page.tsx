@@ -15,11 +15,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from '@/components/ui/button';
-import { Wrench, PlusCircle, ArrowLeft, PlaneIcon, Edit, Loader2 } from 'lucide-react';
+import { Wrench, PlusCircle, ArrowLeft, PlaneIcon, Edit, Loader2, InfoIcon, Phone, UserCircle, MapPin } from 'lucide-react'; // Added new icons
 import { format, parse } from 'date-fns';
 import { sampleMaintenanceData, calculateToGo, getReleaseStatus, type MaintenanceItem } from '../page';
 import { useToast } from '@/hooks/use-toast';
-import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
+import { fetchFleetAircraft, type FleetAircraft, type EngineDetail } from '@/ai/flows/manage-fleet-flow'; // Import FleetAircraft type
 
 interface ComponentTimeData {
   componentName: string;
@@ -28,7 +28,6 @@ interface ComponentTimeData {
 }
 
 // Mock data for the "Current Hours & Cycles" values for different aircraft & components
-// This would eventually come from a database or be part of the aircraft's persistent data
 const MOCK_COMPONENT_VALUES_DATA: Record<string, Record<string, { time?: number; cycles?: number }>> = {
   'N123AB': { 'Airframe': { time: 1200.5, cycles: 850 }, 'Engine 1': { time: 1190.2, cycles: 840 }, 'Engine 2': { time: 1185.7, cycles: 835 }, 'APU': { time: 300.1, cycles: 400 } },
   'N456CD': { 'Airframe': { time: 2500.0, cycles: 1200 }, 'Engine 1': { time: 2450.0, cycles: 1180 }, 'Engine 2': { time: 2440.0, cycles: 1170 }, 'APU': { time: 550.5, cycles: 600 } },
@@ -164,54 +163,109 @@ export default function AircraftMaintenanceDetailPage() {
           </div>
         }
       />
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3"> {/* Adjusted grid for two main columns */}
+        <Card className="shadow-lg lg:col-span-2"> {/* Hours & Cycles card, spans 2/3 on large screens */}
+            <CardHeader className="flex flex-row items-center justify-between">
+                <div className="flex items-center gap-2">
+                    <PlaneIcon className="h-6 w-6 text-primary" />
+                    <CardTitle>Current Hours & Cycles</CardTitle>
+                </div>
+                <Button variant="outline" size="sm" onClick={handleEditComponentTimes}>
+                    <Edit className="mr-2 h-4 w-4" /> Edit Component Times
+                </Button>
+            </CardHeader>
+            <CardContent>
+            {componentTimes.length > 0 ? (
+                <Table>
+                <TableHeader>
+                    <TableRow>
+                    <TableHead>Component</TableHead>
+                    <TableHead className="text-right">Current Time (hrs)</TableHead>
+                    <TableHead className="text-right">Current Cycles</TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {componentTimes.map((comp) => (
+                    <TableRow key={comp.componentName}>
+                        <TableCell className="font-medium">{comp.componentName}</TableCell>
+                        <TableCell className="text-right">
+                        {comp.currentTime.toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1})}
+                        </TableCell>
+                        <TableCell className="text-right">
+                        {comp.currentCycles.toLocaleString()}
+                        </TableCell>
+                    </TableRow>
+                    ))}
+                </TableBody>
+                </Table>
+            ) : (
+                <p className="text-muted-foreground">No specific components configured for time/cycle tracking for this aircraft in Company Settings, or no values recorded.</p>
+            )}
+            </CardContent>
+        </Card>
 
-      <Card className="mb-6 shadow-lg">
-        <CardHeader className="flex flex-row items-center justify-between">
-            <div className="flex items-center gap-2">
-                <PlaneIcon className="h-6 w-6 text-primary" />
-                <CardTitle>Current Hours & Cycles</CardTitle>
-            </div>
-             <Button variant="outline" size="sm" onClick={handleEditComponentTimes}>
-                <Edit className="mr-2 h-4 w-4" /> Edit Component Times
-            </Button>
-        </CardHeader>
-        <CardContent>
-          {componentTimes.length > 0 ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Component</TableHead>
-                  <TableHead className="text-right">Current Time (hrs)</TableHead>
-                  <TableHead className="text-right">Current Cycles</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {componentTimes.map((comp) => (
-                  <TableRow key={comp.componentName}>
-                    <TableCell className="font-medium">{comp.componentName}</TableCell>
-                    <TableCell className="text-right">
-                      {comp.currentTime.toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1})}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {comp.currentCycles.toLocaleString()}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          ) : (
-            <p className="text-muted-foreground">No specific components configured for time/cycle tracking for this aircraft in Company Settings, or no values recorded.</p>
-          )}
-        </CardContent>
-      </Card>
+        <Card className="shadow-lg lg:col-span-1"> {/* Aircraft Info card, spans 1/3 on large screens */}
+            <CardHeader>
+                <div className="flex items-center gap-2">
+                    <InfoIcon className="h-6 w-6 text-primary" />
+                    <CardTitle>Aircraft Information</CardTitle>
+                </div>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+                <div className="flex justify-between">
+                    <span className="text-muted-foreground">Tail Number:</span>
+                    <span className="font-medium">{currentAircraft.tailNumber}</span>
+                </div>
+                <div className="flex justify-between">
+                    <span className="text-muted-foreground">Model:</span>
+                    <span className="font-medium">{currentAircraft.model}</span>
+                </div>
+                <div className="flex justify-between">
+                    <span className="text-muted-foreground">Serial Number:</span>
+                    <span className="font-medium">{currentAircraft.serialNumber || 'N/A'}</span>
+                </div>
+                <div className="flex justify-between">
+                    <span className="text-muted-foreground">Base Location:</span>
+                    <span className="font-medium">{currentAircraft.baseLocation || 'N/A'}</span>
+                </div>
+                {currentAircraft.engineDetails && currentAircraft.engineDetails.length > 0 && (
+                    <div>
+                        <h4 className="font-medium text-muted-foreground mt-2 mb-1">Engine Details:</h4>
+                        {currentAircraft.engineDetails.map((engine, idx) => (
+                            <div key={idx} className="pl-2 text-xs border-l ml-2 mb-1">
+                                <p><strong>Engine {idx + 1} Model:</strong> {engine.model || 'N/A'}</p>
+                                <p><strong>Engine {idx + 1} S/N:</strong> {engine.serialNumber || 'N/A'}</p>
+                            </div>
+                        ))}
+                    </div>
+                )}
+                 {(currentAircraft.primaryContactName || currentAircraft.primaryContactPhone) && (
+                    <div className="pt-2 border-t mt-3">
+                        {currentAircraft.primaryContactName && (
+                             <div className="flex items-center gap-2">
+                                <UserCircle className="h-4 w-4 text-muted-foreground"/>
+                                <span>{currentAircraft.primaryContactName}</span>
+                            </div>
+                        )}
+                        {currentAircraft.primaryContactPhone && (
+                             <div className="flex items-center gap-2">
+                                <Phone className="h-4 w-4 text-muted-foreground"/>
+                                <span>{currentAircraft.primaryContactPhone}</span>
+                            </div>
+                        )}
+                    </div>
+                 )}
+            </CardContent>
+        </Card>
+      </div>
+
 
       {currentAircraft.isMaintenanceTracked ? (
-        <Card className="shadow-lg">
+        <Card className="shadow-lg mt-6"> {/* Added mt-6 for spacing */}
           <CardHeader>
             <CardTitle>Tracked Maintenance Items</CardTitle>
             <CardDescription>
               Detailed list of maintenance items for {currentAircraft.tailNumber}. 
-              {/* Airframe time display could come from the componentTimes if 'Airframe' is tracked */}
               {componentTimes.find(c => c.componentName === 'Airframe') && 
                 ` Overall Airframe Time: ${componentTimes.find(c => c.componentName === 'Airframe')?.currentTime.toLocaleString()} hrs / ${componentTimes.find(c => c.componentName === 'Airframe')?.currentCycles.toLocaleString()} cycles.`}
             </CardDescription>
@@ -283,7 +337,7 @@ export default function AircraftMaintenanceDetailPage() {
           </CardContent>
         </Card>
       ) : (
-        <Card>
+        <Card className="mt-6"> {/* Added mt-6 for spacing */}
           <CardHeader>
             <CardTitle>Maintenance Tracking Not Enabled</CardTitle>
           </CardHeader>

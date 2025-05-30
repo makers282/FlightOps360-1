@@ -11,6 +11,13 @@
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
+// Define the structure for an engine detail
+const EngineDetailSchema = z.object({
+  model: z.string().optional().describe("Engine model."),
+  serialNumber: z.string().optional().describe("Engine serial number."),
+});
+export type EngineDetail = z.infer<typeof EngineDetailSchema>;
+
 // Define the structure for a fleet aircraft
 const FleetAircraftSchema = z.object({
   id: z.string().describe("The unique identifier for the aircraft, typically the tail number if unique, or an auto-generated ID."),
@@ -18,6 +25,11 @@ const FleetAircraftSchema = z.object({
   model: z.string().min(1, "Aircraft model is required.").describe("The aircraft model (e.g., Cessna Citation CJ3)."),
   isMaintenanceTracked: z.boolean().optional().default(true).describe("Whether maintenance tracking is enabled for this aircraft."),
   trackedComponentNames: z.array(z.string()).optional().default(['Airframe', 'Engine 1']).describe("List of component names to track hours/cycles for (e.g., Airframe, Engine 1, Propeller 1)."),
+  serialNumber: z.string().optional().describe("Aircraft serial number."),
+  baseLocation: z.string().optional().describe("Primary base location of the aircraft (e.g., KTEB)."),
+  engineDetails: z.array(EngineDetailSchema).optional().describe("Details for each engine."),
+  primaryContactName: z.string().optional().describe("Primary contact person for the aircraft."),
+  primaryContactPhone: z.string().optional().describe("Primary contact phone for the aircraft."),
 });
 export type FleetAircraft = z.infer<typeof FleetAircraftSchema>;
 
@@ -39,10 +51,61 @@ const DeleteFleetAircraftOutputSchema = z.object({
 
 // Mock in-memory storage
 let MOCK_FLEET_AIRCRAFT_DATA: FleetAircraft[] = [
-  { id: 'N123AB', tailNumber: 'N123AB', model: 'Cessna Citation CJ3', isMaintenanceTracked: true, trackedComponentNames: ['Airframe', 'Engine 1', 'Engine 2', 'APU'] },
-  { id: 'N456CD', tailNumber: 'N456CD', model: 'Bombardier Global 6000', isMaintenanceTracked: true, trackedComponentNames: ['Airframe', 'Engine 1', 'Engine 2', 'APU'] },
-  { id: 'N789EF', tailNumber: 'N789EF', model: 'Gulfstream G650ER', isMaintenanceTracked: true, trackedComponentNames: ['Airframe', 'Engine 1', 'Engine 2', 'APU', 'Air Conditioning'] },
-  { id: 'N630MW', tailNumber: 'N630MW', model: 'Pilatus PC-12 NG', isMaintenanceTracked: false, trackedComponentNames: ['Airframe', 'Engine 1', 'Propeller 1'] }, 
+  { 
+    id: 'N123AB', 
+    tailNumber: 'N123AB', 
+    model: 'Cessna Citation CJ3', 
+    isMaintenanceTracked: true, 
+    trackedComponentNames: ['Airframe', 'Engine 1', 'Engine 2', 'APU'],
+    serialNumber: 'CJ3-0123',
+    baseLocation: 'KHPN',
+    engineDetails: [
+      { model: 'Williams FJ44-3A', serialNumber: 'E1-SN123' },
+      { model: 'Williams FJ44-3A', serialNumber: 'E2-SN124' }
+    ],
+    primaryContactName: 'Ops Manager',
+    primaryContactPhone: '555-123-4567'
+  },
+  { 
+    id: 'N456CD', 
+    tailNumber: 'N456CD', 
+    model: 'Bombardier Global 6000', 
+    isMaintenanceTracked: true, 
+    trackedComponentNames: ['Airframe', 'Engine 1', 'Engine 2', 'APU'],
+    serialNumber: 'GL6000-9456',
+    baseLocation: 'KTEB',
+    engineDetails: [
+      { model: 'Rolls-Royce BR710A2-20', serialNumber: 'RR-E1-SN456' },
+      { model: 'Rolls-Royce BR710A2-20', serialNumber: 'RR-E2-SN457' }
+    ],
+    primaryContactName: 'Chief Pilot',
+    primaryContactPhone: '555-987-6543'
+  },
+  { 
+    id: 'N789EF', 
+    tailNumber: 'N789EF', 
+    model: 'Gulfstream G650ER', 
+    isMaintenanceTracked: true, 
+    trackedComponentNames: ['Airframe', 'Engine 1', 'Engine 2', 'APU', 'Air Conditioning'],
+    serialNumber: 'G650-6789',
+    baseLocation: 'KDAL',
+    engineDetails: [
+      { model: 'Rolls-Royce BR725', serialNumber: 'RR-G1-SN789' },
+      { model: 'Rolls-Royce BR725', serialNumber: 'RR-G2-SN790' }
+    ],
+  },
+  { 
+    id: 'N630MW', 
+    tailNumber: 'N630MW', 
+    model: 'Pilatus PC-12 NG', 
+    isMaintenanceTracked: false, 
+    trackedComponentNames: ['Airframe', 'Engine 1', 'Propeller 1'],
+    serialNumber: 'PC12-1630',
+    baseLocation: 'KAPA',
+    engineDetails: [
+      { model: 'Pratt & Whitney PT6A-67P', serialNumber: 'PWC-PT6-SN630' }
+    ],
+  }, 
 ];
 
 // Exported async functions that clients will call
@@ -52,7 +115,7 @@ export async function fetchFleetAircraft(): Promise<FleetAircraft[]> {
 }
 
 export async function saveFleetAircraft(input: SaveFleetAircraftInput): Promise<FleetAircraft> {
-  console.log('[ManageFleetFlow MOCK] Attempting to save fleet aircraft:', input.id, 'Tracked:', input.isMaintenanceTracked, 'Components:', input.trackedComponentNames);
+  console.log('[ManageFleetFlow MOCK] Attempting to save fleet aircraft:', input.id, 'Data:', JSON.stringify(input));
   const aircraftToSave: FleetAircraft = {
     ...input,
     isMaintenanceTracked: input.isMaintenanceTracked ?? true, 
@@ -74,8 +137,7 @@ const fetchFleetAircraftFlow = ai.defineFlow(
   },
   async () => {
     console.log('Executing fetchFleetAircraftFlow - MOCK');
-    // Simulate async operation
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise(resolve => setTimeout(resolve, 100)); // Simulate async
     console.log('Fetched fleet from MOCK_FLEET_AIRCRAFT_DATA:', MOCK_FLEET_AIRCRAFT_DATA.length, 'aircraft.');
     return MOCK_FLEET_AIRCRAFT_DATA;
   }
@@ -88,8 +150,8 @@ const saveFleetAircraftFlow = ai.defineFlow(
     outputSchema: SaveFleetAircraftOutputSchema,
   },
   async (input) => {
-    console.log('Executing saveFleetAircraftFlow with input - MOCK:', input);
-    await new Promise(resolve => setTimeout(resolve, 100));
+    console.log('Executing saveFleetAircraftFlow with input - MOCK:', JSON.stringify(input));
+    await new Promise(resolve => setTimeout(resolve, 100)); // Simulate async
     
     const existingIndex = MOCK_FLEET_AIRCRAFT_DATA.findIndex(ac => ac.id === input.id);
     if (existingIndex !== -1) {
@@ -111,7 +173,7 @@ const deleteFleetAircraftFlow = ai.defineFlow(
   },
   async (input) => {
     console.log('Executing deleteFleetAircraftFlow for ID - MOCK:', input.aircraftId);
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise(resolve => setTimeout(resolve, 100)); // Simulate async
     
     const initialLength = MOCK_FLEET_AIRCRAFT_DATA.length;
     MOCK_FLEET_AIRCRAFT_DATA = MOCK_FLEET_AIRCRAFT_DATA.filter(ac => ac.id !== input.aircraftId);
