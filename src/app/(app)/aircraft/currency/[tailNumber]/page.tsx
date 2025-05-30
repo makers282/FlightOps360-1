@@ -22,30 +22,28 @@ import { useForm, type SubmitHandler } from 'react-hook-form';
 import { z } from 'zod';
 import { AddMaintenanceTaskModal, type MaintenanceTaskFormData } from './components/add-maintenance-task-modal';
 
-import { Wrench, PlusCircle, ArrowLeft, PlaneIcon, Edit, Loader2, InfoIcon, Phone, UserCircle, MapPin, Save, XCircle, Edit2 } from 'lucide-react';
-import { format, parse, addDays, isValid, addHours as addDateHours, addMonths, addYears } from 'date-fns'; // Keep existing date-fns imports
+import { Wrench, PlusCircle, ArrowLeft, PlaneIcon, Edit, Loader2, InfoIcon, Phone, UserCircle, MapPin, Save, XCircle, Edit2, Edit3 } from 'lucide-react';
+import { format, parse, addDays, isValid, addHours as addDateHours, addMonths, addYears } from 'date-fns';
 import { sampleMaintenanceData, calculateToGo, getReleaseStatus, type MaintenanceItem } from '../page';
 import { useToast } from '@/hooks/use-toast';
 import { fetchFleetAircraft, saveFleetAircraft, type FleetAircraft, type EngineDetail } from '@/ai/flows/manage-fleet-flow';
 
-// MOCK_COMPONENT_VALUES_DATA (MOCK_AIRCRAFT_COMPONENT_TIMES_DATA renamed for consistency)
-// This mock data represents the current component times for various aircraft.
 export const MOCK_COMPONENT_VALUES_DATA: Record<string, Record<string, { time?: number; cycles?: number }>> = {
-  'N123AB': { 'Airframe': { time: 1200.5, cycles: 850 }, 'Engine One': { time: 1190.2, cycles: 840 }, 'Engine Two': { time: 1185.7, cycles: 835 }, 'APU': { time: 300.1, cycles: 400 } },
-  'N456CD': { 'Airframe': { time: 2500.0, cycles: 1200 }, 'Engine One': { time: 2450.0, cycles: 1180 }, 'Engine Two': { time: 2440.0, cycles: 1170 }, 'APU': { time: 550.5, cycles: 600 } },
+  'N123AB': { 'Airframe': { time: 1200.5, cycles: 850 }, 'Engine 1': { time: 1190.2, cycles: 840 }, 'Engine 2': { time: 1185.7, cycles: 835 }, 'APU': { time: 300.1, cycles: 400 } },
+  'N456CD': { 'Airframe': { time: 2500.0, cycles: 1200 }, 'Engine 1': { time: 2450.0, cycles: 1180 }, 'Engine 2': { time: 2440.0, cycles: 1170 }, 'APU': { time: 550.5, cycles: 600 } },
   'N789EF': {
     'Airframe': { time: 350.0, cycles: 120 },
-    'Engine One': { time: 345.0, cycles: 118 },
-    'Engine Two': { time: 340.0, cycles: 115 },
+    'Engine 1': { time: 345.0, cycles: 118 },
+    'Engine 2': { time: 340.0, cycles: 115 },
     'APU': { time: 80.2, cycles: 90 },
     'Air Conditioning': { time: 150.5, cycles: 75 }
   },
   'N630MW': {
     'Airframe': { time: 12540.0, cycles: 8978 },
-    'Engine One': { time: 12471.2, cycles: 9058 },
-    'Engine Two': { time: 12439.9, cycles: 10721 },
+    'Engine 1': { time: 12471.2, cycles: 9058 },
+    'Engine 2': { time: 12439.9, cycles: 10721 }, // Assuming this was a typo in provided image, turboprops usually have 1 engine + props
     'Propeller 1': { time: 245.3, cycles: 88 },
-    'Propeller 2': { time: 245.3, cycles: 89 },
+    // 'Propeller 2': { time: 245.3, cycles: 89 }, // N630MW is a single engine turboprop (Pilatus PC-12)
   },
 };
 
@@ -60,7 +58,6 @@ const aircraftInfoEditSchema = z.object({
 type AircraftInfoEditFormData = z.infer<typeof aircraftInfoEditSchema>;
 
 
-// Helper function to create/update MaintenanceItem from MaintenanceTaskFormData
 const createOrUpdateMaintenanceItem = (
   formData: MaintenanceTaskFormData,
   aircraft: FleetAircraft,
@@ -71,9 +68,9 @@ const createOrUpdateMaintenanceItem = (
   let dueAtHours: number | undefined = undefined;
   let dueAtCycles: number | undefined = undefined;
 
-  const actualLastCompletedDate = formData.lastCompletedDate && isValid(parse(formData.lastCompletedDate, 'yyyy-MM-dd', new Date()))
+  const actualLastCompletedDateObj = formData.lastCompletedDate && isValid(parse(formData.lastCompletedDate, 'yyyy-MM-dd', new Date()))
     ? parse(formData.lastCompletedDate, 'yyyy-MM-dd', new Date())
-    : new Date();
+    : new Date(); // Default to today if no valid date
   const actualLastCompletedHours = Number(formData.lastCompletedHours || 0);
   const actualLastCompletedCycles = Number(formData.lastCompletedCycles || 0);
 
@@ -81,7 +78,7 @@ const createOrUpdateMaintenanceItem = (
     if (formData.isDaysDueEnabled && formData.daysDueValue) {
       const intervalDays = Number(formData.daysDueValue);
       if (!isNaN(intervalDays) && intervalDays > 0) {
-        dueAtDate = format(addDays(actualLastCompletedDate, intervalDays), 'yyyy-MM-dd');
+        dueAtDate = format(addDays(actualLastCompletedDateObj, intervalDays), 'yyyy-MM-dd');
       }
     }
     if (formData.isHoursDueEnabled && formData.hoursDue) {
@@ -123,9 +120,6 @@ const createOrUpdateMaintenanceItem = (
     dueAtHours,
     dueAtCycles,
     notes: formData.details || formData.lastCompletedNotes || '',
-    // Consider adding itemType, isActive from formData if needed for display/filtering later
-    // itemType: formData.itemType, 
-    // isActive: formData.isActive,
   };
 };
 
@@ -137,9 +131,13 @@ export default function AircraftMaintenanceDetailPage() {
 
   const [currentAircraft, setCurrentAircraft] = useState<FleetAircraft | null>(null);
   const [editableComponentTimes, setEditableComponentTimes] = useState<Array<{ componentName: string; currentTime: number; currentCycles: number }>>([]);
+  const [originalComponentTimes, setOriginalComponentTimes] = useState<Array<{ componentName: string; currentTime: number; currentCycles: number }>>([]);
+
   const [isLoadingAircraft, setIsLoadingAircraft] = useState(true);
   const [isSavingAircraftInfo, startSavingAircraftInfoTransition] = useTransition();
   const [isEditingAircraftInfo, setIsEditingAircraftInfo] = useState(false);
+  const [isEditingComponentTimes, setIsEditingComponentTimes] = useState(false);
+
 
   const [maintenanceTasks, setMaintenanceTasks] = useState<MaintenanceItem[]>([]);
   const [isSavingComponentTimes, startSavingComponentTimesTransition] = useTransition();
@@ -152,6 +150,27 @@ export default function AircraftMaintenanceDetailPage() {
   const aircraftInfoForm = useForm<AircraftInfoEditFormData>({
     resolver: zodResolver(aircraftInfoEditSchema),
   });
+
+  const initializeComponentTimes = useCallback((aircraft: FleetAircraft | null) => {
+    if (!aircraft) {
+      setEditableComponentTimes([]);
+      setOriginalComponentTimes([]);
+      return;
+    }
+    const aircraftKeyInMock = aircraft.id || aircraft.tailNumber;
+    const componentValuesForAircraft = MOCK_COMPONENT_VALUES_DATA[aircraftKeyInMock] || {};
+    const trackedComponents = aircraft.trackedComponentNames || ['Airframe', 'Engine 1'];
+    
+    const initialTimes = trackedComponents.map(name => ({
+      componentName: name,
+      currentTime: componentValuesForAircraft[name]?.time ?? 0,
+      currentCycles: componentValuesForAircraft[name]?.cycles ?? 0,
+    }));
+    
+    setEditableComponentTimes(JSON.parse(JSON.stringify(initialTimes)));
+    setOriginalComponentTimes(JSON.parse(JSON.stringify(initialTimes)));
+  }, []);
+
 
   useEffect(() => {
     const loadAircraftDetails = async () => {
@@ -173,24 +192,15 @@ export default function AircraftMaintenanceDetailPage() {
             primaryContactPhone: foundAircraft.primaryContactPhone || '',
           });
 
-          const aircraftKeyInMock = foundAircraft.id || foundAircraft.tailNumber;
-          const componentValuesForAircraft = MOCK_COMPONENT_VALUES_DATA[aircraftKeyInMock] || {};
-          
-          const trackedComponents = foundAircraft.trackedComponentNames || ['Airframe', 'Engine 1'];
-          const initialTimes = trackedComponents.map(name => ({
-            componentName: name,
-            currentTime: componentValuesForAircraft[name]?.time ?? 0,
-            currentCycles: componentValuesForAircraft[name]?.cycles ?? 0,
-          }));
-          setEditableComponentTimes(JSON.parse(JSON.stringify(initialTimes)));
+          initializeComponentTimes(foundAircraft);
 
           const tasksForAircraft = sampleMaintenanceData.filter(item => item.tailNumber === tailNumber);
           setMaintenanceTasks(tasksForAircraft);
 
         } else {
           setCurrentAircraft(null);
-          setEditableComponentTimes([]);
           setMaintenanceTasks([]);
+          initializeComponentTimes(null);
           toast({ title: "Error", description: `Aircraft ${tailNumber} not found in fleet.`, variant: "destructive" });
         }
       } catch (error) {
@@ -198,13 +208,13 @@ export default function AircraftMaintenanceDetailPage() {
         toast({ title: "Error", description: "Could not load aircraft details.", variant: "destructive" });
         setCurrentAircraft(null);
         setMaintenanceTasks([]);
-        setEditableComponentTimes([]);
+        initializeComponentTimes(null);
       } finally {
         setIsLoadingAircraft(false);
       }
     };
     loadAircraftDetails();
-  }, [tailNumber, toast, aircraftInfoForm]);
+  }, [tailNumber, toast, aircraftInfoForm, initializeComponentTimes]);
 
 
   const handleComponentTimeChange = (componentName: string, field: 'currentTime' | 'currentCycles', value: string) => {
@@ -230,14 +240,21 @@ export default function AircraftMaintenanceDetailPage() {
           newComponentValues[comp.componentName] = { time: comp.currentTime, cycles: comp.currentCycles };
         });
         MOCK_COMPONENT_VALUES_DATA[currentAircraftId] = newComponentValues;
+        setOriginalComponentTimes(JSON.parse(JSON.stringify(editableComponentTimes))); // Update original on save
       }
-      console.log("Saving component times for", currentAircraftId, ":", editableComponentTimes);
+      setIsEditingComponentTimes(false);
       toast({
         title: "Component Times Saved (Mock)",
         description: `Updated component times for ${currentAircraftId} in client-side mock data.`,
       });
     });
   };
+
+  const handleCancelEditComponentTimes = () => {
+    setEditableComponentTimes(JSON.parse(JSON.stringify(originalComponentTimes))); // Revert to original
+    setIsEditingComponentTimes(false);
+  };
+
 
   const onSubmitAircraftInfo: SubmitHandler<AircraftInfoEditFormData> = (data) => {
     if (!currentAircraft) return;
@@ -248,7 +265,7 @@ export default function AircraftMaintenanceDetailPage() {
           ...data,
         };
         await saveFleetAircraft(updatedAircraftData);
-        setCurrentAircraft(updatedAircraftData);
+        setCurrentAircraft(updatedAircraftData); // Update local state
         setIsEditingAircraftInfo(false);
         toast({ title: "Success", description: "Aircraft information updated." });
       } catch (error) {
@@ -266,9 +283,13 @@ export default function AircraftMaintenanceDetailPage() {
 
   const handleOpenEditTaskModal = (taskToEdit: MaintenanceItem) => {
     setEditingTaskOriginalId(taskToEdit.id);
+    // For MVP edit, we primarily pre-fill descriptive fields.
+    // Due criteria (last completed, intervals) would need to be re-entered if changing.
     const formData: Partial<MaintenanceTaskFormData> = {
       itemTitle: taskToEdit.nextDueItemDescription,
       details: taskToEdit.notes,
+      // Attempt to reverse-engineer some fields if possible, or set sensible defaults
+      // This part can be complex if the original form data isn't stored with MaintenanceItem
     };
     setInitialModalFormData(formData);
     setIsTaskModalOpen(true);
@@ -289,6 +310,7 @@ export default function AircraftMaintenanceDetailPage() {
       setMaintenanceTasks(prevTasks =>
         prevTasks.map(task => (task.id === editingTaskOriginalId ? newItem : task))
       );
+      // Update the global sampleMaintenanceData as well if it's the source of truth for this view
       const globalIndex = sampleMaintenanceData.findIndex(t => t.id === editingTaskOriginalId);
       if (globalIndex > -1) sampleMaintenanceData[globalIndex] = newItem;
 
@@ -297,6 +319,7 @@ export default function AircraftMaintenanceDetailPage() {
         description: `Task "${newItem.nextDueItemDescription}" updated for ${currentAircraft.tailNumber}.`,
       });
     } else {
+      // Add to global sample data for persistence in this demo session
       sampleMaintenanceData.push(newItem); 
       setMaintenanceTasks(prev => [...prev, newItem]);
       toast({
@@ -396,11 +419,16 @@ export default function AircraftMaintenanceDetailPage() {
       />
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         <Card className="shadow-lg lg:col-span-2">
-          <CardHeader className="flex flex-row items-center justify-between">
+           <CardHeader className="flex flex-row items-start justify-between">
             <div className="flex items-center gap-2">
               <PlaneIcon className="h-6 w-6 text-primary" />
               <CardTitle>Current Hours & Cycles</CardTitle>
             </div>
+            {!isEditingComponentTimes && (
+              <Button variant="outline" size="sm" onClick={() => setIsEditingComponentTimes(true)}>
+                <Edit3 className="mr-2 h-4 w-4" /> Edit Times
+              </Button>
+            )}
           </CardHeader>
           <CardContent>
             {editableComponentTimes.length > 0 ? (
@@ -418,32 +446,45 @@ export default function AircraftMaintenanceDetailPage() {
                       <TableRow key={comp.componentName}>
                         <TableCell className="font-medium">{comp.componentName}</TableCell>
                         <TableCell className="text-right">
-                          <Input
-                            type="number"
-                            value={comp.currentTime}
-                            onChange={(e) => handleComponentTimeChange(comp.componentName, 'currentTime', e.target.value)}
-                            className="w-24 text-right h-8"
-                            step="0.1"
-                          />
+                          {isEditingComponentTimes ? (
+                            <Input
+                              type="number"
+                              value={comp.currentTime}
+                              onChange={(e) => handleComponentTimeChange(comp.componentName, 'currentTime', e.target.value)}
+                              className="w-24 text-right h-8"
+                              step="0.1"
+                            />
+                          ) : (
+                            <span className="tabular-nums">{comp.currentTime.toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1})}</span>
+                          )}
                         </TableCell>
                         <TableCell className="text-right">
-                          <Input
-                            type="number"
-                            value={comp.currentCycles}
-                            onChange={(e) => handleComponentTimeChange(comp.componentName, 'currentCycles', e.target.value)}
-                            className="w-24 text-right h-8"
-                          />
+                          {isEditingComponentTimes ? (
+                            <Input
+                              type="number"
+                              value={comp.currentCycles}
+                              onChange={(e) => handleComponentTimeChange(comp.componentName, 'currentCycles', e.target.value)}
+                              className="w-24 text-right h-8"
+                            />
+                          ) : (
+                            <span className="tabular-nums">{comp.currentCycles.toLocaleString()}</span>
+                          )}
                         </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
-                <div className="flex justify-end">
-                  <Button onClick={handleSaveComponentTimes} size="sm" disabled={isSavingComponentTimes}>
-                    {isSavingComponentTimes ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                    Save Component Times
-                  </Button>
-                </div>
+                {isEditingComponentTimes && (
+                  <div className="flex justify-end gap-2 mt-4">
+                    <Button onClick={handleSaveComponentTimes} size="sm" disabled={isSavingComponentTimes}>
+                      {isSavingComponentTimes ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                      Save Component Times
+                    </Button>
+                     <Button variant="outline" size="sm" onClick={handleCancelEditComponentTimes} disabled={isSavingComponentTimes}>
+                      <XCircle className="mr-2 h-4 w-4" /> Cancel
+                    </Button>
+                  </div>
+                )}
               </div>
             ) : (
               <p className="text-muted-foreground">No specific components configured for time/cycle tracking for this aircraft in Company Settings, or no values recorded.</p>
@@ -596,7 +637,7 @@ export default function AircraftMaintenanceDetailPage() {
             <CardDescription>
               Detailed list of maintenance items for {currentAircraft.tailNumber}.
               {editableComponentTimes.find(c => c.componentName === 'Airframe') &&
-                ` Overall Airframe Time: ${editableComponentTimes.find(c => c.componentName === 'Airframe')?.currentTime.toLocaleString()} hrs / ${editableComponentTimes.find(c => c.componentName === 'Airframe')?.currentCycles.toLocaleString()} cycles.`}
+                ` Overall Airframe Time: ${editableComponentTimes.find(c => c.componentName === 'Airframe')?.currentTime.toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1})} hrs / ${editableComponentTimes.find(c => c.componentName === 'Airframe')?.currentCycles.toLocaleString()} cycles.`}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -622,8 +663,11 @@ export default function AircraftMaintenanceDetailPage() {
                 ) : (
                   maintenanceTasks.map((item) => {
                     const aircraftId = currentAircraft.id || currentAircraft.tailNumber;
-                    const itemCurrentAirframeTime = MOCK_COMPONENT_VALUES_DATA[aircraftId]?.Airframe?.time || item.currentAirframeTime;
-                    const itemCurrentAirframeCycles = MOCK_COMPONENT_VALUES_DATA[aircraftId]?.Airframe?.cycles || item.currentAirframeCycles;
+                    // Use airframe times from editableComponentTimes for consistency with the display card
+                    const airframeComponent = editableComponentTimes.find(c => c.componentName === 'Airframe');
+                    const itemCurrentAirframeTime = airframeComponent?.currentTime ?? item.currentAirframeTime;
+                    const itemCurrentAirframeCycles = airframeComponent?.currentCycles ?? item.currentAirframeCycles;
+
 
                     const toGoData = calculateToGo({
                       ...item,
