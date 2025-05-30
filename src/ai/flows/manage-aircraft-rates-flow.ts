@@ -11,9 +11,8 @@
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
-import { getFirestore, collection, getDocs, doc, setDoc, deleteDoc } from 'firebase/firestore';
-// You'll need to initialize Firebase in your project, typically in a separate config file
-// For example: import { db } from '@/lib/firebase'; (where db is getFirestore())
+import { collection, getDocs, doc, setDoc, deleteDoc, getDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase'; // Import the initialized db instance
 
 // Define the structure for an aircraft rate
 // The 'id' here should correspond to an 'id' from the FleetAircraftSchema in manage-fleet-flow.ts
@@ -68,7 +67,6 @@ const fetchAircraftRatesFlow = ai.defineFlow(
   async () => {
     console.log('Executing fetchAircraftRatesFlow - Firestore');
     try {
-      const db = getFirestore(); // Ensure Firebase is initialized
       const ratesCollection = collection(db, RATES_COLLECTION_NAME);
       const snapshot = await getDocs(ratesCollection);
       const ratesList = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as AircraftRate));
@@ -90,7 +88,6 @@ const saveAircraftRateFlow = ai.defineFlow(
   async (input) => {
     console.log('Executing saveAircraftRateFlow with input - Firestore:', input);
     try {
-      const db = getFirestore(); // Ensure Firebase is initialized
       const { id, ...rateData } = input; // Separate id from the rest of the data
       const rateRef = doc(db, RATES_COLLECTION_NAME, id); 
       await setDoc(rateRef, rateData, { merge: true }); // Use rateData, not input
@@ -112,8 +109,14 @@ const deleteAircraftRateFlow = ai.defineFlow(
   async (input) => {
     console.log('Executing deleteAircraftRateFlow for aircraft ID - Firestore:', input.aircraftId);
     try {
-      const db = getFirestore(); // Ensure Firebase is initialized
-      await deleteDoc(doc(db, RATES_COLLECTION_NAME, input.aircraftId));
+      const rateRef = doc(db, RATES_COLLECTION_NAME, input.aircraftId);
+      // Optionally, check if document exists before deleting
+      const docSnap = await getDoc(rateRef);
+      if (!docSnap.exists()) {
+        console.warn(`Aircraft rate for ID ${input.aircraftId} not found for deletion.`);
+        // Depending on desired behavior, you might return success: false or throw an error
+      }
+      await deleteDoc(rateRef);
       console.log('Deleted aircraft rate from Firestore:', input.aircraftId);
       return { success: true, aircraftId: input.aircraftId };
     } catch (error) {

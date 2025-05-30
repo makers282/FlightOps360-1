@@ -10,9 +10,8 @@
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
-import { getFirestore, collection, getDocs, doc, setDoc, deleteDoc } from 'firebase/firestore';
-// You'll need to initialize Firebase in your project, typically in a separate config file
-// For example: import { db } from '@/lib/firebase'; (where db is getFirestore())
+import { collection, getDocs, doc, setDoc, deleteDoc, getDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase'; // Import the initialized db instance
 
 // Define the structure for a fleet aircraft
 const FleetAircraftSchema = z.object({
@@ -65,7 +64,6 @@ const fetchFleetAircraftFlow = ai.defineFlow(
   async () => {
     console.log('Executing fetchFleetAircraftFlow - Firestore');
     try {
-      const db = getFirestore(); // Ensure Firebase is initialized
       const fleetCollection = collection(db, FLEET_COLLECTION_NAME);
       const snapshot = await getDocs(fleetCollection);
       const aircraftList = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as FleetAircraft));
@@ -73,7 +71,6 @@ const fetchFleetAircraftFlow = ai.defineFlow(
       return aircraftList;
     } catch (error) {
       console.error('Error fetching fleet from Firestore:', error);
-      // Depending on your error handling strategy, you might throw the error or return an empty array
       throw new Error(`Failed to fetch fleet aircraft: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
@@ -88,7 +85,6 @@ const saveFleetAircraftFlow = ai.defineFlow(
   async (input) => {
     console.log('Executing saveFleetAircraftFlow with input - Firestore:', input);
     try {
-      const db = getFirestore(); // Ensure Firebase is initialized
       const { id, ...aircraftData } = input; // Separate id from the rest of the data
       const aircraftRef = doc(db, FLEET_COLLECTION_NAME, id);
       await setDoc(aircraftRef, aircraftData, { merge: true }); // Use aircraftData, not input
@@ -110,13 +106,19 @@ const deleteFleetAircraftFlow = ai.defineFlow(
   async (input) => {
     console.log('Executing deleteFleetAircraftFlow for ID - Firestore:', input.aircraftId);
     try {
-      const db = getFirestore(); // Ensure Firebase is initialized
-      await deleteDoc(doc(db, FLEET_COLLECTION_NAME, input.aircraftId));
+      const aircraftRef = doc(db, FLEET_COLLECTION_NAME, input.aircraftId);
+      // Optionally, check if document exists before deleting
+      const docSnap = await getDoc(aircraftRef);
+      if (!docSnap.exists()) {
+        console.warn(`Aircraft with ID ${input.aircraftId} not found for deletion.`);
+        // Depending on desired behavior, you might return success: false or throw an error
+        // For now, we'll proceed with delete which won't error if doc doesn't exist
+      }
+      await deleteDoc(aircraftRef);
       console.log('Deleted fleet aircraft from Firestore:', input.aircraftId);
       return { success: true, aircraftId: input.aircraftId };
     } catch (error) {
       console.error('Error deleting fleet aircraft from Firestore:', error);
-      // You might want to check if the document existed before deletion for a more accurate success status
       throw new Error(`Failed to delete fleet aircraft: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
