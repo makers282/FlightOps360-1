@@ -32,6 +32,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 
 const itemTypes = ["Inspection", "Service Bulletin", "Airworthiness Directive", "Component Replacement", "Overhaul", "Life Limited Part", "Other"] as const;
 const trackTypes = ["Interval", "One Time", "Dont Alert"] as const;
+const daysIntervalTypes = ["days", "calendar_months_eom", "calendar_years"] as const;
 
 // Default values for the form, extracted for reuse
 const defaultMaintenanceTaskFormValues = {
@@ -58,7 +59,8 @@ const defaultMaintenanceTaskFormValues = {
   cyclesTolerance: 0,
   alertCyclesPrior: 0,
   isDaysDueEnabled: false,
-  daysDueValue: '',
+  daysIntervalType: 'days' as typeof daysIntervalTypes[number], // New default
+  daysDueValue: '', // Overloaded: number string for interval, date string for one time
   daysTolerance: 0,
   alertDaysPrior: 0,
 };
@@ -93,12 +95,8 @@ const maintenanceTaskSchema = z.object({
   alertCyclesPrior: z.coerce.number({invalid_type_error: "Must be a number"}).min(0, "Cannot be negative").int("Must be an integer").optional().or(z.literal(0)).or(z.nan()),
 
   isDaysDueEnabled: z.boolean().default(false),
-  daysDueValue: z.string().optional().refine(val => {
-    if (!val) return true;
-    const numVal = Number(val);
-    if (!isNaN(numVal)) return numVal >= 0;
-    return isValid(parseDate(val, 'yyyy-MM-dd', new Date()));
-  }, { message: "Invalid days/date format." }),
+  daysIntervalType: z.enum(daysIntervalTypes).optional(),
+  daysDueValue: z.string().optional(), // Will be validated conditionally
   daysTolerance: z.coerce.number({invalid_type_error: "Must be a number"}).min(0, "Cannot be negative").int("Must be an integer").optional().or(z.literal(0)).or(z.nan()),
   alertDaysPrior: z.coerce.number({invalid_type_error: "Must be a number"}).min(0, "Cannot be negative").int("Must be an integer").optional().or(z.literal(0)).or(z.nan()),
 })
@@ -109,14 +107,23 @@ const maintenanceTaskSchema = z.object({
     if (data.isCyclesDueEnabled && (data.cyclesDue === undefined || data.cyclesDue === null || isNaN(data.cyclesDue) || data.cyclesDue <=0)) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Cycles Due value must be a positive integer when enabled.", path: ["cyclesDue"]});
     }
-    if (data.isDaysDueEnabled && (!data.daysDueValue || data.daysDueValue.trim() === "")) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Days/Date Due value is required when enabled.", path: ["daysDueValue"]});
-    }
-     if (data.isDaysDueEnabled && data.trackType === 'Interval' && (isNaN(Number(data.daysDueValue)) || Number(data.daysDueValue) <= 0) ) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "For Interval tracking, Days Due must be a positive number.", path: ["daysDueValue"]});
-    }
-     if (data.isDaysDueEnabled && data.trackType === 'One Time' && !isValid(parseDate(data.daysDueValue as string, 'yyyy-MM-dd', new Date())) ) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "For One Time tracking, Due Date must be a valid date.", path: ["daysDueValue"]});
+    
+    if (data.isDaysDueEnabled) {
+        if (!data.daysDueValue || data.daysDueValue.trim() === "") {
+            ctx.addIssue({ code: z.ZodIssueCode.custom, message: "A due value is required when Days/Date Due is enabled.", path: ["daysDueValue"]});
+        } else if (data.trackType === 'Interval') {
+            if (!data.daysIntervalType) {
+                ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Interval type is required.", path: ["daysIntervalType"]});
+            }
+            const numVal = Number(data.daysDueValue);
+            if (isNaN(numVal) || numVal <= 0) {
+                ctx.addIssue({ code: z.ZodIssueCode.custom, message: "For Interval tracking, the due value must be a positive number.", path: ["daysDueValue"]});
+            }
+        } else if (data.trackType === 'One Time') {
+            if (!isValid(parseDate(data.daysDueValue, 'yyyy-MM-dd', new Date()))) {
+                 ctx.addIssue({ code: z.ZodIssueCode.custom, message: "For One Time tracking, Due Date must be a valid date (YYYY-MM-DD).", path: ["daysDueValue"]});
+            }
+        }
     }
 });
 
@@ -129,7 +136,7 @@ interface AddMaintenanceTaskModalProps {
   children: React.ReactNode;
   isOpen: boolean;
   setIsOpen: (isOpen: boolean) => void;
-  initialData?: Partial<MaintenanceTaskFormData> | null; // For pre-filling form in edit mode
+  initialData?: Partial<MaintenanceTaskFormData> | null; 
   isEditing?: boolean;
 }
 
@@ -143,7 +150,6 @@ export function AddMaintenanceTaskModal({ aircraft, onSave, children, isOpen, se
 
   useEffect(() => {
     if (isOpen) {
-      // When modal opens, reset form with initialData if editing, or defaults if adding
       form.reset(initialData ? { ...defaultMaintenanceTaskFormValues, ...initialData } : defaultMaintenanceTaskFormValues);
     }
   }, [isOpen, initialData, form]);
@@ -154,7 +160,7 @@ export function AddMaintenanceTaskModal({ aircraft, onSave, children, isOpen, se
   const isHoursDueEnabled = watch("isHoursDueEnabled");
   const isCyclesDueEnabled = watch("isCyclesDueEnabled");
   const isDaysDueEnabled = watch("isDaysDueEnabled");
-  // const lastCompletedDate = watch("lastCompletedDate"); // Not directly used in UI logic, but good for debugging
+  const daysIntervalType = watch("daysIntervalType");
 
   const onSubmit: SubmitHandler<MaintenanceTaskFormData> = async (data) => {
     setIsSubmitting(true);
@@ -171,27 +177,35 @@ export function AddMaintenanceTaskModal({ aircraft, onSave, children, isOpen, se
       cyclesTolerance: data.isCyclesDueEnabled ? (Number(data.cyclesTolerance) || 0) : undefined,
       alertCyclesPrior: data.isCyclesDueEnabled ? (Number(data.alertCyclesPrior) || 0) : undefined,
       
+      daysIntervalType: data.isDaysDueEnabled && data.trackType === 'Interval' ? data.daysIntervalType : undefined,
       daysDueValue: data.isDaysDueEnabled ? data.daysDueValue : undefined,
       daysTolerance: data.isDaysDueEnabled ? (Number(data.daysTolerance) || 0) : undefined,
       alertDaysPrior: data.isDaysDueEnabled ? (Number(data.alertDaysPrior) || 0) : undefined,
     };
-
-    // console.log("Maintenance Task Form Data (Cleaned for Save):", cleanedData);
-    await new Promise(resolve => setTimeout(resolve, 500)); // Simulate save
-    onSave(cleanedData); // Parent handles add vs update
+    await new Promise(resolve => setTimeout(resolve, 500)); 
+    onSave(cleanedData); 
     setIsSubmitting(false);
-    // Parent will close modal by setting setIsOpen(false), which will trigger form.reset if needed
   };
 
   const availableComponents = aircraft?.trackedComponentNames || ['Airframe', 'Engine 1', 'Engine 2', 'APU', 'Propeller 1', 'Landing Gear'];
   const modalTitle = isEditing ? `Edit Maintenance Task for ${aircraft?.tailNumber}` : `Add New Maintenance Task for ${aircraft?.tailNumber}`;
-
+  
+  const getDaysDueValueLabel = () => {
+    if (trackType === 'Interval') {
+      switch (daysIntervalType) {
+        case 'days': return 'Due In (days)';
+        case 'calendar_months_eom': return 'Due In (months)';
+        case 'calendar_years': return 'Due In (years)';
+        default: return 'Due In';
+      }
+    }
+    return 'Specific Due Date'; // Should not happen if trackType is not 'One Time'
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => {
-      setIsOpen(open); // Parent controls open state
+      setIsOpen(open); 
       if (!open) {
-        // Optionally ensure form is reset if modal is closed externally
         // form.reset(defaultMaintenanceTaskFormValues);
       }
     }}>
@@ -203,7 +217,7 @@ export function AddMaintenanceTaskModal({ aircraft, onSave, children, isOpen, se
             Fill in the details for the maintenance task. Click save when you're done.
           </DialogDescription>
         </DialogHeader>
-        <ScrollArea className="max-h-[calc(80vh-200px)] pr-6"> {/* Adjusted max-h for footer */}
+        <ScrollArea className="max-h-[calc(80vh-200px)] pr-6"> 
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 py-4 ">
 
@@ -286,7 +300,7 @@ export function AddMaintenanceTaskModal({ aircraft, onSave, children, isOpen, se
               <section className="space-y-4 p-4 border rounded-md shadow-sm">
                 <h3 className="text-lg font-semibold text-primary">Tracking Settings</h3>
                 <FormField control={control} name="trackType" render={({ field }) => (
-                  <FormItem className="space-y-3"><FormLabel>Track Type</FormLabel><FormControl><RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4">{trackTypes.map(type => (<FormItem key={type} className="flex items-center space-x-2 space-y-0"><FormControl><RadioGroupItem value={type} /></FormControl><FormLabel className="font-normal">{type}</FormLabel></FormItem>))}</RadioGroup></FormControl><FormMessage /></FormItem>
+                  <FormItem className="space-y-3"><FormLabel>Track Type</FormLabel><FormControl><RadioGroup onValueChange={(value) => { field.onChange(value); if(value === 'Interval' && !form.getValues('daysIntervalType')) { setValue('daysIntervalType', 'days'); } }} defaultValue={field.value} className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4">{trackTypes.map(type => (<FormItem key={type} className="flex items-center space-x-2 space-y-0"><FormControl><RadioGroupItem value={type} /></FormControl><FormLabel className="font-normal">{type}</FormLabel></FormItem>))}</RadioGroup></FormControl><FormMessage /></FormItem>
                 )} />
                 <FormField control={control} name="isTripsNotAffected" render={({ field }) => (
                   <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 shadow-sm"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><FormLabel className="font-normal">Trips not affected by this item</FormLabel></FormItem>
@@ -310,12 +324,28 @@ export function AddMaintenanceTaskModal({ aircraft, onSave, children, isOpen, se
                   </div>
                 )}
 
-                <FormField control={control} name="isDaysDueEnabled" render={({ field }) => (<FormItem className="flex flex-row items-center space-x-3 space-y-0 p-3 border rounded-md bg-muted/30"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><FormLabel className="font-normal">{trackType === 'One Time' ? 'Specific Due Date' : 'Days Due (Interval)'}</FormLabel></FormItem>)} />
+                <FormField control={control} name="isDaysDueEnabled" render={({ field }) => (<FormItem className="flex flex-row items-center space-x-3 space-y-0 p-3 border rounded-md bg-muted/30"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><FormLabel className="font-normal">{trackType === 'One Time' ? 'Specific Due Date' : 'Days/Calendar Due (Interval)'}</FormLabel></FormItem>)} />
                 {isDaysDueEnabled && (
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pl-8">
+                    {trackType === 'Interval' && (
+                      <FormField control={control} name="daysIntervalType" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Interval Type</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value || 'days'} name={field.name}>
+                            <FormControl><SelectTrigger><SelectValue placeholder="Select interval type" /></SelectTrigger></FormControl>
+                            <SelectContent>
+                              <SelectItem value="days">Days</SelectItem>
+                              <SelectItem value="calendar_months_eom">Calendar Months (End of Month)</SelectItem>
+                              <SelectItem value="calendar_years">Calendar Years</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                    )}
                     <FormField control={control} name="daysDueValue" render={({ field }) => (
                       <FormItem>
-                        <FormLabel>{trackType === 'One Time' ? 'Specific Due Date' : 'Due In (days from last completion)'}</FormLabel>
+                        <FormLabel>{getDaysDueValueLabel()}</FormLabel>
                         {trackType === 'One Time' ? (
                           <Popover>
                             <PopoverTrigger asChild>
@@ -365,3 +395,4 @@ export function AddMaintenanceTaskModal({ aircraft, onSave, children, isOpen, se
   );
 }
 
+    
