@@ -16,6 +16,7 @@ const FleetAircraftSchema = z.object({
   id: z.string().describe("The unique identifier for the aircraft, typically the tail number if unique, or an auto-generated ID."),
   tailNumber: z.string().min(1, "Tail number is required.").describe("The aircraft's tail number (e.g., N123AB)."),
   model: z.string().min(1, "Aircraft model is required.").describe("The aircraft model (e.g., Cessna Citation CJ3)."),
+  isMaintenanceTracked: z.boolean().optional().default(true).describe("Whether maintenance tracking is enabled for this aircraft."),
 });
 export type FleetAircraft = z.infer<typeof FleetAircraftSchema>;
 
@@ -37,10 +38,10 @@ const DeleteFleetAircraftOutputSchema = z.object({
 
 // Mock in-memory storage
 let MOCK_FLEET_AIRCRAFT_DATA: FleetAircraft[] = [
-  { id: 'N123AB', tailNumber: 'N123AB', model: 'Cessna Citation CJ3' },
-  { id: 'N456CD', tailNumber: 'N456CD', model: 'Bombardier Global 6000' },
-  { id: 'N789EF', tailNumber: 'N789EF', model: 'Gulfstream G650ER' },
-  { id: 'N630MW', tailNumber: 'N630MW', model: 'Pilatus PC-12 NG' },
+  { id: 'N123AB', tailNumber: 'N123AB', model: 'Cessna Citation CJ3', isMaintenanceTracked: true },
+  { id: 'N456CD', tailNumber: 'N456CD', model: 'Bombardier Global 6000', isMaintenanceTracked: true },
+  { id: 'N789EF', tailNumber: 'N789EF', model: 'Gulfstream G650ER', isMaintenanceTracked: true },
+  { id: 'N630MW', tailNumber: 'N630MW', model: 'Pilatus PC-12 NG', isMaintenanceTracked: false }, // Example of one not tracked
 ];
 
 // Exported async functions that clients will call
@@ -50,8 +51,13 @@ export async function fetchFleetAircraft(): Promise<FleetAircraft[]> {
 }
 
 export async function saveFleetAircraft(input: SaveFleetAircraftInput): Promise<FleetAircraft> {
-  console.log('[ManageFleetFlow MOCK] Attempting to save fleet aircraft:', input.id);
-  return saveFleetAircraftFlow(input);
+  console.log('[ManageFleetFlow MOCK] Attempting to save fleet aircraft:', input.id, 'Tracked:', input.isMaintenanceTracked);
+  // Ensure isMaintenanceTracked has a default if not provided by client for some reason
+  const aircraftToSave: FleetAircraft = {
+    ...input,
+    isMaintenanceTracked: input.isMaintenanceTracked ?? true, 
+  };
+  return saveFleetAircraftFlow(aircraftToSave);
 }
 
 export async function deleteFleetAircraft(input: DeleteFleetAircraftInput): Promise<{ success: boolean; aircraftId: string }> {
@@ -87,10 +93,10 @@ const saveFleetAircraftFlow = ai.defineFlow(
     
     const existingIndex = MOCK_FLEET_AIRCRAFT_DATA.findIndex(ac => ac.id === input.id);
     if (existingIndex !== -1) {
-      MOCK_FLEET_AIRCRAFT_DATA[existingIndex] = input;
+      MOCK_FLEET_AIRCRAFT_DATA[existingIndex] = input; // input already includes isMaintenanceTracked
       console.log('Updated aircraft in MOCK_FLEET_AIRCRAFT_DATA:', input);
     } else {
-      MOCK_FLEET_AIRCRAFT_DATA.push(input);
+      MOCK_FLEET_AIRCRAFT_DATA.push(input); // input already includes isMaintenanceTracked
       console.log('Added new aircraft to MOCK_FLEET_AIRCRAFT_DATA:', input);
     }
     return input;
