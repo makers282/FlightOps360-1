@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useTransition } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { PageHeader } from '@/components/page-header';
@@ -15,11 +15,18 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from '@/components/ui/button';
-import { Wrench, PlusCircle, ArrowLeft, PlaneIcon, Edit, Loader2, InfoIcon, Phone, UserCircle, MapPin } from 'lucide-react'; // Added new icons
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useForm, type SubmitHandler } from 'react-hook-form';
+import { z } from 'zod';
+
+import { Wrench, PlusCircle, ArrowLeft, PlaneIcon, Edit, Loader2, InfoIcon, Phone, UserCircle, MapPin, Save, XCircle } from 'lucide-react';
 import { format, parse } from 'date-fns';
 import { sampleMaintenanceData, calculateToGo, getReleaseStatus, type MaintenanceItem } from '../page';
 import { useToast } from '@/hooks/use-toast';
-import { fetchFleetAircraft, type FleetAircraft, type EngineDetail } from '@/ai/flows/manage-fleet-flow'; // Import FleetAircraft type
+import { fetchFleetAircraft, saveFleetAircraft, type FleetAircraft, type EngineDetail } from '@/ai/flows/manage-fleet-flow';
 
 interface ComponentTimeData {
   componentName: string;
@@ -27,13 +34,21 @@ interface ComponentTimeData {
   currentCycles: number;
 }
 
-// Mock data for the "Current Hours & Cycles" values for different aircraft & components
 const MOCK_COMPONENT_VALUES_DATA: Record<string, Record<string, { time?: number; cycles?: number }>> = {
   'N123AB': { 'Airframe': { time: 1200.5, cycles: 850 }, 'Engine 1': { time: 1190.2, cycles: 840 }, 'Engine 2': { time: 1185.7, cycles: 835 }, 'APU': { time: 300.1, cycles: 400 } },
   'N456CD': { 'Airframe': { time: 2500.0, cycles: 1200 }, 'Engine 1': { time: 2450.0, cycles: 1180 }, 'Engine 2': { time: 2440.0, cycles: 1170 }, 'APU': { time: 550.5, cycles: 600 } },
   'N789EF': { 'Airframe': { time: 350.0, cycles: 120 }, 'Engine 1': { time: 345.0, cycles: 118 }, 'Engine 2': { time: 340.0, cycles: 115 }, 'APU': { time: 80.2, cycles: 90 }, 'Air Conditioning': { time: 150.5, cycles: 75 } },
   'N630MW': { 'Airframe': { time: 12540.0, cycles: 8978 }, 'Engine 1': { time: 12471.2, cycles: 9058 }, 'Propeller 1': { time: 245.3, cycles: 88 } },
 };
+
+const aircraftInfoEditSchema = z.object({
+  model: z.string().min(1, "Model is required."),
+  serialNumber: z.string().optional(),
+  baseLocation: z.string().optional(),
+  primaryContactName: z.string().optional(),
+  primaryContactPhone: z.string().optional(),
+});
+type AircraftInfoEditFormData = z.infer<typeof aircraftInfoEditSchema>;
 
 
 export default function AircraftMaintenanceDetailPage() {
@@ -44,6 +59,12 @@ export default function AircraftMaintenanceDetailPage() {
   const [currentAircraft, setCurrentAircraft] = useState<FleetAircraft | null>(null);
   const [componentTimes, setComponentTimes] = useState<ComponentTimeData[]>([]);
   const [isLoadingAircraft, setIsLoadingAircraft] = useState(true);
+  const [isSavingAircraftInfo, startSavingAircraftInfoTransition] = useTransition();
+  const [isEditingAircraftInfo, setIsEditingAircraftInfo] = useState(false);
+
+  const aircraftInfoForm = useForm<AircraftInfoEditFormData>({
+    resolver: zodResolver(aircraftInfoEditSchema),
+  });
 
   useEffect(() => {
     const loadAircraftDetails = async () => {
@@ -57,13 +78,21 @@ export default function AircraftMaintenanceDetailPage() {
         const foundAircraft = fleet.find(ac => ac.tailNumber === tailNumber);
         if (foundAircraft) {
           setCurrentAircraft(foundAircraft);
+          aircraftInfoForm.reset({
+            model: foundAircraft.model,
+            serialNumber: foundAircraft.serialNumber || '',
+            baseLocation: foundAircraft.baseLocation || '',
+            primaryContactName: foundAircraft.primaryContactName || '',
+            primaryContactPhone: foundAircraft.primaryContactPhone || '',
+          });
+
           const mockValuesForTail = MOCK_COMPONENT_VALUES_DATA[foundAircraft.tailNumber] || {};
           const initialTimes = (foundAircraft.trackedComponentNames || ['Airframe', 'Engine 1']).map(name => ({
             componentName: name,
             currentTime: mockValuesForTail[name]?.time ?? 0,
             currentCycles: mockValuesForTail[name]?.cycles ?? 0,
           }));
-          setComponentTimes(JSON.parse(JSON.stringify(initialTimes))); 
+          setComponentTimes(JSON.parse(JSON.stringify(initialTimes)));
         } else {
           setCurrentAircraft(null);
           setComponentTimes([]);
@@ -79,19 +108,36 @@ export default function AircraftMaintenanceDetailPage() {
       }
     };
     loadAircraftDetails();
-  }, [tailNumber, toast]);
+  }, [tailNumber, toast, aircraftInfoForm]);
 
-  const aircraftMaintenanceTasks = tailNumber 
-    ? sampleMaintenanceData.filter(item => item.tailNumber === tailNumber) 
+  const aircraftMaintenanceTasks = tailNumber
+    ? sampleMaintenanceData.filter(item => item.tailNumber === tailNumber)
     : [];
-  
-  const aircraftDisplayDetails = aircraftMaintenanceTasks.length > 0 ? aircraftMaintenanceTasks[0] : null;
 
   const handleEditComponentTimes = () => {
     console.log("Edit Component Times clicked for", tailNumber);
     toast({
       title: "Edit Component Times (Placeholder)",
       description: `Functionality to edit times for ${tailNumber} will be implemented here. A modal or inline editing could be used.`,
+    });
+  };
+
+  const onSubmitAircraftInfo: SubmitHandler<AircraftInfoEditFormData> = (data) => {
+    if (!currentAircraft) return;
+    startSavingAircraftInfoTransition(async () => {
+      try {
+        const updatedAircraftData: FleetAircraft = {
+          ...currentAircraft,
+          ...data,
+        };
+        await saveFleetAircraft(updatedAircraftData);
+        setCurrentAircraft(updatedAircraftData); // Update local state
+        setIsEditingAircraftInfo(false);
+        toast({ title: "Success", description: "Aircraft information updated." });
+      } catch (error) {
+        console.error("Failed to save aircraft information:", error);
+        toast({ title: "Error", description: "Could not save aircraft information.", variant: "destructive" });
+      }
     });
   };
 
@@ -122,11 +168,21 @@ export default function AircraftMaintenanceDetailPage() {
       </>
     );
   }
-  
-  if (!aircraftDisplayDetails && componentTimes.length === 0 && !currentAircraft.isMaintenanceTracked) {
+
+  if (!currentAircraft.isMaintenanceTracked && componentTimes.length === 0 ) {
      return (
       <>
-        <PageHeader title={`Data for ${currentAircraft.tailNumber}`} icon={Wrench} />
+        <PageHeader title={`Data for ${currentAircraft.tailNumber}`} icon={PlaneIcon} />
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Aircraft Information</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">Model: {currentAircraft.model}</p>
+            <p className="text-sm text-muted-foreground">Serial Number: {currentAircraft.serialNumber || 'N/A'}</p>
+            {/* Add other non-maintenance specific info here if needed */}
+          </CardContent>
+        </Card>
         <Card>
           <CardContent className="pt-6">
             <p>Maintenance tracking is not enabled for aircraft "{currentAircraft.tailNumber}". Component times and maintenance items are not displayed.</p>
@@ -156,15 +212,15 @@ export default function AircraftMaintenanceDetailPage() {
               </Link>
             </Button>
             {currentAircraft.isMaintenanceTracked && (
-              <Button> 
+              <Button>
                 <PlusCircle className="mr-2 h-4 w-4" /> Add New Task for {currentAircraft.tailNumber}
               </Button>
             )}
           </div>
         }
       />
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3"> {/* Adjusted grid for two main columns */}
-        <Card className="shadow-lg lg:col-span-2"> {/* Hours & Cycles card, spans 2/3 on large screens */}
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <Card className="shadow-lg lg:col-span-2">
             <CardHeader className="flex flex-row items-center justify-between">
                 <div className="flex items-center gap-2">
                     <PlaneIcon className="h-6 w-6 text-primary" />
@@ -204,14 +260,94 @@ export default function AircraftMaintenanceDetailPage() {
             </CardContent>
         </Card>
 
-        <Card className="shadow-lg lg:col-span-1"> {/* Aircraft Info card, spans 1/3 on large screens */}
-            <CardHeader>
-                <div className="flex items-center gap-2">
-                    <InfoIcon className="h-6 w-6 text-primary" />
-                    <CardTitle>Aircraft Information</CardTitle>
-                </div>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
+        <Card className="shadow-lg lg:col-span-1">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div className="flex items-center gap-2">
+                <InfoIcon className="h-6 w-6 text-primary" />
+                <CardTitle>Aircraft Information</CardTitle>
+            </div>
+            {!isEditingAircraftInfo && (
+              <Button variant="outline" size="sm" onClick={() => setIsEditingAircraftInfo(true)}>
+                <Edit className="mr-2 h-4 w-4" /> Edit Aircraft Info
+              </Button>
+            )}
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            {isEditingAircraftInfo ? (
+              <Form {...aircraftInfoForm}>
+                <form onSubmit={aircraftInfoForm.handleSubmit(onSubmitAircraftInfo)} className="space-y-4">
+                  <div>
+                    <span className="text-muted-foreground">Tail Number:</span>
+                    <span className="font-medium ml-2">{currentAircraft.tailNumber}</span>
+                  </div>
+                  <FormField
+                    control={aircraftInfoForm.control}
+                    name="model"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Model</FormLabel>
+                        <FormControl><Input {...field} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={aircraftInfoForm.control}
+                    name="serialNumber"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Serial Number</FormLabel>
+                        <FormControl><Input {...field} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={aircraftInfoForm.control}
+                    name="baseLocation"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Base Location</FormLabel>
+                        <FormControl><Input {...field} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={aircraftInfoForm.control}
+                    name="primaryContactName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Primary Contact Name</FormLabel>
+                        <FormControl><Input {...field} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={aircraftInfoForm.control}
+                    name="primaryContactPhone"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Primary Contact Phone</FormLabel>
+                        <FormControl><Input type="tel" {...field} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <div className="flex gap-2 pt-2">
+                    <Button type="submit" size="sm" disabled={isSavingAircraftInfo}>
+                      {isSavingAircraftInfo ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                      Save Changes
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" onClick={() => { setIsEditingAircraftInfo(false); aircraftInfoForm.reset(); /* Reset to original values if needed */ }}>
+                      <XCircle className="mr-2 h-4 w-4" />Cancel
+                    </Button>
+                  </div>
+                </form>
+              </Form>
+            ) : (
+              <>
                 <div className="flex justify-between">
                     <span className="text-muted-foreground">Tail Number:</span>
                     <span className="font-medium">{currentAircraft.tailNumber}</span>
@@ -255,18 +391,20 @@ export default function AircraftMaintenanceDetailPage() {
                         )}
                     </div>
                  )}
-            </CardContent>
+              </>
+            )}
+          </CardContent>
         </Card>
       </div>
 
 
       {currentAircraft.isMaintenanceTracked ? (
-        <Card className="shadow-lg mt-6"> {/* Added mt-6 for spacing */}
+        <Card className="shadow-lg mt-6">
           <CardHeader>
             <CardTitle>Tracked Maintenance Items</CardTitle>
             <CardDescription>
-              Detailed list of maintenance items for {currentAircraft.tailNumber}. 
-              {componentTimes.find(c => c.componentName === 'Airframe') && 
+              Detailed list of maintenance items for {currentAircraft.tailNumber}.
+              {componentTimes.find(c => c.componentName === 'Airframe') &&
                 ` Overall Airframe Time: ${componentTimes.find(c => c.componentName === 'Airframe')?.currentTime.toLocaleString()} hrs / ${componentTimes.find(c => c.componentName === 'Airframe')?.currentCycles.toLocaleString()} cycles.`}
             </CardDescription>
           </CardHeader>
@@ -337,7 +475,7 @@ export default function AircraftMaintenanceDetailPage() {
           </CardContent>
         </Card>
       ) : (
-        <Card className="mt-6"> {/* Added mt-6 for spacing */}
+        <Card className="mt-6">
           <CardHeader>
             <CardTitle>Maintenance Tracking Not Enabled</CardTitle>
           </CardHeader>
