@@ -34,11 +34,13 @@ interface ComponentTimeData {
   currentCycles: number;
 }
 
+// MOCK_COMPONENT_VALUES_DATA should ideally come from a backend or be managed more centrally.
+// For now, it's a local constant.
 const MOCK_COMPONENT_VALUES_DATA: Record<string, Record<string, { time?: number; cycles?: number }>> = {
-  'N123AB': { 'Airframe': { time: 1200.5, cycles: 850 }, 'Engine 1': { time: 1190.2, cycles: 840 }, 'Engine 2': { time: 1185.7, cycles: 835 }, 'APU': { time: 300.1, cycles: 400 } },
-  'N456CD': { 'Airframe': { time: 2500.0, cycles: 1200 }, 'Engine 1': { time: 2450.0, cycles: 1180 }, 'Engine 2': { time: 2440.0, cycles: 1170 }, 'APU': { time: 550.5, cycles: 600 } },
-  'N789EF': { 'Airframe': { time: 350.0, cycles: 120 }, 'Engine 1': { time: 345.0, cycles: 118 }, 'Engine 2': { time: 340.0, cycles: 115 }, 'APU': { time: 80.2, cycles: 90 }, 'Air Conditioning': { time: 150.5, cycles: 75 } },
-  'N630MW': { 'Airframe': { time: 12540.0, cycles: 8978 }, 'Engine 1': { time: 12471.2, cycles: 9058 }, 'Propeller 1': { time: 245.3, cycles: 88 } },
+  'N123AB': { 'Airframe': { time: 1200.5, cycles: 850 }, 'Engine One': { time: 1190.2, cycles: 840 }, 'Engine Two': { time: 1185.7, cycles: 835 }, 'APU': { time: 300.1, cycles: 400 } },
+  'N456CD': { 'Airframe': { time: 2500.0, cycles: 1200 }, 'Engine One': { time: 2450.0, cycles: 1180 }, 'Engine Two': { time: 2440.0, cycles: 1170 }, 'APU': { time: 550.5, cycles: 600 } },
+  'N789EF': { 'Airframe': { time: 350.0, cycles: 120 }, 'Engine One': { time: 345.0, cycles: 118 }, 'Engine Two': { time: 340.0, cycles: 115 }, 'APU': { time: 80.2, cycles: 90 }, 'Air Conditioning': { time: 150.5, cycles: 75 } },
+  'N630MW': { 'Airframe': { time: 12540.0, cycles: 8978 }, 'Engine One': { time: 12471.2, cycles: 9058 }, 'Propeller 1': { time: 245.3, cycles: 88 } },
 };
 
 const aircraftInfoEditSchema = z.object({
@@ -86,13 +88,13 @@ export default function AircraftMaintenanceDetailPage() {
             primaryContactPhone: foundAircraft.primaryContactPhone || '',
           });
 
-          const mockValuesForTail = MOCK_COMPONENT_VALUES_DATA[foundAircraft.tailNumber] || {};
+          const mockValuesForTail = MOCK_COMPONENT_VALUES_DATA[foundAircraft.id] || MOCK_COMPONENT_VALUES_DATA[foundAircraft.tailNumber] || {};
           const initialTimes = (foundAircraft.trackedComponentNames || ['Airframe', 'Engine 1']).map(name => ({
             componentName: name,
             currentTime: mockValuesForTail[name]?.time ?? 0,
             currentCycles: mockValuesForTail[name]?.cycles ?? 0,
           }));
-          setComponentTimes(JSON.parse(JSON.stringify(initialTimes)));
+          setComponentTimes(JSON.parse(JSON.stringify(initialTimes))); // Deep copy for editability
         } else {
           setCurrentAircraft(null);
           setComponentTimes([]);
@@ -180,7 +182,6 @@ export default function AircraftMaintenanceDetailPage() {
           <CardContent>
             <p className="text-sm text-muted-foreground">Model: {currentAircraft.model}</p>
             <p className="text-sm text-muted-foreground">Serial Number: {currentAircraft.serialNumber || 'N/A'}</p>
-            {/* Add other non-maintenance specific info here if needed */}
           </CardContent>
         </Card>
         <Card>
@@ -205,14 +206,14 @@ export default function AircraftMaintenanceDetailPage() {
         description={`Tracked items & component status for ${currentAircraft.model} (${currentAircraft.tailNumber}).`}
         icon={Wrench}
         actions={
-          <div className="flex gap-2">
-            <Button asChild variant="outline">
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Button asChild variant="outline" className="w-full sm:w-auto">
               <Link href="/aircraft/currency">
                 <ArrowLeft className="mr-2 h-4 w-4" /> Back to Overview
               </Link>
             </Button>
             {currentAircraft.isMaintenanceTracked && (
-              <Button>
+              <Button className="w-full sm:w-auto">
                 <PlusCircle className="mr-2 h-4 w-4" /> Add New Task for {currentAircraft.tailNumber}
               </Button>
             )}
@@ -340,7 +341,7 @@ export default function AircraftMaintenanceDetailPage() {
                       {isSavingAircraftInfo ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                       Save Changes
                     </Button>
-                    <Button type="button" variant="outline" size="sm" onClick={() => { setIsEditingAircraftInfo(false); aircraftInfoForm.reset(); /* Reset to original values if needed */ }}>
+                    <Button type="button" variant="outline" size="sm" onClick={() => { setIsEditingAircraftInfo(false); aircraftInfoForm.reset({ model: currentAircraft.model, serialNumber: currentAircraft.serialNumber || '', baseLocation: currentAircraft.baseLocation || '', primaryContactName: currentAircraft.primaryContactName || '', primaryContactPhone: currentAircraft.primaryContactPhone || '' }); }}>
                       <XCircle className="mr-2 h-4 w-4" />Cancel
                     </Button>
                   </div>
@@ -487,3 +488,4 @@ export default function AircraftMaintenanceDetailPage() {
     </>
   );
 }
+
