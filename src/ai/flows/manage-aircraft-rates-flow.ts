@@ -12,14 +12,15 @@ import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
 // Define the structure for an aircraft rate
-export const AircraftRateSchema = z.object({
+// This schema is NOT exported as a const from the 'use server' file.
+const AircraftRateSchema = z.object({
   id: z.string().describe("The unique identifier for the aircraft rate, typically the aircraft name or category key."),
   buy: z.number().min(0).describe("The buy rate per hour for the aircraft."),
   sell: z.number().min(0).describe("The sell rate per hour for the aircraft."),
 });
 export type AircraftRate = z.infer<typeof AircraftRateSchema>;
 
-// Schemas for flow inputs and outputs
+// Schemas for flow inputs and outputs (internal to this file or used by other server components)
 const SaveAircraftRateInputSchema = AircraftRateSchema;
 export type SaveAircraftRateInput = z.infer<typeof SaveAircraftRateInputSchema>;
 
@@ -138,3 +139,4 @@ const deleteAircraftRateFlow = ai.defineFlow(
     return Promise.resolve({ success, aircraftId: input.aircraftId });
   }
 );
+
