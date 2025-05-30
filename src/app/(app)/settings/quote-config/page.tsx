@@ -21,12 +21,19 @@ const INITIAL_AIRCRAFT_RATES_DATA: { [key: string]: { buy: number; sell: number 
   'DEFAULT_AIRCRAFT_RATES': { buy: 3500, sell: 4000 },
 };
 
-const INITIAL_OTHER_COST_RATES_DATA: { [key: string]: { buy: number; sell: number; unitDescription: string } } = {
-  FUEL_SURCHARGE_PER_BLOCK_HOUR: { buy: 300, sell: 400, unitDescription: "Per Block Hour" },
-  LANDING_FEE_PER_LEG: { buy: 400, sell: 500, unitDescription: "Per Leg" },
-  OVERNIGHT_FEE_PER_NIGHT: { buy: 1000, sell: 1300, unitDescription: "Per Night"},
-  MEDICS_FEE_FLAT: { buy: 1800, sell: 2500, unitDescription: "Per Service" }, 
-  CATERING_FEE_FLAT: { buy: 350, sell: 500, unitDescription: "Per Service" },
+interface ServiceFeeRate {
+  displayDescription: string;
+  buy: number;
+  sell: number;
+  unitDescription: string;
+}
+
+const INITIAL_OTHER_COST_RATES_DATA: { [key: string]: ServiceFeeRate } = {
+  FUEL_SURCHARGE_PER_BLOCK_HOUR: { displayDescription: "Fuel Surcharge", buy: 300, sell: 400, unitDescription: "Per Block Hour" },
+  LANDING_FEE_PER_LEG: { displayDescription: "Landing Fee", buy: 400, sell: 500, unitDescription: "Per Leg" },
+  OVERNIGHT_FEE_PER_NIGHT: { displayDescription: "Overnight Fee", buy: 1000, sell: 1300, unitDescription: "Per Night"},
+  MEDICS_FEE_FLAT: { displayDescription: "Medics Fee", buy: 1800, sell: 2500, unitDescription: "Per Service" }, 
+  CATERING_FEE_FLAT: { displayDescription: "Catering Fee", buy: 350, sell: 500, unitDescription: "Per Service" },
 };
 
 const formatCurrency = (amount: number) => {
@@ -35,7 +42,7 @@ const formatCurrency = (amount: number) => {
 
 export default function QuoteConfigPage() {
   const [aircraftRates, setAircraftRates] = useState<{ [key: string]: { buy: number; sell: number } }>(INITIAL_AIRCRAFT_RATES_DATA);
-  const [otherCostRates, setOtherCostRates] = useState<{ [key: string]: { buy: number; sell: number; unitDescription: string } }>(INITIAL_OTHER_COST_RATES_DATA);
+  const [otherCostRates, setOtherCostRates] = useState<{ [key: string]: ServiceFeeRate }>(INITIAL_OTHER_COST_RATES_DATA);
 
   const [showAddAircraftForm, setShowAddAircraftForm] = useState(false);
   const [newAircraftName, setNewAircraftName] = useState('');
@@ -46,17 +53,18 @@ export default function QuoteConfigPage() {
 
   const [showAddServiceForm, setShowAddServiceForm] = useState(false);
   const [newServiceKey, setNewServiceKey] = useState('');
-  const [newServiceDescription, setNewServiceDescription] = useState(''); // Not used for key, but good for display name if we enhance
+  const [newServiceDisplayDescription, setNewServiceDisplayDescription] = useState('');
   const [newServiceUnit, setNewServiceUnit] = useState('');
   const [newServiceBuyRate, setNewServiceBuyRate] = useState('');
   const [newServiceSellRate, setNewServiceSellRate] = useState('');
+  const [editingServiceKey, setEditingServiceKey] = useState<string | null>(null);
 
 
   const handleEditAircraftClick = (key: string) => {
     const aircraftToEdit = aircraftRates[key];
     if (aircraftToEdit) {
       setEditingAircraftKey(key);
-      setNewAircraftName(key); // Or a more display-friendly name if key isn't the name
+      setNewAircraftName(key); 
       setNewAircraftBuyRate(String(aircraftToEdit.buy));
       setNewAircraftSellRate(String(aircraftToEdit.sell));
       setShowAddAircraftForm(true);
@@ -75,10 +83,9 @@ export default function QuoteConfigPage() {
         return;
     }
 
-    if (editingAircraftKey) { // Editing existing aircraft
+    if (editingAircraftKey) { 
       setAircraftRates(prev => {
         const updated = { ...prev };
-        // If name (key) was changed, delete old key and add new one
         if (newAircraftName !== editingAircraftKey) {
           delete updated[editingAircraftKey];
         }
@@ -86,7 +93,7 @@ export default function QuoteConfigPage() {
         return updated;
       });
       setEditingAircraftKey(null);
-    } else { // Adding new aircraft
+    } else { 
       setAircraftRates(prev => ({
         ...prev,
         [newAircraftName]: { buy: buyRateNum, sell: sellRateNum }
@@ -107,22 +114,34 @@ export default function QuoteConfigPage() {
     setShowAddAircraftForm(false);
   };
 
-
   const handleDeleteAircraftRate = (key: string) => {
     setAircraftRates(prev => {
       const updated = { ...prev };
       delete updated[key];
       return updated;
     });
-    if (editingAircraftKey === key) { // If deleting the one being edited
+    if (editingAircraftKey === key) { 
       handleCancelEditAircraft();
     }
   };
 
-  const handleAddServiceFee = () => {
-    const key = newServiceKey.toUpperCase().replace(/\s+/g, '_');
-    if (!key || !newServiceDescription || !newServiceUnit || !newServiceBuyRate || !newServiceSellRate) {
-        alert("Please fill in all fields for the new service/fee.");
+  const handleEditServiceFeeClick = (key: string) => {
+    const serviceToEdit = otherCostRates[key];
+    if (serviceToEdit) {
+      setEditingServiceKey(key);
+      setNewServiceKey(key); // Key is not editable visually
+      setNewServiceDisplayDescription(serviceToEdit.displayDescription);
+      setNewServiceUnit(serviceToEdit.unitDescription);
+      setNewServiceBuyRate(String(serviceToEdit.buy));
+      setNewServiceSellRate(String(serviceToEdit.sell));
+      setShowAddServiceForm(true);
+    }
+  };
+  
+  const handleAddOrUpdateServiceFee = () => {
+    const keyToUse = editingServiceKey || newServiceKey.toUpperCase().replace(/\s+/g, '_');
+    if (!keyToUse || !newServiceDisplayDescription || !newServiceUnit || !newServiceBuyRate || !newServiceSellRate) {
+        alert("Please fill in all fields for the service/fee.");
         return;
     }
     const buyRateNum = parseFloat(newServiceBuyRate);
@@ -134,10 +153,27 @@ export default function QuoteConfigPage() {
 
     setOtherCostRates(prev => ({
         ...prev,
-        [key]: { buy: buyRateNum, sell: sellRateNum, unitDescription: newServiceUnit }
+        [keyToUse]: { 
+            displayDescription: newServiceDisplayDescription,
+            buy: buyRateNum, 
+            sell: sellRateNum, 
+            unitDescription: newServiceUnit 
+        }
     }));
+
     setNewServiceKey('');
-    setNewServiceDescription('');
+    setNewServiceDisplayDescription('');
+    setNewServiceUnit('');
+    setNewServiceBuyRate('');
+    setNewServiceSellRate('');
+    setShowAddServiceForm(false);
+    setEditingServiceKey(null);
+  };
+
+  const handleCancelEditServiceFee = () => {
+    setEditingServiceKey(null);
+    setNewServiceKey('');
+    setNewServiceDisplayDescription('');
     setNewServiceUnit('');
     setNewServiceBuyRate('');
     setNewServiceSellRate('');
@@ -150,6 +186,9 @@ export default function QuoteConfigPage() {
       delete updated[key];
       return updated;
     });
+     if (editingServiceKey === key) {
+      handleCancelEditServiceFee();
+    }
   };
 
   return (
@@ -254,23 +293,27 @@ export default function QuoteConfigPage() {
                     <CardTitle className="flex items-center gap-2"><Percent className="h-5 w-5 text-primary"/> Standard Service & Fee Rates</CardTitle>
                     <CardDescription>Default buy and sell rates for various services and fees.</CardDescription>
                 </div>
-                <Button variant="outline" size="sm" onClick={() => setShowAddServiceForm(!showAddServiceForm)}>
-                    <PlusCircle className="mr-2 h-4 w-4" /> {showAddServiceForm ? 'Cancel Add' : 'Add Service/Fee'}
-                </Button>
+                {!showAddServiceForm && (
+                  <Button variant="outline" size="sm" onClick={() => { setEditingServiceKey(null); setShowAddServiceForm(true); setNewServiceKey(''); setNewServiceDisplayDescription(''); setNewServiceUnit(''); setNewServiceBuyRate(''); setNewServiceSellRate(''); }}>
+                      <PlusCircle className="mr-2 h-4 w-4" /> Add Service/Fee
+                  </Button>
+                )}
             </div>
           </CardHeader>
           <CardContent>
             {showAddServiceForm && (
                  <Card className="p-4 mb-4 bg-muted/50 border-dashed">
-                    <CardTitle className="text-lg mb-2">Add New Service/Fee</CardTitle>
+                    <CardTitle className="text-lg mb-2">
+                      {editingServiceKey ? `Edit Service/Fee: ${editingServiceKey}` : 'Add New Service/Fee'}
+                    </CardTitle>
                     <div className="space-y-3">
                         <div>
                             <Label htmlFor="newServiceKey">Unique Key (ALL_CAPS_SNAKE_CASE)</Label>
-                            <Input id="newServiceKey" value={newServiceKey} onChange={(e) => setNewServiceKey(e.target.value)} placeholder="e.g., INTERNATIONAL_HANDLING_FEE" />
+                            <Input id="newServiceKey" value={newServiceKey} onChange={(e) => setNewServiceKey(e.target.value)} placeholder="e.g., INTERNATIONAL_HANDLING_FEE" disabled={!!editingServiceKey}/>
                         </div>
                         <div>
-                            <Label htmlFor="newServiceDescription">Display Description (for tables)</Label>
-                            <Input id="newServiceDescription" value={newServiceDescription} onChange={(e) => setNewServiceDescription(e.target.value)} placeholder="e.g., International Handling Fee" />
+                            <Label htmlFor="newServiceDisplayDescription">Display Description</Label>
+                            <Input id="newServiceDisplayDescription" value={newServiceDisplayDescription} onChange={(e) => setNewServiceDisplayDescription(e.target.value)} placeholder="e.g., International Handling Fee" />
                         </div>
                         <div>
                             <Label htmlFor="newServiceUnit">Unit Description</Label>
@@ -286,7 +329,14 @@ export default function QuoteConfigPage() {
                                 <Input id="newServiceSellRate" type="number" value={newServiceSellRate} onChange={(e) => setNewServiceSellRate(e.target.value)} placeholder="e.g., 250" />
                             </div>
                         </div>
-                        <Button onClick={handleAddServiceFee} size="sm"><PlusCircle className="mr-2 h-4 w-4"/>Save New Service/Fee</Button>
+                        <div className="flex gap-2">
+                          <Button onClick={handleAddOrUpdateServiceFee} size="sm">
+                            <Save className="mr-2 h-4 w-4"/>{editingServiceKey ? 'Update Service/Fee' : 'Save New Service/Fee'}
+                          </Button>
+                          <Button variant="outline" onClick={handleCancelEditServiceFee} size="sm">
+                              <XCircle className="mr-2 h-4 w-4"/>Cancel
+                          </Button>
+                        </div>
                     </div>
                  </Card>
             )}
@@ -305,16 +355,9 @@ export default function QuoteConfigPage() {
                 {Object.entries(otherCostRates).map(([key, rates]) => {
                   const margin = rates.sell - rates.buy;
                   const marginPercent = rates.buy > 0 && rates.buy !== 0 ? (margin / rates.buy) * 100 : 0;
-                  const description = key
-                    .replace(/_/g, ' ')
-                    .replace(/\b\w/g, l => l.toUpperCase()) 
-                    .replace('Per Block Hour', '(per Block Hour)')
-                    .replace('Per Leg', '(per Leg)')
-                    .replace('Per Night', '(per Night)')
-                    .replace('Flat', '(Flat Rate)');
                   return (
                     <TableRow key={key}>
-                      <TableCell className="font-medium">{description}</TableCell>
+                      <TableCell className="font-medium">{rates.displayDescription}</TableCell>
                       <TableCell>{rates.unitDescription}</TableCell>
                       <TableCell className="text-right">{formatCurrency(rates.buy)}</TableCell>
                       <TableCell className="text-right">{formatCurrency(rates.sell)}</TableCell>
@@ -322,10 +365,13 @@ export default function QuoteConfigPage() {
                         {formatCurrency(margin)} ({marginPercent.toFixed(1)}%)
                       </TableCell>
                        <TableCell className="text-right">
-                        {/* Edit button for services can be added here later if needed */}
+                        <Button variant="ghost" size="icon" onClick={() => handleEditServiceFeeClick(key)} className="mr-1 hover:text-primary">
+                            <Edit className="h-4 w-4" />
+                            <span className="sr-only">Edit {rates.displayDescription}</span>
+                        </Button>
                         <Button variant="ghost" size="icon" onClick={() => handleDeleteServiceFee(key)} className="text-destructive hover:text-destructive">
                           <Trash2 className="h-4 w-4" />
-                           <span className="sr-only">Delete {description}</span>
+                           <span className="sr-only">Delete {rates.displayDescription}</span>
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -343,9 +389,8 @@ export default function QuoteConfigPage() {
             </CardHeader>
             <CardContent>
                 <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
-                    <li>Editing of service/fee rates is not yet implemented.</li>
+                    <li>The "Unique Key" for services/fees is not editable once created; delete and re-add if a key change is needed.</li>
                     <li>No robust input validation is performed on the "add new" forms beyond basic checks.</li>
-                    <li>The unique key for services/fees must be in ALL_CAPS_SNAKE_CASE format for consistency.</li>
                 </ul>
             </CardContent>
         </Card>
