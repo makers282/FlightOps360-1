@@ -15,21 +15,65 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from '@/components/ui/button';
-import { Wrench, PlusCircle, ArrowLeft, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
-import { format, parse } from 'date-fns'; // Added parse
-import { sampleMaintenanceData, calculateToGo, getReleaseStatus, type MaintenanceItem } from '../page'; // Import from parent
+import { Wrench, PlusCircle, ArrowLeft, CheckCircle2, XCircle, AlertTriangle, PlaneIcon } from 'lucide-react';
+import { format, parse } from 'date-fns';
+import { sampleMaintenanceData, calculateToGo, getReleaseStatus, type MaintenanceItem } from '../page';
+
+interface AircraftComponentTime {
+  componentName: string;
+  currentTime: number;
+  currentCycles: number;
+}
+
+// Mock data for the "Current Hours & Cycles" display for different aircraft
+const aircraftComponentTimesData: Record<string, AircraftComponentTime[]> = {
+  'N630MW': [
+    { componentName: 'Airframe', currentTime: 12540.0, currentCycles: 8978 },
+    { componentName: 'Engine One', currentTime: 12471.2, currentCycles: 9058 },
+    { componentName: 'Engine Two', currentTime: 12439.9, currentCycles: 10721 },
+    { componentName: 'Propeller 1', currentTime: 245.3, currentCycles: 88 },
+    { componentName: 'Propeller 2', currentTime: 245.3, currentCycles: 89 },
+  ],
+  'N121RB': [
+    { componentName: 'Airframe', currentTime: 330.3, currentCycles: 200 },
+    { componentName: 'Engine One', currentTime: 330.3, currentCycles: 200 },
+  ],
+  'N1327J': [
+    { componentName: 'Airframe', currentTime: 7050.0, currentCycles: 6049 },
+    { componentName: 'Engine One', currentTime: 7045.0, currentCycles: 6040 },
+    { componentName: 'Engine Two', currentTime: 7048.0, currentCycles: 6042 },
+  ],
+  'N456CD': [
+    { componentName: 'Airframe', currentTime: 1200.5, currentCycles: 850 },
+    { componentName: 'Engine One', currentTime: 1200.5, currentCycles: 850 },
+    { componentName: 'Engine Two', currentTime: 1200.5, currentCycles: 850 },
+  ],
+  'N789EF': [
+    { componentName: 'Airframe', currentTime: 350.0, currentCycles: 120 },
+    { componentName: 'Engine One', currentTime: 350.0, currentCycles: 120 },
+    { componentName: 'Engine Two', currentTime: 350.0, currentCycles: 120 },
+  ],
+  // Default/fallback for aircraft not explicitly listed
+  'DEFAULT': [
+    { componentName: 'Airframe', currentTime: 0, currentCycles: 0 },
+    { componentName: 'Engine One', currentTime: 0, currentCycles: 0 },
+  ]
+};
+
 
 export default function AircraftMaintenanceDetailPage() {
   const params = useParams();
   const tailNumber = typeof params.tailNumber === 'string' ? decodeURIComponent(params.tailNumber) : undefined;
 
-  const aircraftItems = tailNumber 
+  const aircraftMaintenanceTasks = tailNumber 
     ? sampleMaintenanceData.filter(item => item.tailNumber === tailNumber) 
     : [];
   
-  const aircraftDetails = aircraftItems.length > 0 ? aircraftItems[0] : null;
+  const aircraftDisplayDetails = aircraftMaintenanceTasks.length > 0 ? aircraftMaintenanceTasks[0] : null;
+  const componentTimes = tailNumber ? (aircraftComponentTimesData[tailNumber] || aircraftComponentTimesData['DEFAULT']) : aircraftComponentTimesData['DEFAULT'];
 
-  if (!tailNumber || !aircraftDetails) {
+
+  if (!tailNumber || !aircraftDisplayDetails) {
     return (
       <>
         <PageHeader title="Aircraft Not Found" icon={Wrench} />
@@ -50,8 +94,8 @@ export default function AircraftMaintenanceDetailPage() {
   return (
     <>
       <PageHeader
-        title={`Maintenance Details for ${aircraftDetails.tailNumber}`}
-        description={`All tracked items for ${aircraftDetails.aircraftModel} (${aircraftDetails.tailNumber}). Current Airframe: ${aircraftDetails.currentAirframeTime.toLocaleString()} hrs / ${aircraftDetails.currentAirframeCycles.toLocaleString()} cycles.`}
+        title={`Maintenance Details for ${aircraftDisplayDetails.tailNumber}`}
+        description={`Tracked items & component status for ${aircraftDisplayDetails.aircraftModel} (${aircraftDisplayDetails.tailNumber}).`}
         icon={Wrench}
         actions={
           <div className="flex gap-2">
@@ -61,15 +105,47 @@ export default function AircraftMaintenanceDetailPage() {
               </Link>
             </Button>
             <Button>
-              <PlusCircle className="mr-2 h-4 w-4" /> Add New Item for {aircraftDetails.tailNumber}
+              <PlusCircle className="mr-2 h-4 w-4" /> Add New Item for {aircraftDisplayDetails.tailNumber}
             </Button>
           </div>
         }
       />
+
+      <Card className="mb-6 shadow-lg">
+        <CardHeader className="flex flex-row items-center gap-2">
+          <PlaneIcon className="h-6 w-6 text-primary" />
+          <CardTitle>Current Hours & Cycles</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {componentTimes.length > 0 ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Component</TableHead>
+                  <TableHead className="text-right">Current Time</TableHead>
+                  <TableHead className="text-right">Current Cycles</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {componentTimes.map((comp) => (
+                  <TableRow key={comp.componentName}>
+                    <TableCell className="font-medium">{comp.componentName}</TableCell>
+                    <TableCell className="text-right">{comp.currentTime.toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1})}</TableCell>
+                    <TableCell className="text-right">{comp.currentCycles.toLocaleString()}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <p className="text-muted-foreground">No component time data available for this aircraft.</p>
+          )}
+        </CardContent>
+      </Card>
+
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle>Tracked Maintenance Items</CardTitle>
-          <CardDescription>Detailed list of maintenance items for {aircraftDetails.tailNumber}.</CardDescription>
+          <CardDescription>Detailed list of maintenance items for {aircraftDisplayDetails.tailNumber}. Overall Airframe Time: {aircraftDisplayDetails.currentAirframeTime.toLocaleString()} hrs / {aircraftDisplayDetails.currentAirframeCycles.toLocaleString()} cycles.</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
@@ -84,22 +160,29 @@ export default function AircraftMaintenanceDetailPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {aircraftItems.length === 0 ? (
+              {aircraftMaintenanceTasks.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center text-muted-foreground py-10">
                     No maintenance items tracked for this aircraft.
                   </TableCell>
                 </TableRow>
               ) : (
-                aircraftItems.map((item) => {
+                aircraftMaintenanceTasks.map((item) => {
                   const toGoData = calculateToGo(item);
                   const status = getReleaseStatus(toGoData);
                   let dueAtDisplay = 'N/A';
                   let dueType = 'N/A';
 
                   if (item.dueAtDate) {
-                    dueAtDisplay = format(parse(item.dueAtDate, 'yyyy-MM-dd', new Date()), 'MM/dd/yyyy');
-                    dueType = 'Date';
+                    // Ensure item.dueAtDate is a valid string like "yyyy-MM-dd"
+                    try {
+                        dueAtDisplay = format(parse(item.dueAtDate, 'yyyy-MM-dd', new Date()), 'MM/dd/yyyy');
+                        dueType = 'Date';
+                    } catch (e) {
+                        console.error("Error parsing date for maintenance item:", item.dueAtDate, e);
+                        dueAtDisplay = "Invalid Date";
+                        dueType = 'Date';
+                    }
                   } else if (item.dueAtHours != null) {
                     dueAtDisplay = `${item.dueAtHours.toLocaleString()} hrs`;
                     dueType = 'Hours';
@@ -134,3 +217,4 @@ export default function AircraftMaintenanceDetailPage() {
     </>
   );
 }
+
