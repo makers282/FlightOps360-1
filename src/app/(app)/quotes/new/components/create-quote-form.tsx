@@ -94,6 +94,7 @@ const availableAircraft = [
   { id: 'HEAVY_JET', name: 'Category: Heavy Jet' },
 ];
 
+// Define buy and sell rates for aircraft and other costs
 const AIRCRAFT_RATES: { [key: string]: { buy: number; sell: number } } = {
   'N123AB - Cessna Citation CJ3': { buy: 2800, sell: 3200 },
   'N456CD - Bombardier Global 6000': { buy: 5800, sell: 6500 },
@@ -102,7 +103,7 @@ const AIRCRAFT_RATES: { [key: string]: { buy: number; sell: number } } = {
   'Category: Midsize Jet': { buy: 4000, sell: 4500 },
   'Category: Heavy Jet': { buy: 7000, sell: 7500 },
 };
-const DEFAULT_AIRCRAFT_RATES = { buy: 3500, sell: 4000 }; 
+const DEFAULT_AIRCRAFT_RATES = { buy: 3500, sell: 4000 }; // Default if specific aircraft not found
 
 const OTHER_COST_RATES = {
   FUEL_SURCHARGE_PER_BLOCK_HOUR: { buy: 300, sell: 400, unitDescription: "Block Hour" },
@@ -600,15 +601,14 @@ export function CreateQuoteForm() {
     let previousLegPax = 1;
     let previousLegOriginTaxi = 15;
     let previousLegDestTaxi = 15;
-    let previousLegOriginFbo = '';
-    let previousLegDestinationFbo = '';
+    let previousLegOriginFbo = ''; // For text input
+    let previousLegDestinationFbo = ''; // For text input
 
 
     if (fields.length > 0) {
       const previousLegIndex = fields.length - 1;
       const previousLeg = getValues(`legs.${previousLegIndex}`);
-      // const previousLegEstimate = legEstimates[previousLegIndex]; // Not using estimate for next leg FBO
-
+      
       newLegOrigin = previousLeg.destination; 
       previousLegPax = Number(previousLeg.passengerCount || 1); 
       previousLegOriginTaxi = Number(previousLeg.originTaxiTimeMinutes || 15);
@@ -626,7 +626,7 @@ export function CreateQuoteForm() {
         const estimatedArrivalMillis = previousLegDeparture.getTime() + previousLegFlightMillis + previousLegDestTaxiMillis;
         newLegDepartureDateTime = new Date(estimatedArrivalMillis + (60 * 60 * 1000)); // Add 1 hour
       } else if (previousLeg.departureDateTime && previousLeg.departureDateTime instanceof Date && !isNaN(previousLeg.departureDateTime.getTime())) {
-         newLegDepartureDateTime = new Date(previousLeg.departureDateTime.getTime() + (3 * 60 * 60 * 1000)); // Add 3 hours
+         newLegDepartureDateTime = new Date(previousLeg.departureDateTime.getTime() + (3 * 60 * 60 * 1000)); // Add 3 hours if no flight time
       }
     }
 
@@ -745,15 +745,30 @@ export function CreateQuoteForm() {
                         <FormField control={control} name={`legs.${index}.originFbo`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><Building className="h-4 w-4" />Origin FBO (Optional)</FormLabel> <FormControl><Input placeholder="e.g., Signature, Atlantic" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
                         <FormField control={control} name={`legs.${index}.destinationFbo`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><Building className="h-4 w-4" />Destination FBO (Optional)</FormLabel> <FormControl><Input placeholder="e.g., Signature, Atlantic" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
                     </div>
-                     <FormField control={control} name={`legs.${index}.departureDateTime`} render={({ field }) => ( <FormItem className="flex flex-col"> <FormLabel>Desired Departure Date & Time</FormLabel> {isClient ? ( <Popover> <PopoverTrigger asChild> 
-                        <Button 
-                          variant={"outline"} 
-                          className="w-full pl-3 text-left font-normal" // Static className
-                        >
-                          <span>Static Text Content</span> {/* Static content */}
-                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                        </Button> 
-                      </PopoverTrigger> <PopoverContent className="w-auto p-0" align="start"> <Calendar mode="single" selected={field.value && field.value instanceof Date && !isNaN(field.value.getTime()) ? field.value : undefined} onSelect={field.onChange} disabled={(date) => minLegDepartureDate ? date < minLegDepartureDate : true} initialFocus /> <div className="p-2 border-t border-border"> <Input type="time" defaultValue={field.value && field.value instanceof Date && !isNaN(field.value.getTime()) ? format(field.value, "HH:mm") : ""} onChange={(e) => { const time = e.target.value; const [hours, minutes] = time.split(':').map(Number); let newDate = field.value && field.value instanceof Date && !isNaN(field.value.getTime()) ? new Date(field.value) : new Date(); if (isNaN(newDate.getTime())) newDate = new Date(); newDate.setHours(hours, minutes,0,0); field.onChange(newDate); }} /> </div> </PopoverContent> </Popover> ) : ( <Skeleton className="h-10 w-full" /> )} <FormMessage /> </FormItem> )} />
+                     <FormField control={control} name={`legs.${index}.departureDateTime`} render={({ field }) => ( <FormItem className="flex flex-col"> <FormLabel>Desired Departure Date & Time</FormLabel> {isClient ? ( <Popover> 
+                        <PopoverTrigger asChild> 
+                            <Button 
+                              variant={"outline"} 
+                              className={cn(
+                                "w-full pl-3 text-left font-normal", 
+                                !(field.value && field.value instanceof Date && !isNaN(field.value.getTime())) && "text-muted-foreground"
+                              )}
+                            > 
+                              <span>
+                                {field.value && field.value instanceof Date && !isNaN(field.value.getTime()) 
+                                  ? format(field.value, "PPP HH:mm") 
+                                  : "Pick a date and time"}
+                              </span>
+                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" /> 
+                            </Button> 
+                        </PopoverTrigger> 
+                        <PopoverContent className="w-auto p-0" align="start"> 
+                            <Calendar mode="single" selected={field.value && field.value instanceof Date && !isNaN(field.value.getTime()) ? field.value : undefined} onSelect={field.onChange} disabled={(date) => minLegDepartureDate ? date < minLegDepartureDate : true} initialFocus /> 
+                            <div className="p-2 border-t border-border"> 
+                                <Input type="time" defaultValue={field.value && field.value instanceof Date && !isNaN(field.value.getTime()) ? format(field.value, "HH:mm") : ""} onChange={(e) => { const time = e.target.value; const [hours, minutes] = time.split(':').map(Number); let newDate = field.value && field.value instanceof Date && !isNaN(field.value.getTime()) ? new Date(field.value) : new Date(); if (isNaN(newDate.getTime())) newDate = new Date(); newDate.setHours(hours, minutes,0,0); field.onChange(newDate); }} /> 
+                            </div> 
+                        </PopoverContent> 
+                      </Popover> ) : ( <Skeleton className="h-10 w-full" /> )} <FormMessage /> </FormItem> )} />
                     
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <FormField control={control} name={`legs.${index}.legType`} render={({ field }) => ( <FormItem> <FormLabel>Leg Type</FormLabel> <Select onValueChange={field.onChange} value={field.value || ""} name={field.name}> <FormControl><SelectTrigger><SelectValue placeholder="Select leg type" /></SelectTrigger></FormControl> <SelectContent>{legTypes.map(type => (<SelectItem key={type} value={type}>{type}</SelectItem>))}</SelectContent> </Select> <FormMessage /> </FormItem> )} />
@@ -872,3 +887,6 @@ export function CreateQuoteForm() {
     </Card>
   );
 }
+
+
+    
