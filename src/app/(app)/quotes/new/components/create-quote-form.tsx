@@ -28,6 +28,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
 import { estimateFlightDetails, type EstimateFlightDetailsInput, type EstimateFlightDetailsOutput } from '@/ai/flows/estimate-flight-details-flow';
+import { fetchAircraftRates, type AircraftRate } from '@/ai/flows/manage-aircraft-rates-flow'; // Import fetchAircraftRates
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { LegsSummaryTable } from './legs-summary-table';
 import { CostsSummaryDisplay, type LineItem } from './costs-summary-display';
@@ -57,7 +58,7 @@ const formSchema = z.object({
   clientEmail: z.string().email("Invalid email address."),
   clientPhone: z.string().min(7, "Phone number seems too short.").optional().or(z.literal('')),
   legs: z.array(legSchema).min(1, "At least one flight leg is required."),
-  aircraftType: z.string().min(1, "Aircraft type is required.").optional(), 
+  aircraftType: z.string().min(1, "Aircraft type/ID is required.").optional(), 
   
   medicsRequested: z.boolean().optional().default(false),
   cateringRequested: z.boolean().optional().default(false),
@@ -84,15 +85,13 @@ type LegEstimate = EstimateFlightDetailsOutput & {
   blockTimeHours?: number;
 };
 
-const availableAircraft = [
-  { id: 'N123AB', name: 'N123AB - Cessna Citation CJ3' },
-  { id: 'N456CD', name: 'N456CD - Bombardier Global 6000' },
-  { id: 'N789EF', name: 'N789EF - Gulfstream G650ER' },
-  { id: 'LIGHT_JET', name: 'Category: Light Jet' },
-  { id: 'MID_JET', name: 'Category: Midsize Jet' },
-  { id: 'HEAVY_JET', name: 'Category: Heavy Jet' },
-];
+interface AircraftOption {
+  value: string;
+  label: string;
+}
 
+// Keep hardcoded rates for now. Pricing logic will use this.
+// The dropdown will be dynamic, but pricing for newly added aircraft (not in this const) will use DEFAULT_AIRCRAFT_RATES.
 const AIRCRAFT_RATES: { [key: string]: { buy: number; sell: number } } = {
   'N123AB - Cessna Citation CJ3': { buy: 2800, sell: 3200 },
   'N456CD - Bombardier Global 6000': { buy: 5800, sell: 6500 },
@@ -100,8 +99,9 @@ const AIRCRAFT_RATES: { [key: string]: { buy: number; sell: number } } = {
   'Category: Light Jet': { buy: 2400, sell: 2800 },
   'Category: Midsize Jet': { buy: 4000, sell: 4500 },
   'Category: Heavy Jet': { buy: 7000, sell: 7500 },
+  'DEFAULT_AIRCRAFT_RATES': { buy: 3500, sell: 4000 } // Fallback
 };
-const DEFAULT_AIRCRAFT_RATES = { buy: 3500, sell: 4000 }; 
+const DEFAULT_AIRCRAFT_RATES = AIRCRAFT_RATES['DEFAULT_AIRCRAFT_RATES'];
 
 const OTHER_COST_RATES = {
   FUEL_SURCHARGE_PER_BLOCK_HOUR: { buy: 300, sell: 400, unitDescription: "Block Hour" },
@@ -127,6 +127,9 @@ export function CreateQuoteForm() {
   const [isClient, setIsClient] = useState(false);
   const [legEstimates, setLegEstimates] = useState<Array<LegEstimate | null>>([]);
   const [calculatedLineItems, setCalculatedLineItems] = useState<LineItem[]>([]);
+
+  const [aircraftSelectOptions, setAircraftSelectOptions] = useState<AircraftOption[]>([]);
+  const [isLoadingAircraft, setIsLoadingAircraft] = useState(true);
 
 
   const form = useForm<FullQuoteFormData>({ 
@@ -194,7 +197,23 @@ export function CreateQuoteForm() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     setMinLegDepartureDate(today);
-  }, [setValue, getValues]);
+
+    const loadAircraft = async () => {
+      setIsLoadingAircraft(true);
+      try {
+        const rates = await fetchAircraftRates();
+        const options = rates.map(rate => ({ value: rate.id, label: rate.id }));
+        setAircraftSelectOptions(options);
+      } catch (error) {
+        console.error("Failed to fetch aircraft options:", error);
+        toast({ title: "Error", description: "Could not load aircraft list for dropdown.", variant: "destructive" });
+      } finally {
+        setIsLoadingAircraft(false);
+      }
+    };
+    loadAircraft();
+
+  }, [setValue, getValues, toast]);
 
   useEffect(() => {
     if (legsArray && legEstimates.length !== legsArray.length) {
@@ -229,8 +248,7 @@ export function CreateQuoteForm() {
       }
     });
     
-    const selectedAircraftDetails = availableAircraft.find(ac => ac.id === aircraftTypeId);
-    const aircraftNameForRate = selectedAircraftDetails?.name;
+    const aircraftNameForRate = aircraftTypeId; // aircraftTypeId is the ID/Name string from the select
     const aircraftRates = aircraftNameForRate ? (AIRCRAFT_RATES[aircraftNameForRate] || DEFAULT_AIRCRAFT_RATES) : DEFAULT_AIRCRAFT_RATES;
 
     if (totalRevenueFlightHours > 0 && aircraftNameForRate) {
@@ -339,15 +357,14 @@ export function CreateQuoteForm() {
     }
 
     const legData = getValues(`legs.${legIndex}`);
-    const currentAircraftTypeId = getValues('aircraftType');
+    const currentAircraftTypeId = getValues('aircraftType'); // This is the ID/Name string
 
     if (!legData?.origin || legData.origin.length < 3 || !legData?.destination || legData.destination.length < 3 || !currentAircraftTypeId) {
       toast({ title: "Missing Information", description: "Please provide origin, destination (min 3 chars each), and select an aircraft type before estimating.", variant: "destructive"});
       return;
     }
 
-    const selectedAircraft = availableAircraft.find(ac => ac.id === currentAircraftTypeId);
-    const aircraftNameForFlow = selectedAircraft ? selectedAircraft.name : currentAircraftTypeId;
+    const aircraftNameForFlow = currentAircraftTypeId; // The ID is the name/key like "N123AB - Cessna Citation CJ3"
 
     const currentEstimate = legEstimates[legIndex];
     if (currentEstimate &&
@@ -536,11 +553,11 @@ export function CreateQuoteForm() {
   };
 
   const handleCustomerSelect = (customerId: string | undefined) => {
+    setValue('selectedCustomerId', customerId);
     if (!customerId) { 
       setValue('clientName', '');
       setValue('clientEmail', '');
       setValue('clientPhone', '');
-      setValue('selectedCustomerId', undefined);
       return;
     }
     const selectedCustomer = sampleCustomerData.find(c => c.id === customerId);
@@ -548,7 +565,6 @@ export function CreateQuoteForm() {
       setValue('clientName', selectedCustomer.name);
       setValue('clientEmail', selectedCustomer.email);
       setValue('clientPhone', selectedCustomer.phone || '');
-      setValue('selectedCustomerId', customerId);
     }
   };
 
@@ -565,7 +581,7 @@ export function CreateQuoteForm() {
             
             <section>
               <CardTitle className="text-xl border-b pb-2 mb-4">Client Information</CardTitle>
-              <FormField control={control} name="selectedCustomerId" render={({ field }) => ( <FormItem className="mb-4"> <FormLabel className="flex items-center gap-1"><UserSearch className="h-4 w-4" /> Select Existing Client (Optional)</FormLabel> <Select onValueChange={(value) => { handleCustomerSelect(value === "CREATE_NEW_CUSTOMER_PLACEHOLDER" ? undefined : value); field.onChange(value === "CREATE_NEW_CUSTOMER_PLACEHOLDER" ? undefined : value); }} value={field.value || ""} name={field.name} > <FormControl><SelectTrigger><SelectValue placeholder="Select a client to auto-fill details" /></SelectTrigger></FormControl> <SelectContent><SelectItem value="CREATE_NEW_CUSTOMER_PLACEHOLDER">--- Or Enter New Client Details Below ---</SelectItem>{sampleCustomerData.map(customer => (<SelectItem key={customer.id} value={customer.id}>{customer.name} ({customer.company})</SelectItem>))}</SelectContent> </Select> <FormDescription>Choosing a client will auto-populate their details below.</FormDescription> <FormMessage /> </FormItem> )} />
+              <FormField control={control} name="selectedCustomerId" render={({ field }) => ( <FormItem className="mb-4"> <FormLabel className="flex items-center gap-1"><UserSearch className="h-4 w-4" /> Select Existing Client (Optional)</FormLabel> <Select onValueChange={(value) => { handleCustomerSelect(value); field.onChange(value); }} value={field.value || ""} name={field.name} > <FormControl><SelectTrigger><SelectValue placeholder="Select a client to auto-fill details" /></SelectTrigger></FormControl> <SelectContent>{sampleCustomerData.map(customer => (<SelectItem key={customer.id} value={customer.id}>{customer.name} ({customer.company})</SelectItem>))}</SelectContent> </Select> <FormDescription>Choosing a client will auto-populate their details below.</FormDescription> <FormMessage /> </FormItem> )} />
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 mb-4">
                 <FormField control={control} name="clientName" render={({ field }) => ( <FormItem> <FormLabel>Client Name</FormLabel> <FormControl><Input placeholder="e.g., John Doe" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
                 <FormField control={control} name="clientEmail" render={({ field }) => ( <FormItem> <FormLabel>Client Email</FormLabel> <FormControl><Input type="email" placeholder="e.g., john.doe@example.com" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
@@ -589,14 +605,15 @@ export function CreateQuoteForm() {
                                 name={field.name}
                             > 
                                 <FormControl>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Select an aircraft type" />
+                                    <SelectTrigger disabled={isLoadingAircraft}>
+                                        <SelectValue placeholder={isLoadingAircraft ? "Loading aircraft..." : "Select an aircraft type"} />
                                     </SelectTrigger>
                                 </FormControl> 
                                 <SelectContent>
-                                    {availableAircraft.map(aircraft => (
-                                        <SelectItem key={aircraft.id} value={aircraft.id}>
-                                            {aircraft.name}
+                                    {!isLoadingAircraft && aircraftSelectOptions.length === 0 && <SelectItem value="NO_AIRCRAFT_CONFIGURED_PLACEHOLDER" disabled>No aircraft configured</SelectItem>}
+                                    {aircraftSelectOptions.map(aircraft => (
+                                        <SelectItem key={aircraft.value} value={aircraft.value}>
+                                            {aircraft.label}
                                         </SelectItem>
                                     ))}
                                 </SelectContent> 
@@ -628,15 +645,14 @@ export function CreateQuoteForm() {
                         <FormField control={control} name={`legs.${index}.originFbo`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><Building className="h-4 w-4" />Origin FBO (Optional)</FormLabel> <FormControl><Input placeholder="e.g., Signature, Atlantic" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
                         <FormField control={control} name={`legs.${index}.destinationFbo`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><Building className="h-4 w-4" />Destination FBO (Optional)</FormLabel> <FormControl><Input placeholder="e.g., Signature, Atlantic" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
                     </div>
-                     <FormField control={control} name={`legs.${index}.departureDateTime`} render={({ field }) => ( <FormItem className="flex flex-col"> <FormLabel>Desired Departure Date & Time</FormLabel> 
-                      <Popover> <PopoverTrigger asChild> 
-                          <Button 
-                            variant={"outline"} 
-                            className={cn("w-full pl-3 text-left font-normal", !(field.value && field.value instanceof Date && !isNaN(field.value.getTime())) && "text-muted-foreground")}
-                          > 
-                            <span>{field.value && field.value instanceof Date && !isNaN(field.value.getTime()) ? format(field.value, "PPP HH:mm") : "Pick a date and time"}</span> 
-                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" /> 
-                          </Button> 
+                     <FormField control={control} name={`legs.${index}.departureDateTime`} render={({ field }) => ( <FormItem className="flex flex-col"> <FormLabel>Desired Departure Date & Time</FormLabel> {isClient ? ( <Popover> <PopoverTrigger asChild> 
+                        <Button 
+                          variant={"outline"} 
+                          className={cn("w-full pl-3 text-left font-normal", !(field.value && field.value instanceof Date && !isNaN(field.value.getTime())) && "text-muted-foreground")}
+                        > 
+                          <span>{field.value && field.value instanceof Date && !isNaN(field.value.getTime()) ? format(field.value, "PPP HH:mm") : "Pick a date and time"}</span> 
+                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" /> 
+                        </Button> 
                         </PopoverTrigger> 
                         <PopoverContent className="w-auto p-0" align="start"> 
                           <Calendar mode="single" selected={field.value && field.value instanceof Date && !isNaN(field.value.getTime()) ? field.value : undefined} onSelect={field.onChange} disabled={(date) => minLegDepartureDate ? date < minLegDepartureDate : true} initialFocus /> 
@@ -644,8 +660,7 @@ export function CreateQuoteForm() {
                             <Input type="time" defaultValue={field.value && field.value instanceof Date && !isNaN(field.value.getTime()) ? format(field.value, "HH:mm") : ""} onChange={(e) => { const time = e.target.value; const [hours, minutes] = time.split(':').map(Number); let newDate = field.value && field.value instanceof Date && !isNaN(field.value.getTime()) ? new Date(field.value) : new Date(); if (isNaN(newDate.getTime())) newDate = new Date(); newDate.setHours(hours, minutes,0,0); field.onChange(newDate); }} /> 
                           </div> 
                         </PopoverContent> 
-                      </Popover> 
-                     <FormMessage /> </FormItem> )} />
+                      </Popover> ) : ( <Skeleton className="h-10 w-full" /> )} <FormMessage /> </FormItem> )} />
                     
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <FormField control={control} name={`legs.${index}.legType`} render={({ field }) => ( <FormItem> <FormLabel>Leg Type</FormLabel> <Select onValueChange={field.onChange} value={field.value || ""} name={field.name}> <FormControl><SelectTrigger><SelectValue placeholder="Select leg type" /></SelectTrigger></FormControl> <SelectContent>{legTypes.map(type => (<SelectItem key={type} value={type}>{type}</SelectItem>))}</SelectContent> </Select> <FormMessage /> </FormItem> )} />
@@ -745,8 +760,9 @@ export function CreateQuoteForm() {
                         formattedBlockTime = `${String(blockHours).padStart(2, '0')}:${String(blockMinutes).padStart(2, '0')} hrs`;
                       }
                       
-                      const currentAircraftDetails = availableAircraft.find(ac => ac.id === aircraftTypeId);
-                      const currentAircraftName = currentAircraftDetails?.name;
+                      const currentAircraftSelectedId = getValues('aircraftType');
+                      const currentAircraftDetails = aircraftSelectOptions.find(ac => ac.value === currentAircraftSelectedId);
+                      const currentAircraftName = currentAircraftDetails?.label; // Use label for display/rate key
                       const hourlyRateForLeg = currentAircraftName ? (AIRCRAFT_RATES[currentAircraftName]?.sell || DEFAULT_AIRCRAFT_RATES.sell) : DEFAULT_AIRCRAFT_RATES.sell;
                       if (legFlightTimeHours > 0 && ["Charter", "Owner", "Ambulance", "Cargo"].includes(legData.legType)) {
                         legCost = legFlightTimeHours * hourlyRateForLeg;
@@ -899,3 +915,4 @@ export function CreateQuoteForm() {
     </Card>
   );
 }
+

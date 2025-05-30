@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { PlaneTakeoff as PerformanceIcon, Save, Copy, Wand2, Loader2, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { suggestAircraftPerformance, type SuggestAircraftPerformanceInput, type AircraftPerformanceOutput } from '@/ai/flows/suggest-aircraft-performance-flow';
+import { fetchAircraftRates, type AircraftRate } from '@/ai/flows/manage-aircraft-rates-flow'; // Import fetchAircraftRates
 
 const aircraftPerformanceSchema = z.object({
   takeoffSpeed: z.coerce.number().min(0).optional(),
@@ -33,41 +34,63 @@ const aircraftPerformanceSchema = z.object({
 
 type AircraftPerformanceFormData = z.infer<typeof aircraftPerformanceSchema>;
 
-const sampleAircraftList = [
-  { id: 'N123AB', name: 'N123AB - Cessna Citation CJ3' },
-  { id: 'N456CD', name: 'N456CD - Bombardier Global 6000' },
-  { id: 'N630MW', name: 'N630MW - Piper Cheyenne PA-31T2' },
-  { id: 'N789EF', name: 'N789EF - Gulfstream G650ER' },
-];
+interface AircraftOption {
+  id: string; // This is the aircraft ID/Name key from aircraftRates
+  name: string; // This is the display label
+}
 
 const fuelTypes = ["Jet Fuel", "Avgas", "Other"];
 
 // Placeholder for initial data for each aircraft
+// This will be managed more dynamically or fetched if integrated with a backend
 const initialPerformanceData: Record<string, Partial<AircraftPerformanceFormData>> = {
-  'N123AB': { takeoffSpeed: 100, cruiseSpeed: 415, cruiseAltitude: 45000, fuelBurn: 150, maxRange: 1800, maxAllowableTakeoffWeight: 13870, fuelType: "Jet Fuel" },
-  'N456CD': { takeoffSpeed: 130, cruiseSpeed: 488, cruiseAltitude: 51000, fuelBurn: 450, maxRange: 6000, maxAllowableTakeoffWeight: 99500, fuelType: "Jet Fuel" },
-  'N630MW': { takeoffSpeed: 101, landingSpeed: 104, climbSpeed: 165, climbRate: 1750, cruiseSpeed: 255, cruiseAltitude: 25000, descentSpeed: 255, descentRate: 1500, fuelType: "Jet Fuel", fuelBurn: 81.0, maxRange: 1145, maxAllowableTakeoffWeight: 9474 },
-  'N789EF': { takeoffSpeed: 140, cruiseSpeed: 516, cruiseAltitude: 51000, fuelBurn: 500, maxRange: 7500, maxAllowableTakeoffWeight: 103600, fuelType: "Jet Fuel" },
+  'N123AB - Cessna Citation CJ3': { takeoffSpeed: 100, cruiseSpeed: 415, cruiseAltitude: 45000, fuelBurn: 150, maxRange: 1800, maxAllowableTakeoffWeight: 13870, fuelType: "Jet Fuel" },
+  'N456CD - Bombardier Global 6000': { takeoffSpeed: 130, cruiseSpeed: 488, cruiseAltitude: 51000, fuelBurn: 450, maxRange: 6000, maxAllowableTakeoffWeight: 99500, fuelType: "Jet Fuel" },
+  'N630MW - Piper Cheyenne PA-31T2': { takeoffSpeed: 101, landingSpeed: 104, climbSpeed: 165, climbRate: 1750, cruiseSpeed: 255, cruiseAltitude: 25000, descentSpeed: 255, descentRate: 1500, fuelType: "Jet Fuel", fuelBurn: 81.0, maxRange: 1145, maxAllowableTakeoffWeight: 9474 },
+  'N789EF - Gulfstream G650ER': { takeoffSpeed: 140, cruiseSpeed: 516, cruiseAltitude: 51000, fuelBurn: 500, maxRange: 7500, maxAllowableTakeoffWeight: 103600, fuelType: "Jet Fuel" },
 };
 
 
 export function AircraftPerformanceForm() {
-  const [selectedAircraftId, setSelectedAircraftId] = useState<string | undefined>(sampleAircraftList[0]?.id);
+  const [selectedAircraftId, setSelectedAircraftId] = useState<string | undefined>(undefined);
   const [performanceDataStore, setPerformanceDataStore] = useState(initialPerformanceData);
   const { toast } = useToast();
   const [isSaving, startSaveTransition] = useTransition();
   const [isSuggestingWithAi, startAiSuggestionTransition] = useTransition();
 
+  const [aircraftSelectOptions, setAircraftSelectOptions] = useState<AircraftOption[]>([]);
+  const [isLoadingAircraft, setIsLoadingAircraft] = useState(true);
+
   const form = useForm<AircraftPerformanceFormData>({
     resolver: zodResolver(aircraftPerformanceSchema),
-    defaultValues: performanceDataStore[selectedAircraftId || ''] || {},
+    defaultValues: {}, // Default values will be set by useEffect based on selection
   });
+
+  useEffect(() => {
+    const loadAircraft = async () => {
+      setIsLoadingAircraft(true);
+      try {
+        const rates = await fetchAircraftRates();
+        const options = rates.map(rate => ({ id: rate.id, name: rate.id })); // Assuming rate.id is the name/key
+        setAircraftSelectOptions(options);
+        if (options.length > 0 && !selectedAircraftId) {
+          setSelectedAircraftId(options[0].id); // Select the first aircraft by default
+        }
+      } catch (error) {
+        console.error("Failed to fetch aircraft options:", error);
+        toast({ title: "Error", description: "Could not load aircraft list.", variant: "destructive" });
+      } finally {
+        setIsLoadingAircraft(false);
+      }
+    };
+    loadAircraft();
+  }, [toast, selectedAircraftId]); // Added selectedAircraftId to re-evaluate if it changes elsewhere
 
   useEffect(() => {
     if (selectedAircraftId) {
       form.reset(performanceDataStore[selectedAircraftId] || {});
     } else {
-      form.reset({}); // Reset to empty if no aircraft selected
+      form.reset({}); 
     }
   }, [selectedAircraftId, performanceDataStore, form]);
 
@@ -91,7 +114,7 @@ export function AircraftPerformanceForm() {
       toast({ title: "No Aircraft Selected", description: "Please select an aircraft first.", variant: "destructive" });
       return;
     }
-    const selectedAircraftObject = sampleAircraftList.find(ac => ac.id === selectedAircraftId);
+    const selectedAircraftObject = aircraftSelectOptions.find(ac => ac.id === selectedAircraftId);
     if (!selectedAircraftObject) {
       toast({ title: "Error", description: "Could not find selected aircraft details.", variant: "destructive" });
       return;
@@ -99,22 +122,24 @@ export function AircraftPerformanceForm() {
 
     startAiSuggestionTransition(async () => {
       try {
-        const aiInput: SuggestAircraftPerformanceInput = { aircraftName: selectedAircraftObject.name };
+        const aiInput: SuggestAircraftPerformanceInput = { aircraftName: selectedAircraftObject.name }; // Use the name property
         const suggestedData: AircraftPerformanceOutput = await suggestAircraftPerformance(aiInput);
         
-        // Filter out null/undefined values before resetting, coerce to number where appropriate for schema
         const validatedData: Partial<AircraftPerformanceFormData> = {};
         for (const key in suggestedData) {
             const typedKey = key as keyof AircraftPerformanceOutput;
             if (suggestedData[typedKey] !== null && suggestedData[typedKey] !== undefined) {
-                if (typeof aircraftPerformanceSchema.shape[typedKey]?._def.typeName === 'ZodNumber') {
-                    (validatedData as any)[typedKey] = Number(suggestedData[typedKey]);
-                } else {
-                    (validatedData as any)[typedKey] = suggestedData[typedKey];
+                // Ensure the key exists in the schema before attempting to check its type or assign
+                if (aircraftPerformanceSchema.shape[typedKey as keyof typeof aircraftPerformanceSchema.shape]) {
+                    if (typeof aircraftPerformanceSchema.shape[typedKey as keyof typeof aircraftPerformanceSchema.shape]._def.typeName === 'ZodNumber') {
+                        (validatedData as any)[typedKey] = Number(suggestedData[typedKey]);
+                    } else {
+                        (validatedData as any)[typedKey] = suggestedData[typedKey];
+                    }
                 }
             }
         }
-        form.reset(validatedData); // Reset form with AI suggested data
+        form.reset(validatedData); 
         toast({ title: "AI Suggestions Applied", description: "Review and save the suggested performance parameters.", variant: "default", action: <Wand2 className="text-green-500"/> });
       } catch (e) {
         console.error("Error suggesting aircraft performance:", e);
@@ -163,19 +188,24 @@ export function AircraftPerformanceForm() {
                 <CardTitle>Select Aircraft</CardTitle>
                 <CardDescription>Choose an aircraft to view or edit its performance settings.</CardDescription>
               </div>
-              <Button type="button" variant="outline" onClick={handleSetupWithAi} disabled={!selectedAircraftId || isSuggestingWithAi || isSaving}>
+              <Button type="button" variant="outline" onClick={handleSetupWithAi} disabled={!selectedAircraftId || isSuggestingWithAi || isSaving || isLoadingAircraft}>
                 {isSuggestingWithAi ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}
                 Setup with AI
               </Button>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Select onValueChange={setSelectedAircraftId} value={selectedAircraftId || ""}>
+            <Select 
+              onValueChange={setSelectedAircraftId} 
+              value={selectedAircraftId || ""} 
+              disabled={isLoadingAircraft}
+            >
               <SelectTrigger className="w-full sm:w-[350px]">
-                <SelectValue placeholder="Select an aircraft" />
+                <SelectValue placeholder={isLoadingAircraft ? "Loading aircraft..." : "Select an aircraft"} />
               </SelectTrigger>
               <SelectContent>
-                {sampleAircraftList.map(aircraft => (
+                 {!isLoadingAircraft && aircraftSelectOptions.length === 0 && <SelectItem value="NO_AIRCRAFT_CONFIGURED_PLACEHOLDER" disabled>No aircraft configured</SelectItem>}
+                {aircraftSelectOptions.map(aircraft => (
                   <SelectItem key={aircraft.id} value={aircraft.id}>
                     {aircraft.name}
                   </SelectItem>
@@ -199,7 +229,7 @@ export function AircraftPerformanceForm() {
             <CardHeader>
               <div className="flex items-center gap-2">
                 <PerformanceIcon className="h-6 w-6 text-primary" />
-                <CardTitle>Performance Settings for {sampleAircraftList.find(ac => ac.id === selectedAircraftId)?.name || selectedAircraftId}</CardTitle>
+                <CardTitle>Performance Settings for {aircraftSelectOptions.find(ac => ac.id === selectedAircraftId)?.name || selectedAircraftId}</CardTitle>
               </div>
               <CardDescription>Adjust the performance parameters below. AI suggestions can provide a starting point.</CardDescription>
             </CardHeader>
@@ -242,19 +272,25 @@ export function AircraftPerformanceForm() {
               </div>
             </CardContent>
             <CardFooter>
-              <Button type="submit" disabled={isSaving || isSuggestingWithAi}>
+              <Button type="submit" disabled={isSaving || isSuggestingWithAi || isLoadingAircraft}>
                 {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                 Save Performance Settings
               </Button>
             </CardFooter>
           </Card>
         )}
-        {!selectedAircraftId && (
+        {!selectedAircraftId && !isLoadingAircraft && (
             <div className="text-center py-10 text-muted-foreground">
                 Please select an aircraft to view or edit its performance settings.
+            </div>
+        )}
+        {isLoadingAircraft && (
+            <div className="text-center py-10 text-muted-foreground flex items-center justify-center">
+                <Loader2 className="mr-2 h-5 w-5 animate-spin"/> Loading aircraft data...
             </div>
         )}
       </form>
     </Form>
   );
 }
+
