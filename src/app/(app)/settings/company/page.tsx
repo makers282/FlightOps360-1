@@ -8,25 +8,31 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea'; // Added for address
 import { Building2, Plane, PlusCircle, Trash2, Save, XCircle, Loader2, Edit } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { fetchFleetAircraft, saveFleetAircraft, deleteFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
-
-const formatCurrency = (amount: number) => {
-  return amount.toLocaleString(undefined, { style: "currency", currency: "USD" });
-};
 
 export default function CompanySettingsPage() {
   const [fleet, setFleet] = useState<FleetAircraft[]>([]);
   const [isLoadingFleet, setIsLoadingFleet] = useState(true);
   const [isSaving, startSavingTransition] = useTransition();
-  const [isDeleting, startDeletingTransition] = useTransition();
+  const [isDeleting, startDeletingTransition] = useTransition(); // For aircraft deletion
   const { toast } = useToast();
 
+  // Aircraft form state
   const [showAddAircraftForm, setShowAddAircraftForm] = useState(false);
   const [newTailNumber, setNewTailNumber] = useState('');
   const [newModel, setNewModel] = useState('');
-  const [editingAircraftId, setEditingAircraftId] = useState<string | null>(null); // For editing existing aircraft
+  const [editingAircraftId, setEditingAircraftId] = useState<string | null>(null);
+
+  // Company Info form state
+  const [companyName, setCompanyName] = useState('');
+  const [companyAddress, setCompanyAddress] = useState('');
+  const [companyEmail, setCompanyEmail] = useState('');
+  const [companyPhone, setCompanyPhone] = useState('');
+  const [isSavingCompanyInfo, startSavingCompanyInfoTransition] = useTransition();
+
 
   useEffect(() => {
     const loadFleet = async () => {
@@ -42,6 +48,13 @@ export default function CompanySettingsPage() {
       }
     };
     loadFleet();
+    // TODO: In a real app, fetch and set existing company info here
+    // For now, initializing with some placeholder or empty strings
+    setCompanyName("FlightOps360 LLC");
+    setCompanyAddress("123 Aviation Way, Hangar B, Anytown, USA 12345");
+    setCompanyEmail("ops@flightops360.example.com");
+    setCompanyPhone("(555) 012-3456");
+
   }, [toast]);
 
   const handleEditAircraftClick = (aircraft: FleetAircraft) => {
@@ -53,12 +66,12 @@ export default function CompanySettingsPage() {
   
   const handleAddOrUpdateAircraft = () => {
     if (!newTailNumber || !newModel) {
-      toast({ title: "Missing Fields", description: "Please fill in Tail Number and Model.", variant: "destructive" });
+      toast({ title: "Missing Fields", description: "Please fill in Tail Number and Model for the aircraft.", variant: "destructive" });
       return;
     }
 
     const aircraftData: FleetAircraft = {
-      id: editingAircraftId || newTailNumber.toUpperCase().replace(/\s+/g, ''), // Use tail as ID if new, else existing ID
+      id: editingAircraftId || newTailNumber.toUpperCase().replace(/\s+/g, ''),
       tailNumber: newTailNumber.toUpperCase().trim(),
       model: newModel.trim(),
     };
@@ -103,6 +116,23 @@ export default function CompanySettingsPage() {
     });
   };
 
+  const handleSaveCompanyInfo = () => {
+    startSavingCompanyInfoTransition(() => {
+      // Simulate saving company info
+      console.log("Saving company information:", {
+        companyName,
+        companyAddress,
+        companyEmail,
+        companyPhone
+      });
+      toast({
+        title: "Company Information Saved (Simulated)",
+        description: "In a real app, this would save to a backend.",
+      });
+    });
+  };
+
+
   return (
     <>
       <PageHeader 
@@ -111,15 +141,39 @@ export default function CompanySettingsPage() {
         icon={Building2}
       />
 
-      <div className="space-y-6">
+      <div className="grid gap-6 md:grid-cols-2">
         <Card className="shadow-md">
           <CardHeader>
             <CardTitle>Company Information</CardTitle>
-            <CardDescription>Basic details about your company (placeholder).</CardDescription>
+            <CardDescription>Update your company's profile details.</CardDescription>
           </CardHeader>
-          <CardContent>
-            <p className="text-muted-foreground">Company details form will go here.</p>
-            {/* Placeholder for company info form: Name, Address, Contact, Logo upload etc. */}
+          <CardContent className="space-y-4">
+            <div>
+              <Label htmlFor="companyName">Company Name</Label>
+              <Input id="companyName" value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder="Your Company LLC" />
+            </div>
+            <div>
+              <Label htmlFor="companyAddress">Address</Label>
+              <Textarea id="companyAddress" value={companyAddress} onChange={(e) => setCompanyAddress(e.target.value)} placeholder="123 Main St, City, State, Zip" rows={3}/>
+            </div>
+            <div>
+              <Label htmlFor="companyEmail">Contact Email</Label>
+              <Input id="companyEmail" type="email" value={companyEmail} onChange={(e) => setCompanyEmail(e.target.value)} placeholder="contact@company.com" />
+            </div>
+            <div>
+              <Label htmlFor="companyPhone">Contact Phone</Label>
+              <Input id="companyPhone" type="tel" value={companyPhone} onChange={(e) => setCompanyPhone(e.target.value)} placeholder="(555) 123-4567" />
+            </div>
+             {/* Placeholder for Logo upload */}
+            <div className="space-y-1">
+                <Label htmlFor="logoUpload">Company Logo</Label>
+                <Input id="logoUpload" type="file" disabled className="text-sm file:mr-2 file:rounded-md file:border-0 file:bg-muted file:px-3 file:py-1.5 file:text-muted-foreground hover:file:bg-muted/80"/>
+                <p className="text-xs text-muted-foreground">Logo upload functionality to be implemented.</p>
+            </div>
+            <Button onClick={handleSaveCompanyInfo} disabled={isSavingCompanyInfo}>
+              {isSavingCompanyInfo ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+              Save Company Information
+            </Button>
           </CardContent>
         </Card>
 

@@ -26,7 +26,9 @@ import {
   FileArchive,
   SlidersHorizontal,
   PlaneTakeoff,
-  Building2, // Added for Company Settings
+  Building2,
+  Wrench, // Added for Maintenance Currency
+  ClipboardCheck, // Alternative for Maintenance Currency
 } from 'lucide-react';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -63,8 +65,7 @@ export default function AppLayout({ children }: PropsWithChildren) {
       <Sidebar>
         <SidebarHeader className="p-4">
           <Link href="/dashboard" className="flex items-center">
-            <Icons.Logo className="h-7" />
-            {/* Text is part of the logo image now */}
+            <Icons.Logo className="h-8 w-auto" /> {/* Adjusted for potentially wider logo */}
           </Link>
         </SidebarHeader>
         <SidebarContent>
@@ -124,6 +125,20 @@ export default function AppLayout({ children }: PropsWithChildren) {
                 </SidebarMenuSubButton>
               </SidebarMenuSub>
             </SidebarMenuItem>
+            
+            <SidebarMenuItem>
+              <SidebarMenuButton isSubmenuTrigger tooltip="Aircraft">
+                <Plane />
+                Aircraft
+              </SidebarMenuButton>
+              <SidebarMenuSub>
+                <SidebarMenuSubButton href="/aircraft/currency" tooltip="Maintenance Currency">
+                  <Wrench /> 
+                  Maintenance Currency
+                </SidebarMenuSubButton>
+                {/* We can add more aircraft specific links here later */}
+              </SidebarMenuSub>
+            </SidebarMenuItem>
 
             <SidebarMenuItem>
               <SidebarMenuButton href="/documents" tooltip="Document Hub">
@@ -134,12 +149,12 @@ export default function AppLayout({ children }: PropsWithChildren) {
 
             <SidebarMenuItem>
               <SidebarMenuButton isSubmenuTrigger tooltip="Crew Management">
-                <UsersRound />
+                <Users /> {/* Changed from UsersRound for variety */}
                 Crew Management
               </SidebarMenuButton>
               <SidebarMenuSub>
                  <SidebarMenuSubButton href="/crew/status" tooltip="Crew Status">
-                  <Users />
+                  <UsersRound /> {/* Back to UsersRound for consistency here */}
                   Crew Status
                 </SidebarMenuSubButton>
                 <SidebarMenuSubButton href="/crew/documents" tooltip="Crew Documents">
@@ -171,7 +186,7 @@ export default function AppLayout({ children }: PropsWithChildren) {
               <SidebarMenuButton href="/notifications" tooltip="Notifications">
                 <Bell />
                 Notifications
-                <SidebarMenuBadge>3</SidebarMenuBadge> {/* Example badge */}
+                <SidebarMenuBadge>3</SidebarMenuBadge> 
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
