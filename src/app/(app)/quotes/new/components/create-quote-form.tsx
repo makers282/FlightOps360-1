@@ -31,7 +31,6 @@ import { estimateFlightDetails, type EstimateFlightDetailsInput, type EstimateFl
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { LegsSummaryTable } from './legs-summary-table';
 import { CostsSummaryDisplay, type LineItem } from './costs-summary-display';
-// import { fetchFbosForAirport, type FetchFbosInput, type FetchFbosOutput, type Fbo as FetchedFbo } from '@/ai/flows/fetch-fbos-flow';
 
 
 const legTypes = [
@@ -94,7 +93,6 @@ const availableAircraft = [
   { id: 'HEAVY_JET', name: 'Category: Heavy Jet' },
 ];
 
-// Define buy and sell rates for aircraft and other costs
 const AIRCRAFT_RATES: { [key: string]: { buy: number; sell: number } } = {
   'N123AB - Cessna Citation CJ3': { buy: 2800, sell: 3200 },
   'N456CD - Bombardier Global 6000': { buy: 5800, sell: 6500 },
@@ -103,7 +101,7 @@ const AIRCRAFT_RATES: { [key: string]: { buy: number; sell: number } } = {
   'Category: Midsize Jet': { buy: 4000, sell: 4500 },
   'Category: Heavy Jet': { buy: 7000, sell: 7500 },
 };
-const DEFAULT_AIRCRAFT_RATES = { buy: 3500, sell: 4000 }; // Default if specific aircraft not found
+const DEFAULT_AIRCRAFT_RATES = { buy: 3500, sell: 4000 }; 
 
 const OTHER_COST_RATES = {
   FUEL_SURCHARGE_PER_BLOCK_HOUR: { buy: 300, sell: 400, unitDescription: "Block Hour" },
@@ -120,13 +118,6 @@ const sampleCustomerData = [
   { id: 'CUST004', name: 'Emily White', company: 'White Solutions', email: 'emily.white@example.com', phone: '555-4321' },
 ];
 
-// const sampleFboList = [
-//   { id: 'SIG', name: 'Signature Flight Support' },
-//   { id: 'ATL', name: 'Atlantic Aviation' },
-//   { id: 'JET', name: 'Jet Aviation' },
-//   { id: 'TAC', name: 'TAC Air' },
-//   { id: 'OTH', name: 'Other / To Be Advised' },
-// ];
 
 export function CreateQuoteForm() {
   const [isGeneratingQuote, startQuoteGenerationTransition] = useTransition();
@@ -136,10 +127,6 @@ export function CreateQuoteForm() {
   const [isClient, setIsClient] = useState(false);
   const [legEstimates, setLegEstimates] = useState<Array<LegEstimate | null>>([]);
   const [calculatedLineItems, setCalculatedLineItems] = useState<LineItem[]>([]);
-
-  // const [originFboOptionsPerLeg, setOriginFboOptionsPerLeg] = useState<FetchedFbo[][]>([]);
-  // const [destinationFboOptionsPerLeg, setDestinationFboOptionsPerLeg] = useState<FetchedFbo[][]>([]);
-  // const [fetchingFbosForLeg, setFetchingFbosForLeg] = useState<{origin?: boolean; destination?: boolean}[]>([]);
 
 
   const form = useForm<FullQuoteFormData>({ 
@@ -221,16 +208,7 @@ export function CreateQuoteForm() {
             return newEstimates;
         });
     }
-    // if (legsArray && originFboOptionsPerLeg.length !== legsArray.length) {
-    //   setOriginFboOptionsPerLeg(new Array(legsArray.length).fill([]));
-    // }
-    // if (legsArray && destinationFboOptionsPerLeg.length !== legsArray.length) {
-    //   setDestinationFboOptionsPerLeg(new Array(legsArray.length).fill([]));
-    // }
-    // if (legsArray && fetchingFbosForLeg.length !== legsArray.length) {
-    //   setFetchingFbosForLeg(new Array(legsArray.length).fill({}));
-    // }
-  }, [legsArray, legEstimates.length]); // originFboOptionsPerLeg.length, destinationFboOptionsPerLeg.length, fetchingFbosForLeg.length]);
+  }, [legsArray, legEstimates.length]);
 
 
   useEffect(() => {
@@ -310,7 +288,7 @@ export function CreateQuoteForm() {
       });
     }
 
-    const validLegsCount = legsArray.filter(leg => leg.origin && leg.destination).length;
+    const validLegsCount = legsArray.filter(leg => leg.origin && leg.destination && leg.origin.length >=3 && leg.destination.length >=3).length;
     if (includeLandingFees && validLegsCount > 0) {
       const sellRate = sellPriceLandingFeePerLeg ?? OTHER_COST_RATES.LANDING_FEE_PER_LEG.sell;
       newItems.push({
@@ -351,98 +329,6 @@ export function CreateQuoteForm() {
     includeLandingFees, sellPriceLandingFeePerLeg,
     currentEstimatedOvernights, sellPriceOvernight,
   ]);
-
-
-  // const loadFbosForLeg = useCallback(async (legIndex: number, airportCode: string, type: 'origin' | 'destination') => {
-  //   if (!airportCode || airportCode.length < 3) {
-  //     if (type === 'origin') {
-  //       setOriginFboOptionsPerLeg(prev => { const newOpts = [...prev]; newOpts[legIndex] = []; return newOpts; });
-  //     } else {
-  //       setDestinationFboOptionsPerLeg(prev => { const newOpts = [...prev]; newOpts[legIndex] = []; return newOpts; });
-  //     }
-  //     return;
-  //   }
-
-  //   console.log(`[CLIENT DEBUG] loadFbosForLeg CALLED for Leg ${legIndex + 1} (${type}), Airport: ${airportCode}`);
-  //   setFetchingFbosForLeg(prev => {
-  //     const newState = [...prev];
-  //     newState[legIndex] = { ...newState[legIndex], [type]: true };
-  //     console.log(`[CLIENT DEBUG] loadFbosForLeg - Setting fetching to true for leg ${legIndex} ${type}`, newState[legIndex]);
-  //     return newState;
-  //   });
-
-  //   let fbos: FetchedFbo[] = [];
-  //   try {
-  //     console.log(`[CLIENT DEBUG] FBO Fetch Start for Leg ${legIndex + 1} (${type}), Airport: ${airportCode}`);
-  //     const result = await fetchFbosForAirport({ airportCode });
-  //     console.log(`[CLIENT DEBUG] RAW RESULT from fetchFbosForAirport for Leg ${legIndex + 1} (${type}):`, JSON.stringify(result));
-
-  //     if (Array.isArray(result)) {
-  //       fbos = result;
-  //     } else {
-  //       console.warn(`[CLIENT DEBUG] fetchFbosForAirport did not return an array for Leg ${legIndex + 1} (${type}). Received:`, result);
-  //     }
-  //     console.log(`[CLIENT DEBUG] Fetched FBOs for Leg ${legIndex + 1} (${type}) (processed as 'fbos'):`, JSON.stringify(fbos));
-
-  //     if (type === 'origin') {
-  //       console.log(`[CLIENT DEBUG] SETTING Origin FBO Options for leg ${legIndex} with:`, JSON.stringify(fbos));
-  //       setOriginFboOptionsPerLeg(prev => { const newOpts = [...prev]; newOpts[legIndex] = fbos; return newOpts; });
-  //     } else {
-  //       console.log(`[CLIENT DEBUG] SETTING Destination FBO Options for leg ${legIndex} with:`, JSON.stringify(fbos));
-  //       setDestinationFboOptionsPerLeg(prev => { const newOpts = [...prev]; newOpts[legIndex] = fbos; return newOpts; });
-  //     }
-  //   } catch (error) {
-  //     console.error(`[CLIENT DEBUG] FBO Fetch Error for Leg ${legIndex + 1} (${type}), Airport ${airportCode}:`, error);
-  //     toast({ title: `Error Fetching FBOs for ${airportCode}`, description: (error as Error).message, variant: "destructive" });
-  //     if (type === 'origin') {
-  //       setOriginFboOptionsPerLeg(prev => { const newOpts = [...prev]; newOpts[legIndex] = []; return newOpts; });
-  //     } else {
-  //       setDestinationFboOptionsPerLeg(prev => { const newOpts = [...prev]; newOpts[legIndex] = []; return newOpts; });
-  //     }
-  //   } finally {
-  //     setFetchingFbosForLeg(prev => {
-  //       const newState = [...prev];
-  //       newState[legIndex] = { ...newState[legIndex], [type]: false };
-  //       console.log(`[CLIENT DEBUG] loadFbosForLeg - Setting fetching to false for leg ${legIndex} ${type}`, newState[legIndex]);
-  //       return newState;
-  //     });
-  //   }
-  // }, [toast, setOriginFboOptionsPerLeg, setDestinationFboOptionsPerLeg, setFetchingFbosForLeg]);
-
-
-  // useEffect(() => {
-  //   legsArray.forEach((leg, index) => {
-  //     const currentOrigin = leg.origin?.toUpperCase();
-  //     const currentDestination = leg.destination?.toUpperCase();
-      
-  //     const hasFetchedOrigin = originFboOptionsPerLeg[index]?.length > 0 || (originFboOptionsPerLeg[index] && !fetchingFbosForLeg[index]?.origin);
-  //     const hasFetchedDestination = destinationFboOptionsPerLeg[index]?.length > 0 || (destinationFboOptionsPerLeg[index] && !fetchingFbosForLeg[index]?.destination);
-
-  //     if (currentOrigin && currentOrigin.length >= 3 && !fetchingFbosForLeg[index]?.origin && (!originFboOptionsPerLeg[index] || originFboOptionsPerLeg[index].length === 0 || originFboOptionsPerLeg[index][0]?.airportCode !== currentOrigin) ) {
-  //        if (originFboOptionsPerLeg[index] && originFboOptionsPerLeg[index].length > 0 && originFboOptionsPerLeg[index][0]?.airportCode === currentOrigin && !fetchingFbosForLeg[index]?.origin) {
-  //           // Already fetched for this airport
-  //       } else {
-  //           loadFbosForLeg(index, currentOrigin, 'origin');
-  //       }
-  //     } else if (!currentOrigin || currentOrigin.length < 3) {
-  //       if(originFboOptionsPerLeg[index] && originFboOptionsPerLeg[index].length > 0) {
-  //         setOriginFboOptionsPerLeg(prev => { const newOpts = [...prev]; newOpts[index] = []; return newOpts; });
-  //       }
-  //     }
-
-  //     if (currentDestination && currentDestination.length >= 3 && !fetchingFbosForLeg[index]?.destination && (!destinationFboOptionsPerLeg[index] || destinationFboOptionsPerLeg[index].length === 0 || destinationFboOptionsPerLeg[index][0]?.airportCode !== currentDestination) ) {
-  //       if (destinationFboOptionsPerLeg[index] && destinationFboOptionsPerLeg[index].length > 0 && destinationFboOptionsPerLeg[index][0]?.airportCode === currentDestination && !fetchingFbosForLeg[index]?.destination) {
-  //           // Already fetched
-  //       } else {
-  //           loadFbosForLeg(index, currentDestination, 'destination');
-  //       }
-  //     } else if (!currentDestination || currentDestination.length < 3) {
-  //        if(destinationFboOptionsPerLeg[index] && destinationFboOptionsPerLeg[index].length > 0) {
-  //          setDestinationFboOptionsPerLeg(prev => { const newOpts = [...prev]; newOpts[index] = []; return newOpts; });
-  //        }
-  //     }
-  //   });
-  // }, [legsArray, loadFbosForLeg, originFboOptionsPerLeg, destinationFboOptionsPerLeg, fetchingFbosForLeg]);
 
 
   const handleEstimateFlightDetails = useCallback(async (legIndex: number) => {
@@ -601,8 +487,8 @@ export function CreateQuoteForm() {
     let previousLegPax = 1;
     let previousLegOriginTaxi = 15;
     let previousLegDestTaxi = 15;
-    let previousLegOriginFbo = ''; // For text input
-    let previousLegDestinationFbo = ''; // For text input
+    let previousLegOriginFbo = '';
+    let previousLegDestinationFbo = '';
 
 
     if (fields.length > 0) {
@@ -647,9 +533,6 @@ export function CreateQuoteForm() {
   const handleRemoveLeg = (index: number) => {
     remove(index);
     setLegEstimates(prev => { const newEstimates = [...prev]; newEstimates.splice(index, 1); return newEstimates; });
-    // setOriginFboOptionsPerLeg(prev => { const newOpts = [...prev]; newOpts.splice(index, 1); return newOpts; });
-    // setDestinationFboOptionsPerLeg(prev => { const newOpts = [...prev]; newOpts.splice(index, 1); return newOpts; });
-    // setFetchingFbosForLeg(prev => { const newFetching = [...prev]; newFetching.splice(index, 1); return newFetching; });
   };
 
   const handleCustomerSelect = (customerId: string | undefined) => {
@@ -682,7 +565,7 @@ export function CreateQuoteForm() {
             
             <section>
               <CardTitle className="text-xl border-b pb-2 mb-4">Client Information</CardTitle>
-              <FormField control={control} name="selectedCustomerId" render={({ field }) => ( <FormItem className="mb-4"> <FormLabel className="flex items-center gap-1"><UserSearch className="h-4 w-4" /> Select Existing Client (Optional)</FormLabel> <Select onValueChange={(value) => { handleCustomerSelect(value); field.onChange(value); }} value={field.value || ""} name={field.name} > <FormControl><SelectTrigger><SelectValue placeholder="Select a client to auto-fill details" /></SelectTrigger></FormControl> <SelectContent>{sampleCustomerData.map(customer => (<SelectItem key={customer.id} value={customer.id}>{customer.name} ({customer.company})</SelectItem>))}</SelectContent> </Select> <FormDescription>Choosing a client will auto-populate their details below.</FormDescription> <FormMessage /> </FormItem> )} />
+              <FormField control={control} name="selectedCustomerId" render={({ field }) => ( <FormItem className="mb-4"> <FormLabel className="flex items-center gap-1"><UserSearch className="h-4 w-4" /> Select Existing Client (Optional)</FormLabel> <Select onValueChange={(value) => { handleCustomerSelect(value === "CREATE_NEW_CUSTOMER_PLACEHOLDER" ? undefined : value); field.onChange(value === "CREATE_NEW_CUSTOMER_PLACEHOLDER" ? undefined : value); }} value={field.value || ""} name={field.name} > <FormControl><SelectTrigger><SelectValue placeholder="Select a client to auto-fill details" /></SelectTrigger></FormControl> <SelectContent><SelectItem value="CREATE_NEW_CUSTOMER_PLACEHOLDER">--- Or Enter New Client Details Below ---</SelectItem>{sampleCustomerData.map(customer => (<SelectItem key={customer.id} value={customer.id}>{customer.name} ({customer.company})</SelectItem>))}</SelectContent> </Select> <FormDescription>Choosing a client will auto-populate their details below.</FormDescription> <FormMessage /> </FormItem> )} />
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 mb-4">
                 <FormField control={control} name="clientName" render={({ field }) => ( <FormItem> <FormLabel>Client Name</FormLabel> <FormControl><Input placeholder="e.g., John Doe" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
                 <FormField control={control} name="clientEmail" render={({ field }) => ( <FormItem> <FormLabel>Client Email</FormLabel> <FormControl><Input type="email" placeholder="e.g., john.doe@example.com" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
@@ -745,39 +628,89 @@ export function CreateQuoteForm() {
                         <FormField control={control} name={`legs.${index}.originFbo`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><Building className="h-4 w-4" />Origin FBO (Optional)</FormLabel> <FormControl><Input placeholder="e.g., Signature, Atlantic" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
                         <FormField control={control} name={`legs.${index}.destinationFbo`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><Building className="h-4 w-4" />Destination FBO (Optional)</FormLabel> <FormControl><Input placeholder="e.g., Signature, Atlantic" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
                     </div>
-                     <FormField control={control} name={`legs.${index}.departureDateTime`} render={({ field }) => ( <FormItem className="flex flex-col"> <FormLabel>Desired Departure Date & Time</FormLabel> {isClient ? ( <Popover> 
-                        <PopoverTrigger asChild> 
-                            <Button 
-                              variant={"outline"} 
-                              className={cn(
-                                "w-full pl-3 text-left font-normal", 
-                                !(field.value && field.value instanceof Date && !isNaN(field.value.getTime())) && "text-muted-foreground"
-                              )}
-                            > 
-                              <span>
-                                {field.value && field.value instanceof Date && !isNaN(field.value.getTime()) 
-                                  ? format(field.value, "PPP HH:mm") 
-                                  : "Pick a date and time"}
-                              </span>
-                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" /> 
-                            </Button> 
+                     <FormField control={control} name={`legs.${index}.departureDateTime`} render={({ field }) => ( <FormItem className="flex flex-col"> <FormLabel>Desired Departure Date & Time</FormLabel> 
+                      <Popover> <PopoverTrigger asChild> 
+                          <Button 
+                            variant={"outline"} 
+                            className={cn("w-full pl-3 text-left font-normal", !(field.value && field.value instanceof Date && !isNaN(field.value.getTime())) && "text-muted-foreground")}
+                          > 
+                            <span>{field.value && field.value instanceof Date && !isNaN(field.value.getTime()) ? format(field.value, "PPP HH:mm") : "Pick a date and time"}</span> 
+                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" /> 
+                          </Button> 
                         </PopoverTrigger> 
                         <PopoverContent className="w-auto p-0" align="start"> 
-                            <Calendar mode="single" selected={field.value && field.value instanceof Date && !isNaN(field.value.getTime()) ? field.value : undefined} onSelect={field.onChange} disabled={(date) => minLegDepartureDate ? date < minLegDepartureDate : true} initialFocus /> 
-                            <div className="p-2 border-t border-border"> 
-                                <Input type="time" defaultValue={field.value && field.value instanceof Date && !isNaN(field.value.getTime()) ? format(field.value, "HH:mm") : ""} onChange={(e) => { const time = e.target.value; const [hours, minutes] = time.split(':').map(Number); let newDate = field.value && field.value instanceof Date && !isNaN(field.value.getTime()) ? new Date(field.value) : new Date(); if (isNaN(newDate.getTime())) newDate = new Date(); newDate.setHours(hours, minutes,0,0); field.onChange(newDate); }} /> 
-                            </div> 
+                          <Calendar mode="single" selected={field.value && field.value instanceof Date && !isNaN(field.value.getTime()) ? field.value : undefined} onSelect={field.onChange} disabled={(date) => minLegDepartureDate ? date < minLegDepartureDate : true} initialFocus /> 
+                          <div className="p-2 border-t border-border"> 
+                            <Input type="time" defaultValue={field.value && field.value instanceof Date && !isNaN(field.value.getTime()) ? format(field.value, "HH:mm") : ""} onChange={(e) => { const time = e.target.value; const [hours, minutes] = time.split(':').map(Number); let newDate = field.value && field.value instanceof Date && !isNaN(field.value.getTime()) ? new Date(field.value) : new Date(); if (isNaN(newDate.getTime())) newDate = new Date(); newDate.setHours(hours, minutes,0,0); field.onChange(newDate); }} /> 
+                          </div> 
                         </PopoverContent> 
-                      </Popover> ) : ( <Skeleton className="h-10 w-full" /> )} <FormMessage /> </FormItem> )} />
+                      </Popover> 
+                     <FormMessage /> </FormItem> )} />
                     
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <FormField control={control} name={`legs.${index}.legType`} render={({ field }) => ( <FormItem> <FormLabel>Leg Type</FormLabel> <Select onValueChange={field.onChange} value={field.value || ""} name={field.name}> <FormControl><SelectTrigger><SelectValue placeholder="Select leg type" /></SelectTrigger></FormControl> <SelectContent>{legTypes.map(type => (<SelectItem key={type} value={type}>{type}</SelectItem>))}</SelectContent> </Select> <FormMessage /> </FormItem> )} />
-                        <FormField control={control} name={`legs.${index}.passengerCount`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><Users className="h-4 w-4" />Passengers</FormLabel> <FormControl><Input type="number" placeholder="e.g., 2" {...field} min="0" onChange={e => field.onChange(parseInt(e.target.value, 10))} /></FormControl> <FormMessage /> </FormItem> )} />
+                        <FormField control={control} name={`legs.${index}.passengerCount`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><Users className="h-4 w-4" />Passengers</FormLabel> 
+                          <FormControl>
+                            <Input 
+                              type="number" 
+                              placeholder="e.g., 1" 
+                              {...field} 
+                              value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : field.value}
+                              onChange={e => {
+                                const val = parseInt(e.target.value, 10);
+                                field.onChange(isNaN(val) ? undefined : val);
+                              }}
+                              min="0"
+                            />
+                          </FormControl> 
+                        <FormMessage /> </FormItem> )} />
                     </div>
                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                        <FormField control={control} name={`legs.${index}.originTaxiTimeMinutes`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1">Origin Taxi (mins)</FormLabel> <FormControl><Input type="number" placeholder="e.g., 15" {...field} min="0" onChange={e => field.onChange(parseInt(e.target.value, 10))} /></FormControl> <FormMessage /> </FormItem> )} />
-                        <FormField control={control} name={`legs.${index}.flightTimeHours`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><PlaneTakeoff className="h-4 w-4" />Flight Time (hrs)</FormLabel> <FormControl><Input type="number" step="0.1" placeholder="e.g., 2.5" {...field} onChange={e => field.onChange(parseFloat(e.target.value))} /></FormControl> <FormDescription className="text-xs">Populated by AI, editable.</FormDescription><FormMessage /> </FormItem> )} />
-                        <FormField control={control} name={`legs.${index}.destinationTaxiTimeMinutes`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1">Dest. Taxi (mins)</FormLabel> <FormControl><Input type="number" placeholder="e.g., 15" {...field} min="0" onChange={e => field.onChange(parseInt(e.target.value, 10))} /></FormControl> <FormMessage /> </FormItem> )} />
+                        <FormField control={control} name={`legs.${index}.originTaxiTimeMinutes`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1">Origin Taxi (mins)</FormLabel> 
+                          <FormControl>
+                            <Input 
+                              type="number" 
+                              placeholder="e.g., 15" 
+                              {...field} 
+                              value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : field.value}
+                              onChange={e => {
+                                const val = parseInt(e.target.value, 10);
+                                field.onChange(isNaN(val) ? undefined : val);
+                              }}
+                              min="0"
+                            />
+                          </FormControl> 
+                        <FormMessage /> </FormItem> )} />
+                        <FormField control={control} name={`legs.${index}.flightTimeHours`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><PlaneTakeoff className="h-4 w-4" />Flight Time (hrs)</FormLabel> 
+                          <FormControl>
+                            <Input 
+                              type="number" 
+                              step="0.1" 
+                              placeholder="e.g., 2.5" 
+                              {...field} 
+                              value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : field.value}
+                              onChange={e => {
+                                const val = parseFloat(e.target.value);
+                                field.onChange(isNaN(val) ? undefined : val);
+                              }}
+                            />
+                          </FormControl> 
+                        <FormDescription className="text-xs">Populated by AI, editable.</FormDescription><FormMessage /> </FormItem> )} />
+                        <FormField control={control} name={`legs.${index}.destinationTaxiTimeMinutes`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1">Dest. Taxi (mins)</FormLabel> 
+                          <FormControl>
+                            <Input 
+                              type="number" 
+                              placeholder="e.g., 15" 
+                              {...field} 
+                              value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : field.value}
+                              onChange={e => {
+                                const val = parseInt(e.target.value, 10);
+                                field.onChange(isNaN(val) ? undefined : val);
+                              }}
+                              min="0"
+                            />
+                          </FormControl> 
+                        <FormMessage /> </FormItem> )} />
                     </div>
 
                     <Button type="button" variant="outline" size="sm" onClick={() => handleEstimateFlightDetails(index)} disabled={estimatingLegIndex === index || !aircraftTypeId} className="w-full sm:w-auto"> {estimatingLegIndex === index ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />} Estimate Flight Details </Button>
@@ -854,20 +787,99 @@ export function CreateQuoteForm() {
                 <CardTitle className="text-xl border-b pb-2 mb-4">Additional Quote Options & Pricing</CardTitle>
                 <div className="space-y-4">
                     <FormField control={control} name="fuelSurchargeRequested" render={({ field }) => ( <FormItem className="flex flex-row items-center space-x-3 space-y-0 p-3 border rounded-md hover:bg-muted/50"> <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl> <div className="space-y-1 leading-none"><FormLabel className="flex items-center gap-2"><Fuel className="h-4 w-4 text-primary" /> Include Fuel Surcharge (${OTHER_COST_RATES.FUEL_SURCHARGE_PER_BLOCK_HOUR.sell}/Block Hr)</FormLabel></div> </FormItem> )} />
-                    {fuelSurchargeRequested && <FormField control={control} name="sellPriceFuelSurchargePerHour" render={({ field }) => (<FormItem className="pl-8"> <FormLabel>Fuel Surcharge Sell Price (per Block Hour)</FormLabel> <FormControl><Input type="number" placeholder={`Default: $${OTHER_COST_RATES.FUEL_SURCHARGE_PER_BLOCK_HOUR.sell.toLocaleString()}`} {...field} onChange={e => field.onChange(parseFloat(e.target.value))} /></FormControl> <FormMessage /> </FormItem> )} />}
+                    {fuelSurchargeRequested && <FormField control={control} name="sellPriceFuelSurchargePerHour" render={({ field }) => (<FormItem className="pl-8"> <FormLabel>Fuel Surcharge Sell Price (per Block Hour)</FormLabel> 
+                      <FormControl>
+                        <Input 
+                          type="number" 
+                          placeholder={`Default: $${OTHER_COST_RATES.FUEL_SURCHARGE_PER_BLOCK_HOUR.sell.toLocaleString()}`} 
+                          {...field} 
+                          value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : field.value}
+                          onChange={e => {
+                            const val = parseFloat(e.target.value);
+                            field.onChange(isNaN(val) ? undefined : val);
+                          }}
+                        />
+                      </FormControl> 
+                    <FormMessage /> </FormItem> )} />}
 
                     <FormField control={control} name="medicsRequested" render={({ field }) => ( <FormItem className="flex flex-row items-center space-x-3 space-y-0 p-3 border rounded-md hover:bg-muted/50"> <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl> <div className="space-y-1 leading-none"><FormLabel className="flex items-center gap-2"><Users className="h-4 w-4 text-primary" /> Medics Requested (${OTHER_COST_RATES.MEDICS_FEE_FLAT.sell.toLocaleString()})</FormLabel></div> </FormItem> )} />
-                    {medicsRequested && <FormField control={control} name="sellPriceMedics" render={({ field }) => (<FormItem className="pl-8"> <FormLabel>Medics Fee Sell Price</FormLabel> <FormControl><Input type="number" placeholder={`Default: $${OTHER_COST_RATES.MEDICS_FEE_FLAT.sell.toLocaleString()}`} {...field} onChange={e => field.onChange(parseFloat(e.target.value))} /></FormControl> <FormMessage /> </FormItem> )} />}
+                    {medicsRequested && <FormField control={control} name="sellPriceMedics" render={({ field }) => (<FormItem className="pl-8"> <FormLabel>Medics Fee Sell Price</FormLabel> 
+                      <FormControl>
+                        <Input 
+                          type="number" 
+                          placeholder={`Default: $${OTHER_COST_RATES.MEDICS_FEE_FLAT.sell.toLocaleString()}`} 
+                          {...field} 
+                          value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : field.value}
+                          onChange={e => {
+                            const val = parseFloat(e.target.value);
+                            field.onChange(isNaN(val) ? undefined : val);
+                          }}
+                        />
+                      </FormControl> 
+                    <FormMessage /> </FormItem> )} />}
                     
                     <FormField control={control} name="cateringRequested" render={({ field }) => ( <FormItem className="flex flex-row items-center space-x-3 space-y-0 p-3 border rounded-md hover:bg-muted/50"> <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl> <div className="space-y-1 leading-none"><FormLabel className="flex items-center gap-2"><Utensils className="h-4 w-4 text-primary" /> Catering Requested (${OTHER_COST_RATES.CATERING_FEE_FLAT.sell.toLocaleString()})</FormLabel></div> </FormItem> )} />
                     {cateringRequested && ( <FormField control={control} name="cateringNotes" render={({ field }) => ( <FormItem className="pl-8"> <FormLabel>Catering Notes</FormLabel> <FormControl><Textarea placeholder="Specify catering details..." {...field} rows={3} /></FormControl> <FormMessage /> </FormItem> )} /> )}
-                    {cateringRequested && <FormField control={control} name="sellPriceCatering" render={({ field }) => (<FormItem className="pl-8"> <FormLabel>Catering Fee Sell Price</FormLabel> <FormControl><Input type="number" placeholder={`Default: $${OTHER_COST_RATES.CATERING_FEE_FLAT.sell.toLocaleString()}`} {...field} onChange={e => field.onChange(parseFloat(e.target.value))} /></FormControl> <FormMessage /> </FormItem> )} />}
+                    {cateringRequested && <FormField control={control} name="sellPriceCatering" render={({ field }) => (<FormItem className="pl-8"> <FormLabel>Catering Fee Sell Price</FormLabel> 
+                      <FormControl>
+                        <Input 
+                          type="number" 
+                          placeholder={`Default: $${OTHER_COST_RATES.CATERING_FEE_FLAT.sell.toLocaleString()}`} 
+                          {...field} 
+                          value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : field.value}
+                          onChange={e => {
+                            const val = parseFloat(e.target.value);
+                            field.onChange(isNaN(val) ? undefined : val);
+                          }}
+                        />
+                      </FormControl> 
+                    <FormMessage /> </FormItem> )} />}
 
                     <FormField control={control} name="includeLandingFees" render={({ field }) => ( <FormItem className="flex flex-row items-center space-x-3 space-y-0 p-3 border rounded-md hover:bg-muted/50"> <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl> <div className="space-y-1 leading-none"><FormLabel className="flex items-center gap-2"><Landmark className="h-4 w-4 text-primary" /> Include Landing Fees (${OTHER_COST_RATES.LANDING_FEE_PER_LEG.sell.toLocaleString()}/Leg)</FormLabel></div> </FormItem> )} />
-                    {includeLandingFees && <FormField control={control} name="sellPriceLandingFeePerLeg" render={({ field }) => (<FormItem className="pl-8"> <FormLabel>Landing Fee Sell Price (per Leg)</FormLabel> <FormControl><Input type="number" placeholder={`Default: $${OTHER_COST_RATES.LANDING_FEE_PER_LEG.sell.toLocaleString()}`} {...field} onChange={e => field.onChange(parseFloat(e.target.value))} /></FormControl> <FormMessage /> </FormItem> )} />}
+                    {includeLandingFees && <FormField control={control} name="sellPriceLandingFeePerLeg" render={({ field }) => (<FormItem className="pl-8"> <FormLabel>Landing Fee Sell Price (per Leg)</FormLabel> 
+                      <FormControl>
+                        <Input 
+                          type="number" 
+                          placeholder={`Default: $${OTHER_COST_RATES.LANDING_FEE_PER_LEG.sell.toLocaleString()}`} 
+                          {...field} 
+                          value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : field.value}
+                          onChange={e => {
+                            const val = parseFloat(e.target.value);
+                            field.onChange(isNaN(val) ? undefined : val);
+                          }}
+                        />
+                      </FormControl> 
+                    <FormMessage /> </FormItem> )} />}
 
-                    <FormField control={control} name="estimatedOvernights" render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-2"><BedDouble className="h-4 w-4 text-primary"/> Estimated Overnights (${OTHER_COST_RATES.OVERNIGHT_FEE_PER_NIGHT.sell.toLocaleString()}/Night)</FormLabel> <FormControl><Input type="number" placeholder="e.g., 0" {...field} min="0" onChange={e => field.onChange(parseInt(e.target.value, 10))} /></FormControl> <FormDescription>Number of overnight stays for crew/aircraft.</FormDescription> <FormMessage /> </FormItem> )} />
-                    {Number(currentEstimatedOvernights || 0) > 0 && <FormField control={control} name="sellPriceOvernight" render={({ field }) => (<FormItem className="pl-8"> <FormLabel>Overnight Fee Sell Price (per Night)</FormLabel> <FormControl><Input type="number" placeholder={`Default: $${OTHER_COST_RATES.OVERNIGHT_FEE_PER_NIGHT.sell.toLocaleString()}`} {...field} onChange={e => field.onChange(parseFloat(e.target.value))} /></FormControl> <FormMessage /> </FormItem> )} />}
+                    <FormField control={control} name="estimatedOvernights" render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-2"><BedDouble className="h-4 w-4 text-primary"/> Estimated Overnights (${OTHER_COST_RATES.OVERNIGHT_FEE_PER_NIGHT.sell.toLocaleString()}/Night)</FormLabel> 
+                      <FormControl>
+                        <Input 
+                          type="number" 
+                          placeholder="e.g., 0" 
+                          {...field} 
+                          value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : field.value}
+                          onChange={e => {
+                            const val = parseInt(e.target.value, 10);
+                            field.onChange(isNaN(val) ? undefined : val);
+                          }}
+                          min="0"
+                        />
+                      </FormControl> 
+                    <FormDescription>Number of overnight stays for crew/aircraft.</FormDescription> <FormMessage /> </FormItem> )} />
+                    {Number(currentEstimatedOvernights || 0) > 0 && <FormField control={control} name="sellPriceOvernight" render={({ field }) => (<FormItem className="pl-8"> <FormLabel>Overnight Fee Sell Price (per Night)</FormLabel> 
+                      <FormControl>
+                        <Input 
+                          type="number" 
+                          placeholder={`Default: $${OTHER_COST_RATES.OVERNIGHT_FEE_PER_NIGHT.sell.toLocaleString()}`} 
+                          {...field} 
+                          value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : field.value}
+                          onChange={e => {
+                            const val = parseFloat(e.target.value);
+                            field.onChange(isNaN(val) ? undefined : val);
+                          }}
+                        />
+                      </FormControl> 
+                    <FormMessage /> </FormItem> )} />}
                 </div>
             </section>
 
@@ -887,6 +899,3 @@ export function CreateQuoteForm() {
     </Card>
   );
 }
-
-
-    
