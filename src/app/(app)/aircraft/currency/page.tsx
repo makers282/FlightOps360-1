@@ -118,11 +118,6 @@ export default function AircraftCurrencyPage() {
         title="Aircraft Maintenance Currency"
         description="Track and manage aircraft maintenance status and upcoming items."
         icon={Wrench}
-        actions={
-          <Button>
-            <PlusCircle className="mr-2 h-4 w-4" /> Add Tracked Item
-          </Button>
-        }
       />
       <Card className="shadow-lg">
         <CardHeader>
