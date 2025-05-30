@@ -9,10 +9,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Checkbox } from '@/components/ui/checkbox'; // Added Checkbox
-import { Building2, Plane, PlusCircle, Trash2, Save, XCircle, Loader2, Edit, CheckSquare, Square } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Building2, Plane, PlusCircle, Trash2, Save, XCircle, Loader2, Edit, CheckSquare, Square, Info } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { fetchFleetAircraft, saveFleetAircraft, deleteFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 export default function CompanySettingsPage() {
   const [fleet, setFleet] = useState<FleetAircraft[]>([]);
@@ -21,14 +22,13 @@ export default function CompanySettingsPage() {
   const [isDeletingAircraft, startDeletingAircraftTransition] = useTransition();
   const { toast } = useToast();
 
-  // Aircraft form state
   const [showAddAircraftForm, setShowAddAircraftForm] = useState(false);
   const [newTailNumber, setNewTailNumber] = useState('');
   const [newModel, setNewModel] = useState('');
   const [newIsMaintenanceTracked, setNewIsMaintenanceTracked] = useState(true);
+  const [newTrackedComponentNamesStr, setNewTrackedComponentNamesStr] = useState('');
   const [editingAircraftId, setEditingAircraftId] = useState<string | null>(null);
 
-  // Company Info form state
   const [companyName, setCompanyName] = useState('');
   const [companyAddress, setCompanyAddress] = useState('');
   const [companyEmail, setCompanyEmail] = useState('');
@@ -50,7 +50,6 @@ export default function CompanySettingsPage() {
 
   useEffect(() => {
     loadFleetData();
-    // TODO: In a real app, fetch and set existing company info here
     setCompanyName("FlightOps360 LLC");
     setCompanyAddress("123 Aviation Way, Hangar B, Anytown, USA 12345");
     setCompanyEmail("ops@flightops360.example.com");
@@ -62,6 +61,7 @@ export default function CompanySettingsPage() {
     setNewTailNumber(aircraft.tailNumber);
     setNewModel(aircraft.model);
     setNewIsMaintenanceTracked(aircraft.isMaintenanceTracked ?? true);
+    setNewTrackedComponentNamesStr((aircraft.trackedComponentNames || ['Airframe', 'Engine 1']).join(', '));
     setShowAddAircraftForm(true);
   };
   
@@ -71,17 +71,22 @@ export default function CompanySettingsPage() {
       return;
     }
 
+    const parsedTrackedComponentNames = newTrackedComponentNamesStr
+      .split(',')
+      .map(name => name.trim())
+      .filter(name => name.length > 0);
+
     const aircraftData: FleetAircraft = {
-      id: editingAircraftId || newTailNumber.toUpperCase().replace(/\s+/g, ''), // Use tail # as ID if new
+      id: editingAircraftId || newTailNumber.toUpperCase().replace(/\s+/g, ''), 
       tailNumber: newTailNumber.toUpperCase().trim(),
       model: newModel.trim(),
       isMaintenanceTracked: newIsMaintenanceTracked,
+      trackedComponentNames: parsedTrackedComponentNames.length > 0 ? parsedTrackedComponentNames : ['Airframe', 'Engine 1'], // Default if empty
     };
 
     startSavingAircraftTransition(async () => {
       try {
         await saveFleetAircraft(aircraftData);
-        // Refetch the fleet to get the latest data including the new/updated item
         await loadFleetData(); 
         toast({ title: "Success", description: `Aircraft ${editingAircraftId ? 'updated' : 'added'}.` });
         handleCancelEditAircraft();
@@ -97,6 +102,7 @@ export default function CompanySettingsPage() {
     setNewTailNumber('');
     setNewModel('');
     setNewIsMaintenanceTracked(true);
+    setNewTrackedComponentNamesStr('');
     setShowAddAircraftForm(false);
   };
 
@@ -104,7 +110,6 @@ export default function CompanySettingsPage() {
     startDeletingAircraftTransition(async () => {
       try {
         await deleteFleetAircraft({ aircraftId: aircraftIdToDelete });
-        // Refetch the fleet to reflect the deletion
         await loadFleetData();
         toast({ title: "Success", description: "Aircraft deleted from fleet." });
         if (editingAircraftId === aircraftIdToDelete) {
@@ -184,7 +189,7 @@ export default function CompanySettingsPage() {
                 <CardDescription>Add, edit, or remove aircraft from your company's fleet.</CardDescription>
               </div>
               {!showAddAircraftForm && (
-                <Button variant="outline" size="sm" onClick={() => { setEditingAircraftId(null); setShowAddAircraftForm(true); setNewTailNumber(''); setNewModel(''); setNewIsMaintenanceTracked(true);}}>
+                <Button variant="outline" size="sm" onClick={() => { setEditingAircraftId(null); setShowAddAircraftForm(true); setNewTailNumber(''); setNewModel(''); setNewIsMaintenanceTracked(true); setNewTrackedComponentNamesStr('Airframe, Engine 1');}}>
                   <PlusCircle className="mr-2 h-4 w-4" /> Add Aircraft
                 </Button>
               )}
@@ -216,6 +221,17 @@ export default function CompanySettingsPage() {
                         Track Maintenance for this Aircraft
                     </Label>
                   </div>
+                  <div>
+                    <Label htmlFor="newTrackedComponentNamesStr">Tracked Component Names</Label>
+                    <Textarea 
+                      id="newTrackedComponentNamesStr"
+                      value={newTrackedComponentNamesStr}
+                      onChange={(e) => setNewTrackedComponentNamesStr(e.target.value)}
+                      placeholder="e.g., Airframe, Engine 1, Propeller 1, APU"
+                      rows={2}
+                    />
+                    <p className="text-xs text-muted-foreground">Enter component names, separated by commas.</p>
+                  </div>
                   <div className="flex gap-2 pt-2">
                     <Button onClick={handleAddOrUpdateAircraft} size="sm" disabled={isSavingAircraft}>
                       {isSavingAircraft ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4"/>}
@@ -234,19 +250,34 @@ export default function CompanySettingsPage() {
                 <p className="ml-2 text-muted-foreground">Loading fleet...</p>
               </div>
             ) : (
+              <>
+              <Alert className="mb-4">
+                <Info className="h-4 w-4" />
+                <AlertDescription className="text-xs">
+                  Sample tracked components for existing aircraft:
+                  <ul className="list-disc list-inside pl-4">
+                    <li>N123AB: Airframe, Engine 1, Engine 2, APU</li>
+                    <li>N456CD: Airframe, Engine 1, Engine 2, APU</li>
+                    <li>N789EF: Airframe, Engine 1, Engine 2, APU, Air Conditioning</li>
+                    <li>N630MW: Airframe, Engine 1, Propeller 1</li>
+                  </ul>
+                  Newly added aircraft default to 'Airframe, Engine 1' if not specified.
+                </AlertDescription>
+              </Alert>
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Tail Number</TableHead>
                     <TableHead>Model</TableHead>
                     <TableHead>Maintenance Tracked</TableHead>
+                    <TableHead>Tracked Components</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {fleet.length === 0 && !isLoadingFleet && (
                     <TableRow>
-                      <TableCell colSpan={4} className="text-center text-muted-foreground py-4">No aircraft in fleet. Add one to get started.</TableCell>
+                      <TableCell colSpan={5} className="text-center text-muted-foreground py-4">No aircraft in fleet. Add one to get started.</TableCell>
                     </TableRow>
                   )}
                   {fleet.map((aircraft) => (
@@ -257,6 +288,9 @@ export default function CompanySettingsPage() {
                         {aircraft.isMaintenanceTracked ? 
                           <CheckSquare className="h-5 w-5 text-green-500" /> : 
                           <Square className="h-5 w-5 text-muted-foreground" />}
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {(aircraft.trackedComponentNames || []).join(', ') || 'Default (Airframe, Engine 1)'}
                       </TableCell>
                       <TableCell className="text-right">
                         <Button variant="ghost" size="icon" onClick={() => handleEditAircraftClick(aircraft)} className="mr-1 hover:text-primary" disabled={isSavingAircraft || isDeletingAircraft}>
@@ -272,6 +306,7 @@ export default function CompanySettingsPage() {
                   ))}
                 </TableBody>
               </Table>
+              </>
             )}
           </CardContent>
         </Card>

@@ -17,6 +17,7 @@ const FleetAircraftSchema = z.object({
   tailNumber: z.string().min(1, "Tail number is required.").describe("The aircraft's tail number (e.g., N123AB)."),
   model: z.string().min(1, "Aircraft model is required.").describe("The aircraft model (e.g., Cessna Citation CJ3)."),
   isMaintenanceTracked: z.boolean().optional().default(true).describe("Whether maintenance tracking is enabled for this aircraft."),
+  trackedComponentNames: z.array(z.string()).optional().default(['Airframe', 'Engine 1']).describe("List of component names to track hours/cycles for (e.g., Airframe, Engine 1, Propeller 1)."),
 });
 export type FleetAircraft = z.infer<typeof FleetAircraftSchema>;
 
@@ -38,10 +39,10 @@ const DeleteFleetAircraftOutputSchema = z.object({
 
 // Mock in-memory storage
 let MOCK_FLEET_AIRCRAFT_DATA: FleetAircraft[] = [
-  { id: 'N123AB', tailNumber: 'N123AB', model: 'Cessna Citation CJ3', isMaintenanceTracked: true },
-  { id: 'N456CD', tailNumber: 'N456CD', model: 'Bombardier Global 6000', isMaintenanceTracked: true },
-  { id: 'N789EF', tailNumber: 'N789EF', model: 'Gulfstream G650ER', isMaintenanceTracked: true },
-  { id: 'N630MW', tailNumber: 'N630MW', model: 'Pilatus PC-12 NG', isMaintenanceTracked: false }, // Example of one not tracked
+  { id: 'N123AB', tailNumber: 'N123AB', model: 'Cessna Citation CJ3', isMaintenanceTracked: true, trackedComponentNames: ['Airframe', 'Engine 1', 'Engine 2', 'APU'] },
+  { id: 'N456CD', tailNumber: 'N456CD', model: 'Bombardier Global 6000', isMaintenanceTracked: true, trackedComponentNames: ['Airframe', 'Engine 1', 'Engine 2', 'APU'] },
+  { id: 'N789EF', tailNumber: 'N789EF', model: 'Gulfstream G650ER', isMaintenanceTracked: true, trackedComponentNames: ['Airframe', 'Engine 1', 'Engine 2', 'APU', 'Air Conditioning'] },
+  { id: 'N630MW', tailNumber: 'N630MW', model: 'Pilatus PC-12 NG', isMaintenanceTracked: false, trackedComponentNames: ['Airframe', 'Engine 1', 'Propeller 1'] }, 
 ];
 
 // Exported async functions that clients will call
@@ -51,11 +52,11 @@ export async function fetchFleetAircraft(): Promise<FleetAircraft[]> {
 }
 
 export async function saveFleetAircraft(input: SaveFleetAircraftInput): Promise<FleetAircraft> {
-  console.log('[ManageFleetFlow MOCK] Attempting to save fleet aircraft:', input.id, 'Tracked:', input.isMaintenanceTracked);
-  // Ensure isMaintenanceTracked has a default if not provided by client for some reason
+  console.log('[ManageFleetFlow MOCK] Attempting to save fleet aircraft:', input.id, 'Tracked:', input.isMaintenanceTracked, 'Components:', input.trackedComponentNames);
   const aircraftToSave: FleetAircraft = {
     ...input,
     isMaintenanceTracked: input.isMaintenanceTracked ?? true, 
+    trackedComponentNames: input.trackedComponentNames && input.trackedComponentNames.length > 0 ? input.trackedComponentNames : ['Airframe', 'Engine 1'], // Ensure default if empty
   };
   return saveFleetAircraftFlow(aircraftToSave);
 }
@@ -88,15 +89,14 @@ const saveFleetAircraftFlow = ai.defineFlow(
   },
   async (input) => {
     console.log('Executing saveFleetAircraftFlow with input - MOCK:', input);
-    // Simulate async operation
     await new Promise(resolve => setTimeout(resolve, 100));
     
     const existingIndex = MOCK_FLEET_AIRCRAFT_DATA.findIndex(ac => ac.id === input.id);
     if (existingIndex !== -1) {
-      MOCK_FLEET_AIRCRAFT_DATA[existingIndex] = input; // input already includes isMaintenanceTracked
+      MOCK_FLEET_AIRCRAFT_DATA[existingIndex] = input; 
       console.log('Updated aircraft in MOCK_FLEET_AIRCRAFT_DATA:', input);
     } else {
-      MOCK_FLEET_AIRCRAFT_DATA.push(input); // input already includes isMaintenanceTracked
+      MOCK_FLEET_AIRCRAFT_DATA.push(input); 
       console.log('Added new aircraft to MOCK_FLEET_AIRCRAFT_DATA:', input);
     }
     return input;
@@ -111,7 +111,6 @@ const deleteFleetAircraftFlow = ai.defineFlow(
   },
   async (input) => {
     console.log('Executing deleteFleetAircraftFlow for ID - MOCK:', input.aircraftId);
-    // Simulate async operation
     await new Promise(resolve => setTimeout(resolve, 100));
     
     const initialLength = MOCK_FLEET_AIRCRAFT_DATA.length;
