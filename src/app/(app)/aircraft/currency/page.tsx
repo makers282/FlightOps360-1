@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/table";
 import { Button } from '@/components/ui/button';
 import { Wrench, PlusCircle, CheckCircle2, XCircle, AlertTriangle, Eye } from 'lucide-react';
-import { format, differenceInCalendarDays } from 'date-fns';
+import { format, differenceInCalendarDays, parse } from 'date-fns';
 
 export interface MaintenanceItem { // Exported for use in detail page
   id: string;
@@ -78,7 +78,7 @@ const getAggregatedMaintenanceData = (data: MaintenanceItem[]): MaintenanceItem[
 export const calculateToGo = (item: MaintenanceItem): { text: string; numeric: number; unit: 'days' | 'hrs' | 'cycles' | 'N/A'; isOverdue: boolean } => {
   const now = new Date();
   if (item.dueAtDate) {
-    const dueDate = new Date(item.dueAtDate);
+    const dueDate = parse(item.dueAtDate, 'yyyy-MM-dd', new Date());
     const daysRemaining = differenceInCalendarDays(dueDate, now);
     return { text: `${daysRemaining} days`, numeric: daysRemaining, unit: 'days', isOverdue: daysRemaining < 0 };
   }
@@ -150,7 +150,7 @@ export default function AircraftCurrencyPage() {
                   const toGoData = calculateToGo(item);
                   const status = getReleaseStatus(toGoData);
                   let dueAtDisplay = 'N/A';
-                  if (item.dueAtDate) dueAtDisplay = format(new Date(item.dueAtDate), 'MM/dd/yyyy');
+                  if (item.dueAtDate) dueAtDisplay = format(parse(item.dueAtDate, 'yyyy-MM-dd', new Date()), 'MM/dd/yyyy');
                   else if (item.dueAtHours != null) dueAtDisplay = `${item.dueAtHours.toLocaleString()} hrs`;
                   else if (item.dueAtCycles != null) dueAtDisplay = `${item.dueAtCycles.toLocaleString()} cycles`;
 

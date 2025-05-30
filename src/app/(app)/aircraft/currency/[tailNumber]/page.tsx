@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/table";
 import { Button } from '@/components/ui/button';
 import { Wrench, PlusCircle, ArrowLeft, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, parse } from 'date-fns'; // Added parse
 import { sampleMaintenanceData, calculateToGo, getReleaseStatus, type MaintenanceItem } from '../page'; // Import from parent
 
 export default function AircraftMaintenanceDetailPage() {
@@ -98,7 +98,7 @@ export default function AircraftMaintenanceDetailPage() {
                   let dueType = 'N/A';
 
                   if (item.dueAtDate) {
-                    dueAtDisplay = format(new Date(item.dueAtDate), 'MM/dd/yyyy');
+                    dueAtDisplay = format(parse(item.dueAtDate, 'yyyy-MM-dd', new Date()), 'MM/dd/yyyy');
                     dueType = 'Date';
                   } else if (item.dueAtHours != null) {
                     dueAtDisplay = `${item.dueAtHours.toLocaleString()} hrs`;
