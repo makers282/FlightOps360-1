@@ -2,6 +2,7 @@
 'use server';
 /**
  * @fileOverview Genkit flows for managing aircraft rate configurations.
+ * Rates are associated with aircraft from the main fleet.
  *
  * - fetchAircraftRates - Fetches all aircraft rates.
  * - saveAircraftRate - Saves (adds or updates) an aircraft rate.
@@ -12,39 +13,40 @@ import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
 // Define the structure for an aircraft rate
-// This schema is NOT exported as a const from the 'use server' file.
+// The 'id' here should correspond to an 'id' from the FleetAircraftSchema in manage-fleet-flow.ts
 const AircraftRateSchema = z.object({
-  id: z.string().describe("The unique identifier for the aircraft rate, typically the aircraft name or category key."),
+  id: z.string().describe("The unique identifier for the aircraft from the fleet (e.g., N123AB or a Firestore doc ID)."),
   buy: z.number().min(0).describe("The buy rate per hour for the aircraft."),
   sell: z.number().min(0).describe("The sell rate per hour for the aircraft."),
 });
 export type AircraftRate = z.infer<typeof AircraftRateSchema>;
 
-// Schemas for flow inputs and outputs (internal to this file or used by other server components)
+// Schemas for flow inputs and outputs
 const SaveAircraftRateInputSchema = AircraftRateSchema;
 export type SaveAircraftRateInput = z.infer<typeof SaveAircraftRateInputSchema>;
 
 const DeleteAircraftRateInputSchema = z.object({
-  aircraftId: z.string().describe("The ID of the aircraft rate to delete."),
+  aircraftId: z.string().describe("The ID of the aircraft rate to delete (corresponds to fleet aircraft ID)."),
 });
 export type DeleteAircraftRateInput = z.infer<typeof DeleteAircraftRateInputSchema>;
 
 const FetchAircraftRatesOutputSchema = z.array(AircraftRateSchema);
-const SaveAircraftRateOutputSchema = AircraftRateSchema; // Returns the saved/updated rate
+const SaveAircraftRateOutputSchema = AircraftRateSchema; 
 const DeleteAircraftRateOutputSchema = z.object({
   success: z.boolean(),
   aircraftId: z.string(),
 });
 
-// Mock initial data if Firestore isn't set up yet, for skeleton functionality
+// Mock initial data. The 'id' should match an 'id' from MOCK_INITIAL_FLEET_AIRCRAFT in manage-fleet-flow.ts
 const MOCK_INITIAL_AIRCRAFT_RATES: AircraftRate[] = [
-    { id: 'N123AB - Cessna Citation CJ3', buy: 2800, sell: 3200 },
-    { id: 'N456CD - Bombardier Global 6000', buy: 5800, sell: 6500 },
-    { id: 'N789EF - Gulfstream G650ER', buy: 7500, sell: 8500 },
-    { id: 'Category: Light Jet', buy: 2400, sell: 2800 },
-    { id: 'Category: Midsize Jet', buy: 4000, sell: 4500 },
-    { id: 'Category: Heavy Jet', buy: 7000, sell: 7500 },
-    { id: 'DEFAULT_AIRCRAFT_RATES', buy: 3500, sell: 4000 },
+    { id: 'N123AB', buy: 2800, sell: 3200 },
+    { id: 'N456CD', buy: 5800, sell: 6500 },
+    { id: 'N789EF', buy: 7500, sell: 8500 },
+    { id: 'N630MW', buy: 2200, sell: 2600 },
+    // { id: 'Category: Light Jet', buy: 2400, sell: 2800 }, // Category rates might need different handling or a different settings section
+    // { id: 'Category: Midsize Jet', buy: 4000, sell: 4500 },
+    // { id: 'Category: Heavy Jet', buy: 7000, sell: 7500 },
+    { id: 'DEFAULT_AIRCRAFT_RATES', buy: 3500, sell: 4000 }, // A general fallback
 ];
 let internalMockStorageRates: AircraftRate[] = [...MOCK_INITIAL_AIRCRAFT_RATES];
 
@@ -56,12 +58,12 @@ export async function fetchAircraftRates(): Promise<AircraftRate[]> {
 }
 
 export async function saveAircraftRate(input: SaveAircraftRateInput): Promise<AircraftRate> {
-  console.log('[ManageAircraftRatesFlow] Attempting to save aircraft rate:', input.id);
+  console.log('[ManageAircraftRatesFlow] Attempting to save aircraft rate for aircraft ID:', input.id);
   return saveAircraftRateFlow(input);
 }
 
 export async function deleteAircraftRate(input: DeleteAircraftRateInput): Promise<{ success: boolean; aircraftId: string }> {
-  console.log('[ManageAircraftRatesFlow] Attempting to delete aircraft rate:', input.aircraftId);
+  console.log('[ManageAircraftRatesFlow] Attempting to delete aircraft rate for aircraft ID:', input.aircraftId);
   return deleteAircraftRateFlow(input);
 }
 
@@ -74,17 +76,17 @@ const fetchAircraftRatesFlow = ai.defineFlow(
   },
   async () => {
     console.log('Executing fetchAircraftRatesFlow');
-    // TODO: Replace with actual Firestore read logic
+    // TODO: Replace with actual Firestore read logic from 'aircraftRates' collection
+    // This collection would store documents where doc.id is the aircraftId from the fleet.
     // Example:
-    // const db = getFirestore(); // Assuming you have a way to get Firestore instance
+    // const db = getFirestore();
     // const snapshot = await db.collection('aircraftRates').get();
     // const rates = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AircraftRate));
     // console.log('Fetched rates from Firestore:', rates);
     // return rates;
 
-    // Returning mock data for now
     console.log('Returning mock aircraft rates from flow skeleton:', internalMockStorageRates);
-    return Promise.resolve([...internalMockStorageRates]); // Return a copy
+    return Promise.resolve([...internalMockStorageRates]); 
   }
 );
 
@@ -96,13 +98,14 @@ const saveAircraftRateFlow = ai.defineFlow(
   },
   async (input) => {
     console.log('Executing saveAircraftRateFlow with input:', input);
-    // TODO: Replace with actual Firestore add/update logic
+    // TODO: Replace with actual Firestore add/update logic for 'aircraftRates' collection
+    // The document ID should be input.id (which is the aircraftId from the fleet)
     // Example:
     // const db = getFirestore();
-    // const rateRef = db.collection('aircraftRates').doc(input.id); // Use 'id' as document ID
-    // await rateRef.set({ buy: input.buy, sell: input.sell }, { merge: true }); // Save/update
+    // const rateRef = db.collection('aircraftRates').doc(input.id); 
+    // await rateRef.set({ buy: input.buy, sell: input.sell }, { merge: true }); 
     // console.log('Saved/Updated rate to Firestore:', input);
-    // return input; // Return the saved object
+    // return input; 
 
     // Mocking persistence
     const index = internalMockStorageRates.findIndex(rate => rate.id === input.id);
@@ -123,8 +126,9 @@ const deleteAircraftRateFlow = ai.defineFlow(
     outputSchema: DeleteAircraftRateOutputSchema,
   },
   async (input) => {
-    console.log('Executing deleteAircraftRateFlow for ID:', input.aircraftId);
-    // TODO: Replace with actual Firestore delete logic
+    console.log('Executing deleteAircraftRateFlow for aircraft ID:', input.aircraftId);
+    // TODO: Replace with actual Firestore delete logic from 'aircraftRates' collection
+    // Document ID is input.aircraftId
     // Example:
     // const db = getFirestore();
     // await db.collection('aircraftRates').doc(input.aircraftId).delete();
@@ -139,4 +143,3 @@ const deleteAircraftRateFlow = ai.defineFlow(
     return Promise.resolve({ success, aircraftId: input.aircraftId });
   }
 );
-

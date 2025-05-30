@@ -25,7 +25,8 @@ import {
   UsersRound, 
   FileArchive,
   SlidersHorizontal,
-  PlaneTakeoff, // Added for Aircraft Performance
+  PlaneTakeoff,
+  Building2, // Added for Company Settings
 } from 'lucide-react';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -61,9 +62,9 @@ export default function AppLayout({ children }: PropsWithChildren) {
     <SidebarProvider defaultOpen>
       <Sidebar>
         <SidebarHeader className="p-4">
-          <Link href="/dashboard" className="flex items-center gap-2 text-lg font-semibold text-primary">
-            <Icons.Logo className="h-7 w-7" /> 
-            <span>FlightOps360</span>
+          <Link href="/dashboard" className="flex items-center">
+            <Icons.Logo className="h-7" />
+            {/* Text is part of the logo image now */}
           </Link>
         </SidebarHeader>
         <SidebarContent>
@@ -179,6 +180,9 @@ export default function AppLayout({ children }: PropsWithChildren) {
                 Settings
               </SidebarMenuButton>
               <SidebarMenuSub>
+                <SidebarMenuSubButton href="/settings/company">
+                  <Building2 /> Company Settings
+                </SidebarMenuSubButton>
                 <SidebarMenuSubButton href="/settings/roles">
                   <Users /> User Roles
                 </SidebarMenuSubButton>

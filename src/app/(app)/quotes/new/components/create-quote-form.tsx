@@ -28,7 +28,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
 import { estimateFlightDetails, type EstimateFlightDetailsInput, type EstimateFlightDetailsOutput } from '@/ai/flows/estimate-flight-details-flow';
-import { fetchAircraftRates, type AircraftRate } from '@/ai/flows/manage-aircraft-rates-flow'; // Import fetchAircraftRates
+import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow'; // Use new fleet flow
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { LegsSummaryTable } from './legs-summary-table';
 import { CostsSummaryDisplay, type LineItem } from './costs-summary-display';
@@ -58,7 +58,7 @@ const formSchema = z.object({
   clientEmail: z.string().email("Invalid email address."),
   clientPhone: z.string().min(7, "Phone number seems too short.").optional().or(z.literal('')),
   legs: z.array(legSchema).min(1, "At least one flight leg is required."),
-  aircraftType: z.string().min(1, "Aircraft type/ID is required.").optional(), 
+  aircraftId: z.string().min(1, "Aircraft selection is required.").optional(), 
   
   medicsRequested: z.boolean().optional().default(false),
   cateringRequested: z.boolean().optional().default(false),
@@ -81,24 +81,21 @@ export type FullQuoteFormData = z.infer<typeof formSchema>;
 
 type LegEstimate = EstimateFlightDetailsOutput & {
   error?: string;
-  estimatedForInputs?: { origin: string; destination: string; aircraftType: string };
+  estimatedForInputs?: { origin: string; destination: string; aircraftModel: string }; // Changed from aircraftType to aircraftModel
   blockTimeHours?: number;
 };
 
-interface AircraftOption {
-  value: string;
-  label: string;
+interface AircraftSelectOption { // Renamed from AircraftOption to avoid conflict with performance form
+  value: string; // aircraft.id
+  label: string; // tailNumber - model
+  model: string; // aircraft.model for AI flow
 }
 
-// Keep hardcoded rates for now. Pricing logic will use this.
-// The dropdown will be dynamic, but pricing for newly added aircraft (not in this const) will use DEFAULT_AIRCRAFT_RATES.
-const AIRCRAFT_RATES: { [key: string]: { buy: number; sell: number } } = {
-  'N123AB - Cessna Citation CJ3': { buy: 2800, sell: 3200 },
-  'N456CD - Bombardier Global 6000': { buy: 5800, sell: 6500 },
-  'N789EF - Gulfstream G650ER': { buy: 7500, sell: 8500 },
-  'Category: Light Jet': { buy: 2400, sell: 2800 },
-  'Category: Midsize Jet': { buy: 4000, sell: 4500 },
-  'Category: Heavy Jet': { buy: 7000, sell: 7500 },
+const AIRCRAFT_RATES: { [key: string]: { buy: number; sell: number } } = { // Keyed by aircraft ID (e.g., tail number or generated ID)
+  'N123AB': { buy: 2800, sell: 3200 }, // Example: ID is 'N123AB'
+  'N456CD': { buy: 5800, sell: 6500 },
+  'N789EF': { buy: 7500, sell: 8500 },
+  'N630MW': { buy: 2200, sell: 2600 },
   'DEFAULT_AIRCRAFT_RATES': { buy: 3500, sell: 4000 } // Fallback
 };
 const DEFAULT_AIRCRAFT_RATES = AIRCRAFT_RATES['DEFAULT_AIRCRAFT_RATES'];
@@ -128,7 +125,7 @@ export function CreateQuoteForm() {
   const [legEstimates, setLegEstimates] = useState<Array<LegEstimate | null>>([]);
   const [calculatedLineItems, setCalculatedLineItems] = useState<LineItem[]>([]);
 
-  const [aircraftSelectOptions, setAircraftSelectOptions] = useState<AircraftOption[]>([]);
+  const [aircraftSelectOptions, setAircraftSelectOptions] = useState<AircraftSelectOption[]>([]);
   const [isLoadingAircraft, setIsLoadingAircraft] = useState(true);
 
 
@@ -152,7 +149,7 @@ export function CreateQuoteForm() {
         destinationTaxiTimeMinutes: 15,
         flightTimeHours: undefined,
       }],
-      aircraftType: undefined, 
+      aircraftId: undefined, 
       medicsRequested: false,
       cateringRequested: false,
       includeLandingFees: true,
@@ -171,7 +168,7 @@ export function CreateQuoteForm() {
   const { control, setValue, getValues, trigger, formState: { errors } } = form;
   
   const legsArray = useWatch({ control, name: "legs", defaultValue: [] });
-  const aircraftTypeId = useWatch({ control, name: "aircraftType" });
+  const aircraftId = useWatch({ control, name: "aircraftId" }); // This is the ID of the aircraft from the fleet
   const fuelSurchargeRequested = useWatch({ control, name: "fuelSurchargeRequested" });
   const sellPriceFuelSurchargePerHour = useWatch({ control, name: "sellPriceFuelSurchargePerHour" });
   const medicsRequested = useWatch({ control, name: "medicsRequested" });
@@ -201,8 +198,12 @@ export function CreateQuoteForm() {
     const loadAircraft = async () => {
       setIsLoadingAircraft(true);
       try {
-        const rates = await fetchAircraftRates();
-        const options = rates.map(rate => ({ value: rate.id, label: rate.id }));
+        const fleet = await fetchFleetAircraft();
+        const options = fleet.map(ac => ({ 
+          value: ac.id, 
+          label: `${ac.tailNumber} - ${ac.model}`,
+          model: ac.model // Store model for AI flow
+        }));
         setAircraftSelectOptions(options);
       } catch (error) {
         console.error("Failed to fetch aircraft options:", error);
@@ -248,13 +249,15 @@ export function CreateQuoteForm() {
       }
     });
     
-    const aircraftNameForRate = aircraftTypeId; // aircraftTypeId is the ID/Name string from the select
-    const aircraftRates = aircraftNameForRate ? (AIRCRAFT_RATES[aircraftNameForRate] || DEFAULT_AIRCRAFT_RATES) : DEFAULT_AIRCRAFT_RATES;
+    const selectedAircraft = aircraftSelectOptions.find(ac => ac.value === aircraftId);
+    const aircraftRates = aircraftId ? (AIRCRAFT_RATES[aircraftId] || DEFAULT_AIRCRAFT_RATES) : DEFAULT_AIRCRAFT_RATES;
+    const aircraftDisplayName = selectedAircraft ? selectedAircraft.label : "Selected Aircraft";
 
-    if (totalRevenueFlightHours > 0 && aircraftNameForRate) {
+
+    if (totalRevenueFlightHours > 0 && aircraftId) {
       newItems.push({
         id: 'revenueFlightTime',
-        description: `Flight Time (${aircraftNameForRate})`,
+        description: `Flight Time (${aircraftDisplayName})`,
         buyRate: aircraftRates.buy,
         sellRate: aircraftRates.sell,
         unitDescription: 'Flight Hour',
@@ -340,7 +343,7 @@ export function CreateQuoteForm() {
 
   }, [
     legsArray, 
-    aircraftTypeId, 
+    aircraftId, aircraftSelectOptions, // Added aircraftSelectOptions
     fuelSurchargeRequested, sellPriceFuelSurchargePerHour,
     medicsRequested, sellPriceMedics,
     cateringRequested, sellPriceCatering,
@@ -356,22 +359,24 @@ export function CreateQuoteForm() {
        return;
     }
 
-    const legData = getValues(`legs.${legIndex}`);
-    const currentAircraftTypeId = getValues('aircraftType'); // This is the ID/Name string
+    const legData = getValues(`legs.${index}`);
+    const currentAircraftId = getValues('aircraftId');
+    const selectedAircraft = aircraftSelectOptions.find(ac => ac.value === currentAircraftId);
 
-    if (!legData?.origin || legData.origin.length < 3 || !legData?.destination || legData.destination.length < 3 || !currentAircraftTypeId) {
+
+    if (!legData?.origin || legData.origin.length < 3 || !legData?.destination || legData.destination.length < 3 || !currentAircraftId || !selectedAircraft) {
       toast({ title: "Missing Information", description: "Please provide origin, destination (min 3 chars each), and select an aircraft type before estimating.", variant: "destructive"});
       return;
     }
-
-    const aircraftNameForFlow = currentAircraftTypeId; // The ID is the name/key like "N123AB - Cessna Citation CJ3"
+    
+    const aircraftModelForFlow = selectedAircraft.model;
 
     const currentEstimate = legEstimates[legIndex];
     if (currentEstimate &&
         !currentEstimate.error &&
         currentEstimate.estimatedForInputs?.origin === legData.origin.toUpperCase() &&
         currentEstimate.estimatedForInputs?.destination === legData.destination.toUpperCase() &&
-        currentEstimate.estimatedForInputs?.aircraftType === aircraftNameForFlow) {
+        currentEstimate.estimatedForInputs?.aircraftModel === aircraftModelForFlow) {
       toast({ title: "Estimate Exists", description: "Flight details already estimated for these inputs.", variant: "default" });
       if(currentEstimate.estimatedFlightTimeHours !== undefined) {
         setValue(`legs.${legIndex}.flightTimeHours`, currentEstimate.estimatedFlightTimeHours);
@@ -386,7 +391,7 @@ export function CreateQuoteForm() {
       const result = await estimateFlightDetails({
         origin: legData.origin.toUpperCase(),
         destination: legData.destination.toUpperCase(),
-        aircraftType: aircraftNameForFlow,
+        aircraftType: aircraftModelForFlow, // Pass the model name
       });
       
       setValue(`legs.${legIndex}.flightTimeHours`, result.estimatedFlightTimeHours);
@@ -406,7 +411,7 @@ export function CreateQuoteForm() {
           estimatedForInputs: {
             origin: legData.origin.toUpperCase(),
             destination: legData.destination.toUpperCase(),
-            aircraftType: aircraftNameForFlow
+            aircraftModel: aircraftModelForFlow
           }
         };
         return newEstimates;
@@ -424,7 +429,7 @@ export function CreateQuoteForm() {
           estimatedForInputs: {
             origin: legData.origin.toUpperCase(),
             destination: legData.destination.toUpperCase(),
-            aircraftType: aircraftNameForFlow
+            aircraftModel: aircraftModelForFlow
           }
         } as LegEstimate; 
         return newEstimates;
@@ -432,7 +437,7 @@ export function CreateQuoteForm() {
     } finally {
       setEstimatingLegIndex(null);
     }
-  }, [getValues, legEstimates, toast, estimatingLegIndex, setValue, setLegEstimates, setEstimatingLegIndex]);
+  }, [getValues, legEstimates, toast, estimatingLegIndex, setValue, setLegEstimates, setEstimatingLegIndex, aircraftSelectOptions]);
 
 
   const onSendQuote: SubmitHandler<FullQuoteFormData> = (data) => { 
@@ -595,10 +600,10 @@ export function CreateQuoteForm() {
               <div className="grid grid-cols-1 gap-6 mb-6">
                 <FormField 
                     control={control} 
-                    name="aircraftType" 
+                    name="aircraftId" 
                     render={({ field }) => ( 
                         <FormItem> 
-                            <FormLabel>Aircraft Type</FormLabel> 
+                            <FormLabel>Aircraft</FormLabel> 
                             <Select 
                                 onValueChange={field.onChange} 
                                 value={field.value || ""}
@@ -606,11 +611,11 @@ export function CreateQuoteForm() {
                             > 
                                 <FormControl>
                                     <SelectTrigger disabled={isLoadingAircraft}>
-                                        <SelectValue placeholder={isLoadingAircraft ? "Loading aircraft..." : "Select an aircraft type"} />
+                                        <SelectValue placeholder={isLoadingAircraft ? "Loading aircraft..." : "Select an aircraft"} />
                                     </SelectTrigger>
                                 </FormControl> 
                                 <SelectContent>
-                                    {!isLoadingAircraft && aircraftSelectOptions.length === 0 && <SelectItem value="NO_AIRCRAFT_CONFIGURED_PLACEHOLDER" disabled>No aircraft configured</SelectItem>}
+                                    {!isLoadingAircraft && aircraftSelectOptions.length === 0 && <SelectItem value="NO_AIRCRAFT_CONFIGURED_PLACEHOLDER" disabled>No aircraft configured in fleet</SelectItem>}
                                     {aircraftSelectOptions.map(aircraft => (
                                         <SelectItem key={aircraft.value} value={aircraft.value}>
                                             {aircraft.label}
@@ -645,11 +650,8 @@ export function CreateQuoteForm() {
                         <FormField control={control} name={`legs.${index}.originFbo`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><Building className="h-4 w-4" />Origin FBO (Optional)</FormLabel> <FormControl><Input placeholder="e.g., Signature, Atlantic" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
                         <FormField control={control} name={`legs.${index}.destinationFbo`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><Building className="h-4 w-4" />Destination FBO (Optional)</FormLabel> <FormControl><Input placeholder="e.g., Signature, Atlantic" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
                     </div>
-                     <FormField control={control} name={`legs.${index}.departureDateTime`} render={({ field }) => ( <FormItem className="flex flex-col"> <FormLabel>Desired Departure Date & Time</FormLabel> {isClient ? ( <Popover> <PopoverTrigger asChild> 
-                        <Button 
-                          variant={"outline"} 
-                          className={cn("w-full pl-3 text-left font-normal", !(field.value && field.value instanceof Date && !isNaN(field.value.getTime())) && "text-muted-foreground")}
-                        > 
+                    <FormField control={control} name={`legs.${index}.departureDateTime`} render={({ field }) => ( <FormItem className="flex flex-col"> <FormLabel>Desired Departure Date & Time</FormLabel> {isClient ? ( <Popover> <PopoverTrigger asChild> 
+                        <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !(field.value && field.value instanceof Date && !isNaN(field.value.getTime())) && "text-muted-foreground")}> 
                           <span>{field.value && field.value instanceof Date && !isNaN(field.value.getTime()) ? format(field.value, "PPP HH:mm") : "Pick a date and time"}</span> 
                           <CalendarIcon className="ml-auto h-4 w-4 opacity-50" /> 
                         </Button> 
@@ -728,8 +730,8 @@ export function CreateQuoteForm() {
                         <FormMessage /> </FormItem> )} />
                     </div>
 
-                    <Button type="button" variant="outline" size="sm" onClick={() => handleEstimateFlightDetails(index)} disabled={estimatingLegIndex === index || !aircraftTypeId} className="w-full sm:w-auto"> {estimatingLegIndex === index ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />} Estimate Flight Details </Button>
-                    {!aircraftTypeId && <FormDescription className="text-xs text-destructive">Select an aircraft type above to enable estimation.</FormDescription>}
+                    <Button type="button" variant="outline" size="sm" onClick={() => handleEstimateFlightDetails(index)} disabled={estimatingLegIndex === index || !aircraftId} className="w-full sm:w-auto"> {estimatingLegIndex === index ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />} Estimate Flight Details </Button>
+                    {!aircraftId && <FormDescription className="text-xs text-destructive">Select an aircraft to enable estimation.</FormDescription>}
 
                     {legEstimates[index] && (() => {
                       const estimate = legEstimates[index]!;
@@ -760,10 +762,10 @@ export function CreateQuoteForm() {
                         formattedBlockTime = `${String(blockHours).padStart(2, '0')}:${String(blockMinutes).padStart(2, '0')} hrs`;
                       }
                       
-                      const currentAircraftSelectedId = getValues('aircraftType');
-                      const currentAircraftDetails = aircraftSelectOptions.find(ac => ac.value === currentAircraftSelectedId);
-                      const currentAircraftName = currentAircraftDetails?.label; // Use label for display/rate key
-                      const hourlyRateForLeg = currentAircraftName ? (AIRCRAFT_RATES[currentAircraftName]?.sell || DEFAULT_AIRCRAFT_RATES.sell) : DEFAULT_AIRCRAFT_RATES.sell;
+                      const currentAircraftSelectedId = getValues('aircraftId');
+                      const currentAircraftRateInfo = currentAircraftSelectedId ? (AIRCRAFT_RATES[currentAircraftSelectedId] || DEFAULT_AIRCRAFT_RATES) : DEFAULT_AIRCRAFT_RATES;
+                      const hourlyRateForLeg = currentAircraftRateInfo.sell;
+
                       if (legFlightTimeHours > 0 && ["Charter", "Owner", "Ambulance", "Cargo"].includes(legData.legType)) {
                         legCost = legFlightTimeHours * hourlyRateForLeg;
                       }
@@ -915,4 +917,3 @@ export function CreateQuoteForm() {
     </Card>
   );
 }
-

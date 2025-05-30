@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { PlaneTakeoff as PerformanceIcon, Save, Copy, Wand2, Loader2, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { suggestAircraftPerformance, type SuggestAircraftPerformanceInput, type AircraftPerformanceOutput } from '@/ai/flows/suggest-aircraft-performance-flow';
-import { fetchAircraftRates, type AircraftRate } from '@/ai/flows/manage-aircraft-rates-flow'; // Import fetchAircraftRates
+import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow'; // Use new fleet flow
 
 const aircraftPerformanceSchema = z.object({
   takeoffSpeed: z.coerce.number().min(0).optional(),
@@ -34,20 +34,20 @@ const aircraftPerformanceSchema = z.object({
 
 type AircraftPerformanceFormData = z.infer<typeof aircraftPerformanceSchema>;
 
-interface AircraftOption {
-  id: string; // This is the aircraft ID/Name key from aircraftRates
-  name: string; // This is the display label
+interface FleetAircraftSelectOption {
+  id: string;    // aircraft.id from fleet
+  label: string; // tailNumber - model
+  model: string; // aircraft.model for AI
 }
 
 const fuelTypes = ["Jet Fuel", "Avgas", "Other"];
 
-// Placeholder for initial data for each aircraft
-// This will be managed more dynamically or fetched if integrated with a backend
+// Placeholder for initial data for each aircraft, keyed by aircraft.id from fleet
 const initialPerformanceData: Record<string, Partial<AircraftPerformanceFormData>> = {
-  'N123AB - Cessna Citation CJ3': { takeoffSpeed: 100, cruiseSpeed: 415, cruiseAltitude: 45000, fuelBurn: 150, maxRange: 1800, maxAllowableTakeoffWeight: 13870, fuelType: "Jet Fuel" },
-  'N456CD - Bombardier Global 6000': { takeoffSpeed: 130, cruiseSpeed: 488, cruiseAltitude: 51000, fuelBurn: 450, maxRange: 6000, maxAllowableTakeoffWeight: 99500, fuelType: "Jet Fuel" },
-  'N630MW - Piper Cheyenne PA-31T2': { takeoffSpeed: 101, landingSpeed: 104, climbSpeed: 165, climbRate: 1750, cruiseSpeed: 255, cruiseAltitude: 25000, descentSpeed: 255, descentRate: 1500, fuelType: "Jet Fuel", fuelBurn: 81.0, maxRange: 1145, maxAllowableTakeoffWeight: 9474 },
-  'N789EF - Gulfstream G650ER': { takeoffSpeed: 140, cruiseSpeed: 516, cruiseAltitude: 51000, fuelBurn: 500, maxRange: 7500, maxAllowableTakeoffWeight: 103600, fuelType: "Jet Fuel" },
+  'N123AB': { takeoffSpeed: 100, cruiseSpeed: 415, cruiseAltitude: 45000, fuelBurn: 150, maxRange: 1800, maxAllowableTakeoffWeight: 13870, fuelType: "Jet Fuel" },
+  'N456CD': { takeoffSpeed: 130, cruiseSpeed: 488, cruiseAltitude: 51000, fuelBurn: 450, maxRange: 6000, maxAllowableTakeoffWeight: 99500, fuelType: "Jet Fuel" },
+  'N630MW': { takeoffSpeed: 101, landingSpeed: 104, climbSpeed: 165, climbRate: 1750, cruiseSpeed: 255, cruiseAltitude: 25000, descentSpeed: 255, descentRate: 1500, fuelType: "Jet Fuel", fuelBurn: 81.0, maxRange: 1145, maxAllowableTakeoffWeight: 9474 },
+  'N789EF': { takeoffSpeed: 140, cruiseSpeed: 516, cruiseAltitude: 51000, fuelBurn: 500, maxRange: 7500, maxAllowableTakeoffWeight: 103600, fuelType: "Jet Fuel" },
 };
 
 
@@ -58,23 +58,27 @@ export function AircraftPerformanceForm() {
   const [isSaving, startSaveTransition] = useTransition();
   const [isSuggestingWithAi, startAiSuggestionTransition] = useTransition();
 
-  const [aircraftSelectOptions, setAircraftSelectOptions] = useState<AircraftOption[]>([]);
+  const [fleetSelectOptions, setFleetSelectOptions] = useState<FleetAircraftSelectOption[]>([]);
   const [isLoadingAircraft, setIsLoadingAircraft] = useState(true);
 
   const form = useForm<AircraftPerformanceFormData>({
     resolver: zodResolver(aircraftPerformanceSchema),
-    defaultValues: {}, // Default values will be set by useEffect based on selection
+    defaultValues: {}, 
   });
 
   useEffect(() => {
-    const loadAircraft = async () => {
+    const loadFleet = async () => {
       setIsLoadingAircraft(true);
       try {
-        const rates = await fetchAircraftRates();
-        const options = rates.map(rate => ({ id: rate.id, name: rate.id })); // Assuming rate.id is the name/key
-        setAircraftSelectOptions(options);
+        const fleet = await fetchFleetAircraft();
+        const options = fleet.map(ac => ({ 
+          id: ac.id, 
+          label: `${ac.tailNumber} - ${ac.model}`,
+          model: ac.model 
+        }));
+        setFleetSelectOptions(options);
         if (options.length > 0 && !selectedAircraftId) {
-          setSelectedAircraftId(options[0].id); // Select the first aircraft by default
+          setSelectedAircraftId(options[0].id); 
         }
       } catch (error) {
         console.error("Failed to fetch aircraft options:", error);
@@ -83,8 +87,8 @@ export function AircraftPerformanceForm() {
         setIsLoadingAircraft(false);
       }
     };
-    loadAircraft();
-  }, [toast, selectedAircraftId]); // Added selectedAircraftId to re-evaluate if it changes elsewhere
+    loadFleet();
+  }, [toast, selectedAircraftId]); 
 
   useEffect(() => {
     if (selectedAircraftId) {
@@ -104,7 +108,8 @@ export function AircraftPerformanceForm() {
         ...prev,
         [selectedAircraftId]: data,
       }));
-      toast({ title: "Success", description: `Performance settings for ${selectedAircraftId} saved (client-side).` });
+      const selectedAircraftLabel = fleetSelectOptions.find(ac => ac.id === selectedAircraftId)?.label || selectedAircraftId;
+      toast({ title: "Success", description: `Performance settings for ${selectedAircraftLabel} saved (client-side).` });
       console.log("Saved data for", selectedAircraftId, data);
     });
   };
@@ -114,7 +119,7 @@ export function AircraftPerformanceForm() {
       toast({ title: "No Aircraft Selected", description: "Please select an aircraft first.", variant: "destructive" });
       return;
     }
-    const selectedAircraftObject = aircraftSelectOptions.find(ac => ac.id === selectedAircraftId);
+    const selectedAircraftObject = fleetSelectOptions.find(ac => ac.id === selectedAircraftId);
     if (!selectedAircraftObject) {
       toast({ title: "Error", description: "Could not find selected aircraft details.", variant: "destructive" });
       return;
@@ -122,14 +127,13 @@ export function AircraftPerformanceForm() {
 
     startAiSuggestionTransition(async () => {
       try {
-        const aiInput: SuggestAircraftPerformanceInput = { aircraftName: selectedAircraftObject.name }; // Use the name property
+        const aiInput: SuggestAircraftPerformanceInput = { aircraftName: selectedAircraftObject.model }; // Use the model for AI
         const suggestedData: AircraftPerformanceOutput = await suggestAircraftPerformance(aiInput);
         
         const validatedData: Partial<AircraftPerformanceFormData> = {};
         for (const key in suggestedData) {
             const typedKey = key as keyof AircraftPerformanceOutput;
             if (suggestedData[typedKey] !== null && suggestedData[typedKey] !== undefined) {
-                // Ensure the key exists in the schema before attempting to check its type or assign
                 if (aircraftPerformanceSchema.shape[typedKey as keyof typeof aircraftPerformanceSchema.shape]) {
                     if (typeof aircraftPerformanceSchema.shape[typedKey as keyof typeof aircraftPerformanceSchema.shape]._def.typeName === 'ZodNumber') {
                         (validatedData as any)[typedKey] = Number(suggestedData[typedKey]);
@@ -204,10 +208,10 @@ export function AircraftPerformanceForm() {
                 <SelectValue placeholder={isLoadingAircraft ? "Loading aircraft..." : "Select an aircraft"} />
               </SelectTrigger>
               <SelectContent>
-                 {!isLoadingAircraft && aircraftSelectOptions.length === 0 && <SelectItem value="NO_AIRCRAFT_CONFIGURED_PLACEHOLDER" disabled>No aircraft configured</SelectItem>}
-                {aircraftSelectOptions.map(aircraft => (
+                 {!isLoadingAircraft && fleetSelectOptions.length === 0 && <SelectItem value="NO_AIRCRAFT_CONFIGURED_PLACEHOLDER" disabled>No aircraft configured in fleet</SelectItem>}
+                {fleetSelectOptions.map(aircraft => (
                   <SelectItem key={aircraft.id} value={aircraft.id}>
-                    {aircraft.name}
+                    {aircraft.label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -229,7 +233,7 @@ export function AircraftPerformanceForm() {
             <CardHeader>
               <div className="flex items-center gap-2">
                 <PerformanceIcon className="h-6 w-6 text-primary" />
-                <CardTitle>Performance Settings for {aircraftSelectOptions.find(ac => ac.id === selectedAircraftId)?.name || selectedAircraftId}</CardTitle>
+                <CardTitle>Performance Settings for {fleetSelectOptions.find(ac => ac.id === selectedAircraftId)?.label || selectedAircraftId}</CardTitle>
               </div>
               <CardDescription>Adjust the performance parameters below. AI suggestions can provide a starting point.</CardDescription>
             </CardHeader>
@@ -293,4 +297,3 @@ export function AircraftPerformanceForm() {
     </Form>
   );
 }
-
