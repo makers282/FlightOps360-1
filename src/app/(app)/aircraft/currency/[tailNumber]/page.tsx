@@ -53,6 +53,7 @@ const MOCK_AIRCRAFT_COMPONENT_TIMES_DATA: Record<string, AircraftComponentTime[]
     { componentName: 'Airframe', currentTime: 350.0, currentCycles: 120 },
     { componentName: 'Engine One', currentTime: 350.0, currentCycles: 120 },
     { componentName: 'Engine Two', currentTime: 350.0, currentCycles: 120 },
+    { componentName: 'Air Conditioning', currentTime: 150.5, currentCycles: 75 }, // Added Air Conditioning
   ],
   // Default/fallback for aircraft not explicitly listed
   'DEFAULT': [
