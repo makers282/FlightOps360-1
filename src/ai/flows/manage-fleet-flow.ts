@@ -1,7 +1,7 @@
 
 'use server';
 /**
- * @fileOverview Genkit flows for managing the company's aircraft fleet.
+ * @fileOverview Genkit flows for managing the company's aircraft fleet using Firestore.
  *
  * - fetchFleetAircraft - Fetches all aircraft in the fleet.
  * - saveFleetAircraft - Saves (adds or updates) an aircraft in the fleet.
@@ -10,6 +10,9 @@
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
+import { getFirestore, collection, getDocs, doc, setDoc, deleteDoc } from 'firebase/firestore';
+// You'll need to initialize Firebase in your project, typically in a separate config file
+// For example: import { db } from '@/lib/firebase'; (where db is getFirestore())
 
 // Define the structure for a fleet aircraft
 const FleetAircraftSchema = z.object({
@@ -35,28 +38,21 @@ const DeleteFleetAircraftOutputSchema = z.object({
   aircraftId: z.string(),
 });
 
-// Mock initial data for the fleet
-const MOCK_INITIAL_FLEET_AIRCRAFT: FleetAircraft[] = [
-  { id: 'N123AB', tailNumber: 'N123AB', model: 'Cessna Citation CJ3' },
-  { id: 'N456CD', tailNumber: 'N456CD', model: 'Bombardier Global 6000' },
-  { id: 'N789EF', tailNumber: 'N789EF', model: 'Gulfstream G650ER' },
-  { id: 'N630MW', tailNumber: 'N630MW', model: 'Piper Cheyenne PA-31T2' },
-];
-let internalMockFleetStorage: FleetAircraft[] = [...MOCK_INITIAL_FLEET_AIRCRAFT];
+const FLEET_COLLECTION_NAME = 'fleetAircraft';
 
 // Exported async functions that clients will call
 export async function fetchFleetAircraft(): Promise<FleetAircraft[]> {
-  console.log('[ManageFleetFlow] Attempting to fetch fleet aircraft.');
+  console.log('[ManageFleetFlow] Attempting to fetch fleet aircraft from Firestore.');
   return fetchFleetAircraftFlow();
 }
 
 export async function saveFleetAircraft(input: SaveFleetAircraftInput): Promise<FleetAircraft> {
-  console.log('[ManageFleetFlow] Attempting to save fleet aircraft:', input.id);
+  console.log('[ManageFleetFlow] Attempting to save fleet aircraft to Firestore:', input.id);
   return saveFleetAircraftFlow(input);
 }
 
 export async function deleteFleetAircraft(input: DeleteFleetAircraftInput): Promise<{ success: boolean; aircraftId: string }> {
-  console.log('[ManageFleetFlow] Attempting to delete fleet aircraft:', input.aircraftId);
+  console.log('[ManageFleetFlow] Attempting to delete fleet aircraft from Firestore:', input.aircraftId);
   return deleteFleetAircraftFlow(input);
 }
 
@@ -67,17 +63,19 @@ const fetchFleetAircraftFlow = ai.defineFlow(
     outputSchema: FetchFleetAircraftOutputSchema,
   },
   async () => {
-    console.log('Executing fetchFleetAircraftFlow');
-    // TODO: Replace with actual Firestore read logic for 'fleetAircraft' collection
-    // Example:
-    // const db = getFirestore();
-    // const snapshot = await db.collection('fleetAircraft').get();
-    // const aircraftList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FleetAircraft));
-    // console.log('Fetched fleet from Firestore:', aircraftList);
-    // return aircraftList;
-
-    console.log('Returning mock fleet aircraft from flow skeleton:', internalMockFleetStorage);
-    return Promise.resolve([...internalMockFleetStorage]); // Return a copy
+    console.log('Executing fetchFleetAircraftFlow - Firestore');
+    try {
+      const db = getFirestore(); // Ensure Firebase is initialized
+      const fleetCollection = collection(db, FLEET_COLLECTION_NAME);
+      const snapshot = await getDocs(fleetCollection);
+      const aircraftList = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as FleetAircraft));
+      console.log('Fetched fleet from Firestore:', aircraftList.length, 'aircraft.');
+      return aircraftList;
+    } catch (error) {
+      console.error('Error fetching fleet from Firestore:', error);
+      // Depending on your error handling strategy, you might throw the error or return an empty array
+      throw new Error(`Failed to fetch fleet aircraft: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 );
 
@@ -88,24 +86,18 @@ const saveFleetAircraftFlow = ai.defineFlow(
     outputSchema: SaveFleetAircraftOutputSchema,
   },
   async (input) => {
-    console.log('Executing saveFleetAircraftFlow with input:', input);
-    // TODO: Replace with actual Firestore add/update logic for 'fleetAircraft' collection
-    // Example:
-    // const db = getFirestore();
-    // const aircraftRef = db.collection('fleetAircraft').doc(input.id); // Use input.id as document ID
-    // await aircraftRef.set({ tailNumber: input.tailNumber, model: input.model }, { merge: true });
-    // console.log('Saved/Updated fleet aircraft to Firestore:', input);
-    // return input;
-
-    // Mocking persistence
-    const index = internalMockFleetStorage.findIndex(ac => ac.id === input.id);
-    if (index !== -1) {
-      internalMockFleetStorage[index] = input; // Update existing
-    } else {
-      internalMockFleetStorage.push(input); // Add new
+    console.log('Executing saveFleetAircraftFlow with input - Firestore:', input);
+    try {
+      const db = getFirestore(); // Ensure Firebase is initialized
+      const { id, ...aircraftData } = input; // Separate id from the rest of the data
+      const aircraftRef = doc(db, FLEET_COLLECTION_NAME, id);
+      await setDoc(aircraftRef, aircraftData, { merge: true }); // Use aircraftData, not input
+      console.log('Saved/Updated fleet aircraft to Firestore:', input);
+      return input; // Return the full input object as confirmation
+    } catch (error) {
+      console.error('Error saving fleet aircraft to Firestore:', error);
+      throw new Error(`Failed to save fleet aircraft: ${error instanceof Error ? error.message : String(error)}`);
     }
-    console.log('Returning mock saved fleet aircraft from flow skeleton:', input);
-    return Promise.resolve(input);
   }
 );
 
@@ -116,19 +108,16 @@ const deleteFleetAircraftFlow = ai.defineFlow(
     outputSchema: DeleteFleetAircraftOutputSchema,
   },
   async (input) => {
-    console.log('Executing deleteFleetAircraftFlow for ID:', input.aircraftId);
-    // TODO: Replace with actual Firestore delete logic for 'fleetAircraft' collection
-    // Example:
-    // const db = getFirestore();
-    // await db.collection('fleetAircraft').doc(input.aircraftId).delete();
-    // console.log('Deleted fleet aircraft from Firestore:', input.aircraftId);
-    // return { success: true, aircraftId: input.aircraftId };
-
-    // Mocking persistence
-    const initialLength = internalMockFleetStorage.length;
-    internalMockFleetStorage = internalMockFleetStorage.filter(ac => ac.id !== input.aircraftId);
-    const success = internalMockFleetStorage.length < initialLength;
-    console.log(`Mock fleet aircraft deletion ${success ? 'successful' : 'failed/not found'} for:`, input.aircraftId);
-    return Promise.resolve({ success, aircraftId: input.aircraftId });
+    console.log('Executing deleteFleetAircraftFlow for ID - Firestore:', input.aircraftId);
+    try {
+      const db = getFirestore(); // Ensure Firebase is initialized
+      await deleteDoc(doc(db, FLEET_COLLECTION_NAME, input.aircraftId));
+      console.log('Deleted fleet aircraft from Firestore:', input.aircraftId);
+      return { success: true, aircraftId: input.aircraftId };
+    } catch (error) {
+      console.error('Error deleting fleet aircraft from Firestore:', error);
+      // You might want to check if the document existed before deletion for a more accurate success status
+      throw new Error(`Failed to delete fleet aircraft: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 );
