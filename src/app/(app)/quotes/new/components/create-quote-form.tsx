@@ -57,7 +57,7 @@ const formSchema = z.object({
   clientEmail: z.string().email("Invalid email address."),
   clientPhone: z.string().min(7, "Phone number seems too short.").optional().or(z.literal('')),
   legs: z.array(legSchema).min(1, "At least one flight leg is required."),
-  aircraftType: z.string().min(1, "Aircraft type is required.").optional(), // Made optional to allow undefined default
+  aircraftType: z.string().min(1, "Aircraft type is required.").optional(), 
   
   medicsRequested: z.boolean().optional().default(false),
   cateringRequested: z.boolean().optional().default(false),
@@ -176,7 +176,7 @@ export function CreateQuoteForm() {
   const sellPriceCatering = useWatch({ control, name: "sellPriceCatering" });
   const includeLandingFees = useWatch({ control, name: "includeLandingFees" });
   const sellPriceLandingFeePerLeg = useWatch({ control, name: "sellPriceLandingFeePerLeg" });
-  const currentEstimatedOvernights = useWatch({ control, name: "estimatedOvernights" }); // Renamed to avoid conflict
+  const currentEstimatedOvernights = useWatch({ control, name: "estimatedOvernights" });
   const sellPriceOvernight = useWatch({ control, name: "sellPriceOvernight" });
 
 
@@ -196,9 +196,6 @@ export function CreateQuoteForm() {
   }, [setValue, getValues]);
 
   useEffect(() => {
-    // Ensure legEstimates array has the same length as legsArray
-    // This might be better handled by initializing legEstimates based on legsArray's initial length
-    // or when legs are added/removed.
     if (legsArray && legEstimates.length !== legsArray.length) {
         setLegEstimates(currentEstimates => {
             const newEstimates = new Array(legsArray.length).fill(null);
@@ -215,8 +212,7 @@ export function CreateQuoteForm() {
 
   useEffect(() => {
     const newItems: LineItem[] = [];
-    const currentFormData = getValues(); // Get a snapshot of all form data
-
+    
     let totalRevenueFlightHours = 0;
     let totalBlockHours = 0;
 
@@ -232,7 +228,7 @@ export function CreateQuoteForm() {
       }
     });
     
-    const selectedAircraftDetails = availableAircraft.find(ac => ac.id === aircraftTypeId); // Use watched aircraftTypeId
+    const selectedAircraftDetails = availableAircraft.find(ac => ac.id === aircraftTypeId);
     const aircraftNameForRate = selectedAircraftDetails?.name;
     const aircraftRates = aircraftNameForRate ? (AIRCRAFT_RATES[aircraftNameForRate] || DEFAULT_AIRCRAFT_RATES) : DEFAULT_AIRCRAFT_RATES;
 
@@ -306,7 +302,7 @@ export function CreateQuoteForm() {
       });
     }
 
-    const numericEstimatedOvernights = Number(currentEstimatedOvernights || 0); // Use watched value
+    const numericEstimatedOvernights = Number(currentEstimatedOvernights || 0);
     if (numericEstimatedOvernights > 0) {
       const sellRate = sellPriceOvernight ?? OTHER_COST_RATES.OVERNIGHT_FEE_PER_NIGHT.sell;
       newItems.push({
@@ -330,8 +326,7 @@ export function CreateQuoteForm() {
     medicsRequested, sellPriceMedics,
     cateringRequested, sellPriceCatering,
     includeLandingFees, sellPriceLandingFeePerLeg,
-    currentEstimatedOvernights, sellPriceOvernight, // Watched value for overnights
-    getValues // getValues reference itself is stable
+    currentEstimatedOvernights, sellPriceOvernight,
   ]);
 
 
@@ -540,7 +535,7 @@ export function CreateQuoteForm() {
     setLegEstimates(prev => { const newEstimates = [...prev]; newEstimates.splice(index, 1); return newEstimates; });
   };
 
-  const handleCustomerSelect = (customerId: string) => {
+  const handleCustomerSelect = (customerId: string | undefined) => {
     if (!customerId) { 
       setValue('clientName', '');
       setValue('clientEmail', '');
@@ -636,9 +631,9 @@ export function CreateQuoteForm() {
                      <FormField control={control} name={`legs.${index}.departureDateTime`} render={({ field }) => ( <FormItem className="flex flex-col"> <FormLabel>Desired Departure Date & Time</FormLabel> {isClient ? ( <Popover> <PopoverTrigger asChild> <FormControl> 
                         <Button 
                           variant={"outline"} 
-                          className="w-full pl-3 text-left font-normal" 
+                          className="w-full pl-3 text-left font-normal" // Static className
                         >
-                          <span>Static Text Content</span> 
+                          <span>Pick a date (Static)</span> {/* Static text */}
                           <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
                         </Button> 
                       </FormControl> </PopoverTrigger> <PopoverContent className="w-auto p-0" align="start"> <Calendar mode="single" selected={field.value && field.value instanceof Date && !isNaN(field.value.getTime()) ? field.value : undefined} onSelect={field.onChange} disabled={(date) => minLegDepartureDate ? date < minLegDepartureDate : true} initialFocus /> <div className="p-2 border-t border-border"> <Input type="time" defaultValue={field.value && field.value instanceof Date && !isNaN(field.value.getTime()) ? format(field.value, "HH:mm") : ""} onChange={(e) => { const time = e.target.value; const [hours, minutes] = time.split(':').map(Number); let newDate = field.value && field.value instanceof Date && !isNaN(field.value.getTime()) ? new Date(field.value) : new Date(); if (isNaN(newDate.getTime())) newDate = new Date(); newDate.setHours(hours, minutes,0,0); field.onChange(newDate); }} /> </div> </PopoverContent> </Popover> ) : ( <Skeleton className="h-10 w-full" /> )} <FormMessage /> </FormItem> )} />
@@ -761,3 +756,4 @@ export function CreateQuoteForm() {
   );
 }
 
+    
