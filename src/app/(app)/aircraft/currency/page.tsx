@@ -1,7 +1,7 @@
 
 "use client"; 
 
-import React, { useState, useEffect } from 'react'; // Added useState, useEffect
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -15,48 +15,41 @@ import {
 } from "@/components/ui/table";
 import { Button } from '@/components/ui/button';
 import { Wrench, CheckCircle2, XCircle, AlertTriangle, Eye, Loader2 } from 'lucide-react';
-import { format, differenceInCalendarDays, parse } from 'date-fns';
-import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow'; // Import fleet data
+import { format, differenceInCalendarDays, parse, addDays, addHours as addDateHours, addMonths, addYears } from 'date-fns';
+import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow'; 
 import { useToast } from '@/hooks/use-toast';
 
 
 export interface MaintenanceItem {
   id: string;
-  tailNumber: string; // This will be used to link to FleetAircraft.tailNumber
-  aircraftModel: string; // This can come from FleetAircraft.model
+  tailNumber: string; 
+  aircraftModel: string; 
   currentAirframeTime: number;
   currentAirframeCycles: number;
   nextDueItemDescription: string;
-  dueAtDate?: string; 
+  dueAtDate?: string; // yyyy-MM-dd
   dueAtHours?: number; 
   dueAtCycles?: number; 
   notes?: string;
 }
 
 // This sample data represents the actual maintenance log entries.
-// The list of aircraft displayed will come from the fleet settings.
 export const sampleMaintenanceData: MaintenanceItem[] = [
-  { id: 'MX001', tailNumber: 'N121RB', aircraftModel: 'Cirrus SR-22', currentAirframeTime: 330.3, currentAirframeCycles: 200, nextDueItemDescription: 'IFR Pitot Static System', dueAtDate: '2023-07-31', notes: 'Performed by ACME Avionics.' },
-  { id: 'MX008', tailNumber: 'N121RB', aircraftModel: 'Cirrus SR-22', currentAirframeTime: 330.3, currentAirframeCycles: 200, nextDueItemDescription: 'Annual Inspection', dueAtDate: '2024-12-15', notes: 'Scheduled with Cirrus Service Center.' },
-  { id: 'MX009', tailNumber: 'N121RB', aircraftModel: 'Cirrus SR-22', currentAirframeTime: 330.3, currentAirframeCycles: 200, nextDueItemDescription: 'Oil Change', dueAtHours: 350 },
+  { id: 'MX001', tailNumber: 'N123AB', aircraftModel: 'Cessna Citation CJ3', currentAirframeTime: 1200.5, currentAirframeCycles: 850, nextDueItemDescription: 'Phase A Inspection', dueAtDate: '2024-09-15', notes: 'Scheduled with Cessna Service.' },
+  { id: 'MX010', tailNumber: 'N123AB', aircraftModel: 'Cessna Citation CJ3', currentAirframeTime: 1200.5, currentAirframeCycles: 850, nextDueItemDescription: 'Engine #1 Hot Section', dueAtHours: 1500 },
   
-  { id: 'MX002', tailNumber: 'N1327J', aircraftModel: 'Cessna Citation CJ', currentAirframeTime: 7050.0, currentAirframeCycles: 6049, nextDueItemDescription: "AIR DUCT O'HEAT light", dueAtHours: 7060 },
-  { id: 'MX010', tailNumber: 'N1327J', aircraftModel: 'Cessna Citation CJ', currentAirframeTime: 7050.0, currentAirframeCycles: 6049, nextDueItemDescription: 'Phase 1 Inspection', dueAtCycles: 6100, notes: 'Check landing gear torque.' },
+  { id: 'MX002', tailNumber: 'N456CD', aircraftModel: 'Bombardier Global 6000', currentAirframeTime: 2500.0, currentAirframeCycles: 1200, nextDueItemDescription: "Annual Inspection", dueAtDate: '2025-02-28' },
+  { id: 'MX011', tailNumber: 'N456CD', aircraftModel: 'Bombardier Global 6000', currentAirframeTime: 2500.0, currentAirframeCycles: 1200, nextDueItemDescription: 'Landing Gear Overhaul', dueAtCycles: 2000, notes: 'Check torque links.' },
 
-  { id: 'MX003', tailNumber: 'N630MW', aircraftModel: 'Pilatus PC-12 NG', currentAirframeTime: 12540.0, currentAirframeCycles: 8978, nextDueItemDescription: '50 Hour Inspection', dueAtHours: 12550.3 }, // N630MW might be isMaintenanceTracked: false
-  { id: 'MX004', tailNumber: 'N89TB', aircraftModel: 'LearJet 35A', currentAirframeTime: 16728.2, currentAirframeCycles: 11695, nextDueItemDescription: 'Fuel leak address', dueAtDate: '2024-07-15' }, // This aircraft is not in the default fleet, will be ignored
-  { id: 'MX005', tailNumber: 'N907DK', aircraftModel: 'Cessna Citation CJ', currentAirframeTime: 5361.4, currentAirframeCycles: 5476, nextDueItemDescription: 'Inspection Document 36', dueAtDate: '2025-07-14' }, // Not in default fleet
-  { id: 'MX006', tailNumber: 'N456CD', aircraftModel: 'Bombardier Global 6000', currentAirframeTime: 1200.5, currentAirframeCycles: 850, nextDueItemDescription: 'Annual Inspection', dueAtDate: '2025-01-31' },
-  { id: 'MX007', tailNumber: 'N789EF', aircraftModel: 'Gulfstream G650ER', currentAirframeTime: 350.0, currentAirframeCycles: 120, nextDueItemDescription: 'Engine Oil Change', dueAtHours: 400 },
+  { id: 'MX003', tailNumber: 'N630MW', aircraftModel: 'Pilatus PC-12 NG', currentAirframeTime: 12540.0, currentAirframeCycles: 8978, nextDueItemDescription: '50 Hour Inspection', dueAtHours: 12590.0 }, 
+  { id: 'MX006', tailNumber: 'N789EF', aircraftModel: 'Gulfstream G650ER', currentAirframeTime: 350.0, currentAirframeCycles: 120, nextDueItemDescription: '12 Month Check', dueAtDate: '2025-01-31' },
+  { id: 'MX007', tailNumber: 'N789EF', aircraftModel: 'Gulfstream G650ER', currentAirframeTime: 350.0, currentAirframeCycles: 120, nextDueItemDescription: 'Engine Oil Change', dueAtHours: 450 },
 ];
 
-// Interface for the aggregated data displayed in the table
 interface AggregatedMaintenanceDisplayItem extends MaintenanceItem {
-  fleetAircraftId: string; // ID from FleetAircraft
+  fleetAircraftId: string; 
 }
 
-
-// Aggregate data for the main overview table (shows only the most pressing item per aircraft)
 const getAggregatedMaintenanceData = (
   allFleetAircraft: FleetAircraft[], 
   allMaintenanceItems: MaintenanceItem[]
@@ -68,31 +61,28 @@ const getAggregatedMaintenanceData = (
     const itemsForThisAircraft = allMaintenanceItems.filter(item => item.tailNumber === fleetAc.tailNumber);
 
     if (itemsForThisAircraft.length > 0) {
-      // Sort items by urgency (overdue first, then by smallest 'to go' value)
       const sortedItems = itemsForThisAircraft.sort((a, b) => {
         const toGoA = calculateToGo(a);
         const toGoB = calculateToGo(b);
         if (toGoA.isOverdue && !toGoB.isOverdue) return -1;
         if (!toGoA.isOverdue && toGoB.isOverdue) return 1;
-        if (toGoA.isOverdue && toGoB.isOverdue) return toGoA.numeric - toGoB.numeric; // Both overdue, sort by how much
-        return toGoA.numeric - toGoB.numeric; // Neither overdue, sort by smallest remaining
+        if (toGoA.isOverdue && toGoB.isOverdue) return toGoA.numeric - toGoB.numeric; 
+        return toGoA.numeric - toGoB.numeric; 
       });
       
       const mostUrgentItem = sortedItems[0];
       aggregated.push({
         ...mostUrgentItem,
-        aircraftModel: fleetAc.model, // Ensure model comes from fleet data
+        aircraftModel: fleetAc.model, 
         fleetAircraftId: fleetAc.id,
       });
     } else {
-      // If a tracked aircraft has no maintenance items in sampleMaintenanceData, 
-      // we can still show it with N/A for due items
       aggregated.push({
         id: `NO_MX_${fleetAc.id}`,
         tailNumber: fleetAc.tailNumber,
         aircraftModel: fleetAc.model,
-        currentAirframeTime: 0, // Or fetch/store this separately
-        currentAirframeCycles: 0, // Or fetch/store this separately
+        currentAirframeTime: 0, 
+        currentAirframeCycles: 0, 
         nextDueItemDescription: 'No items tracked',
         fleetAircraftId: fleetAc.id,
       });
@@ -105,16 +95,25 @@ const getAggregatedMaintenanceData = (
 export const calculateToGo = (item: MaintenanceItem): { text: string; numeric: number; unit: 'days' | 'hrs' | 'cycles' | 'N/A'; isOverdue: boolean } => {
   const now = new Date();
   if (item.dueAtDate) {
-    const dueDate = parse(item.dueAtDate, 'yyyy-MM-dd', new Date());
-    const daysRemaining = differenceInCalendarDays(dueDate, now);
-    return { text: `${daysRemaining} days`, numeric: daysRemaining, unit: 'days', isOverdue: daysRemaining < 0 };
+    try {
+      const dueDate = parse(item.dueAtDate, 'yyyy-MM-dd', new Date());
+      const daysRemaining = differenceInCalendarDays(dueDate, now);
+      return { text: `${daysRemaining} days`, numeric: daysRemaining, unit: 'days', isOverdue: daysRemaining < 0 };
+    } catch (e) {
+      console.error("Error parsing dueAtDate:", item.dueAtDate, e);
+      return { text: 'Invalid Date', numeric: Infinity, unit: 'N/A', isOverdue: true };
+    }
   }
-  if (item.dueAtHours != null) { 
-    const hoursRemaining = parseFloat((item.dueAtHours - item.currentAirframeTime).toFixed(1));
+  // Ensure currentAirframeTime and currentAirframeCycles are numbers
+  const currentHours = typeof item.currentAirframeTime === 'number' ? item.currentAirframeTime : 0;
+  const currentCycles = typeof item.currentAirframeCycles === 'number' ? item.currentAirframeCycles : 0;
+
+  if (item.dueAtHours != null && typeof item.dueAtHours === 'number') { 
+    const hoursRemaining = parseFloat((item.dueAtHours - currentHours).toFixed(1));
     return { text: `${hoursRemaining} hrs`, numeric: hoursRemaining, unit: 'hrs', isOverdue: hoursRemaining < 0 };
   }
-  if (item.dueAtCycles != null) { 
-    const cyclesRemaining = item.dueAtCycles - item.currentAirframeCycles;
+  if (item.dueAtCycles != null && typeof item.dueAtCycles === 'number') { 
+    const cyclesRemaining = item.dueAtCycles - currentCycles;
     return { text: `${cyclesRemaining} cycles`, numeric: cyclesRemaining, unit: 'cycles', isOverdue: cyclesRemaining < 0 };
   }
   return { text: 'N/A', numeric: Infinity, unit: 'N/A', isOverdue: false };
@@ -133,6 +132,9 @@ export const getReleaseStatus = (toGo: { numeric: number; unit: 'days' | 'hrs' |
   if (toGo.unit === 'cycles' && toGo.numeric < 50) { 
     return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-yellow-500', label: 'Due Soon' };
   }
+  if (toGo.text === 'N/A') {
+    return { icon: <CheckCircle2 className="h-5 w-5" />, colorClass: 'text-gray-400', label: 'N/A' };
+  }
   return { icon: <CheckCircle2 className="h-5 w-5" />, colorClass: 'text-green-500', label: 'OK' };
 };
 
@@ -148,7 +150,8 @@ export default function AircraftCurrencyPage() {
       try {
         const fetchedFleet = await fetchFleetAircraft();
         setFleet(fetchedFleet);
-        const newAggregatedData = getAggregatedMaintenanceData(fetchedFleet, sampleMaintenanceData);
+        // Pass a copy of sampleMaintenanceData to avoid direct modification if getAggregatedMaintenanceData sorts it
+        const newAggregatedData = getAggregatedMaintenanceData(fetchedFleet, [...sampleMaintenanceData]);
         setAggregatedData(newAggregatedData);
       } catch (error) {
         console.error("Failed to fetch fleet aircraft:", error);
@@ -205,12 +208,24 @@ export default function AircraftCurrencyPage() {
                     const toGoData = calculateToGo(item);
                     const status = getReleaseStatus(toGoData);
                     let dueAtDisplay = 'N/A';
-                    if (item.dueAtDate) dueAtDisplay = format(parse(item.dueAtDate, 'yyyy-MM-dd', new Date()), 'MM/dd/yyyy');
-                    else if (item.dueAtHours != null) dueAtDisplay = `${item.dueAtHours.toLocaleString()} hrs`;
-                    else if (item.dueAtCycles != null) dueAtDisplay = `${item.dueAtCycles.toLocaleString()} cycles`;
+                    
+                    if (item.nextDueItemDescription === 'No items tracked') {
+                        dueAtDisplay = 'N/A';
+                    } else if (item.dueAtDate) {
+                        try {
+                            dueAtDisplay = format(parse(item.dueAtDate, 'yyyy-MM-dd', new Date()), 'MM/dd/yyyy');
+                        } catch {
+                            dueAtDisplay = "Invalid Date";
+                        }
+                    } else if (item.dueAtHours != null) {
+                        dueAtDisplay = `${item.dueAtHours.toLocaleString()} hrs`;
+                    } else if (item.dueAtCycles != null) {
+                        dueAtDisplay = `${item.dueAtCycles.toLocaleString()} cycles`;
+                    }
+
 
                     return (
-                      <TableRow key={item.fleetAircraftId} className="hover:bg-muted/50"> {/* Use fleetAircraftId as key */}
+                      <TableRow key={item.fleetAircraftId} className="hover:bg-muted/50">
                         <TableCell className="font-medium">
                           <Link href={`/aircraft/currency/${encodeURIComponent(item.tailNumber)}`} className="hover:underline text-primary">
                             {item.tailNumber}
