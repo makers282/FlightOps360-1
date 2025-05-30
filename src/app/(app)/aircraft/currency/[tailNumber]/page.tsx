@@ -1,7 +1,7 @@
 
 "use client";
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { PageHeader } from '@/components/page-header';
@@ -15,9 +15,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from '@/components/ui/button';
-import { Wrench, PlusCircle, ArrowLeft, CheckCircle2, XCircle, AlertTriangle, PlaneIcon } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Wrench, PlusCircle, ArrowLeft, PlaneIcon, Save } from 'lucide-react';
 import { format, parse } from 'date-fns';
 import { sampleMaintenanceData, calculateToGo, getReleaseStatus, type MaintenanceItem } from '../page';
+import { useToast } from '@/hooks/use-toast';
 
 interface AircraftComponentTime {
   componentName: string;
@@ -26,7 +28,7 @@ interface AircraftComponentTime {
 }
 
 // Mock data for the "Current Hours & Cycles" display for different aircraft
-const aircraftComponentTimesData: Record<string, AircraftComponentTime[]> = {
+const MOCK_AIRCRAFT_COMPONENT_TIMES_DATA: Record<string, AircraftComponentTime[]> = {
   'N630MW': [
     { componentName: 'Airframe', currentTime: 12540.0, currentCycles: 8978 },
     { componentName: 'Engine One', currentTime: 12471.2, currentCycles: 9058 },
@@ -64,22 +66,68 @@ const aircraftComponentTimesData: Record<string, AircraftComponentTime[]> = {
 export default function AircraftMaintenanceDetailPage() {
   const params = useParams();
   const tailNumber = typeof params.tailNumber === 'string' ? decodeURIComponent(params.tailNumber) : undefined;
+  const { toast } = useToast();
+
+  const [editableComponentTimes, setEditableComponentTimes] = useState<AircraftComponentTime[]>([]);
+
+  useEffect(() => {
+    if (tailNumber) {
+      const initialTimes = MOCK_AIRCRAFT_COMPONENT_TIMES_DATA[tailNumber] || MOCK_AIRCRAFT_COMPONENT_TIMES_DATA['DEFAULT'];
+      setEditableComponentTimes(JSON.parse(JSON.stringify(initialTimes))); // Deep copy
+    }
+  }, [tailNumber]);
 
   const aircraftMaintenanceTasks = tailNumber 
     ? sampleMaintenanceData.filter(item => item.tailNumber === tailNumber) 
     : [];
   
   const aircraftDisplayDetails = aircraftMaintenanceTasks.length > 0 ? aircraftMaintenanceTasks[0] : null;
-  const componentTimes = tailNumber ? (aircraftComponentTimesData[tailNumber] || aircraftComponentTimesData['DEFAULT']) : aircraftComponentTimesData['DEFAULT'];
 
+  const handleComponentTimeChange = (index: number, field: 'currentTime' | 'currentCycles', value: string) => {
+    const numericValue = parseFloat(value);
+    if (!isNaN(numericValue) || value === '') {
+      setEditableComponentTimes(prevTimes => {
+        const newTimes = [...prevTimes];
+        newTimes[index] = { ...newTimes[index], [field]: value === '' ? 0 : numericValue };
+        return newTimes;
+      });
+    }
+  };
 
-  if (!tailNumber || !aircraftDisplayDetails) {
+  const handleSaveComponentTimes = () => {
+    // In a real app, this would save to a backend.
+    console.log("Saving component times for", tailNumber, editableComponentTimes);
+    toast({
+      title: "Component Times Saved (Simulated)",
+      description: `Times for ${tailNumber} logged to console.`,
+    });
+  };
+
+  if (!tailNumber) {
     return (
       <>
         <PageHeader title="Aircraft Not Found" icon={Wrench} />
         <Card>
           <CardContent className="pt-6">
-            <p>The aircraft with tail number "{tailNumber}" could not be found or has no maintenance items.</p>
+            <p>Invalid aircraft tail number provided.</p>
+            <Button asChild variant="outline" className="mt-4">
+              <Link href="/aircraft/currency">
+                <ArrowLeft className="mr-2 h-4 w-4" /> Back to Maintenance Overview
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </>
+    );
+  }
+  
+  if (!aircraftDisplayDetails && editableComponentTimes.length === 0) {
+     return (
+      <>
+        <PageHeader title={`Data for ${tailNumber}`} icon={Wrench} />
+        <Card>
+          <CardContent className="pt-6">
+            <p>No maintenance or component time data found for aircraft "{tailNumber}".</p>
             <Button asChild variant="outline" className="mt-4">
               <Link href="/aircraft/currency">
                 <ArrowLeft className="mr-2 h-4 w-4" /> Back to Maintenance Overview
@@ -91,11 +139,12 @@ export default function AircraftMaintenanceDetailPage() {
     );
   }
 
+
   return (
     <>
       <PageHeader
-        title={`Maintenance Details for ${aircraftDisplayDetails.tailNumber}`}
-        description={`Tracked items & component status for ${aircraftDisplayDetails.aircraftModel} (${aircraftDisplayDetails.tailNumber}).`}
+        title={`Maintenance Details for ${tailNumber}`}
+        description={`Tracked items & component status for ${aircraftDisplayDetails?.aircraftModel || 'Unknown Model'} (${tailNumber}).`}
         icon={Wrench}
         actions={
           <div className="flex gap-2">
@@ -105,47 +154,75 @@ export default function AircraftMaintenanceDetailPage() {
               </Link>
             </Button>
             <Button>
-              <PlusCircle className="mr-2 h-4 w-4" /> Add New Item for {aircraftDisplayDetails.tailNumber}
+              <PlusCircle className="mr-2 h-4 w-4" /> Add New Item for {tailNumber}
             </Button>
           </div>
         }
       />
 
       <Card className="mb-6 shadow-lg">
-        <CardHeader className="flex flex-row items-center gap-2">
-          <PlaneIcon className="h-6 w-6 text-primary" />
-          <CardTitle>Current Hours & Cycles</CardTitle>
+        <CardHeader className="flex flex-row items-center justify-between">
+            <div className="flex items-center gap-2">
+                <PlaneIcon className="h-6 w-6 text-primary" />
+                <CardTitle>Current Hours & Cycles</CardTitle>
+            </div>
         </CardHeader>
         <CardContent>
-          {componentTimes.length > 0 ? (
+          {editableComponentTimes.length > 0 ? (
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Component</TableHead>
-                  <TableHead className="text-right">Current Time</TableHead>
-                  <TableHead className="text-right">Current Cycles</TableHead>
+                  <TableHead className="w-1/3 text-right">Current Time (hrs)</TableHead>
+                  <TableHead className="w-1/3 text-right">Current Cycles</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {componentTimes.map((comp) => (
+                {editableComponentTimes.map((comp, index) => (
                   <TableRow key={comp.componentName}>
                     <TableCell className="font-medium">{comp.componentName}</TableCell>
-                    <TableCell className="text-right">{comp.currentTime.toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1})}</TableCell>
-                    <TableCell className="text-right">{comp.currentCycles.toLocaleString()}</TableCell>
+                    <TableCell className="text-right">
+                      <Input 
+                        type="number"
+                        step="0.1"
+                        value={comp.currentTime}
+                        onChange={(e) => handleComponentTimeChange(index, 'currentTime', e.target.value)}
+                        className="text-right"
+                      />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Input 
+                        type="number"
+                        step="1"
+                        value={comp.currentCycles}
+                        onChange={(e) => handleComponentTimeChange(index, 'currentCycles', e.target.value)}
+                        className="text-right"
+                      />
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
           ) : (
-            <p className="text-muted-foreground">No component time data available for this aircraft.</p>
+            <p className="text-muted-foreground">No component time data available for this aircraft. Configure in Company Settings.</p>
           )}
         </CardContent>
+        {editableComponentTimes.length > 0 && (
+            <div className="p-6 pt-0 flex justify-end">
+                <Button onClick={handleSaveComponentTimes}>
+                    <Save className="mr-2 h-4 w-4" /> Save Component Times
+                </Button>
+            </div>
+        )}
       </Card>
 
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle>Tracked Maintenance Items</CardTitle>
-          <CardDescription>Detailed list of maintenance items for {aircraftDisplayDetails.tailNumber}. Overall Airframe Time: {aircraftDisplayDetails.currentAirframeTime.toLocaleString()} hrs / {aircraftDisplayDetails.currentAirframeCycles.toLocaleString()} cycles.</CardDescription>
+          <CardDescription>
+            Detailed list of maintenance items for {tailNumber}. 
+            {aircraftDisplayDetails && ` Overall Airframe Time: ${aircraftDisplayDetails.currentAirframeTime.toLocaleString()} hrs / ${aircraftDisplayDetails.currentAirframeCycles.toLocaleString()} cycles.`}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
@@ -174,7 +251,6 @@ export default function AircraftMaintenanceDetailPage() {
                   let dueType = 'N/A';
 
                   if (item.dueAtDate) {
-                    // Ensure item.dueAtDate is a valid string like "yyyy-MM-dd"
                     try {
                         dueAtDisplay = format(parse(item.dueAtDate, 'yyyy-MM-dd', new Date()), 'MM/dd/yyyy');
                         dueType = 'Date';
@@ -218,3 +294,5 @@ export default function AircraftMaintenanceDetailPage() {
   );
 }
 
+
+    
