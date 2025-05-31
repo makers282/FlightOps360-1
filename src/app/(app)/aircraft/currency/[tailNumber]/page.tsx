@@ -30,6 +30,7 @@ import { useToast } from '@/hooks/use-toast';
 import { fetchFleetAircraft, saveFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
 import { fetchMaintenanceTasksForAircraft, saveMaintenanceTask, deleteMaintenanceTask, type MaintenanceTask as FlowMaintenanceTask } from '@/ai/flows/manage-maintenance-tasks-flow';
 import { fetchComponentTimesForAircraft, saveComponentTimesForAircraft, type AircraftComponentTimes } from '@/ai/flows/manage-component-times-flow';
+import { fetchCompanyProfile, type CompanyProfile } from '@/ai/flows/manage-company-profile-flow'; // Added for company info
 import { PageHeader } from '@/components/page-header';
 
 
@@ -535,10 +536,12 @@ export default function AircraftMaintenanceDetailPage() {
   const generateWorkOrderHtml = (
     tasksToReport: DisplayMaintenanceItem[], 
     aircraft: FleetAircraft, 
-    componentTimes: Array<{ componentName: string; currentTime: number; currentCycles: number }>
+    componentTimes: Array<{ componentName: string; currentTime: number; currentCycles: number }>,
+    companyProfile: CompanyProfile | null
   ): string => {
     
-    const companyName = "FlightOps360 Demo"; // Placeholder
+    const companyName = companyProfile?.companyName || "SkyBase Operations"; // Use fetched or default
+    // Logo handling: for now, use the SVG. If companyProfile.logoUrl exists, it could be used.
     const companyLogoSvg = `
       <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-plane">
         <path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>
@@ -559,7 +562,7 @@ export default function AircraftMaintenanceDetailPage() {
       return `
         <tr>
           <td>${task.itemTitle}</td>
-          <td>${task.referenceNumber || '-'}</td>
+          <td style="white-space: nowrap;">${task.referenceNumber || '-'}</td>
           <td>${task.itemType}</td>
           <td>${task.associatedComponent || 'Airframe'}</td>
           <td>${lastDoneStr}</td>
@@ -592,13 +595,16 @@ export default function AircraftMaintenanceDetailPage() {
           table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 9pt; }
           th, td { border: 1px solid #ccc; padding: 8px; text-align: left; vertical-align: top; }
           th { background-color: #e9ecef; color: #495057; font-weight: 600; }
+          td[style*="white-space: nowrap;"] { min-width: 70px; } /* Ensure Ref # column is wide enough */
           tr:nth-child(even) { background-color: #f8f9fa; }
           .signatures { margin-top: 40px; display: flex; justify-content: space-between; page-break-inside: avoid; }
           .signatures div { width: 45%; }
           .signatures div p { margin-bottom: 50px; font-size: 10pt; }
-          .print-button { position: fixed; top: 15px; right: 15px; padding: 10px 15px; background-color: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.1); font-size: 10pt;}
+          .print-button-container { text-align: center; margin-top: 30px; margin-bottom: 10px; }
+          .print-button { padding: 10px 20px; background-color: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.1); font-size: 12pt;}
+          .footer-powered-by { text-align: center; font-size: 9pt; color: #777; margin-top: 30px; padding-top: 10px; border-top: 1px solid #eee; }
           @media print {
-            .print-button { display: none; }
+            .print-button-container { display: none; }
             body { margin: 0.5in; font-size: 9pt; color: #000; }
             .header-container { border-bottom: 2px solid #007bff; }
             .company-info h1 { color: #007bff; }
@@ -611,7 +617,6 @@ export default function AircraftMaintenanceDetailPage() {
         </style>
       </head>
       <body>
-        <button class="print-button" onclick="window.print()">Print Work Order</button>
         <div class="header-container">
             <div class="company-info">
                 <h1>${companyName}</h1>
@@ -668,12 +673,18 @@ export default function AircraftMaintenanceDetailPage() {
             <p>Date: ____________</p>
           </div>
         </div>
+        <div class="print-button-container">
+            <button class="print-button" onclick="window.print()">Print Work Order</button>
+        </div>
+        <div class="footer-powered-by">
+            Powered by SkyBase
+        </div>
       </body>
       </html>
     `;
   };
 
-  const handleGenerateWorkOrder = () => {
+  const handleGenerateWorkOrder = async () => {
     if (!currentAircraft) {
       toast({ title: "Error", description: "Aircraft data not loaded.", variant: "destructive" });
       return;
@@ -683,19 +694,25 @@ export default function AircraftMaintenanceDetailPage() {
       return;
     }
 
-    startReportGenerationTransition(() => {
-      const tasksToReport = displayedTasks.filter(task => selectedTaskIds.includes(task.id));
-      const reportHtml = generateWorkOrderHtml(tasksToReport, currentAircraft, editableComponentTimes);
-      
-      const reportWindow = window.open('', '_blank');
-      if (reportWindow) {
-        reportWindow.document.open();
-        reportWindow.document.write(reportHtml);
-        reportWindow.document.close();
-      } else {
-        toast({ title: "Popup Blocked?", description: "Could not open the report window. Please check your popup blocker.", variant: "destructive" });
+    startReportGenerationTransition(async () => {
+      try {
+        const companyProfile = await fetchCompanyProfile(); // Fetch company profile
+        const tasksToReport = displayedTasks.filter(task => selectedTaskIds.includes(task.id));
+        const reportHtml = generateWorkOrderHtml(tasksToReport, currentAircraft, editableComponentTimes, companyProfile);
+        
+        const reportWindow = window.open('', '_blank');
+        if (reportWindow) {
+          reportWindow.document.open();
+          reportWindow.document.write(reportHtml);
+          reportWindow.document.close();
+        } else {
+          toast({ title: "Popup Blocked?", description: "Could not open the report window. Please check your popup blocker.", variant: "destructive" });
+        }
+        toast({ title: "Work Order Generated", description: "A new window with the work order should have opened.", variant: "default" });
+      } catch (error) {
+        console.error("Error generating work order:", error);
+        toast({ title: "Error Generating Report", description: (error instanceof Error ? error.message : "Could not fetch company profile."), variant: "destructive" });
       }
-      toast({ title: "Work Order Generated", description: "A new window with the work order should have opened.", variant: "default" });
     });
   };
 
@@ -785,7 +802,7 @@ export default function AircraftMaintenanceDetailPage() {
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         <Card className="shadow-lg lg:col-span-2">
            <CardHeader className="flex flex-row items-start justify-between">
-            <div className="flex items-center gap-2"><PlaneIcon className="h-6 w-6 text-primary" /><CardTitle>Current Hours &amp; Cycles</CardTitle></div>
+            <div className="flex items-center gap-2"><PlaneIcon className="h-6 w-6 text-primary" /><CardTitle>Current Hours & Cycles</CardTitle></div>
             {!isEditingComponentTimes ? (
                 <Button variant="outline" size="icon" onClick={() => setIsEditingComponentTimes(true)} disabled={isSavingComponentTimes}>
                     <Edit className="h-4 w-4" /> <span className="sr-only">Edit Component Times</span>
