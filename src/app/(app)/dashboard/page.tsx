@@ -1,10 +1,12 @@
 
-import React from 'react';
+"use client"; // Added "use client" as we'll use hooks
+
+import React, { useState, useEffect } from 'react'; // Added useState, useEffect
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { List, ListItem } from '@/components/ui/list';
-import { AlertTriangle, Plane, Milestone, FileText, ShieldAlert, Bell, LayoutDashboard, Megaphone, UserCheck, CalendarClock, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { AlertTriangle, Plane, Milestone, FileText, ShieldAlert, Bell, LayoutDashboard, Megaphone, UserCheck, CalendarClock, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 import Image from 'next/image';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -15,14 +17,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow'; // Import fleet flow
+import { useToast } from '@/hooks/use-toast'; // Import useToast
 
-
-const aircraftData = [
-  { id: 'N123AB', type: 'Cessna Citation CJ3', status: 'Available', location: 'KHPN', imageUrl: 'https://placehold.co/600x400.png', dataAiHint: 'private jet' },
-  { id: 'N456CD', type: 'Bombardier Global 6000', status: 'In Flight', location: 'KTEB -> KSDL', imageUrl: 'https://placehold.co/600x400.png', dataAiHint: 'business jet' },
-  { id: 'N789EF', type: 'Gulfstream G650ER', status: 'Maintenance', location: 'KDAL', imageUrl: 'https://placehold.co/600x400.png', dataAiHint: 'luxury jet' },
-];
-
+// Static data for sections not yet dynamic
 const tripData = [
   { id: 'TRP-001', origin: 'KHPN', destination: 'KMIA', aircraft: 'N123AB', status: 'Scheduled', departure: '2024-08-15 10:00 EDT' },
   { id: 'TRP-002', origin: 'KTEB', destination: 'KSDL', aircraft: 'N456CD', status: 'En Route', departure: '2024-08-14 14:30 EDT' },
@@ -86,6 +84,30 @@ const getAlertIcon = (alert: typeof crewAlertData[0]) => {
 }
 
 export default function DashboardPage() {
+  const [aircraftList, setAircraftList] = useState<FleetAircraft[]>([]);
+  const [isLoadingAircraft, setIsLoadingAircraft] = useState(true);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    const loadAircraft = async () => {
+      setIsLoadingAircraft(true);
+      try {
+        const fleet = await fetchFleetAircraft();
+        setAircraftList(fleet);
+      } catch (error) {
+        console.error("Failed to load aircraft for dashboard:", error);
+        toast({
+          title: "Error Loading Aircraft",
+          description: "Could not fetch aircraft status for the dashboard.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoadingAircraft(false);
+      }
+    };
+    loadAircraft();
+  }, [toast]);
+
   return (
     <>
       <PageHeader title="Dashboard" description="Real-time overview of flight operations." icon={LayoutDashboard} />
@@ -93,7 +115,7 @@ export default function DashboardPage() {
       <Card className="mb-6 shadow-md border-primary/50">
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><Megaphone className="h-5 w-5 text-primary" /> Company Bulletin Board</CardTitle>
-          <CardDescription>Latest news and announcements for all personnel.</CardDescription>
+          <CardDescription>Latest news and announcements for all personnel. (Static Data)</CardDescription>
         </CardHeader>
         <CardContent>
           <List>
@@ -116,7 +138,7 @@ export default function DashboardPage() {
       <Card className="md:col-span-2 lg:col-span-3 mb-6">
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><Milestone className="h-5 w-5 text-primary" />Trip Status</CardTitle>
-            <CardDescription>Overview of current and upcoming trips.</CardDescription>
+            <CardDescription>Overview of current and upcoming trips. (Static Data)</CardDescription>
           </CardHeader>
           <CardContent>
             <Table>
@@ -151,25 +173,44 @@ export default function DashboardPage() {
             <CardDescription>Current status of all operational aircraft.</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {aircraftData.map((aircraft) => (
-                <div key={aircraft.id} className="flex items-center gap-4 p-3 rounded-lg hover:bg-muted/50 transition-colors">
-                  <Image src={aircraft.imageUrl} alt={aircraft.type} width={80} height={53} className="rounded-md aspect-video object-cover" data-ai-hint={aircraft.dataAiHint} />
-                  <div className="flex-1">
-                    <p className="font-semibold">{aircraft.id} <span className="text-sm text-muted-foreground font-normal">- {aircraft.type}</span></p>
-                    <p className="text-sm text-muted-foreground">{aircraft.location}</p>
+            {isLoadingAircraft ? (
+              <div className="flex items-center justify-center py-10">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <p className="ml-2 text-muted-foreground">Loading aircraft status...</p>
+              </div>
+            ) : aircraftList.length === 0 ? (
+              <p className="text-muted-foreground text-center py-5">No aircraft found in fleet.</p>
+            ) : (
+              <div className="space-y-4">
+                {aircraftList.map((aircraft) => (
+                  <div key={aircraft.id} className="flex items-center gap-4 p-3 rounded-lg hover:bg-muted/50 transition-colors">
+                    <Image 
+                      src={`https://placehold.co/80x53.png`} // Example placeholder, AI hint can be used for actual image search
+                      alt={aircraft.model} 
+                      width={80} 
+                      height={53} 
+                      className="rounded-md aspect-video object-cover" 
+                      data-ai-hint={`${aircraft.model.split(' ')[0] || 'jet'} private`} // Simple AI hint
+                    />
+                    <div className="flex-1">
+                      <p className="font-semibold">{aircraft.tailNumber} <span className="text-sm text-muted-foreground font-normal">- {aircraft.model}</span></p>
+                      <p className="text-sm text-muted-foreground">Base: {aircraft.baseLocation || 'N/A'}</p>
+                    </div>
+                    {/* A true "Status" (e.g., Available, In Flight) would require more complex logic or another data source */}
+                    <Badge variant={getStatusBadgeVariant(aircraft.isMaintenanceTracked ? 'Available' : 'Check Status')}>
+                      {aircraft.isMaintenanceTracked ? 'Active' : 'Needs Review'}
+                    </Badge>
                   </div>
-                  <Badge variant={getStatusBadgeVariant(aircraft.status)}>{aircraft.status}</Badge>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><UserCheck className="h-5 w-5 text-primary" />Crew Alerts</CardTitle>
-            <CardDescription>Important crew notifications.</CardDescription>
+            <CardDescription>Important crew notifications. (Static Data)</CardDescription>
           </CardHeader>
           <CardContent>
             <List>
@@ -196,7 +237,7 @@ export default function DashboardPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><AlertTriangle className="h-5 w-5 text-destructive" />Active System Alerts</CardTitle>
-            <CardDescription>Critical system notifications.</CardDescription>
+            <CardDescription>Critical system notifications. (Static Data)</CardDescription>
           </CardHeader>
           <CardContent>
             <List>
@@ -222,19 +263,19 @@ export default function DashboardPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><FileText className="h-5 w-5 text-primary" />Document Hub</CardTitle>
+            <CardDescription>(Static Link)</CardDescription>
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground">Access flight and compliance documents.</p>
-            {/* Placeholder for document hub summary */}
           </CardContent>
         </Card>
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><ShieldAlert className="h-5 w-5 text-primary" />FRAT</CardTitle>
+            <CardDescription>(Static Link)</CardDescription>
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground">Flight Risk Assessment Tool status.</p>
-            {/* Placeholder for FRAT summary */}
           </CardContent>
         </Card>
 
@@ -242,4 +283,6 @@ export default function DashboardPage() {
     </>
   );
 }
+    
+
     
