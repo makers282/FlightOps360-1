@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useTransition, useCallback } from 'react';
@@ -47,11 +48,11 @@ export default function QuoteConfigPage() {
   const [editingAircraftRateId, setEditingAircraftRateId] = useState<string | null>(null);
 
   const [showAddServiceForm, setShowAddServiceForm] = useState(false);
-  const [newServiceKey, setNewServiceKey] = useState('');
+  // const [newServiceKey, setNewServiceKey] = useState(''); // Removed: Key will be auto-generated
   const [newServiceDisplayDescription, setNewServiceDisplayDescription] = useState('');
   const [newServiceUnit, setNewServiceUnit] = useState('');
-  const [newServiceBuyRateLocal, setNewServiceBuyRateLocal] = useState(''); // Renamed to avoid conflict
-  const [newServiceSellRateLocal, setNewServiceSellRateLocal] = useState(''); // Renamed to avoid conflict
+  const [newServiceBuyRateLocal, setNewServiceBuyRateLocal] = useState(''); 
+  const [newServiceSellRateLocal, setNewServiceSellRateLocal] = useState(''); 
   const [editingServiceKey, setEditingServiceKey] = useState<string | null>(null);
 
   const loadInitialData = useCallback(async () => {
@@ -77,7 +78,7 @@ export default function QuoteConfigPage() {
       setIsLoadingFleet(false);
       setIsLoadingCompanyProfile(false);
     }
-  }, [toast]); // toast is stable
+  }, [toast]); 
 
   useEffect(() => {
     loadInitialData();
@@ -149,12 +150,11 @@ export default function QuoteConfigPage() {
     });
   };
 
-  // Service Fee Handlers - Now interact with companyProfile
   const handleEditServiceFeeClick = (key: string) => {
     const serviceToEdit = currentServiceFeeRates[key];
     if (serviceToEdit) {
       setEditingServiceKey(key);
-      setNewServiceKey(key); 
+      // setNewServiceKey(key); // Key is not directly editable by user now
       setNewServiceDisplayDescription(serviceToEdit.displayDescription);
       setNewServiceUnit(serviceToEdit.unitDescription);
       setNewServiceBuyRateLocal(String(serviceToEdit.buy));
@@ -164,13 +164,40 @@ export default function QuoteConfigPage() {
   };
   
   const handleAddOrUpdateServiceFee = () => {
-    const keyToUse = editingServiceKey || newServiceKey.toUpperCase().replace(/\s+/g, '_');
-    if (!keyToUse || !newServiceDisplayDescription || !newServiceUnit || !newServiceBuyRateLocal || !newServiceSellRateLocal) {
+    let keyToUse: string;
+
+    if (editingServiceKey) {
+        keyToUse = editingServiceKey;
+    } else {
+        if (!newServiceDisplayDescription) {
+            toast({ title: "Missing Fields", description: "Please provide a display description for the service/fee.", variant: "destructive" });
+            return;
+        }
+        // Auto-generate key from display description
+        keyToUse = newServiceDisplayDescription
+            .trim()
+            .toUpperCase()
+            .replace(/\s+/g, '_') // Replace spaces with underscores
+            .replace(/[^A-Z0-9_]/g, ''); // Remove non-alphanumeric characters except underscore
+
+        if (!keyToUse) {
+             toast({ title: "Invalid Description", description: "Could not generate a valid key from the description. Please use alphanumeric characters.", variant: "destructive" });
+            return;
+        }
+        if (currentServiceFeeRates[keyToUse] && !editingServiceKey) { // Check if key exists only when adding new
+            toast({ title: "Key Exists", description: `A service/fee with a similar description (key: ${keyToUse}) already exists. Please use a more unique description or edit the existing one.`, variant: "destructive" });
+            return;
+        }
+    }
+
+
+    if (!newServiceDisplayDescription || !newServiceUnit || !newServiceBuyRateLocal || !newServiceSellRateLocal) {
         toast({ title: "Missing Fields", description: "Please fill in all fields for the service/fee.", variant: "destructive" });
         return;
     }
     const buyRateNum = parseFloat(newServiceBuyRateLocal);
     const sellRateNum = parseFloat(newServiceSellRateLocal);
+
     if (isNaN(buyRateNum) || isNaN(sellRateNum) || buyRateNum < 0 || sellRateNum < 0) {
         toast({ title: "Invalid Rates", description: "Buy and Sell rates must be valid non-negative numbers.", variant: "destructive" });
         return;
@@ -179,10 +206,10 @@ export default function QuoteConfigPage() {
     const updatedServiceFeeRates = {
         ...currentServiceFeeRates,
         [keyToUse]: { 
-            displayDescription: newServiceDisplayDescription,
+            displayDescription: newServiceDisplayDescription.trim(),
             buy: buyRateNum, 
             sell: sellRateNum, 
-            unitDescription: newServiceUnit 
+            unitDescription: newServiceUnit.trim() 
         }
     };
 
@@ -199,8 +226,8 @@ export default function QuoteConfigPage() {
     startSavingServiceFeeTransition(async () => {
         try {
             await saveCompanyProfile(updatedProfile);
-            setCurrentServiceFeeRates(updatedServiceFeeRates); // Update local state immediately for UI
-            setCompanyProfile(updatedProfile); // Update the main profile state
+            setCurrentServiceFeeRates(updatedServiceFeeRates); 
+            setCompanyProfile(updatedProfile); 
             toast({ title: "Success", description: `Service/Fee ${editingServiceKey ? 'updated' : 'added'} in Firestore.` });
             handleCancelEditServiceFee();
         } catch (error) {
@@ -212,7 +239,7 @@ export default function QuoteConfigPage() {
 
   const handleCancelEditServiceFee = () => {
     setEditingServiceKey(null);
-    setNewServiceKey('');
+    // setNewServiceKey(''); // Key field removed
     setNewServiceDisplayDescription('');
     setNewServiceUnit('');
     setNewServiceBuyRateLocal('');
@@ -399,7 +426,7 @@ export default function QuoteConfigPage() {
                     <CardDescription>Default buy and sell rates for various services and fees. (Connected to Firestore)</CardDescription>
                 </div>
                 {!showAddServiceForm && (
-                  <Button variant="outline" size="sm" onClick={() => { setEditingServiceKey(null); setShowAddServiceForm(true); setNewServiceKey(''); setNewServiceDisplayDescription(''); setNewServiceUnit(''); setNewServiceBuyRateLocal(''); setNewServiceSellRateLocal(''); }}>
+                  <Button variant="outline" size="sm" onClick={() => { setEditingServiceKey(null); setShowAddServiceForm(true); setNewServiceDisplayDescription(''); setNewServiceUnit(''); setNewServiceBuyRateLocal(''); setNewServiceSellRateLocal(''); }}>
                       <PlusCircle className="mr-2 h-4 w-4" /> Add Service/Fee
                   </Button>
                 )}
@@ -412,14 +439,11 @@ export default function QuoteConfigPage() {
                       {editingServiceKey ? `Edit Service/Fee: ${currentServiceFeeRates[editingServiceKey]?.displayDescription || editingServiceKey}` : 'Add New Service/Fee'}
                     </CardTitle>
                     <div className="space-y-3">
-                        <div>
-                            <Label htmlFor="newServiceKey">Unique Key (ALL_CAPS_SNAKE_CASE)</Label>
-                            <Input id="newServiceKey" value={newServiceKey} onChange={(e) => setNewServiceKey(e.target.value)} placeholder="e.g., INTERNATIONAL_HANDLING_FEE" disabled={!!editingServiceKey}/>
-                             {editingServiceKey && <p className="text-xs text-muted-foreground">Key cannot be changed during edit.</p>}
-                        </div>
+                        {/* Removed Unique Key input field */}
                         <div>
                             <Label htmlFor="newServiceDisplayDescription">Display Description</Label>
                             <Input id="newServiceDisplayDescription" value={newServiceDisplayDescription} onChange={(e) => setNewServiceDisplayDescription(e.target.value)} placeholder="e.g., International Handling Fee" />
+                            {!editingServiceKey && <p className="text-xs text-muted-foreground">A unique key will be auto-generated from this description.</p>}
                         </div>
                         <div>
                             <Label htmlFor="newServiceUnit">Unit Description</Label>
@@ -518,3 +542,4 @@ export default function QuoteConfigPage() {
     </>
   );
 }
+
