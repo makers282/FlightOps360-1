@@ -1,7 +1,10 @@
 
+"use client"; // Mark as client component for usePathname
+
 import React from 'react';
 import type { PropsWithChildren } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation'; // Import usePathname
 import {
   Bell,
   Calculator,
@@ -27,8 +30,8 @@ import {
   SlidersHorizontal,
   PlaneTakeoff,
   Building2,
-  Wrench, // Added for Maintenance Currency
-  ClipboardCheck, // Alternative for Maintenance Currency
+  Wrench, 
+  ClipboardCheck, 
 } from 'lucide-react';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -60,38 +63,40 @@ import { Icons } from '@/components/icons';
 
 
 export default function AppLayout({ children }: PropsWithChildren) {
+  const pathname = usePathname(); // Get current pathname
+
   return (
     <SidebarProvider defaultOpen>
       <Sidebar>
         <SidebarHeader className="p-4">
           <Link href="/dashboard" className="flex items-center">
-            <Icons.Logo className="h-8 w-auto" /> {/* Adjusted for potentially wider logo */}
+            <Icons.Logo className="h-8 w-auto" /> 
           </Link>
         </SidebarHeader>
         <SidebarContent>
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton href="/dashboard" tooltip="Dashboard">
+              <SidebarMenuButton href="/dashboard" tooltip="Dashboard" isActive={pathname === '/dashboard'}>
                 <LayoutDashboard />
                 Dashboard
               </SidebarMenuButton>
             </SidebarMenuItem>
 
             <SidebarMenuItem>
-              <SidebarMenuButton isSubmenuTrigger tooltip="Trips">
+              <SidebarMenuButton isSubmenuTrigger tooltip="Trips" isActive={pathname.startsWith('/trips')}>
                 <CalendarDays />
                 Trips
               </SidebarMenuButton>
               <SidebarMenuSub>
-                <SidebarMenuSubButton href="/trips/new" tooltip="Create New Trip">
+                <SidebarMenuSubButton href="/trips/new" tooltip="Create New Trip" isActive={pathname === '/trips/new'}>
                   <CalendarPlus />
                   New Trip
                 </SidebarMenuSubButton>
-                <SidebarMenuSubButton href="/trips/calendar" tooltip="Trip Calendar">
+                <SidebarMenuSubButton href="/trips/calendar" tooltip="Trip Calendar" isActive={pathname === '/trips/calendar'}>
                   <Calendar />
                   Trip Calendar
                 </SidebarMenuSubButton>
-                <SidebarMenuSubButton href="/trips/list" tooltip="Trip List View">
+                <SidebarMenuSubButton href="/trips/list" tooltip="Trip List View" isActive={pathname === '/trips/list'}>
                   <ListChecks />
                   Trip List
                 </SidebarMenuSubButton>
@@ -99,27 +104,27 @@ export default function AppLayout({ children }: PropsWithChildren) {
             </SidebarMenuItem>
 
             <SidebarMenuItem>
-              <SidebarMenuButton href="/customers" tooltip="Customers">
+              <SidebarMenuButton href="/customers" tooltip="Customers" isActive={pathname.startsWith('/customers')}>
                 <UsersRound />
                 Customers
               </SidebarMenuButton>
             </SidebarMenuItem>
 
             <SidebarMenuItem>
-              <SidebarMenuButton isSubmenuTrigger tooltip="Quotes & Routing">
+              <SidebarMenuButton isSubmenuTrigger tooltip="Quotes & Routing" isActive={pathname.startsWith('/quotes') || pathname.startsWith('/optimal-route')}>
                 <FileSpreadsheet />
                 Quotes & Routing
               </SidebarMenuButton>
               <SidebarMenuSub>
-                <SidebarMenuSubButton href="/quotes/new" tooltip="New Quote">
+                <SidebarMenuSubButton href="/quotes/new" tooltip="New Quote" isActive={pathname === '/quotes/new'}>
                   <Calculator />
                   New Quote
                 </SidebarMenuSubButton>
-                 <SidebarMenuSubButton href="/quotes" tooltip="All Quotes">
+                 <SidebarMenuSubButton href="/quotes" tooltip="All Quotes" isActive={pathname === '/quotes' && pathname !== '/quotes/new'}>
                   <FileArchive />
                   All Quotes
                 </SidebarMenuSubButton>
-                <SidebarMenuSubButton href="/optimal-route" tooltip="Optimal Route Planning">
+                <SidebarMenuSubButton href="/optimal-route" tooltip="Optimal Route Planning" isActive={pathname === '/optimal-route'}>
                   <Route />
                   Optimal Route
                 </SidebarMenuSubButton>
@@ -127,49 +132,56 @@ export default function AppLayout({ children }: PropsWithChildren) {
             </SidebarMenuItem>
             
             <SidebarMenuItem>
-              <SidebarMenuButton isSubmenuTrigger tooltip="Aircraft">
+              <SidebarMenuButton isSubmenuTrigger tooltip="Aircraft" isActive={pathname.startsWith('/aircraft')}>
                 <Plane />
                 Aircraft
               </SidebarMenuButton>
               <SidebarMenuSub>
-                <SidebarMenuSubButton href="/aircraft/currency" tooltip="Maintenance Currency">
+                <SidebarMenuSubButton href="/aircraft/currency" tooltip="Maintenance Currency" isActive={pathname.startsWith('/aircraft/currency')}>
                   <Wrench /> 
                   Maintenance Currency
                 </SidebarMenuSubButton>
-                {/* We can add more aircraft specific links here later */}
               </SidebarMenuSub>
             </SidebarMenuItem>
 
             <SidebarMenuItem>
-              <SidebarMenuButton href="/documents" tooltip="Document Hub">
+              <SidebarMenuButton href="/documents" tooltip="Document Hub" isActive={pathname === '/documents'}>
                 <FileText />
                 Document Hub
               </SidebarMenuButton>
             </SidebarMenuItem>
 
             <SidebarMenuItem>
-              <SidebarMenuButton isSubmenuTrigger tooltip="Crew Management">
-                <Users /> {/* Changed from UsersRound for variety */}
+              <SidebarMenuButton 
+                isSubmenuTrigger 
+                tooltip="Crew Management" 
+                isActive={
+                  pathname.startsWith('/crew') || 
+                  pathname === '/trips/crew-schedule' || 
+                  pathname === '/trips/duty-time'
+                }
+              >
+                <Users /> 
                 Crew Management
               </SidebarMenuButton>
               <SidebarMenuSub>
-                 <SidebarMenuSubButton href="/crew/status" tooltip="Crew Status">
-                  <UsersRound /> {/* Back to UsersRound for consistency here */}
+                 <SidebarMenuSubButton href="/crew/status" tooltip="Crew Status" isActive={pathname === '/crew/status'}>
+                  <UsersRound /> 
                   Crew Status
                 </SidebarMenuSubButton>
-                <SidebarMenuSubButton href="/crew/documents" tooltip="Crew Documents">
+                <SidebarMenuSubButton href="/crew/documents" tooltip="Crew Documents" isActive={pathname === '/crew/documents'}>
                   <FolderArchive />
                   Crew Documents
                 </SidebarMenuSubButton>
-                <SidebarMenuSubButton href="/crew/training" tooltip="Crew Training Records">
+                <SidebarMenuSubButton href="/crew/training" tooltip="Crew Training Records" isActive={pathname === '/crew/training'}>
                   <GraduationCap />
                   Crew Training
                 </SidebarMenuSubButton>
-                <SidebarMenuSubButton href="/trips/crew-schedule" tooltip="Crew Schedule Calendar">
+                <SidebarMenuSubButton href="/trips/crew-schedule" tooltip="Crew Schedule Calendar" isActive={pathname === '/trips/crew-schedule'}>
                   <CalendarCheck2 />
                   Crew Schedule
                 </SidebarMenuSubButton>
-                <SidebarMenuSubButton href="/trips/duty-time" tooltip="Duty Time Calendar">
+                <SidebarMenuSubButton href="/trips/duty-time" tooltip="Duty Time Calendar" isActive={pathname === '/trips/duty-time'}>
                   <CalendarClock />
                   Duty Times
                 </SidebarMenuSubButton>
@@ -177,34 +189,34 @@ export default function AppLayout({ children }: PropsWithChildren) {
             </SidebarMenuItem>
 
             <SidebarMenuItem>
-              <SidebarMenuButton href="/frat" tooltip="FRAT Integration">
+              <SidebarMenuButton href="/frat" tooltip="FRAT Integration" isActive={pathname === '/frat'}>
                 <ShieldAlert />
                 FRAT Integration
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <SidebarMenuButton href="/notifications" tooltip="Notifications">
+              <SidebarMenuButton href="/notifications" tooltip="Notifications" isActive={pathname === '/notifications'}>
                 <Bell />
                 Notifications
                 <SidebarMenuBadge>3</SidebarMenuBadge> 
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <SidebarMenuButton isSubmenuTrigger tooltip="Settings">
+              <SidebarMenuButton isSubmenuTrigger tooltip="Settings" isActive={pathname.startsWith('/settings')}>
                 <Settings />
                 Settings
               </SidebarMenuButton>
               <SidebarMenuSub>
-                <SidebarMenuSubButton href="/settings/company">
+                <SidebarMenuSubButton href="/settings/company" isActive={pathname === '/settings/company'}>
                   <Building2 /> Company Settings
                 </SidebarMenuSubButton>
-                <SidebarMenuSubButton href="/settings/roles">
+                <SidebarMenuSubButton href="/settings/roles" isActive={pathname === '/settings/roles'}>
                   <Users /> User Roles
                 </SidebarMenuSubButton>
-                <SidebarMenuSubButton href="/settings/quote-config">
+                <SidebarMenuSubButton href="/settings/quote-config" isActive={pathname === '/settings/quote-config'}>
                   <SlidersHorizontal /> Quote Configuration
                 </SidebarMenuSubButton>
-                 <SidebarMenuSubButton href="/settings/aircraft-performance">
+                 <SidebarMenuSubButton href="/settings/aircraft-performance" isActive={pathname === '/settings/aircraft-performance'}>
                   <PlaneTakeoff /> Aircraft Performance
                 </SidebarMenuSubButton>
               </SidebarMenuSub>
@@ -212,14 +224,12 @@ export default function AppLayout({ children }: PropsWithChildren) {
           </SidebarMenu>
         </SidebarContent>
         <SidebarFooter className="p-2">
-           {/* Could add a user profile link or quick actions here */}
         </SidebarFooter>
       </Sidebar>
       <SidebarInset>
         <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background/80 px-4 backdrop-blur-sm sm:h-16 sm:px-6">
           <SidebarTrigger className="md:hidden" />
           <div className="flex-1">
-            {/* Header content, e.g., breadcrumbs or search can go here if needed */}
           </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

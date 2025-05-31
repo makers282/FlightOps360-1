@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { Slot } from "@radix-ui/react-slot"
 import { VariantProps, cva } from "class-variance-authority"
 import { PanelLeft, ChevronRight } from "lucide-react" 
+import { usePathname } from 'next/navigation'; // Added for SidebarMenuItem
 
 import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
@@ -502,49 +503,51 @@ const SidebarMenuItem = React.forwardRef<
   HTMLLIElement,
   React.ComponentProps<"li">
 >(({ className, children, ...props }, ref) => {
-  const [isSubMenuOpen, setIsSubMenuOpen] = React.useState(false);
   const { state: sidebarState, isMobile, isClientMounted } = useSidebar();
-
-  const isSidebarCollapsedIconOnly = sidebarState === "collapsed" && !isMobile;
-
+  
   const childrenArray = React.Children.toArray(children);
   const menuButtonChild = childrenArray.find(
     (child) => React.isValidElement(child) && (child.type as any).displayName === 'SidebarMenuButton'
   ) as React.ReactElement<any> | undefined;
 
-  const hasSubmenu =
-    menuButtonChild?.props.isSubmenuTrigger &&
-    childrenArray.some(
-      (child) => React.isValidElement(child) && (child.type as any).displayName === 'SidebarMenuSub'
-    );
+  const menuSubChild = childrenArray.find(
+    (child) => React.isValidElement(child) && (child.type as any).displayName === 'SidebarMenuSub'
+  ) as React.ReactElement<any> | undefined;
 
-  const childrenWithProps = React.Children.map(children, (child) => {
-    if (React.isValidElement(child)) {
-      if ((child.type as any).displayName === 'SidebarMenuButton' && hasSubmenu) {
-        return React.cloneElement(child, {
-          onClick: (e: React.MouseEvent<HTMLElement>) => {
-            if (!isSidebarCollapsedIconOnly) {
-                setIsSubMenuOpen((prev) => !prev);
-            }
-            if (child.props.onClick) child.props.onClick(e);
-          },
-          isSubMenuExpanded: isSubMenuOpen,
-        });
-      }
-      if ((child.type as any).displayName === 'SidebarMenuSub' && hasSubmenu) {
-        // Only render submenu if client mounted, submenu is open, and not in icon-only mode
-        return isClientMounted && isSubMenuOpen && !isSidebarCollapsedIconOnly ? child : null;
-      }
-    }
-    return child;
-  });
+  const hasSubmenu = menuButtonChild?.props.isSubmenuTrigger && menuSubChild;
+  const isButtonActive = menuButtonChild?.props.isActive || false;
   
-  React.useEffect(() => {
-    if (isSidebarCollapsedIconOnly) {
-      setIsSubMenuOpen(false);
-    }
-  }, [isSidebarCollapsedIconOnly]);
+  const [isSubMenuOpen, setIsSubMenuOpen] = React.useState(isButtonActive);
 
+  React.useEffect(() => {
+    if (isClientMounted) {
+      if (sidebarState === "collapsed" && !isMobile) {
+        setIsSubMenuOpen(false);
+      } else {
+        // Only set based on isActive if not collapsed (or if mobile, where it's a sheet)
+        setIsSubMenuOpen(isButtonActive);
+      }
+    }
+  }, [isButtonActive, sidebarState, isMobile, isClientMounted]);
+
+
+  const isSidebarCollapsedIconOnly = sidebarState === "collapsed" && !isMobile;
+
+  const clonedMenuButton = menuButtonChild ? React.cloneElement(menuButtonChild, {
+    ...(hasSubmenu && {
+      onClick: (e: React.MouseEvent<HTMLElement>) => {
+        if (!isSidebarCollapsedIconOnly) { 
+          setIsSubMenuOpen((prev) => !prev);
+        }
+        if (menuButtonChild.props.onClick) menuButtonChild.props.onClick(e);
+      },
+      isSubMenuExpanded: isSubMenuOpen,
+    })
+  }) : null;
+
+  const otherChildren = childrenArray.filter(
+    child => child !== menuButtonChild && child !== menuSubChild
+  );
 
   return (
     <li
@@ -553,7 +556,9 @@ const SidebarMenuItem = React.forwardRef<
       className={cn("group/menu-item relative", className)}
       {...props}
     >
-      {childrenWithProps}
+      {clonedMenuButton}
+      {otherChildren}
+      {hasSubmenu && isClientMounted && isSubMenuOpen && !isSidebarCollapsedIconOnly && menuSubChild}
     </li>
   );
 });
@@ -613,16 +618,16 @@ const SidebarMenuButton = React.forwardRef<
   ) => {
     const { isMobile, state, isClientMounted } = useSidebar();
     const isIconOnly = state === "collapsed" && !isMobile;
+    
     const [showChevronIcon, setShowChevronIcon] = React.useState(false);
-
     React.useEffect(() => {
-      // Only show chevron on client after mount, if it's a submenu trigger and not icon-only mode
       if (isClientMounted && isSubmenuTrigger && !isIconOnly) {
         setShowChevronIcon(true);
       } else {
         setShowChevronIcon(false);
       }
     }, [isClientMounted, isSubmenuTrigger, isIconOnly]);
+
 
     const commonClassAndData = {
       "data-sidebar": "menu-button",
@@ -634,7 +639,7 @@ const SidebarMenuButton = React.forwardRef<
     const content = (
       <>
         {children}
-        {showChevronIcon && (
+        {showChevronIcon && ( 
           <ChevronRight
             className={cn(
               "submenu-chevron ml-auto h-4 w-4 shrink-0 transition-transform duration-200",
@@ -653,7 +658,7 @@ const SidebarMenuButton = React.forwardRef<
           {content}
         </Slot>
       );
-    } else if (href && !isSubmenuTrigger) {
+    } else if (href && !isSubmenuTrigger) { 
       element = (
         <Link
           href={href}
@@ -665,7 +670,7 @@ const SidebarMenuButton = React.forwardRef<
           {content}
         </Link>
       );
-    } else {
+    } else { 
       element = (
         <button
           type="button"
@@ -679,7 +684,8 @@ const SidebarMenuButton = React.forwardRef<
       );
     }
     
-    const tooltipContentHidden = !isClientMounted || state !== "collapsed" || isMobile;
+    const tooltipContentHidden = !isClientMounted || (isClientMounted && (state !== "collapsed" || isMobile));
+
 
     if (!tooltip) {
       return element;
@@ -895,5 +901,3 @@ export {
   SidebarTrigger,
   useSidebar,
 }
-
-    
