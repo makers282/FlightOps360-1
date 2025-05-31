@@ -3,7 +3,12 @@
  * @fileOverview Zod schemas and TypeScript types for quotes.
  */
 import { z } from 'zod';
-import { legTypes } from '@/app/(app)/quotes/new/components/create-quote-form'; 
+// Removed import of legTypes from client component
+
+// Define legTypes here
+export const legTypes = [ 
+  "Charter", "Owner", "Positioning", "Ambulance", "Cargo", "Maintenance", "Ferry"
+] as const;
 
 // Schema for individual line items in the cost breakdown
 export const QuoteLineItemSchema = z.object({

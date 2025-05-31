@@ -40,13 +40,11 @@ import { LegsSummaryTable } from './legs-summary-table';
 import { CostsSummaryDisplay, type LineItem } from './costs-summary-display';
 import { saveQuote } from '@/ai/flows/manage-quotes-flow';
 import type { Quote, SaveQuoteInput, QuoteLeg, QuoteLineItem, quoteStatuses as QuoteStatusType } from '@/ai/schemas/quote-schemas';
-import { quoteStatuses } from '@/ai/schemas/quote-schemas';
+import { quoteStatuses, legTypes } from '@/ai/schemas/quote-schemas'; // Import legTypes from quote-schemas
 import { useRouter } from 'next/navigation';
 
 
-export const legTypes = [ 
-  "Charter", "Owner", "Positioning", "Ambulance", "Cargo", "Maintenance", "Ferry"
-] as const;
+// legTypes is now imported from @/ai/schemas/quote-schemas
 
 const legSchema = z.object({
   origin: z.string().min(3, "Origin airport code (e.g., JFK).").max(5, "Origin airport code too long.").toUpperCase(),
