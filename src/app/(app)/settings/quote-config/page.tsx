@@ -11,7 +11,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { SlidersHorizontal, DollarSign, Edit, Percent, PlusCircle, Trash2, Save, XCircle, Loader2, Info } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { fetchAircraftRates, saveAircraftRate, deleteAircraftRate, type AircraftRate } from '@/ai/flows/manage-aircraft-rates-flow';
+import { fetchAircraftRates, saveAircraftRate, deleteAircraftRate } from '@/ai/flows/manage-aircraft-rates-flow';
+import type { AircraftRate } from '@/ai/schemas/aircraft-rate-schemas'; // Updated import
 import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
 import { fetchCompanyProfile, saveCompanyProfile, type CompanyProfile, type ServiceFeeRate } from '@/ai/flows/manage-company-profile-flow';
 import { Alert, AlertDescription } from '@/components/ui/alert';

@@ -10,35 +10,18 @@
  */
 
 import {ai} from '@/ai/genkit';
-import {z}from 'genkit';
 import { db } from '@/lib/firebase';
 import { collection, doc, getDocs, setDoc, deleteDoc, getDoc } from 'firebase/firestore';
+import type { AircraftRate, SaveAircraftRateInput, DeleteAircraftRateInput } from '@/ai/schemas/aircraft-rate-schemas';
+import { 
+    AircraftRateSchema as FlowAircraftRateSchema, // Renamed to avoid conflict with AircraftRate type
+    SaveAircraftRateInputSchema, 
+    DeleteAircraftRateInputSchema,
+    FetchAircraftRatesOutputSchema,
+    SaveAircraftRateOutputSchema,
+    DeleteAircraftRateOutputSchema
+} from '@/ai/schemas/aircraft-rate-schemas';
 
-// Define the structure for an aircraft rate (simplified back to direct buy/sell)
-// The 'id' here should correspond to an 'id' from the FleetAircraftSchema in manage-fleet-flow.ts
-export const AircraftRateSchema = z.object({
-  id: z.string().describe("The unique identifier for the aircraft from the fleet (e.g., N123AB or a Firestore doc ID)."),
-  buy: z.number().min(0).describe("The buy rate per hour for the aircraft."),
-  sell: z.number().min(0).describe("The sell rate per hour for the aircraft."),
-});
-export type AircraftRate = z.infer<typeof AircraftRateSchema>;
-
-// Schemas for flow inputs and outputs
-// SaveAircraftRateInputSchema matches AircraftRateSchema directly
-const SaveAircraftRateInputSchema = AircraftRateSchema;
-export type SaveAircraftRateInput = z.infer<typeof SaveAircraftRateInputSchema>;
-
-const DeleteAircraftRateInputSchema = z.object({
-  aircraftId: z.string().describe("The ID of the aircraft rate to delete (corresponds to fleet aircraft ID)."),
-});
-export type DeleteAircraftRateInput = z.infer<typeof DeleteAircraftRateInputSchema>;
-
-const FetchAircraftRatesOutputSchema = z.array(AircraftRateSchema);
-const SaveAircraftRateOutputSchema = AircraftRateSchema;
-const DeleteAircraftRateOutputSchema = z.object({
-  success: z.boolean(),
-  aircraftId: z.string(),
-});
 
 const AIRCRAFT_RATES_COLLECTION = 'aircraftRates';
 
@@ -76,10 +59,10 @@ const fetchAircraftRatesFlow = ai.defineFlow(
         let buy = 0;
         let sell = 0;
 
-        if (data.rates && data.rates.standardCharter) { // Check for old categorized structure
-          buy = data.rates.standardCharter.buy || 0;
-          sell = data.rates.standardCharter.sell || 0;
-        } else if (data.buy !== undefined && data.sell !== undefined) { // Check for direct buy/sell
+        if (data.rates && data.rates.standardCharter && typeof data.rates.standardCharter.buy === 'number' && typeof data.rates.standardCharter.sell === 'number') { 
+          buy = data.rates.standardCharter.buy;
+          sell = data.rates.standardCharter.sell;
+        } else if (data.buy !== undefined && data.sell !== undefined) { 
           buy = data.buy;
           sell = data.sell;
         }
@@ -145,8 +128,7 @@ const deleteAircraftRateFlow = ai.defineFlow(
       await deleteDoc(rateDocRef);
       console.log('Deleted aircraft rate from Firestore:', input.aircraftId);
       return { success: true, aircraftId: input.aircraftId };
-    } catch (error)
-       {
+    } catch (error) {
       console.error('Error deleting aircraft rate from Firestore:', error);
       throw new Error(`Failed to delete aircraft rate for ${input.aircraftId}: ${error instanceof Error ? error.message : String(error)}`);
     }

@@ -29,10 +29,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
 import { estimateFlightDetails, type EstimateFlightDetailsInput, type EstimateFlightDetailsOutput } from '@/ai/flows/estimate-flight-details-flow';
 import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
-import {
-  fetchAircraftRates,
-  type AircraftRate,
-} from '@/ai/flows/manage-aircraft-rates-flow';
+import { fetchAircraftRates } from '@/ai/flows/manage-aircraft-rates-flow';
+import type { AircraftRate } from '@/ai/schemas/aircraft-rate-schemas'; // Updated import path
 import {
   fetchCompanyProfile,
   type CompanyProfile,
@@ -281,39 +279,30 @@ export function CreateQuoteForm() {
         totalBlockHours += parseFloat((legBlockMinutes / 60).toFixed(2));
 
         // For simplicity, all billable leg types use the aircraft's standard rate.
-        // Positioning/Ferry/Maintenance might be billed differently or at cost in a more complex setup.
-        if (flightTime > 0 && ["Charter", "Owner", "Ambulance", "Cargo"].includes(leg.legType)) {
+        if (flightTime > 0 && ["Charter", "Owner", "Ambulance", "Cargo", "Positioning", "Ferry"].includes(leg.legType)) {
             totalFlightTimeBuyCost += flightTime * aircraftBuyRate;
             totalFlightTimeSellCost += flightTime * aircraftSellRate;
-            totalRevenueFlightHours += flightTime;
-        } else if (flightTime > 0 && ["Positioning", "Ferry", "Maintenance"].includes(leg.legType)) {
-            // Example: Bill positioning at cost or a specific configured rate if available.
-            // For this simplified model, we assume positioning cost is covered by the operator
-            // or handled by a specific sell rate in a more advanced setup.
-            // For now, let's assume positioning might be billed if its sell rate is > 0 or matches buy.
-            // Here, we'll just accumulate its cost for now.
-             totalFlightTimeBuyCost += flightTime * aircraftBuyRate; // Operator's cost
-             // If positioning sell rate is specifically set (e.g. to match buy or zero), it could be added here.
-             // For this iteration, let's assume sell rate for positioning is 0 or covered by main leg.
-             // Or, if we want to bill positioning at a specific rate, we'd need that from config.
-             // For now, we'll use the standard sell rate for simplicity in this reverted model.
-             totalFlightTimeSellCost += flightTime * aircraftSellRate; 
+            if (["Charter", "Owner", "Ambulance", "Cargo"].includes(leg.legType)) {
+                 totalRevenueFlightHours += flightTime;
+            }
         }
     });
 
     const selectedAircraftInfo = aircraftSelectOptions.find(ac => ac.value === aircraftId);
     const aircraftDisplayName = selectedAircraftInfo ? selectedAircraftInfo.label : "Selected Aircraft";
+    const billableFlightOrBlockHours = totalRevenueFlightHours > 0 ? totalRevenueFlightHours : (totalBlockHours > 0 ? totalBlockHours : 0);
 
-    if (totalRevenueFlightHours > 0 || totalFlightTimeSellCost > 0) {
+
+    if (billableFlightOrBlockHours > 0) {
         newItems.push({
             id: 'aircraftFlightTimeCost',
-            description: `Aircraft Flight Time (${aircraftDisplayName})`,
-            buyRate: totalRevenueFlightHours > 0 ? totalFlightTimeBuyCost / totalRevenueFlightHours : (totalBlockHours > 0 ? totalFlightTimeBuyCost / totalBlockHours : 0),
-            sellRate: totalRevenueFlightHours > 0 ? totalFlightTimeSellCost / totalRevenueFlightHours : (totalBlockHours > 0 ? totalFlightTimeSellCost / totalBlockHours : 0),
-            unitDescription: 'Flight Hour (Std.)',
-            quantity: parseFloat(totalRevenueFlightHours > 0 ? totalRevenueFlightHours.toFixed(2) : (totalBlockHours > 0 ? totalBlockHours.toFixed(2) : "0.00")),
-            buyTotal: totalFlightTimeBuyCost,
-            sellTotal: totalFlightTimeSellCost,
+            description: `Aircraft Time (${aircraftDisplayName})`,
+            buyRate: aircraftBuyRate, // Display the base hourly buy rate
+            sellRate: aircraftSellRate, // Display the base hourly sell rate
+            unitDescription: 'Hour (Std.)',
+            quantity: parseFloat(billableFlightOrBlockHours.toFixed(2)),
+            buyTotal: totalFlightTimeBuyCost, // Use the aggregated cost
+            sellTotal: totalFlightTimeSellCost, // Use the aggregated sell price
         });
     }
     
