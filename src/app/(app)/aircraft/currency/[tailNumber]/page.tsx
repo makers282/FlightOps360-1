@@ -4,7 +4,6 @@
 import React, { useState, useEffect, useTransition, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-// import { PageHeader } from '@/components/page-header'; // Keep PageHeader commented for now
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
   Table,
@@ -28,24 +27,17 @@ import { format, parse, addDays, isValid, addMonths, addYears, endOfMonth, parse
 import { useToast } from '@/hooks/use-toast';
 import { fetchFleetAircraft, saveFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
 import { fetchMaintenanceTasksForAircraft, saveMaintenanceTask, deleteMaintenanceTask, type MaintenanceTask as FlowMaintenanceTask } from '@/ai/flows/manage-maintenance-tasks-flow';
-import { PageHeader } from '@/components/page-header'; // Uncommented PageHeader
+import { fetchComponentTimesForAircraft, saveComponentTimesForAircraft, type AircraftComponentTimes } from '@/ai/flows/manage-component-times-flow';
+import { PageHeader } from '@/components/page-header';
 
-// MOCK_COMPONENT_VALUES_DATA remains client-side for now
-export const MOCK_COMPONENT_VALUES_DATA: Record<string, Record<string, { time?: number; cycles?: number }>> = {
-  'N123AB': { 'Airframe': { time: 1200.5, cycles: 850 }, 'Engine 1': { time: 1190.2, cycles: 840 }, 'Engine 2': { time: 1185.7, cycles: 835 }, 'APU': { time: 300.1, cycles: 400 } },
-  'N456CD': { 'Airframe': { time: 2500.0, cycles: 1200 }, 'Engine 1': { time: 2450.0, cycles: 1180 }, 'Engine 2': { time: 2440.0, cycles: 1170 }, 'APU': { time: 550.5, cycles: 600 } },
-  'N789EF': { 'Airframe': { time: 350.0, cycles: 120 }, 'Engine 1': { time: 345.0, cycles: 118 }, 'Engine 2': { time: 340.0, cycles: 115 }, 'APU': { time: 80.2, cycles: 90 }, 'Air Conditioning': { time: 150.5, cycles: 75 } },
-  'N630MW': { 'Airframe': { time: 12540.0, cycles: 8978 }, 'Engine 1': { time: 12471.2, cycles: 888 }, 'Engine 2': { time: 12471.2, cycles: 888 } }, // Corrected Engine 1 cycles for consistency
-};
+// MOCK_COMPONENT_VALUES_DATA is no longer used here, data will come from Firestore.
+// export const MOCK_COMPONENT_VALUES_DATA: Record<string, Record<string, { time?: number; cycles?: number }>> = { ... };
 
-// This is the type for tasks displayed in the UI, including calculated due dates.
 export interface DisplayMaintenanceItem extends FlowMaintenanceTask {
-  // Calculated fields for display:
-  dueAtDate?: string; // yyyy-MM-dd
+  dueAtDate?: string; 
   dueAtHours?: number;
   dueAtCycles?: number;
 }
-
 
 const aircraftInfoEditSchema = z.object({
   model: z.string().min(1, "Model is required."),
@@ -64,19 +56,21 @@ export default function AircraftMaintenanceDetailPage() {
 
   const [currentAircraft, setCurrentAircraft] = useState<FleetAircraft | null>(null);
   const [maintenanceTasks, setMaintenanceTasks] = useState<DisplayMaintenanceItem[]>([]);
-  const [isLoadingTasks, setIsLoadingTasks] = useState(true);
-
+  
   const [editableComponentTimes, setEditableComponentTimes] = useState<Array<{ componentName: string; currentTime: number; currentCycles: number }>>([]);
   const [originalComponentTimes, setOriginalComponentTimes] = useState<Array<{ componentName: string; currentTime: number; currentCycles: number }>>([]);
 
   const [isLoadingAircraft, setIsLoadingAircraft] = useState(true);
+  const [isLoadingTasks, setIsLoadingTasks] = useState(true);
+  const [isLoadingComponentTimes, setIsLoadingComponentTimes] = useState(true);
+  
   const [isSavingAircraftInfo, startSavingAircraftInfoTransition] = useTransition();
   const [isEditingAircraftInfo, setIsEditingAircraftInfo] = useState(false);
   const [isEditingComponentTimes, setIsEditingComponentTimes] = useState(false);
   const [isSavingComponentTimes, startSavingComponentTimesTransition] = useTransition();
 
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
-  const [editingTaskOriginalId, setEditingTaskOriginalId] = useState<string | null>(null); // This is the Firestore document ID
+  const [editingTaskOriginalId, setEditingTaskOriginalId] = useState<string | null>(null);
   const [initialModalFormData, setInitialModalFormData] = useState<Partial<MaintenanceTaskFormData> | null>(null);
 
   const aircraftInfoForm = useForm<AircraftInfoEditFormData>({ resolver: zodResolver(aircraftInfoEditSchema) });
@@ -119,35 +113,48 @@ export default function AircraftMaintenanceDetailPage() {
     }
     return { ...task, dueAtDate, dueAtHours, dueAtCycles };
   }, []);
-
-  const initializeComponentTimes = useCallback((aircraft: FleetAircraft | null) => {
-    if (!aircraft) {
+  
+  const loadAndInitializeComponentTimes = useCallback(async (aircraft: FleetAircraft | null) => {
+    if (!aircraft || !aircraft.id) {
       setEditableComponentTimes([]);
       setOriginalComponentTimes([]);
+      setIsLoadingComponentTimes(false);
       return;
     }
-  
-    const aircraftKeyInMock = aircraft.id || aircraft.tailNumber;
-    const componentValuesForAircraft = MOCK_COMPONENT_VALUES_DATA[aircraftKeyInMock] || {};
-    const trackedComponents = aircraft.trackedComponentNames || ['Airframe', 'Engine 1'];
-  
-    const initialTimes = trackedComponents.map(name => {
-      const trimmedName = name.trim();
-      // Attempt to find by exact trimmed name first, then case-insensitively if needed, though MOCK is usually exact
-      const mockDataForComponent = componentValuesForAircraft[trimmedName] || 
-                                   Object.entries(componentValuesForAircraft)
-                                         .find(([key, _]) => key.trim() === trimmedName)?.[1];
+    setIsLoadingComponentTimes(true);
+    try {
+      const fetchedTimesMap = await fetchComponentTimesForAircraft({ aircraftId: aircraft.id });
+      const trackedComponents = aircraft.trackedComponentNames || ['Airframe', 'Engine 1'];
       
-      return {
-        componentName: trimmedName, // Store the trimmed name
-        currentTime: mockDataForComponent?.time ?? 0,
-        currentCycles: mockDataForComponent?.cycles ?? 0,
-      };
-    });
-  
-    setEditableComponentTimes(JSON.parse(JSON.stringify(initialTimes))); 
-    setOriginalComponentTimes(JSON.parse(JSON.stringify(initialTimes))); 
-  }, []);
+      const initialTimesArray = trackedComponents.map(name => {
+        const trimmedName = name.trim();
+        const componentData = fetchedTimesMap ? fetchedTimesMap[trimmedName] : null;
+        return {
+          componentName: trimmedName,
+          currentTime: componentData?.time ?? 0,
+          currentCycles: componentData?.cycles ?? 0,
+        };
+      });
+
+      setEditableComponentTimes(JSON.parse(JSON.stringify(initialTimesArray)));
+      setOriginalComponentTimes(JSON.parse(JSON.stringify(initialTimesArray)));
+
+    } catch (error) {
+      console.error(`Failed to load component times for ${aircraft.id}:`, error);
+      toast({ title: "Error Loading Component Times", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
+      // Initialize with defaults if fetch fails
+      const trackedComponents = aircraft.trackedComponentNames || ['Airframe', 'Engine 1'];
+      const defaultTimesArray = trackedComponents.map(name => ({
+        componentName: name.trim(),
+        currentTime: 0,
+        currentCycles: 0,
+      }));
+      setEditableComponentTimes(defaultTimesArray);
+      setOriginalComponentTimes(JSON.parse(JSON.stringify(defaultTimesArray)));
+    } finally {
+      setIsLoadingComponentTimes(false);
+    }
+  }, [toast]);
 
 
   const loadMaintenanceTasks = useCallback(async (aircraftId: string) => {
@@ -183,12 +190,12 @@ export default function AircraftMaintenanceDetailPage() {
             primaryContactName: foundAircraft.primaryContactName || '',
             primaryContactPhone: foundAircraft.primaryContactPhone || '',
           });
-          initializeComponentTimes(foundAircraft);
+          await loadAndInitializeComponentTimes(foundAircraft); // Load component times from Firestore
           await loadMaintenanceTasks(foundAircraft.id);
         } else {
           setCurrentAircraft(null);
           setMaintenanceTasks([]);
-          initializeComponentTimes(null);
+          await loadAndInitializeComponentTimes(null);
           toast({ title: "Error", description: `Aircraft ${tailNumber} not found in fleet.`, variant: "destructive" });
         }
       } catch (error) {
@@ -199,7 +206,7 @@ export default function AircraftMaintenanceDetailPage() {
       }
     };
     loadAircraftDetails();
-  }, [tailNumber, toast, aircraftInfoForm, initializeComponentTimes, loadMaintenanceTasks]);
+  }, [tailNumber, toast, aircraftInfoForm, loadAndInitializeComponentTimes, loadMaintenanceTasks]);
 
   const handleComponentTimeChange = (componentName: string, field: 'currentTime' | 'currentCycles', value: string) => {
     const numericValue = parseFloat(value);
@@ -214,16 +221,25 @@ export default function AircraftMaintenanceDetailPage() {
   };
 
   const handleSaveComponentTimes = () => {
-    if (!currentAircraft) return;
-    startSavingComponentTimesTransition(() => {
-      const currentAircraftId = currentAircraft.id || currentAircraft.tailNumber; 
-      const newValues: Record<string, { time?: number; cycles?: number }> = {};
-      editableComponentTimes.forEach(comp => newValues[comp.componentName] = { time: comp.currentTime, cycles: comp.currentCycles });
-      MOCK_COMPONENT_VALUES_DATA[currentAircraftId] = newValues; 
+    if (!currentAircraft || !currentAircraft.id) return;
+    startSavingComponentTimesTransition(async () => {
+      const componentTimesMap: AircraftComponentTimes = {};
+      editableComponentTimes.forEach(comp => {
+        componentTimesMap[comp.componentName] = {
+          time: comp.currentTime,
+          cycles: comp.currentCycles,
+        };
+      });
       
-      setOriginalComponentTimes(JSON.parse(JSON.stringify(editableComponentTimes)));
-      setIsEditingComponentTimes(false);
-      toast({ title: "Component Times Saved (Mock)", description: `Updated for ${currentAircraftId}. This data is client-side only.` });
+      try {
+        await saveComponentTimesForAircraft({ aircraftId: currentAircraft.id, componentTimes: componentTimesMap });
+        setOriginalComponentTimes(JSON.parse(JSON.stringify(editableComponentTimes)));
+        setIsEditingComponentTimes(false);
+        toast({ title: "Component Times Saved", description: `Updated for ${currentAircraft.tailNumber} in Firestore.` });
+      } catch (error) {
+        console.error("Failed to save component times:", error);
+        toast({ title: "Error Saving Component Times", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
+      }
     });
   };
 
@@ -236,17 +252,15 @@ export default function AircraftMaintenanceDetailPage() {
     if (!currentAircraft) return;
     startSavingAircraftInfoTransition(async () => {
       try {
-        // Preserve fields not in AircraftInfoEditFormData
         const updatedAircraftData: FleetAircraft = { 
           ...currentAircraft, 
           ...data,
-          // Ensure fields like isMaintenanceTracked, trackedComponentNames, engineDetails are carried over
           isMaintenanceTracked: currentAircraft.isMaintenanceTracked,
           trackedComponentNames: currentAircraft.trackedComponentNames,
           engineDetails: currentAircraft.engineDetails,
         };
         await saveFleetAircraft(updatedAircraftData);
-        setCurrentAircraft(updatedAircraftData); // Update local state with the full object
+        setCurrentAircraft(updatedAircraftData);
         setIsEditingAircraftInfo(false);
         toast({ title: "Success", description: "Aircraft information updated." });
       } catch (error) {
@@ -275,22 +289,18 @@ export default function AircraftMaintenanceDetailPage() {
       isActive: taskToEdit.isActive,
       trackType: taskToEdit.trackType,
       isTripsNotAffected: taskToEdit.isTripsNotAffected || false, 
-      
       lastCompletedDate: taskToEdit.lastCompletedDate || '', 
       lastCompletedHours: taskToEdit.lastCompletedHours, 
       lastCompletedCycles: taskToEdit.lastCompletedCycles, 
       lastCompletedNotes: taskToEdit.lastCompletedNotes || '', 
-      
       isHoursDueEnabled: taskToEdit.isHoursDueEnabled || false,
       hoursDue: taskToEdit.hoursDue,
       hoursTolerance: taskToEdit.hoursTolerance,
       alertHoursPrior: taskToEdit.alertHoursPrior,
-      
       isCyclesDueEnabled: taskToEdit.isCyclesDueEnabled || false,
       cyclesDue: taskToEdit.cyclesDue,
       cyclesTolerance: taskToEdit.cyclesTolerance,
       alertCyclesPrior: taskToEdit.alertCyclesPrior,
-      
       isDaysDueEnabled: taskToEdit.isDaysDueEnabled || false,
       daysIntervalType: taskToEdit.daysIntervalType || 'days', 
       daysDueValue: taskToEdit.daysDueValue || '', 
@@ -303,13 +313,11 @@ export default function AircraftMaintenanceDetailPage() {
 
   const handleSaveTask = async (taskFormData: MaintenanceTaskFormData) => {
     if (!currentAircraft) return;
-
     const taskToSave: FlowMaintenanceTask = {
       ...taskFormData,
       id: editingTaskOriginalId || `MX-${Date.now()}-${Math.random().toString(16).slice(2)}`, 
       aircraftId: currentAircraft.id, 
     };
-
     try {
       await saveMaintenanceTask(taskToSave);
       toast({
@@ -340,7 +348,6 @@ export default function AircraftMaintenanceDetailPage() {
 
   const calculateToGo = useCallback((item: DisplayMaintenanceItem): { text: string; numeric: number; unit: 'days' | 'hrs' | 'cycles' | 'N/A'; isOverdue: boolean } => {
     const now = new Date();
-
     if (item.dueAtDate && isValid(parse(item.dueAtDate, 'yyyy-MM-dd', new Date()))) {
       const dueDate = parse(item.dueAtDate, 'yyyy-MM-dd', new Date());
       const daysRemaining = differenceInCalendarDays(dueDate, now);
@@ -352,7 +359,7 @@ export default function AircraftMaintenanceDetailPage() {
     
     const componentNameToUse = (item.associatedComponent && item.associatedComponent.trim() !== "") 
       ? item.associatedComponent.trim() 
-      : "Airframe";
+      : "Airframe"; // Default to "Airframe" if no specific component
     
     const currentTimesForComponent = editableComponentTimes.find(c => c.componentName.trim() === componentNameToUse);
 
@@ -398,8 +405,8 @@ export default function AircraftMaintenanceDetailPage() {
   };
 
 
-  if (isLoadingAircraft) {
-    return <div className="flex items-center justify-center h-screen"><Loader2 className="h-12 w-12 animate-spin text-primary" /><p className="ml-3 text-lg text-muted-foreground">Loading aircraft details...</p></div>;
+  if (isLoadingAircraft || isLoadingComponentTimes) {
+    return <div className="flex items-center justify-center h-screen"><Loader2 className="h-12 w-12 animate-spin text-primary" /><p className="ml-3 text-lg text-muted-foreground">Loading aircraft details & component times...</p></div>;
   }
   if (!tailNumber || !currentAircraft) {
     return (
@@ -437,7 +444,7 @@ export default function AircraftMaintenanceDetailPage() {
   }
 
   const pageHeaderTitle = `Maintenance Details for ${currentAircraft.tailNumber}`;
-  const pageHeaderDescription = `Tracked items & component status for ${currentAircraft.model} (${currentAircraft.tailNumber}).`;
+  const pageHeaderDescription = `Tracked items & component status for ${currentAircraft.model} (${currentAircraft.tailNumber}). Component times are loaded from Firestore.`;
 
   return (
     <div>
@@ -483,7 +490,7 @@ export default function AircraftMaintenanceDetailPage() {
            </CardHeader>
            <CardContent>
             {editableComponentTimes.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No components configured for time tracking. Update in Company Settings.</p>
+                <p className="text-sm text-muted-foreground">No components configured for time tracking. Update in Company Settings or component data not yet loaded.</p>
             ) : (
                 <div className="space-y-3">
                 {editableComponentTimes.map(comp => (
@@ -529,7 +536,7 @@ export default function AircraftMaintenanceDetailPage() {
                 </Button>
               ) : (
                 <div className="flex gap-2">
-                  <Button variant="ghost" size="icon" onClick={() => { setIsEditingAircraftInfo(false); aircraftInfoForm.reset(); }} disabled={isSavingAircraftInfo}>
+                  <Button variant="ghost" size="icon" onClick={() => { setIsEditingAircraftInfo(false); aircraftInfoForm.reset({ model: currentAircraft.model, serialNumber: currentAircraft.serialNumber || '', baseLocation: currentAircraft.baseLocation || '', primaryContactName: currentAircraft.primaryContactName || '', primaryContactPhone: currentAircraft.primaryContactPhone || '' }); }} disabled={isSavingAircraftInfo}>
                     <XCircle className="h-4 w-4" /><span className="sr-only">Cancel</span>
                   </Button>
                   <Button size="icon" onClick={aircraftInfoForm.handleSubmit(onSubmitAircraftInfo)} disabled={isSavingAircraftInfo}>
