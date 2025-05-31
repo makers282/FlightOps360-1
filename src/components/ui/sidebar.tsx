@@ -2,10 +2,10 @@
 "use client"
 
 import * as React from "react"
-import Link from 'next/link'; // Added import for next/link
+import Link from 'next/link';
 import { Slot } from "@radix-ui/react-slot"
 import { VariantProps, cva } from "class-variance-authority"
-import { PanelLeft } from "lucide-react"
+import { PanelLeft, ChevronRight } from "lucide-react" // Added ChevronRight
 
 import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
@@ -227,7 +227,7 @@ const Sidebar = React.forwardRef<
         <div
           className={cn(
             "duration-200 relative h-svh w-[--sidebar-width] bg-transparent transition-[width] ease-linear",
-            "group-data-[collapsible=offcanvas]:w-0",
+            "group-data-[collapsible=icon]:w-0",
             "group-data-[side=right]:rotate-180",
             variant === "floating" || variant === "inset"
               ? "group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)_+_theme(spacing.4))]"
@@ -501,18 +501,68 @@ SidebarMenu.displayName = "SidebarMenu"
 const SidebarMenuItem = React.forwardRef<
   HTMLLIElement,
   React.ComponentProps<"li">
->(({ className, ...props }, ref) => (
-  <li
-    ref={ref}
-    data-sidebar="menu-item"
-    className={cn("group/menu-item relative", className)}
-    {...props}
-  />
-))
+>(({ className, children, ...props }, ref) => {
+  const [isSubMenuOpen, setIsSubMenuOpen] = React.useState(false);
+  const { state: sidebarState, isMobile } = useSidebar();
+
+  const isSidebarCollapsedIconOnly = sidebarState === "collapsed" && !isMobile;
+
+  const childrenArray = React.Children.toArray(children);
+  const menuButtonChild = childrenArray.find(
+    (child) => React.isValidElement(child) && (child.type as any).displayName === 'SidebarMenuButton'
+  ) as React.ReactElement<any> | undefined;
+
+  const hasSubmenu =
+    menuButtonChild?.props.isSubmenuTrigger &&
+    childrenArray.some(
+      (child) => React.isValidElement(child) && (child.type as any).displayName === 'SidebarMenuSub'
+    );
+
+  const childrenWithProps = React.Children.map(children, (child) => {
+    if (React.isValidElement(child)) {
+      if ((child.type as any).displayName === 'SidebarMenuButton' && hasSubmenu) {
+        return React.cloneElement(child, {
+          onClick: (e: React.MouseEvent<HTMLElement>) => {
+            // Prevent submenu toggle when sidebar is icon-only and button is clicked for tooltip
+            if (!isSidebarCollapsedIconOnly) {
+                setIsSubMenuOpen((prev) => !prev);
+            }
+            if (child.props.onClick) child.props.onClick(e);
+          },
+          isSubMenuExpanded: isSubMenuOpen,
+        });
+      }
+      if ((child.type as any).displayName === 'SidebarMenuSub' && hasSubmenu) {
+        // Do not render submenu if sidebar is icon-only
+        return isSubMenuOpen && !isSidebarCollapsedIconOnly ? child : null;
+      }
+    }
+    return child;
+  });
+  
+  // Effect to close submenu when main sidebar collapses to icon-only view
+  React.useEffect(() => {
+    if (isSidebarCollapsedIconOnly) {
+      setIsSubMenuOpen(false);
+    }
+  }, [isSidebarCollapsedIconOnly]);
+
+
+  return (
+    <li
+      ref={ref}
+      data-sidebar="menu-item"
+      className={cn("group/menu-item relative", className)}
+      {...props}
+    >
+      {childrenWithProps}
+    </li>
+  );
+});
 SidebarMenuItem.displayName = "SidebarMenuItem"
 
 const sidebarMenuButtonVariants = cva(
-  "peer/menu-button flex w-full items-center gap-2 overflow-hidden rounded-md p-2 text-left text-sm outline-none ring-sidebar-ring transition-[width,height,padding] hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 group-has-[[data-sidebar=menu-action]]/menu-item:pr-8 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-[active=true]:bg-sidebar-accent data-[active=true]:font-medium data-[active=true]:text-sidebar-accent-foreground data-[state=open]:hover:bg-sidebar-accent data-[state=open]:hover:text-sidebar-accent-foreground group-data-[collapsible=icon]:!size-8 group-data-[collapsible=icon]:!p-2 [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0",
+  "peer/menu-button flex w-full items-center gap-2 overflow-hidden rounded-md p-2 text-left text-sm outline-none ring-sidebar-ring transition-[width,height,padding] hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 group-has-[[data-sidebar=menu-action]]/menu-item:pr-8 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-[active=true]:bg-sidebar-accent data-[active=true]:font-medium data-[active=true]:text-sidebar-accent-foreground data-[state=open]:hover:bg-sidebar-accent data-[state=open]:hover:text-sidebar-accent-foreground group-data-[collapsible=icon]:!size-8 group-data-[collapsible=icon]:!p-2 [&>span:last-child]:truncate [&>svg:not(.submenu-chevron)]:size-4 [&>svg:not(.submenu-chevron)]:shrink-0",
   {
     variants: {
       variant: {
@@ -534,15 +584,16 @@ const sidebarMenuButtonVariants = cva(
 )
 
 const SidebarMenuButton = React.forwardRef<
-  HTMLElement, // Generic element type for ref
-  Omit<React.ComponentPropsWithoutRef<'button'>, "href"> & // Button props, omit href
-  Partial<Omit<React.ComponentPropsWithoutRef<typeof Link>, "href">> & // Link props are partial, href handled separately
+  HTMLElement,
+  Omit<React.ComponentPropsWithoutRef<'button'>, "href"> &
+  Partial<Omit<React.ComponentPropsWithoutRef<typeof Link>, "href">> &
   {
     asChild?: boolean;
     isActive?: boolean;
     isSubmenuTrigger?: boolean;
     tooltip?: string | React.ComponentProps<typeof TooltipContent>;
-    href?: string; // Explicit href prop
+    href?: string;
+    isSubMenuExpanded?: boolean; // Added for chevron state
   } & VariantProps<typeof sidebarMenuButtonVariants>
 >(
   (
@@ -555,13 +606,15 @@ const SidebarMenuButton = React.forwardRef<
       tooltip,
       className,
       children,
-      href, // Destructure href
-      onClick,
-      ...props // Remaining props
+      href,
+      isSubMenuExpanded, // Consumed prop
+      onClick, 
+      ...props
     },
     ref
   ) => {
     const { isMobile, state } = useSidebar();
+    const isIconOnly = state === "collapsed" && !isMobile;
 
     const commonClassAndData = {
       "data-sidebar": "menu-button",
@@ -570,12 +623,26 @@ const SidebarMenuButton = React.forwardRef<
       className: cn(sidebarMenuButtonVariants({ variant, size }), className),
     };
 
+    const content = (
+      <>
+        {children}
+        {isSubmenuTrigger && !isIconOnly && (
+          <ChevronRight
+            className={cn(
+              "submenu-chevron ml-auto h-4 w-4 shrink-0 transition-transform duration-200",
+              isSubMenuExpanded && "rotate-90"
+            )}
+          />
+        )}
+      </>
+    );
+
     let element: JSX.Element;
 
     if (asChild) {
       element = (
         <Slot ref={ref as React.Ref<any>} {...commonClassAndData} {...props} onClick={onClick}>
-          {children}
+          {content}
         </Slot>
       );
     } else if (href && !isSubmenuTrigger) {
@@ -584,22 +651,22 @@ const SidebarMenuButton = React.forwardRef<
           href={href}
           ref={ref as React.Ref<HTMLAnchorElement>}
           {...commonClassAndData}
-          {...props} // Pass other Link-compatible props
+          {...props}
           onClick={onClick}
         >
-          {children}
+          {content}
         </Link>
       );
     } else {
       element = (
         <button
-          type="button" // Default type for buttons
+          type="button"
           ref={ref as React.Ref<HTMLButtonElement>}
           {...commonClassAndData}
-          {...props} // Pass other button-compatible props
+          {...props}
           onClick={onClick}
         >
-          {children}
+          {content}
         </button>
       );
     }
@@ -733,18 +800,18 @@ SidebarMenuSub.displayName = "SidebarMenuSub"
 const SidebarMenuSubItem = React.forwardRef<
   HTMLLIElement,
   React.ComponentProps<"li">
->(({ ...props }, ref) => <li ref={ref} data-sidebar="menu-sub-item" {...props} />) // Added data-sidebar attribute
+>(({ ...props }, ref) => <li ref={ref} data-sidebar="menu-sub-item" {...props} />) 
 SidebarMenuSubItem.displayName = "SidebarMenuSubItem"
 
 const SidebarMenuSubButton = React.forwardRef<
-  HTMLElement, // Generic element type for ref
-  Omit<React.ComponentPropsWithoutRef<'a'>, "href"> & // Anchor props, omit href
-  Partial<Omit<React.ComponentPropsWithoutRef<typeof Link>, "href">> & // Link props
+  HTMLElement, 
+  Omit<React.ComponentPropsWithoutRef<'a'>, "href"> & 
+  Partial<Omit<React.ComponentPropsWithoutRef<typeof Link>, "href">> & 
   {
     asChild?: boolean;
     size?: "sm" | "md";
     isActive?: boolean;
-    href?: string; // Explicit href prop
+    href?: string; 
   }
 >(({ asChild = false, size = "md", isActive, className, children, href, onClick, ...props }, ref) => {
 
@@ -779,7 +846,6 @@ const SidebarMenuSubButton = React.forwardRef<
     );
   }
 
-  // Fallback to a button if no href and not asChild
   return (
     <button
       type="button"
