@@ -16,7 +16,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { CalendarIcon, Loader2, Users, Briefcase, Utensils, Landmark, BedDouble, PlaneTakeoff, PlaneLanding, PlusCircle, Trash2, GripVertical, Wand2, Info, Eye, Send, Building, UserSearch, DollarSign, Fuel } from 'lucide-react';
 import { cn } from "@/lib/utils";
-import { format } from "date-fns";
+import { format, isValid as isValidDate } from "date-fns";
 import { useToast } from '@/hooks/use-toast';
 import {
   Select,
@@ -27,21 +27,23 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
-import { estimateFlightDetails, type EstimateFlightDetailsInput, type EstimateFlightDetailsOutput } from '@/ai/flows/estimate-flight-details-flow';
+import { estimateFlightDetails, type EstimateFlightDetailsOutput } from '@/ai/flows/estimate-flight-details-flow';
 import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
-import { fetchAircraftRates } from '@/ai/flows/manage-aircraft-rates-flow';
-import type { AircraftRate } from '@/ai/schemas/aircraft-rate-schemas'; // Updated import path
+import { fetchAircraftRates, type AircraftRate } from '@/ai/flows/manage-aircraft-rates-flow';
 import {
   fetchCompanyProfile,
   type CompanyProfile,
-  type ServiceFeeRate
+  type ServiceFeeRate,
 } from '@/ai/flows/manage-company-profile-flow';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { LegsSummaryTable } from './legs-summary-table';
 import { CostsSummaryDisplay, type LineItem } from './costs-summary-display';
+import { saveQuote } from '@/ai/flows/manage-quotes-flow';
+import type { Quote, SaveQuoteInput, QuoteLeg, QuoteLineItem } from '@/ai/schemas/quote-schemas';
+import { useRouter } from 'next/navigation';
 
 
-const legTypes = [
+export const legTypes = [ // Exporting for use in quote-schemas
   "Charter", "Owner", "Positioning", "Ambulance", "Cargo", "Maintenance", "Ferry"
 ] as const;
 
@@ -98,14 +100,12 @@ interface AircraftSelectOption {
   model: string; 
 }
 
-// Constants for service fee keys (must match auto-generated keys from QuoteConfigPage)
 const SERVICE_KEY_FUEL_SURCHARGE = "FUEL_SURCHARGE_PER_BLOCK_HOUR";
 const SERVICE_KEY_MEDICS = "MEDICAL_TEAM";
 const SERVICE_KEY_CATERING = "CATERING";
 const SERVICE_KEY_LANDING_FEES = "LANDING_FEES_PER_LEG";
 const SERVICE_KEY_OVERNIGHT_FEES = "OVERNIGHT_FEES_PER_NIGHT";
 
-// Simplified fallback for a single buy/sell rate per aircraft
 const DEFAULT_AIRCRAFT_RATE_FALLBACK: Pick<AircraftRate, 'buy' | 'sell'> = {
   buy: 3500,
   sell: 4000,
@@ -119,21 +119,20 @@ const DEFAULT_SERVICE_RATES: Record<string, ServiceFeeRate> = {
   [SERVICE_KEY_CATERING]: { displayDescription: "Catering", buy: 350, sell: 500, unitDescription: "Service" },
 };
 
-
 const sampleCustomerData = [
   { id: 'CUST001', name: 'John Doe', company: 'Doe Industries', email: 'john.doe@example.com', phone: '555-1234' },
   { id: 'CUST002', name: 'Jane Smith', company: 'Smith Corp', email: 'jane.smith@example.com', phone: '555-5678' },
 ];
 
-
 export function CreateQuoteForm() {
   const [isGeneratingQuote, startQuoteGenerationTransition] = useTransition();
   const [estimatingLegIndex, setEstimatingLegIndex] = useState<number | null>(null);
   const { toast } = useToast();
+  const router = useRouter();
   const [minLegDepartureDate, setMinLegDepartureDate] = useState<Date | null>(null);
   const [isClient, setIsClient] = useState(false);
   const [legEstimates, setLegEstimates] = useState<Array<LegEstimate | null>>([]);
-  const [calculatedLineItems, setCalculatedLineItems] = useState<LineItem[]>([]);
+  const [calculatedLineItems, setCalculatedLineItems] = useState<QuoteLineItem[]>([]);
 
   const [aircraftSelectOptions, setAircraftSelectOptions] = useState<AircraftSelectOption[]>([]);
   const [isLoadingAircraftList, setIsLoadingAircraftList] = useState(true);
@@ -141,7 +140,6 @@ export function CreateQuoteForm() {
   const [fetchedAircraftRates, setFetchedAircraftRates] = useState<AircraftRate[]>([]);
   const [fetchedCompanyProfile, setFetchedCompanyProfile] = useState<CompanyProfile | null>(null);
   const [isLoadingDynamicRates, setIsLoadingDynamicRates] = useState(true);
-
 
   const form = useForm<FullQuoteFormData>({ 
     resolver: zodResolver(formSchema),
@@ -194,7 +192,6 @@ export function CreateQuoteForm() {
   const currentEstimatedOvernights = useWatch({ control, name: "estimatedOvernights" });
   const sellPriceOvernight = useWatch({ control, name: "sellPriceOvernight" });
 
-
   const { fields, append, remove } = useFieldArray({
     control,
     name: "legs",
@@ -237,7 +234,6 @@ export function CreateQuoteForm() {
       }
     };
     loadInitialData();
-
   }, [setValue, getValues, toast]);
 
   useEffect(() => {
@@ -254,9 +250,8 @@ export function CreateQuoteForm() {
     }
   }, [legsArray, legEstimates.length]);
 
-
   useEffect(() => {
-    const newItems: LineItem[] = [];
+    const newItems: QuoteLineItem[] = [];
     if (isLoadingDynamicRates || !aircraftId) {
         setCalculatedLineItems([]);
         return;
@@ -278,38 +273,43 @@ export function CreateQuoteForm() {
         const legBlockMinutes = originTaxi + (flightTime * 60) + destTaxi;
         totalBlockHours += parseFloat((legBlockMinutes / 60).toFixed(2));
 
-        // For simplicity, all billable leg types use the aircraft's standard rate.
-        if (flightTime > 0 && ["Charter", "Owner", "Ambulance", "Cargo", "Positioning", "Ferry"].includes(leg.legType)) {
+        if (flightTime > 0 && ["Charter", "Owner", "Ambulance", "Cargo"].includes(leg.legType)) {
             totalFlightTimeBuyCost += flightTime * aircraftBuyRate;
             totalFlightTimeSellCost += flightTime * aircraftSellRate;
-            if (["Charter", "Owner", "Ambulance", "Cargo"].includes(leg.legType)) {
-                 totalRevenueFlightHours += flightTime;
-            }
+            totalRevenueFlightHours += flightTime;
+        } else if (flightTime > 0 && ["Positioning", "Ferry", "Maintenance"].includes(leg.legType)) {
+             // For non-revenue, typically buy rate is applied, sell might be 0 or same as buy
+            totalFlightTimeBuyCost += flightTime * aircraftBuyRate;
+            // Assuming positioning legs are billed at cost or a specific configured rate.
+            // For now, let's assume positioning sell rate matches buy rate for this example unless configured otherwise.
+            // A more complex system would fetch a specific "positioning" rate from AircraftRateSchema.
+            totalFlightTimeSellCost += flightTime * aircraftBuyRate; // Example: positioning billed at cost
         }
     });
 
     const selectedAircraftInfo = aircraftSelectOptions.find(ac => ac.value === aircraftId);
     const aircraftDisplayName = selectedAircraftInfo ? selectedAircraftInfo.label : "Selected Aircraft";
-    const billableFlightOrBlockHours = totalRevenueFlightHours > 0 ? totalRevenueFlightHours : (totalBlockHours > 0 ? totalBlockHours : 0);
+    
+    // Using revenue flight hours for primary billing, or total block if no rev flight hours (e.g. pure positioning quote)
+    const billableHoursForAircraft = totalRevenueFlightHours > 0 ? totalRevenueFlightHours : (totalBlockHours > 0 ? totalBlockHours : 0);
 
-
-    if (billableFlightOrBlockHours > 0) {
+    if (billableHoursForAircraft > 0) {
         newItems.push({
             id: 'aircraftFlightTimeCost',
             description: `Aircraft Time (${aircraftDisplayName})`,
-            buyRate: aircraftBuyRate, // Display the base hourly buy rate
-            sellRate: aircraftSellRate, // Display the base hourly sell rate
+            buyRate: aircraftBuyRate,
+            sellRate: aircraftSellRate,
             unitDescription: 'Hour (Std.)',
-            quantity: parseFloat(billableFlightOrBlockHours.toFixed(2)),
-            buyTotal: totalFlightTimeBuyCost, // Use the aggregated cost
-            sellTotal: totalFlightTimeSellCost, // Use the aggregated sell price
+            quantity: parseFloat(billableHoursForAircraft.toFixed(2)),
+            buyTotal: totalFlightTimeBuyCost, // Use sum of all legs buy costs
+            sellTotal: totalFlightTimeSellCost, // Use sum of all legs sell costs
         });
     }
     
-    const companyRates = fetchedCompanyProfile?.serviceFeeRates || {};
+    const companyServiceRates = fetchedCompanyProfile?.serviceFeeRates || {};
 
     if (fuelSurchargeRequested && totalBlockHours > 0) {
-      const config = companyRates[SERVICE_KEY_FUEL_SURCHARGE] || DEFAULT_SERVICE_RATES[SERVICE_KEY_FUEL_SURCHARGE];
+      const config = companyServiceRates[SERVICE_KEY_FUEL_SURCHARGE] || DEFAULT_SERVICE_RATES[SERVICE_KEY_FUEL_SURCHARGE];
       const buyRate = config.buy;
       const sellRate = sellPriceFuelSurchargePerHour ?? config.sell;
       newItems.push({
@@ -320,7 +320,7 @@ export function CreateQuoteForm() {
     }
 
     if (medicsRequested) {
-      const config = companyRates[SERVICE_KEY_MEDICS] || DEFAULT_SERVICE_RATES[SERVICE_KEY_MEDICS];
+      const config = companyServiceRates[SERVICE_KEY_MEDICS] || DEFAULT_SERVICE_RATES[SERVICE_KEY_MEDICS];
       const buyRate = config.buy;
       const sellRate = sellPriceMedics ?? config.sell;
       newItems.push({
@@ -330,7 +330,7 @@ export function CreateQuoteForm() {
     }
 
     if (cateringRequested) {
-      const config = companyRates[SERVICE_KEY_CATERING] || DEFAULT_SERVICE_RATES[SERVICE_KEY_CATERING];
+      const config = companyServiceRates[SERVICE_KEY_CATERING] || DEFAULT_SERVICE_RATES[SERVICE_KEY_CATERING];
       const buyRate = config.buy;
       const sellRate = sellPriceCatering ?? config.sell;
       newItems.push({
@@ -341,7 +341,7 @@ export function CreateQuoteForm() {
 
     const validLegsCount = legsArray.filter(leg => leg.origin && leg.destination && leg.origin.length >=3 && leg.destination.length >=3).length;
     if (includeLandingFees && validLegsCount > 0) {
-      const config = companyRates[SERVICE_KEY_LANDING_FEES] || DEFAULT_SERVICE_RATES[SERVICE_KEY_LANDING_FEES];
+      const config = companyServiceRates[SERVICE_KEY_LANDING_FEES] || DEFAULT_SERVICE_RATES[SERVICE_KEY_LANDING_FEES];
       const buyRate = config.buy;
       const sellRate = sellPriceLandingFeePerLeg ?? config.sell;
       newItems.push({
@@ -353,7 +353,7 @@ export function CreateQuoteForm() {
 
     const numericEstimatedOvernights = Number(currentEstimatedOvernights || 0);
     if (numericEstimatedOvernights > 0) {
-      const config = companyRates[SERVICE_KEY_OVERNIGHT_FEES] || DEFAULT_SERVICE_RATES[SERVICE_KEY_OVERNIGHT_FEES];
+      const config = companyServiceRates[SERVICE_KEY_OVERNIGHT_FEES] || DEFAULT_SERVICE_RATES[SERVICE_KEY_OVERNIGHT_FEES];
       const buyRate = config.buy;
       const sellRate = sellPriceOvernight ?? config.sell;
       newItems.push({
@@ -376,7 +376,6 @@ export function CreateQuoteForm() {
     isLoadingDynamicRates
   ]);
 
-
   const handleEstimateFlightDetails = useCallback(async (legIndex: number) => {
     if (estimatingLegIndex === legIndex) return; 
     if (estimatingLegIndex !== null && estimatingLegIndex !== legIndex) {
@@ -388,17 +387,15 @@ export function CreateQuoteForm() {
     const currentAircraftId = getValues('aircraftId');
     const selectedAircraft = aircraftSelectOptions.find(ac => ac.value === currentAircraftId);
 
-
     if (!legData?.origin || legData.origin.length < 3 || !legData?.destination || legData.destination.length < 3 || !currentAircraftId || !selectedAircraft) {
       toast({ title: "Missing Information", description: "Please provide origin, destination (min 3 chars each), and select an aircraft type before estimating.", variant: "destructive"});
       return;
     }
     
     const aircraftModelForFlow = selectedAircraft.model;
-
     const currentEstimate = legEstimates[legIndex];
-    if (currentEstimate &&
-        !currentEstimate.error &&
+
+    if (currentEstimate && !currentEstimate.error &&
         currentEstimate.estimatedForInputs?.origin === legData.origin.toUpperCase() &&
         currentEstimate.estimatedForInputs?.destination === legData.destination.toUpperCase() &&
         currentEstimate.estimatedForInputs?.aircraftModel === aircraftModelForFlow) {
@@ -420,13 +417,11 @@ export function CreateQuoteForm() {
       });
       
       setValue(`legs.${legIndex}.flightTimeHours`, result.estimatedFlightTimeHours);
-      
       const originTaxi = Number(legData.originTaxiTimeMinutes || 0);
       const destTaxi = Number(legData.destinationTaxiTimeMinutes || 0);
       const flightTime = Number(result.estimatedFlightTimeHours || 0); 
       const blockTimeTotalMinutes = originTaxi + (flightTime * 60) + destTaxi;
       const blockTimeHours = parseFloat((blockTimeTotalMinutes / 60).toFixed(2));
-
 
       setLegEstimates(prev => {
         const newEstimates = [...prev];
@@ -464,67 +459,131 @@ export function CreateQuoteForm() {
     }
   }, [getValues, legEstimates, toast, estimatingLegIndex, setValue, setLegEstimates, setEstimatingLegIndex, aircraftSelectOptions]);
 
-
   const onSendQuote: SubmitHandler<FullQuoteFormData> = (data) => { 
     startQuoteGenerationTransition(async () => {
-      const finalData = {
-        ...data,
-        calculatedLineItems, 
-        cateringNotes: data.cateringRequested ? data.cateringNotes : undefined, 
-        legsWithEstimatesAndBlockTime: data.legs.map((leg, index) => {
+      const selectedAircraftInfo = aircraftSelectOptions.find(ac => ac.value === data.aircraftId);
+      const totalBuyCost = calculatedLineItems.reduce((sum, item) => sum + item.buyTotal, 0);
+      const totalSellPrice = calculatedLineItems.reduce((sum, item) => sum + item.sellTotal, 0);
+      const marginAmount = totalSellPrice - totalBuyCost;
+      const marginPercentage = totalBuyCost > 0 ? (marginAmount / totalBuyCost) * 100 : 0;
+
+      const quoteToSave: SaveQuoteInput = {
+        quoteId: data.quoteId,
+        selectedCustomerId: data.selectedCustomerId,
+        clientName: data.clientName,
+        clientEmail: data.clientEmail,
+        clientPhone: data.clientPhone,
+        aircraftId: data.aircraftId,
+        aircraftLabel: selectedAircraftInfo?.label,
+        legs: data.legs.map((leg, index) => {
           const estimate = legEstimates[index];
           const originTaxi = Number(leg.originTaxiTimeMinutes || 0);
           const destTaxi = Number(leg.destinationTaxiTimeMinutes || 0);
           const flightTime = Number(leg.flightTimeHours || 0);
           const blockTimeTotalMinutes = originTaxi + (flightTime * 60) + destTaxi;
           const blockTimeHours = parseFloat((blockTimeTotalMinutes / 60).toFixed(2));
-          
           return {
             ...leg,
-            estimationDetails: estimate && !estimate.error ? estimate : undefined,
+            departureDateTime: leg.departureDateTime ? leg.departureDateTime.toISOString() : undefined,
             calculatedBlockTimeHours: blockTimeHours,
           };
-        })
+        }),
+        options: {
+          medicsRequested: data.medicsRequested,
+          cateringRequested: data.cateringRequested,
+          includeLandingFees: data.includeLandingFees,
+          estimatedOvernights: data.estimatedOvernights,
+          fuelSurchargeRequested: data.fuelSurchargeRequested,
+          cateringNotes: data.cateringRequested ? data.cateringNotes : undefined,
+          notes: data.notes,
+          sellPriceFuelSurchargePerHour: data.sellPriceFuelSurchargePerHour,
+          sellPriceMedics: data.sellPriceMedics,
+          sellPriceCatering: data.sellPriceCatering,
+          sellPriceLandingFeePerLeg: data.sellPriceLandingFeePerLeg,
+          sellPriceOvernight: data.sellPriceOvernight,
+        },
+        lineItems: calculatedLineItems,
+        totalBuyCost,
+        totalSellPrice,
+        marginAmount,
+        marginPercentage,
+        status: "Sent", // Assuming "Send Quote" means it's sent
       };
-      console.log('Quote Data (Send Quote):', finalData);
-      toast({
-        title: "Quote Sent (Simulated)",
-        description: (
-          <pre className="mt-2 w-full max-w-[480px] rounded-md bg-slate-950 p-4 overflow-x-auto">
-            <code className="text-white whitespace-pre-wrap">{JSON.stringify(finalData, null, 2)}</code>
-          </pre>
-        ),
-        variant: "default",
-      });
+      
+      try {
+        const savedQuote = await saveQuote(quoteToSave);
+        toast({
+          title: "Quote Saved & Sent (Simulated)",
+          description: `Quote ${savedQuote.quoteId} has been saved to Firestore.`,
+          variant: "default",
+        });
+        // Potentially redirect or clear form
+        // router.push('/quotes'); 
+        form.reset();
+        setValue('quoteId', `QT-${Math.random().toString(36).substring(2, 7).toUpperCase()}`);
+        setLegEstimates([]);
+        setCalculatedLineItems([]);
+      } catch (error) {
+        console.error("Failed to save quote:", error);
+        toast({
+          title: "Error Saving Quote",
+          description: (error instanceof Error ? error.message : "Unknown error"),
+          variant: "destructive",
+        });
+      }
     });
   };
 
   const handlePreviewQuote = () => {
     trigger(); 
     const data = getValues();
-     const finalData = {
-        ...data,
-        calculatedLineItems, 
-        cateringNotes: data.cateringRequested ? data.cateringNotes : undefined, 
-        legsWithEstimatesAndBlockTime: data.legs.map((leg, index) => {
-          const estimate = legEstimates[index];
-          const originTaxi = Number(leg.originTaxiTimeMinutes || 0);
-          const destTaxi = Number(leg.destinationTaxiTimeMinutes || 0);
-          const flightTime = Number(leg.flightTimeHours || 0);
-          const blockTimeTotalMinutes = originTaxi + (flightTime * 60) + destTaxi;
-          const blockTimeHours = parseFloat((blockTimeTotalMinutes / 60).toFixed(2));
-          
-          return {
-            ...leg,
-            estimationDetails: estimate && !estimate.error ? estimate : undefined,
-            calculatedBlockTimeHours: blockTimeHours,
-          };
-        })
-      };
-    console.log("Preview Quote Clicked. Current form data:", finalData);
+    const selectedAircraftInfo = aircraftSelectOptions.find(ac => ac.value === data.aircraftId);
+    const totalBuyCost = calculatedLineItems.reduce((sum, item) => sum + item.buyTotal, 0);
+    const totalSellPrice = calculatedLineItems.reduce((sum, item) => sum + item.sellTotal, 0);
+    const marginAmount = totalSellPrice - totalBuyCost;
+    const marginPercentage = totalBuyCost > 0 ? (marginAmount / totalBuyCost) * 100 : 0;
+
+    const previewData = {
+      ...data,
+      aircraftLabel: selectedAircraftInfo?.label,
+      legs: data.legs.map((leg, index) => {
+        const estimate = legEstimates[index];
+        const originTaxi = Number(leg.originTaxiTimeMinutes || 0);
+        const destTaxi = Number(leg.destinationTaxiTimeMinutes || 0);
+        const flightTime = Number(leg.flightTimeHours || 0);
+        const blockTimeTotalMinutes = originTaxi + (flightTime * 60) + destTaxi;
+        const blockTimeHours = parseFloat((blockTimeTotalMinutes / 60).toFixed(2));
+        return {
+          ...leg,
+          departureDateTime: leg.departureDateTime ? leg.departureDateTime.toISOString() : undefined,
+          calculatedBlockTimeHours: blockTimeHours,
+          estimationDetails: estimate && !estimate.error ? estimate : undefined,
+        };
+      }),
+      options: {
+        medicsRequested: data.medicsRequested,
+        cateringRequested: data.cateringRequested,
+        includeLandingFees: data.includeLandingFees,
+        estimatedOvernights: data.estimatedOvernights,
+        fuelSurchargeRequested: data.fuelSurchargeRequested,
+        cateringNotes: data.cateringRequested ? data.cateringNotes : undefined,
+        notes: data.notes,
+      },
+      lineItems: calculatedLineItems,
+      totalBuyCost,
+      totalSellPrice,
+      marginAmount,
+      marginPercentage,
+      status: "Draft", // Preview is typically a draft
+    };
+    console.log("Preview Quote Clicked. Current form data:", previewData);
     toast({
       title: "Quote Preview (Logged to Console)",
-      description: "Check the browser console for the current quote details.",
+      description: (
+        <pre className="mt-2 w-full max-w-[480px] rounded-md bg-slate-950 p-4 overflow-x-auto">
+          <code className="text-white whitespace-pre-wrap">{JSON.stringify(previewData, null, 2)}</code>
+        </pre>
+      ),
     });
   };
 
@@ -536,7 +595,6 @@ export function CreateQuoteForm() {
     let previousLegDestTaxi = 15;
     let previousLegOriginFbo = '';
     let previousLegDestinationFbo = '';
-
 
     if (fields.length > 0) {
       const previousLegIndex = fields.length - 1;
@@ -551,14 +609,13 @@ export function CreateQuoteForm() {
 
       const previousLegFlightTime = Number(previousLeg.flightTimeHours || (legEstimates[previousLegIndex]?.estimatedFlightTimeHours || 0));
 
-      if (previousLeg.departureDateTime && previousLeg.departureDateTime instanceof Date && !isNaN(previousLeg.departureDateTime.getTime()) && previousLegFlightTime > 0) {
+      if (previousLeg.departureDateTime && previousLeg.departureDateTime instanceof Date && isValidDate(previousLeg.departureDateTime) && previousLegFlightTime > 0) {
         const previousLegDeparture = new Date(previousLeg.departureDateTime);
         const previousLegFlightMillis = previousLegFlightTime * 60 * 60 * 1000;
         const previousLegDestTaxiMillis = (Number(previousLeg.destinationTaxiTimeMinutes || 0)) * 60 * 1000;
-        
         const estimatedArrivalMillis = previousLegDeparture.getTime() + previousLegFlightMillis + previousLegDestTaxiMillis;
         newLegDepartureDateTime = new Date(estimatedArrivalMillis + (60 * 60 * 1000)); 
-      } else if (previousLeg.departureDateTime && previousLeg.departureDateTime instanceof Date && !isNaN(previousLeg.departureDateTime.getTime())) {
+      } else if (previousLeg.departureDateTime && previousLeg.departureDateTime instanceof Date && isValidDate(previousLeg.departureDateTime)) {
          newLegDepartureDateTime = new Date(previousLeg.departureDateTime.getTime() + (3 * 60 * 60 * 1000)); 
       }
     }
@@ -690,15 +747,15 @@ export function CreateQuoteForm() {
                         <FormField control={control} name={`legs.${index}.destinationFbo`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><Building className="h-4 w-4" />Destination FBO (Optional)</FormLabel> <FormControl><Input placeholder="e.g., Signature, Atlantic" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
                     </div>
                     <FormField control={control} name={`legs.${index}.departureDateTime`} render={({ field }) => ( <FormItem className="flex flex-col"> <FormLabel>Desired Departure Date & Time</FormLabel> {isClient ? ( <Popover> <PopoverTrigger asChild> 
-                        <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !(field.value && field.value instanceof Date && !isNaN(field.value.getTime())) && "text-muted-foreground")}> 
-                          <span>{field.value && field.value instanceof Date && !isNaN(field.value.getTime()) ? format(field.value, "PPP HH:mm") : "Pick a date and time"}</span> 
+                        <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !(field.value && field.value instanceof Date && isValidDate(field.value)) && "text-muted-foreground")}> 
+                          <span>{field.value && field.value instanceof Date && isValidDate(field.value) ? format(field.value, "PPP HH:mm") : "Pick a date and time"}</span> 
                           <CalendarIcon className="ml-auto h-4 w-4 opacity-50" /> 
                         </Button> 
                         </PopoverTrigger> 
                         <PopoverContent className="w-auto p-0" align="start"> 
-                          <Calendar mode="single" selected={field.value && field.value instanceof Date && !isNaN(field.value.getTime()) ? field.value : undefined} onSelect={field.onChange} disabled={(date) => minLegDepartureDate ? date < minLegDepartureDate : true} initialFocus /> 
+                          <Calendar mode="single" selected={field.value && field.value instanceof Date && isValidDate(field.value) ? field.value : undefined} onSelect={field.onChange} disabled={(date) => minLegDepartureDate ? date < minLegDepartureDate : true} initialFocus /> 
                           <div className="p-2 border-t border-border"> 
-                            <Input type="time" defaultValue={field.value && field.value instanceof Date && !isNaN(field.value.getTime()) ? format(field.value, "HH:mm") : ""} onChange={(e) => { const time = e.target.value; const [hours, minutes] = time.split(':').map(Number); let newDate = field.value && field.value instanceof Date && !isNaN(field.value.getTime()) ? new Date(field.value) : new Date(); if (isNaN(newDate.getTime())) newDate = new Date(); newDate.setHours(hours, minutes,0,0); field.onChange(newDate); }} /> 
+                            <Input type="time" defaultValue={field.value && field.value instanceof Date && isValidDate(field.value) ? format(field.value, "HH:mm") : ""} onChange={(e) => { const time = e.target.value; const [hours, minutes] = time.split(':').map(Number); let newDate = field.value && field.value instanceof Date && isValidDate(field.value) ? new Date(field.value) : new Date(); if (!isValidDate(newDate)) newDate = new Date(); newDate.setHours(hours, minutes,0,0); field.onChange(newDate); }} /> 
                           </div> 
                         </PopoverContent> 
                       </Popover> ) : ( <Skeleton className="h-10 w-full" /> )} <FormMessage /> </FormItem> )} />
@@ -773,7 +830,6 @@ export function CreateQuoteForm() {
                     {(!aircraftId && !isLoadingDynamicRates) && <FormDescription className="text-xs text-destructive">Select an aircraft to enable estimation.</FormDescription>}
                     {(isLoadingDynamicRates || isLoadingAircraftList) && <FormDescription className="text-xs">Loading aircraft & rate data...</FormDescription>}
 
-
                     {legEstimates[index] && (() => {
                       const estimate = legEstimates[index]!;
                       const legData = getValues(`legs.${index}`);
@@ -783,7 +839,7 @@ export function CreateQuoteForm() {
                       const legDepartureDateTime = legData.departureDateTime;
                       const legFlightTimeHours = Number(legData.flightTimeHours || 0); 
 
-                      if (legDepartureDateTime && legDepartureDateTime instanceof Date && !isNaN(legDepartureDateTime.getTime()) && legFlightTimeHours > 0) {
+                      if (legDepartureDateTime && legDepartureDateTime instanceof Date && isValidDate(legDepartureDateTime) && legFlightTimeHours > 0) {
                         const departureTime = new Date(legDepartureDateTime);
                         const flightTimeMillis = legFlightTimeHours * 60 * 60 * 1000;
                         const arrivalTimeMillis = departureTime.getTime() + flightTimeMillis;
@@ -811,7 +867,7 @@ export function CreateQuoteForm() {
                               <>
                                 <p><strong>AI Est. Distance:</strong> {estimate.estimatedMileageNM?.toLocaleString()} NM</p>
                                 <p><strong>AI Est. Flight Time:</strong> {estimate.estimatedFlightTimeHours?.toFixed(1)} hours (Populated editable field above)</p>
-                                {(legDepartureDateTime && legDepartureDateTime instanceof Date && !isNaN(legDepartureDateTime.getTime())) && <p><strong>Calc. Arrival Time:</strong> {formattedArrivalTime}</p>}
+                                {(legDepartureDateTime && legDepartureDateTime instanceof Date && isValidDate(legDepartureDateTime)) && <p><strong>Calc. Arrival Time:</strong> {formattedArrivalTime}</p>}
                                 <p><strong>Calc. Block Time:</strong> {formattedBlockTime} (based on current taxi/flight times)</p>
                                 <p><strong>Assumed Speed (AI):</strong> {estimate.assumedCruiseSpeedKts?.toLocaleString()} kts</p>
                                 <p className="mt-1"><em>AI Explanation: {estimate.briefExplanation}</em></p>
@@ -892,7 +948,7 @@ export function CreateQuoteForm() {
           </CardContent>
           <CardFooter className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={handlePreviewQuote}> <Eye className="mr-2 h-4 w-4" /> Preview Quote </Button>
-            <Button type="submit" disabled={isGeneratingQuote}> {isGeneratingQuote ? ( <Loader2 className="mr-2 h-4 w-4 animate-spin" /> ) : ( <Send className="mr-2 h-4 w-4" /> )} Send Quote </Button>
+            <Button type="submit" disabled={isGeneratingQuote}> {isGeneratingQuote ? ( <Loader2 className="mr-2 h-4 w-4 animate-spin" /> ) : ( <Send className="mr-2 h-4 w-4" /> )} Save & Send Quote </Button>
           </CardFooter>
         </form>
       </Form>
