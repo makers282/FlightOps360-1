@@ -16,6 +16,17 @@ import {
   DialogTrigger,
   DialogClose,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -24,7 +35,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { CalendarIcon, Loader2, Save, X } from 'lucide-react';
+import { CalendarIcon, Loader2, History, Info } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { format, parse as parseDate, isValid } from "date-fns";
 import type { FleetAircraft } from '@/ai/flows/manage-fleet-flow';
@@ -47,22 +58,22 @@ export const defaultMaintenanceTaskFormValues = {
   trackType: 'Interval' as typeof trackTypes[number],
   isTripsNotAffected: false,
   lastCompletedDate: '',
-  lastCompletedHours: 0 as number | undefined, // Allow undefined for empty state
-  lastCompletedCycles: 0 as number | undefined, // Allow undefined for empty state
+  lastCompletedHours: undefined as number | undefined, 
+  lastCompletedCycles: undefined as number | undefined, 
   lastCompletedNotes: '',
   isHoursDueEnabled: false,
-  hoursDue: 0 as number | undefined,
-  hoursTolerance: 0 as number | undefined,
-  alertHoursPrior: 0 as number | undefined,
+  hoursDue: undefined as number | undefined,
+  hoursTolerance: undefined as number | undefined,
+  alertHoursPrior: undefined as number | undefined,
   isCyclesDueEnabled: false,
-  cyclesDue: 0 as number | undefined,
-  cyclesTolerance: 0 as number | undefined,
-  alertCyclesPrior: 0 as number | undefined,
+  cyclesDue: undefined as number | undefined,
+  cyclesTolerance: undefined as number | undefined,
+  alertCyclesPrior: undefined as number | undefined,
   isDaysDueEnabled: false,
   daysIntervalType: 'days' as typeof daysIntervalTypes[number],
   daysDueValue: '', 
-  daysTolerance: 0 as number | undefined,
-  alertDaysPrior: 0 as number | undefined,
+  daysTolerance: undefined as number | undefined,
+  alertDaysPrior: undefined as number | undefined,
 };
 
 
@@ -142,21 +153,22 @@ interface AddMaintenanceTaskModalProps {
 
 export function AddMaintenanceTaskModal({ aircraft, onSave, children, isOpen, setIsOpen, initialData, isEditing }: AddMaintenanceTaskModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showHistoryAlert, setShowHistoryAlert] = useState(false);
 
   const form = useForm<MaintenanceTaskFormData>({
     resolver: zodResolver(maintenanceTaskSchema),
     defaultValues: initialData ? { ...defaultMaintenanceTaskFormValues, ...initialData } : defaultMaintenanceTaskFormValues,
   });
   
-  const { control, watch, setValue } = form;
+  const { control, watch, setValue, getValues } = form;
   const trackType = watch("trackType");
   const isHoursDueEnabled = watch("isHoursDueEnabled");
   const isCyclesDueEnabled = watch("isCyclesDueEnabled");
   const isDaysDueEnabled = watch("isDaysDueEnabled");
   const daysIntervalType = watch("daysIntervalType");
+  const lastCompletedDateValue = watch("lastCompletedDate");
 
-  // This useEffect is to re-initialize the form if initialData changes *while the modal is already open and the key hasn't changed*
-  // However, with key-based remounting, this might be less critical, but doesn't hurt.
+
   useEffect(() => {
     if (isOpen) {
       form.reset(initialData ? { ...defaultMaintenanceTaskFormValues, ...initialData } : defaultMaintenanceTaskFormValues);
@@ -204,13 +216,15 @@ export function AddMaintenanceTaskModal({ aircraft, onSave, children, isOpen, se
     }
     return 'Specific Due Date'; 
   };
+  
+  const currentTaskValues = getValues();
+  const hasLastCompletionDetails = !!currentTaskValues.lastCompletedDate || !!currentTaskValues.lastCompletedHours || !!currentTaskValues.lastCompletedCycles || !!currentTaskValues.lastCompletedNotes;
+
 
   return (
+    <>
     <Dialog open={isOpen} onOpenChange={(open) => {
       setIsOpen(open); 
-      if (!open && !isEditing) { // Only reset if closing and NOT in edit mode (to preserve edit form on re-open if needed)
-         // form.reset(defaultMaintenanceTaskFormValues); // Handled by key remount or useEffect
-      }
     }}>
       <DialogTrigger asChild>{children}</DialogTrigger>
       <DialogContent className="sm:max-w-[600px] md:max-w-[750px] lg:max-w-[900px]">
@@ -402,7 +416,9 @@ export function AddMaintenanceTaskModal({ aircraft, onSave, children, isOpen, se
               </section>
               <DialogFooter className="pt-6 sticky bottom-0 bg-background py-4 border-t">
                 <Button type="button" variant="destructive" disabled>Delete Task</Button>
-                <Button type="button" variant="ghost" disabled>View History</Button>
+                <Button type="button" variant="ghost" onClick={() => setShowHistoryAlert(true)} disabled={!isEditing || !hasLastCompletionDetails}>
+                   <History className="mr-2 h-4 w-4" /> View History
+                </Button>
                 <DialogClose asChild>
                   <Button type="button" variant="outline">Close</Button>
                 </DialogClose>
@@ -416,5 +432,39 @@ export function AddMaintenanceTaskModal({ aircraft, onSave, children, isOpen, se
         </ScrollArea>
       </DialogContent>
     </Dialog>
+
+    {showHistoryAlert && (
+        <AlertDialog open={showHistoryAlert} onOpenChange={setShowHistoryAlert}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2">
+                <History className="h-5 w-5 text-primary" />
+                Last Completion Details for: {currentTaskValues.itemTitle}
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                This shows the most recent completion information recorded for this task. A full audit trail is not yet available.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="space-y-3 py-4 text-sm">
+                {currentTaskValues.lastCompletedDate && isValid(parseDate(currentTaskValues.lastCompletedDate, 'yyyy-MM-dd', new Date())) ? (
+                    <p><strong>Date:</strong> {format(parseDate(currentTaskValues.lastCompletedDate, 'yyyy-MM-dd', new Date()), "PPP")}</p>
+                ) : (
+                    <p><strong>Date:</strong> Not specified</p>
+                )}
+                <p><strong>Hours:</strong> {currentTaskValues.lastCompletedHours?.toLocaleString() ?? 'N/A'}</p>
+                <p><strong>Cycles:</strong> {currentTaskValues.lastCompletedCycles?.toLocaleString() ?? 'N/A'}</p>
+                <p><strong>Notes:</strong></p>
+                <ScrollArea className="h-24 w-full rounded-md border p-2 bg-muted/50">
+                   {currentTaskValues.lastCompletedNotes || "No notes provided."}
+                </ScrollArea>
+            </div>
+            <AlertDialogFooter>
+              <AlertDialogAction onClick={() => setShowHistoryAlert(false)}>Close</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
+    </>
   );
 }
+
