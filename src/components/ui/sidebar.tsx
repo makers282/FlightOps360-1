@@ -5,7 +5,7 @@ import * as React from "react"
 import Link from 'next/link';
 import { Slot } from "@radix-ui/react-slot"
 import { VariantProps, cva } from "class-variance-authority"
-import { PanelLeft, ChevronRight } from "lucide-react" // Added ChevronRight
+import { PanelLeft, ChevronRight } from "lucide-react" 
 
 import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
@@ -503,7 +503,7 @@ const SidebarMenuItem = React.forwardRef<
   React.ComponentProps<"li">
 >(({ className, children, ...props }, ref) => {
   const [isSubMenuOpen, setIsSubMenuOpen] = React.useState(false);
-  const { state: sidebarState, isMobile } = useSidebar();
+  const { state: sidebarState, isMobile, isClientMounted } = useSidebar();
 
   const isSidebarCollapsedIconOnly = sidebarState === "collapsed" && !isMobile;
 
@@ -523,7 +523,6 @@ const SidebarMenuItem = React.forwardRef<
       if ((child.type as any).displayName === 'SidebarMenuButton' && hasSubmenu) {
         return React.cloneElement(child, {
           onClick: (e: React.MouseEvent<HTMLElement>) => {
-            // Prevent submenu toggle when sidebar is icon-only and button is clicked for tooltip
             if (!isSidebarCollapsedIconOnly) {
                 setIsSubMenuOpen((prev) => !prev);
             }
@@ -533,14 +532,13 @@ const SidebarMenuItem = React.forwardRef<
         });
       }
       if ((child.type as any).displayName === 'SidebarMenuSub' && hasSubmenu) {
-        // Do not render submenu if sidebar is icon-only
-        return isSubMenuOpen && !isSidebarCollapsedIconOnly ? child : null;
+        // Only render submenu if client mounted, submenu is open, and not in icon-only mode
+        return isClientMounted && isSubMenuOpen && !isSidebarCollapsedIconOnly ? child : null;
       }
     }
     return child;
   });
   
-  // Effect to close submenu when main sidebar collapses to icon-only view
   React.useEffect(() => {
     if (isSidebarCollapsedIconOnly) {
       setIsSubMenuOpen(false);
@@ -593,7 +591,7 @@ const SidebarMenuButton = React.forwardRef<
     isSubmenuTrigger?: boolean;
     tooltip?: string | React.ComponentProps<typeof TooltipContent>;
     href?: string;
-    isSubMenuExpanded?: boolean; // Added for chevron state
+    isSubMenuExpanded?: boolean; 
   } & VariantProps<typeof sidebarMenuButtonVariants>
 >(
   (
@@ -607,14 +605,24 @@ const SidebarMenuButton = React.forwardRef<
       className,
       children,
       href,
-      isSubMenuExpanded, // Consumed prop
+      isSubMenuExpanded, 
       onClick, 
       ...props
     },
     ref
   ) => {
-    const { isMobile, state } = useSidebar();
+    const { isMobile, state, isClientMounted } = useSidebar();
     const isIconOnly = state === "collapsed" && !isMobile;
+    const [showChevronIcon, setShowChevronIcon] = React.useState(false);
+
+    React.useEffect(() => {
+      // Only show chevron on client after mount, if it's a submenu trigger and not icon-only mode
+      if (isClientMounted && isSubmenuTrigger && !isIconOnly) {
+        setShowChevronIcon(true);
+      } else {
+        setShowChevronIcon(false);
+      }
+    }, [isClientMounted, isSubmenuTrigger, isIconOnly]);
 
     const commonClassAndData = {
       "data-sidebar": "menu-button",
@@ -626,7 +634,7 @@ const SidebarMenuButton = React.forwardRef<
     const content = (
       <>
         {children}
-        {isSubmenuTrigger && !isIconOnly && (
+        {showChevronIcon && (
           <ChevronRight
             className={cn(
               "submenu-chevron ml-auto h-4 w-4 shrink-0 transition-transform duration-200",
@@ -670,6 +678,8 @@ const SidebarMenuButton = React.forwardRef<
         </button>
       );
     }
+    
+    const tooltipContentHidden = !isClientMounted || state !== "collapsed" || isMobile;
 
     if (!tooltip) {
       return element;
@@ -683,7 +693,7 @@ const SidebarMenuButton = React.forwardRef<
         <TooltipContent
           side="right"
           align="center"
-          hidden={state !== "collapsed" || isMobile}
+          hidden={tooltipContentHidden}
           {...tooltipProps}
         />
       </Tooltip>
@@ -885,3 +895,5 @@ export {
   SidebarTrigger,
   useSidebar,
 }
+
+    
