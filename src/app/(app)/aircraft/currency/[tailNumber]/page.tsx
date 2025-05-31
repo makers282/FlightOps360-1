@@ -1,8 +1,8 @@
 
 "use client";
 
-import React, { useState, useEffect, useTransition, useCallback } from 'react';
-import { useParams } from 'next/navigation';
+import React, { useState, useEffect, useTransition, useCallback, useMemo } from 'react';
+import { useParams, useRouter } from 'next/navigation'; // Added useRouter
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
@@ -16,13 +16,14 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { z } from 'zod';
 import { AddMaintenanceTaskModal, type MaintenanceTaskFormData, defaultMaintenanceTaskFormValues } from './components/add-maintenance-task-modal';
 import { Badge } from '@/components/ui/badge';
 
-import { Wrench, PlusCircle, ArrowLeft, PlaneIcon, Edit, Loader2, InfoIcon, Phone, UserCircle, MapPin, Save, XCircle, Edit2, Edit3, AlertTriangle, CheckCircle2, XCircle as XCircleIcon } from 'lucide-react';
+import { Wrench, PlusCircle, ArrowLeft, PlaneIcon, Edit, Loader2, InfoIcon, Phone, UserCircle, MapPin, Save, XCircle, Edit2, Edit3, AlertTriangle, CheckCircle2, XCircle as XCircleIcon, Search, ArrowUpDown, ArrowDown, ArrowUp } from 'lucide-react';
 import { format, parse, addDays, isValid, addMonths, addYears, endOfMonth, parseISO, differenceInCalendarDays } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { fetchFleetAircraft, saveFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
@@ -35,6 +36,7 @@ export interface DisplayMaintenanceItem extends FlowMaintenanceTask {
   dueAtDate?: string; 
   dueAtHours?: number;
   dueAtCycles?: number;
+  toGoData?: { text: string; numeric: number; unit: 'days' | 'hrs' | 'cycles' | 'N/A'; isOverdue: boolean };
 }
 
 const aircraftInfoEditSchema = z.object({
@@ -46,14 +48,22 @@ const aircraftInfoEditSchema = z.object({
 });
 type AircraftInfoEditFormData = z.infer<typeof aircraftInfoEditSchema>;
 
+type SortKey = 'itemTitle' | 'toGoNumeric' | 'referenceNumber';
+type SortDirection = 'ascending' | 'descending';
+
+interface SortConfig {
+  key: SortKey;
+  direction: SortDirection;
+}
 
 export default function AircraftMaintenanceDetailPage() {
   const params = useParams();
+  const router = useRouter(); // For back button navigation
   const tailNumber = typeof params.tailNumber === 'string' ? decodeURIComponent(params.tailNumber) : undefined;
   const { toast } = useToast();
 
   const [currentAircraft, setCurrentAircraft] = useState<FleetAircraft | null>(null);
-  const [maintenanceTasks, setMaintenanceTasks] = useState<DisplayMaintenanceItem[]>([]);
+  const [maintenanceTasks, setMaintenanceTasks] = useState<FlowMaintenanceTask[]>([]); // Store raw tasks
   
   const [editableComponentTimes, setEditableComponentTimes] = useState<Array<{ componentName: string; currentTime: number; currentCycles: number }>>([]);
   const [originalComponentTimes, setOriginalComponentTimes] = useState<Array<{ componentName: string; currentTime: number; currentCycles: number }>>([]);
@@ -71,9 +81,52 @@ export default function AircraftMaintenanceDetailPage() {
   const [editingTaskOriginalId, setEditingTaskOriginalId] = useState<string | null>(null);
   const [initialModalFormData, setInitialModalFormData] = useState<Partial<MaintenanceTaskFormData> | null>(null);
 
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'dueSoon' | 'overdue'>('all');
+  const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'toGoNumeric', direction: 'ascending' });
+
   const aircraftInfoForm = useForm<AircraftInfoEditFormData>({ resolver: zodResolver(aircraftInfoEditSchema) });
 
-  const calculateDisplayFields = useCallback((task: FlowMaintenanceTask): DisplayMaintenanceItem => {
+  const calculateToGo = useCallback((item: DisplayMaintenanceItem, currentComponentTimes: Array<{ componentName: string; currentTime: number; currentCycles: number }>): { text: string; numeric: number; unit: 'days' | 'hrs' | 'cycles' | 'N/A'; isOverdue: boolean } => {
+    const now = new Date();
+    if (item.dueAtDate && isValid(parse(item.dueAtDate, 'yyyy-MM-dd', new Date()))) {
+      const dueDate = parse(item.dueAtDate, 'yyyy-MM-dd', new Date());
+      const daysRemaining = differenceInCalendarDays(dueDate, now);
+      return { text: `${daysRemaining} days`, numeric: daysRemaining, unit: 'days', isOverdue: daysRemaining < 0 };
+    }
+    
+    let currentRelevantTime: number | undefined = undefined;
+    let currentRelevantCycles: number | undefined = undefined;
+    
+    const componentNameToUse = (item.associatedComponent && item.associatedComponent.trim() !== "") 
+      ? item.associatedComponent.trim() 
+      : "Airframe"; 
+    
+    const timesForComponent = currentComponentTimes.find(c => c.componentName.trim() === componentNameToUse);
+
+    if (timesForComponent) {
+      currentRelevantTime = timesForComponent.currentTime;
+      currentRelevantCycles = timesForComponent.currentCycles;
+    } else {
+      if (item.dueAtHours != null) return { text: `N/A (No time for ${componentNameToUse})`, numeric: Infinity, unit: 'hrs', isOverdue: false };
+      if (item.dueAtCycles != null) return { text: `N/A (No cycles for ${componentNameToUse})`, numeric: Infinity, unit: 'cycles', isOverdue: false };
+      return { text: 'N/A (Comp. data missing)', numeric: Infinity, unit: 'N/A', isOverdue: false };
+    }
+    
+    if (item.dueAtHours != null && currentRelevantTime !== undefined) {
+      const hoursRemaining = parseFloat((item.dueAtHours - currentRelevantTime).toFixed(1));
+      return { text: `${hoursRemaining.toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1})} hrs (from ${componentNameToUse})`, numeric: hoursRemaining, unit: 'hrs', isOverdue: hoursRemaining < 0 };
+    }
+  
+    if (item.dueAtCycles != null && currentRelevantCycles !== undefined) {
+      const cyclesRemaining = item.dueAtCycles - currentRelevantCycles;
+      return { text: `${cyclesRemaining.toLocaleString()} cycles (from ${componentNameToUse})`, numeric: cyclesRemaining, unit: 'cycles', isOverdue: cyclesRemaining < 0 };
+    }
+    
+    return { text: 'N/A (Not Date/Hr/Cycle)', numeric: Infinity, unit: 'N/A', isOverdue: false };
+  }, []);
+
+  const calculateDisplayFields = useCallback((task: FlowMaintenanceTask, currentComponentTimes: Array<{ componentName: string; currentTime: number; currentCycles: number }>): DisplayMaintenanceItem => {
     let dueAtDate: string | undefined = undefined;
     let dueAtHours: number | undefined = undefined;
     let dueAtCycles: number | undefined = undefined;
@@ -109,8 +162,9 @@ export default function AircraftMaintenanceDetailPage() {
       if (task.isHoursDueEnabled && task.hoursDue) dueAtHours = Number(task.hoursDue);
       if (task.isCyclesDueEnabled && task.cyclesDue) dueAtCycles = Number(task.cyclesDue);
     }
-    return { ...task, dueAtDate, dueAtHours, dueAtCycles };
-  }, []);
+    const toGoData = calculateToGo({ ...task, dueAtDate, dueAtHours, dueAtCycles }, currentComponentTimes);
+    return { ...task, dueAtDate, dueAtHours, dueAtCycles, toGoData };
+  }, [calculateToGo]);
   
   const loadAndInitializeComponentTimes = useCallback(async (aircraft: FleetAircraft | null) => {
     if (!aircraft || !aircraft.id) {
@@ -153,12 +207,11 @@ export default function AircraftMaintenanceDetailPage() {
     }
   }, [toast]);
 
-
   const loadMaintenanceTasks = useCallback(async (aircraftId: string) => {
     setIsLoadingTasks(true);
     try {
       const tasksFromDb = await fetchMaintenanceTasksForAircraft({ aircraftId });
-      setMaintenanceTasks(tasksFromDb.map(calculateDisplayFields));
+      setMaintenanceTasks(tasksFromDb); // Store raw tasks
     } catch (error) {
       console.error("Failed to load maintenance tasks:", error);
       toast({ title: "Error", description: "Could not load maintenance tasks.", variant: "destructive" });
@@ -166,7 +219,7 @@ export default function AircraftMaintenanceDetailPage() {
     } finally {
       setIsLoadingTasks(false);
     }
-  }, [toast, calculateDisplayFields]);
+  }, [toast]);
 
   useEffect(() => {
     const loadAircraftDetails = async () => {
@@ -342,46 +395,7 @@ export default function AircraftMaintenanceDetailPage() {
       toast({ title: "Error Deleting Task", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
     }
   };
-
-  const calculateToGo = useCallback((item: DisplayMaintenanceItem): { text: string; numeric: number; unit: 'days' | 'hrs' | 'cycles' | 'N/A'; isOverdue: boolean } => {
-    const now = new Date();
-    if (item.dueAtDate && isValid(parse(item.dueAtDate, 'yyyy-MM-dd', new Date()))) {
-      const dueDate = parse(item.dueAtDate, 'yyyy-MM-dd', new Date());
-      const daysRemaining = differenceInCalendarDays(dueDate, now);
-      return { text: `${daysRemaining} days`, numeric: daysRemaining, unit: 'days', isOverdue: daysRemaining < 0 };
-    }
-    
-    let currentRelevantTime: number | undefined = undefined;
-    let currentRelevantCycles: number | undefined = undefined;
-    
-    const componentNameToUse = (item.associatedComponent && item.associatedComponent.trim() !== "") 
-      ? item.associatedComponent.trim() 
-      : "Airframe"; 
-    
-    const currentTimesForComponent = editableComponentTimes.find(c => c.componentName.trim() === componentNameToUse);
-
-    if (currentTimesForComponent) {
-      currentRelevantTime = currentTimesForComponent.currentTime;
-      currentRelevantCycles = currentTimesForComponent.currentCycles;
-    } else {
-      if (item.dueAtHours != null) return { text: `N/A (No time for ${componentNameToUse})`, numeric: Infinity, unit: 'hrs', isOverdue: false };
-      if (item.dueAtCycles != null) return { text: `N/A (No cycles for ${componentNameToUse})`, numeric: Infinity, unit: 'cycles', isOverdue: false };
-      return { text: 'N/A (Comp. data missing)', numeric: Infinity, unit: 'N/A', isOverdue: false };
-    }
-    
-    if (item.dueAtHours != null && currentRelevantTime !== undefined) {
-      const hoursRemaining = parseFloat((item.dueAtHours - currentRelevantTime).toFixed(1));
-      return { text: `${hoursRemaining.toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1})} hrs (from ${componentNameToUse})`, numeric: hoursRemaining, unit: 'hrs', isOverdue: hoursRemaining < 0 };
-    }
   
-    if (item.dueAtCycles != null && currentRelevantCycles !== undefined) {
-      const cyclesRemaining = item.dueAtCycles - currentRelevantCycles;
-      return { text: `${cyclesRemaining.toLocaleString()} cycles (from ${componentNameToUse})`, numeric: cyclesRemaining, unit: 'cycles', isOverdue: cyclesRemaining < 0 };
-    }
-    
-    return { text: 'N/A (Not Date/Hr/Cycle)', numeric: Infinity, unit: 'N/A', isOverdue: false };
-  }, [editableComponentTimes]);
-
   const formatTaskFrequency = (task: FlowMaintenanceTask): string => {
     if (task.trackType === "Dont Alert") return "Not Tracked";
     if (task.trackType === "One Time") return "One Time";
@@ -408,7 +422,6 @@ export default function AircraftMaintenanceDetailPage() {
     return frequencies.length > 0 ? frequencies.join(' / ') : 'N/A';
   };
 
-
   const getReleaseStatus = (toGo: { text: string; numeric: number; unit: 'days' | 'hrs' | 'cycles' | 'N/A'; isOverdue: boolean }): { icon: JSX.Element; colorClass: string; label: string } => {
     if (toGo.text.startsWith('N/A (No time for') || toGo.text.startsWith('N/A (No cycles for') || toGo.text.startsWith('N/A (Comp. data missing')) {
       return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-orange-500', label: 'Missing Comp. Time' };
@@ -427,6 +440,80 @@ export default function AircraftMaintenanceDetailPage() {
     return { icon: <CheckCircle2 className="h-5 w-5" />, colorClass: 'text-green-500', label: 'OK' };
   };
 
+  const displayedTasks = useMemo(() => {
+    if (isLoadingComponentTimes) return []; // Don't process until component times are loaded
+
+    let filtered = maintenanceTasks.map(task => calculateDisplayFields(task, editableComponentTimes));
+
+    if (searchTerm) {
+      const lowerSearchTerm = searchTerm.toLowerCase();
+      filtered = filtered.filter(task =>
+        task.itemTitle.toLowerCase().includes(lowerSearchTerm) ||
+        (task.referenceNumber && task.referenceNumber.toLowerCase().includes(lowerSearchTerm)) ||
+        task.itemType.toLowerCase().includes(lowerSearchTerm) ||
+        (task.associatedComponent && task.associatedComponent.toLowerCase().includes(lowerSearchTerm))
+      );
+    }
+
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter(task => {
+        if (statusFilter === 'active') return task.isActive;
+        if (statusFilter === 'inactive') return !task.isActive;
+        if (!task.isActive) return false; // Further status filters only apply to active tasks
+
+        const status = getReleaseStatus(task.toGoData!);
+        if (statusFilter === 'overdue') return status.label === 'Overdue';
+        if (statusFilter === 'dueSoon') return status.label === 'Due Soon';
+        return true;
+      });
+    }
+    
+    if (sortConfig !== null) {
+      filtered.sort((a, b) => {
+        let aValue: string | number | undefined;
+        let bValue: string | number | undefined;
+
+        if (sortConfig.key === 'toGoNumeric') {
+          aValue = a.toGoData?.numeric;
+          bValue = b.toGoData?.numeric;
+        } else {
+          aValue = a[sortConfig.key as keyof DisplayMaintenanceItem] as string | number | undefined;
+          bValue = b[sortConfig.key as keyof DisplayMaintenanceItem] as string | number | undefined;
+        }
+
+        if (aValue === undefined && bValue === undefined) return 0;
+        if (aValue === undefined) return sortConfig.direction === 'ascending' ? 1 : -1;
+        if (bValue === undefined) return sortConfig.direction === 'ascending' ? -1 : 1;
+        
+        if (typeof aValue === 'string' && typeof bValue === 'string') {
+          const comparison = aValue.toLowerCase().localeCompare(bValue.toLowerCase());
+          return sortConfig.direction === 'ascending' ? comparison : -comparison;
+        }
+        if (typeof aValue === 'number' && typeof bValue === 'number') {
+          return sortConfig.direction === 'ascending' ? aValue - bValue : bValue - aValue;
+        }
+        return 0;
+      });
+    }
+
+    return filtered;
+  }, [maintenanceTasks, searchTerm, statusFilter, sortConfig, calculateDisplayFields, editableComponentTimes, isLoadingComponentTimes]);
+
+  const requestSort = (key: SortKey) => {
+    let direction: SortDirection = 'ascending';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') {
+      direction = 'descending';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const getSortIcon = (key: SortKey) => {
+    if (!sortConfig || sortConfig.key !== key) {
+      return <ArrowUpDown className="ml-2 h-3 w-3 opacity-50" />;
+    }
+    return sortConfig.direction === 'ascending' ? <ArrowUp className="ml-2 h-3 w-3" /> : <ArrowDown className="ml-2 h-3 w-3" />;
+  };
+
 
   if (isLoadingAircraft || isLoadingComponentTimes) {
     return <div className="flex items-center justify-center h-screen"><Loader2 className="h-12 w-12 animate-spin text-primary" /><p className="ml-3 text-lg text-muted-foreground">Loading aircraft details & component times...</p></div>;
@@ -434,13 +521,18 @@ export default function AircraftMaintenanceDetailPage() {
   if (!tailNumber || !currentAircraft) {
     return (
       <div>
-        <PageHeader title="Aircraft Not Found" icon={Wrench} />
+        <PageHeader 
+          title="Aircraft Not Found" 
+          icon={Wrench} 
+          actions={
+            <Button asChild variant="outline">
+              <Link href="/aircraft/currency"><ArrowLeft className="mr-2 h-4 w-4" /> Back to Overview</Link>
+            </Button>
+          }
+        />
         <Card>
           <CardContent className="pt-6">
             <p>Aircraft "{tailNumber || 'Unknown'}" not found.</p>
-            <Button asChild variant="outline" className="mt-4">
-              <Link href="/aircraft/currency"><ArrowLeft className="mr-2 h-4 w-4" /> Back to Overview</Link>
-            </Button>
           </CardContent>
         </Card>
       </div>
@@ -449,7 +541,15 @@ export default function AircraftMaintenanceDetailPage() {
   if (!currentAircraft.isMaintenanceTracked) {
      return (
         <div>
-            <PageHeader title={`Data for ${currentAircraft.tailNumber}`} icon={PlaneIcon} />
+            <PageHeader 
+                title={`Data for ${currentAircraft.tailNumber}`} 
+                icon={PlaneIcon}
+                actions={
+                    <Button asChild variant="outline">
+                      <Link href="/aircraft/currency"><ArrowLeft className="mr-2 h-4 w-4" /> Back to Overview</Link>
+                    </Button>
+                }
+            />
             <Card className="mb-6">
                 <CardHeader><CardTitle>Aircraft Information</CardTitle></CardHeader>
                 <CardContent><p className="text-sm text-muted-foreground">Model: {currentAircraft.model}</p></CardContent>
@@ -457,9 +557,6 @@ export default function AircraftMaintenanceDetailPage() {
             <Card>
                 <CardContent className="pt-6">
                     <p>Maintenance tracking not enabled for "{currentAircraft.tailNumber}".</p>
-                    <Button asChild variant="outline" className="mt-4">
-                        <Link href="/aircraft/currency"><ArrowLeft className="mr-2 h-4 w-4" /> Back to Overview</Link>
-                    </Button>
                 </CardContent>
             </Card>
         </div>
@@ -476,18 +573,23 @@ export default function AircraftMaintenanceDetailPage() {
         description={pageHeaderDescription}
         icon={Wrench}
         actions={
-          <AddMaintenanceTaskModal 
-            aircraft={currentAircraft} 
-            onSave={handleSaveTask} 
-            onDelete={handleDeleteTask}
-            isOpen={isTaskModalOpen}
-            setIsOpen={setIsTaskModalOpen}
-            initialData={initialModalFormData}
-            isEditing={!!editingTaskOriginalId}
-            currentTaskId={editingTaskOriginalId}
-          >
-            <Button><PlusCircle className="mr-2 h-4 w-4" /> Add New Task</Button>
-          </AddMaintenanceTaskModal>
+          <div className="flex gap-2">
+            <Button asChild variant="outline">
+                <Link href="/aircraft/currency"><ArrowLeft className="mr-2 h-4 w-4" /> Back to Overview</Link>
+            </Button>
+            <AddMaintenanceTaskModal 
+              aircraft={currentAircraft} 
+              onSave={handleSaveTask} 
+              onDelete={handleDeleteTask}
+              isOpen={isTaskModalOpen}
+              setIsOpen={setIsTaskModalOpen}
+              initialData={initialModalFormData}
+              isEditing={!!editingTaskOriginalId}
+              currentTaskId={editingTaskOriginalId}
+            >
+              <Button><PlusCircle className="mr-2 h-4 w-4" /> Add New Task</Button>
+            </AddMaintenanceTaskModal>
+          </div>
         }
       />
       
@@ -613,6 +715,35 @@ export default function AircraftMaintenanceDetailPage() {
             Overview of scheduled and upcoming maintenance tasks for {currentAircraft.tailNumber}.
             Calculated "To Go" is based on the values in "Current Hours & Cycles" above.
           </CardDescription>
+          <div className="mt-4 flex flex-col sm:flex-row gap-2">
+            <div className="relative flex-grow">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="search"
+                placeholder="Search tasks (title, ref, type, component)..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-8 w-full"
+              />
+              {searchTerm && (
+                <Button variant="ghost" size="icon" className="absolute right-1 top-1 h-7 w-7" onClick={() => setSearchTerm('')}>
+                    <XCircleIcon className="h-4 w-4"/>
+                </Button>
+              )}
+            </div>
+            <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as any)}>
+              <SelectTrigger className="w-full sm:w-[200px]">
+                <SelectValue placeholder="Filter by status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Items</SelectItem>
+                <SelectItem value="active">Active Items</SelectItem>
+                <SelectItem value="inactive">Inactive Items</SelectItem>
+                <SelectItem value="dueSoon">Due Soon (Active)</SelectItem>
+                <SelectItem value="overdue">Overdue (Active)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </CardHeader>
         <CardContent>
           {isLoadingTasks ? (
@@ -621,28 +752,37 @@ export default function AircraftMaintenanceDetailPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Item</TableHead>
-                  <TableHead>Associated Component</TableHead>
+                  <TableHead>Ref #</TableHead>
+                  <TableHead>
+                    <Button variant="ghost" size="sm" onClick={() => requestSort('itemTitle')} className="px-1 -ml-2">
+                        Title {getSortIcon('itemTitle')}
+                    </Button>
+                  </TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Component</TableHead>
                   <TableHead>Frequency</TableHead>
                   <TableHead>Last Done</TableHead>
                   <TableHead>Due At</TableHead>
-                  <TableHead>To Go</TableHead>
+                  <TableHead>
+                    <Button variant="ghost" size="sm" onClick={() => requestSort('toGoNumeric')} className="px-1 -ml-2">
+                        To Go {getSortIcon('toGoNumeric')}
+                    </Button>
+                  </TableHead>
                   <TableHead className="text-center">Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {maintenanceTasks.length === 0 && (
+                {displayedTasks.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center text-muted-foreground py-10">
-                      No maintenance tasks found for this aircraft. 
+                    <TableCell colSpan={10} className="text-center text-muted-foreground py-10">
+                      No maintenance tasks match your criteria. 
                       <Button variant="link" className="p-0 ml-1" onClick={handleOpenAddTaskModal}>Add one now?</Button>
                     </TableCell>
                   </TableRow>
                 )}
-                {maintenanceTasks.map((item) => {
-                  const toGo = calculateToGo(item);
-                  const status = getReleaseStatus(toGo);
+                {displayedTasks.map((item) => {
+                  const status = getReleaseStatus(item.toGoData!);
                   const frequency = formatTaskFrequency(item);
                   let dueAtDisplay = "N/A";
                   if (item.dueAtDate) {
@@ -664,16 +804,17 @@ export default function AircraftMaintenanceDetailPage() {
 
                   return (
                     <TableRow key={item.id} className={item.isActive ? '' : 'opacity-50 bg-muted/30 hover:bg-muted/40'}>
+                      <TableCell className="text-xs text-muted-foreground">{item.referenceNumber || '-'}</TableCell>
                       <TableCell className="font-medium">
                         {item.itemTitle}
                         {!item.isActive && <Badge variant="outline" className="ml-2 text-xs">Inactive</Badge>}
-                        <p className="text-xs text-muted-foreground">{item.itemType}</p>
                       </TableCell>
-                      <TableCell>{item.associatedComponent || 'Airframe'}</TableCell>
-                      <TableCell>{frequency}</TableCell>
-                      <TableCell>{lastDoneDisplay}</TableCell>
-                      <TableCell>{dueAtDisplay}</TableCell>
-                      <TableCell className={`font-semibold ${status.colorClass}`}>{toGo.text}</TableCell>
+                      <TableCell className="text-xs">{item.itemType}</TableCell>
+                      <TableCell className="text-xs">{item.associatedComponent || 'Airframe'}</TableCell>
+                      <TableCell className="text-xs">{frequency}</TableCell>
+                      <TableCell className="text-xs">{lastDoneDisplay}</TableCell>
+                      <TableCell className="text-xs">{dueAtDisplay}</TableCell>
+                      <TableCell className={`font-semibold text-xs ${item.toGoData?.isOverdue ? 'text-red-600' : (item.toGoData?.unit === 'days' && item.toGoData?.numeric < 30) || (item.toGoData?.unit === 'hrs' && item.toGoData?.numeric < 25) || (item.toGoData?.unit === 'cycles' && item.toGoData?.numeric < 50) ? 'text-yellow-600' : 'text-green-600'}`}>{item.toGoData?.text}</TableCell>
                       <TableCell className="text-center">
                         <div className={`flex flex-col items-center justify-center ${status.colorClass}`}>
                           {status.icon}
