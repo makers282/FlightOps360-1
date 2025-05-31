@@ -13,6 +13,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Building2, Plane, PlusCircle, Trash2, Save, XCircle, Loader2, Edit, CheckSquare, Square, Info } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { fetchFleetAircraft, saveFleetAircraft, deleteFleetAircraft, type FleetAircraft, type SaveFleetAircraftInput } from '@/ai/flows/manage-fleet-flow';
+import { fetchCompanyProfile, saveCompanyProfile, type CompanyProfile } from '@/ai/flows/manage-company-profile-flow'; // Import new flows
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
 // Define local type including fields not directly editable via simple form inputs
@@ -42,10 +43,12 @@ export default function CompanySettingsPage() {
   const [newPrimaryContactPhone, setNewPrimaryContactPhone] = useState('');
   // Engine details are not directly editable in this form for simplicity
 
+  // State for company information
   const [companyName, setCompanyName] = useState('');
   const [companyAddress, setCompanyAddress] = useState('');
   const [companyEmail, setCompanyEmail] = useState('');
   const [companyPhone, setCompanyPhone] = useState('');
+  const [isLoadingCompanyInfo, setIsLoadingCompanyInfo] = useState(true);
   const [isSavingCompanyInfo, startSavingCompanyInfoTransition] = useTransition();
 
   const loadFleetData = async () => {
@@ -61,13 +64,35 @@ export default function CompanySettingsPage() {
     }
   };
 
+  const loadCompanyProfileData = async () => {
+    setIsLoadingCompanyInfo(true);
+    try {
+      const profile = await fetchCompanyProfile();
+      if (profile) {
+        setCompanyName(profile.companyName || '');
+        setCompanyAddress(profile.companyAddress || '');
+        setCompanyEmail(profile.companyEmail || '');
+        setCompanyPhone(profile.companyPhone || '');
+      } else {
+        // Set default or example values if no profile exists
+        setCompanyName("FlightOps360 LLC (Example)");
+        setCompanyAddress("123 Aviation Way, Hangar B, Anytown, USA 12345");
+        setCompanyEmail("ops@flightops360.example.com");
+        setCompanyPhone("(555) 012-3456");
+      }
+    } catch (error) {
+      console.error("Failed to fetch company profile:", error);
+      toast({ title: "Error Loading Company Info", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
+    } finally {
+      setIsLoadingCompanyInfo(false);
+    }
+  };
+
+
   useEffect(() => {
     loadFleetData();
-    setCompanyName("FlightOps360 LLC");
-    setCompanyAddress("123 Aviation Way, Hangar B, Anytown, USA 12345");
-    setCompanyEmail("ops@flightops360.example.com");
-    setCompanyPhone("(555) 012-3456");
-  }, [toast]); // Removed loadFleetData from dependency array to avoid re-triggering, toast is fine.
+    loadCompanyProfileData();
+  }, [toast]); 
 
   const resetAircraftFormFields = () => {
     setNewTailNumber('');
@@ -114,7 +139,6 @@ export default function CompanySettingsPage() {
       baseLocation: newBaseLocation.trim() || undefined,
       primaryContactName: newPrimaryContactName.trim() || undefined,
       primaryContactPhone: newPrimaryContactPhone.trim() || undefined,
-      // engineDetails are not directly editable in this form, will retain existing if editing
       engineDetails: editingAircraftId ? fleet.find(ac => ac.id === editingAircraftId)?.engineDetails : undefined,
     };
 
@@ -154,19 +178,21 @@ export default function CompanySettingsPage() {
   };
 
   const handleSaveCompanyInfo = () => {
-    startSavingCompanyInfoTransition(() => {
-      // In a real app, this would save to Firestore or another backend.
-      // For now, we'll just log it and show a toast.
-      console.log("Saving company information:", {
-        companyName,
-        companyAddress,
-        companyEmail,
-        companyPhone
-      });
-      toast({
-        title: "Company Information Saved (Simulated)",
-        description: "This data is not yet connected to Firestore.",
-      });
+    startSavingCompanyInfoTransition(async () => {
+      const profileData: CompanyProfile = {
+        id: 'main', // Fixed ID for the company profile document
+        companyName: companyName.trim(),
+        companyAddress: companyAddress.trim(),
+        companyEmail: companyEmail.trim(),
+        companyPhone: companyPhone.trim(),
+      };
+      try {
+        await saveCompanyProfile(profileData);
+        toast({ title: "Success", description: "Company information updated in Firestore." });
+      } catch (error) {
+        console.error("Failed to save company profile:", error);
+        toast({ title: "Error Saving Company Info", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
+      }
     });
   };
 
@@ -183,9 +209,19 @@ export default function CompanySettingsPage() {
         <Card className="shadow-md">
           <CardHeader>
             <CardTitle>Company Information</CardTitle>
-            <CardDescription>Update your company's profile details. (Not connected to Firestore yet)</CardDescription>
+            <CardDescription>Update your company's profile details. (Connected to Firestore)</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {isLoadingCompanyInfo ? (
+                <div className="space-y-4">
+                    <Skeleton className="h-6 w-1/4" /> <Skeleton className="h-10 w-full" />
+                    <Skeleton className="h-6 w-1/4" /> <Skeleton className="h-20 w-full" />
+                    <Skeleton className="h-6 w-1/4" /> <Skeleton className="h-10 w-full" />
+                    <Skeleton className="h-6 w-1/4" /> <Skeleton className="h-10 w-full" />
+                    <Skeleton className="h-10 w-1/3 mt-2" />
+                </div>
+            ) : (
+            <>
             <div>
               <Label htmlFor="companyName">Company Name</Label>
               <Input id="companyName" value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder="Your Company LLC" />
@@ -205,12 +241,14 @@ export default function CompanySettingsPage() {
             <div className="space-y-1">
                 <Label htmlFor="logoUpload">Company Logo</Label>
                 <Input id="logoUpload" type="file" disabled className="text-sm file:mr-2 file:rounded-md file:border-0 file:bg-muted file:px-3 file:py-1.5 file:text-muted-foreground hover:file:bg-muted/80"/>
-                <p className="text-xs text-muted-foreground">Logo upload functionality to be implemented.</p>
+                <p className="text-xs text-muted-foreground">Logo upload functionality to be implemented separately.</p>
             </div>
-            <Button onClick={handleSaveCompanyInfo} disabled={isSavingCompanyInfo}>
+            <Button onClick={handleSaveCompanyInfo} disabled={isSavingCompanyInfo || isLoadingCompanyInfo}>
               {isSavingCompanyInfo ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
               Save Company Information
             </Button>
+            </>
+            )}
           </CardContent>
         </Card>
 
@@ -310,7 +348,7 @@ export default function CompanySettingsPage() {
               <Alert className="mb-4">
                 <Info className="h-4 w-4" />
                 <AlertDescription className="text-xs">
-                  Aircraft data is now managed in Firestore. Ensure your Firestore rules are set up for security.
+                  Aircraft data is managed in Firestore.
                   Deleting an aircraft here will also delete its associated rate from the 'aircraftRates' collection.
                 </AlertDescription>
               </Alert>
