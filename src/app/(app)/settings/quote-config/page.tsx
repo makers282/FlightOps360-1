@@ -1,7 +1,6 @@
-
 "use client";
 
-import React, { useState, useEffect, useTransition } from 'react';
+import React, { useState, useEffect, useTransition, useCallback } from 'react';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,24 +12,10 @@ import { SlidersHorizontal, DollarSign, Edit, Percent, PlusCircle, Trash2, Save,
 import { useToast } from '@/hooks/use-toast';
 import { fetchAircraftRates, saveAircraftRate, deleteAircraftRate, type AircraftRate } from '@/ai/flows/manage-aircraft-rates-flow';
 import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
+import { fetchCompanyProfile, saveCompanyProfile, type CompanyProfile, type ServiceFeeRate } from '@/ai/flows/manage-company-profile-flow';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Skeleton } from '@/components/ui/skeleton';
 
-
-interface ServiceFeeRate {
-  displayDescription: string;
-  buy: number;
-  sell: number;
-  unitDescription: string;
-}
-
-// This data is now client-side only, not connected to Firestore for this iteration.
-const INITIAL_OTHER_COST_RATES_DATA: { [key: string]: ServiceFeeRate } = {
-  FUEL_SURCHARGE_PER_BLOCK_HOUR: { displayDescription: "Fuel Surcharge", buy: 300, sell: 400, unitDescription: "Per Block Hour" },
-  LANDING_FEE_PER_LEG: { displayDescription: "Landing Fee", buy: 400, sell: 500, unitDescription: "Per Leg" },
-  OVERNIGHT_FEE_PER_NIGHT: { displayDescription: "Overnight Fee", buy: 1000, sell: 1300, unitDescription: "Per Night"},
-  MEDICS_FEE_FLAT: { displayDescription: "Medics Fee", buy: 1800, sell: 2500, unitDescription: "Per Service" }, 
-  CATERING_FEE_FLAT: { displayDescription: "Catering Fee", buy: 350, sell: 500, unitDescription: "Per Service" },
-};
 
 const formatCurrency = (amount: number) => {
   return amount.toLocaleString(undefined, { style: "currency", currency: "USD" });
@@ -39,12 +24,19 @@ const formatCurrency = (amount: number) => {
 export default function QuoteConfigPage() {
   const [aircraftRates, setAircraftRates] = useState<AircraftRate[]>([]);
   const [fleet, setFleet] = useState<FleetAircraft[]>([]);
-  const [otherCostRates, setOtherCostRates] = useState<{ [key: string]: ServiceFeeRate }>(INITIAL_OTHER_COST_RATES_DATA);
+  
+  // State for the entire company profile, including serviceFeeRates
+  const [companyProfile, setCompanyProfile] = useState<CompanyProfile | null>(null);
+  const [currentServiceFeeRates, setCurrentServiceFeeRates] = useState<{ [key: string]: ServiceFeeRate }>({});
 
   const [isLoadingAircraftRates, setIsLoadingAircraftRates] = useState(true);
   const [isLoadingFleet, setIsLoadingFleet] = useState(true);
-  const [isSavingAircraftRate, startSavingTransition] = useTransition();
-  const [isDeletingAircraftRate, startDeletingTransition] = useTransition();
+  const [isLoadingCompanyProfile, setIsLoadingCompanyProfile] = useState(true);
+
+  const [isSavingAircraftRate, startSavingAircraftRateTransition] = useTransition();
+  const [isDeletingAircraftRate, startDeletingAircraftRateTransition] = useTransition();
+  const [isSavingServiceFee, startSavingServiceFeeTransition] = useTransition();
+
   const [currentDeletingRateId, setCurrentDeletingRateId] = useState<string | null>(null);
   const { toast } = useToast();
 
@@ -54,37 +46,42 @@ export default function QuoteConfigPage() {
   const [newAircraftSellRate, setNewAircraftSellRate] = useState('');
   const [editingAircraftRateId, setEditingAircraftRateId] = useState<string | null>(null);
 
-
   const [showAddServiceForm, setShowAddServiceForm] = useState(false);
   const [newServiceKey, setNewServiceKey] = useState('');
   const [newServiceDisplayDescription, setNewServiceDisplayDescription] = useState('');
   const [newServiceUnit, setNewServiceUnit] = useState('');
-  const [newServiceBuyRate, setNewServiceBuyRate] = useState('');
-  const [newServiceSellRate, setNewServiceSellRate] = useState('');
+  const [newServiceBuyRateLocal, setNewServiceBuyRateLocal] = useState(''); // Renamed to avoid conflict
+  const [newServiceSellRateLocal, setNewServiceSellRateLocal] = useState(''); // Renamed to avoid conflict
   const [editingServiceKey, setEditingServiceKey] = useState<string | null>(null);
 
-  const loadInitialData = async () => {
+  const loadInitialData = useCallback(async () => {
     setIsLoadingAircraftRates(true);
     setIsLoadingFleet(true);
+    setIsLoadingCompanyProfile(true);
     try {
-      const [fetchedRates, fetchedFleet] = await Promise.all([
+      const [fetchedRates, fetchedFleet, fetchedProfile] = await Promise.all([
         fetchAircraftRates(),
-        fetchFleetAircraft()
+        fetchFleetAircraft(),
+        fetchCompanyProfile()
       ]);
       setAircraftRates(fetchedRates);
       setFleet(fetchedFleet);
+      setCompanyProfile(fetchedProfile);
+      setCurrentServiceFeeRates(fetchedProfile?.serviceFeeRates || {});
+
     } catch (error) {
       console.error("Failed to load quote configuration data:", error);
-      toast({ title: "Error", description: "Could not load configuration data.", variant: "destructive" });
+      toast({ title: "Error", description: `Could not load configuration data. ${error instanceof Error ? error.message : ''}`, variant: "destructive" });
     } finally {
       setIsLoadingAircraftRates(false);
       setIsLoadingFleet(false);
+      setIsLoadingCompanyProfile(false);
     }
-  };
+  }, [toast]); // toast is stable
 
   useEffect(() => {
     loadInitialData();
-  }, [toast]); // loadInitialData is stable, toast for error display
+  }, [loadInitialData]);
 
   const handleEditAircraftRateClick = (rate: AircraftRate) => {
     setEditingAircraftRateId(rate.id);
@@ -112,10 +109,10 @@ export default function QuoteConfigPage() {
       sell: sellRateNum,
     };
 
-    startSavingTransition(async () => {
+    startSavingAircraftRateTransition(async () => {
       try {
         await saveAircraftRate(rateData);
-        await loadInitialData(); // Reload all data to reflect changes
+        await loadInitialData(); 
         toast({ title: "Success", description: `Aircraft rate ${editingAircraftRateId ? 'updated' : 'added/updated'}.` });
         handleCancelEditAircraftRate();
       } catch (error) {
@@ -135,10 +132,10 @@ export default function QuoteConfigPage() {
 
   const handleDeleteAircraftRate = (aircraftIdToDelete: string) => {
     setCurrentDeletingRateId(aircraftIdToDelete);
-    startDeletingTransition(async () => {
+    startDeletingAircraftRateTransition(async () => {
       try {
         await deleteAircraftRate({ aircraftId: aircraftIdToDelete });
-        await loadInitialData(); // Reload all data
+        await loadInitialData(); 
         toast({ title: "Success", description: "Aircraft rate deleted." });
         if (editingAircraftRateId === aircraftIdToDelete) { 
           handleCancelEditAircraftRate();
@@ -152,50 +149,65 @@ export default function QuoteConfigPage() {
     });
   };
 
+  // Service Fee Handlers - Now interact with companyProfile
   const handleEditServiceFeeClick = (key: string) => {
-    const serviceToEdit = otherCostRates[key];
+    const serviceToEdit = currentServiceFeeRates[key];
     if (serviceToEdit) {
       setEditingServiceKey(key);
       setNewServiceKey(key); 
       setNewServiceDisplayDescription(serviceToEdit.displayDescription);
       setNewServiceUnit(serviceToEdit.unitDescription);
-      setNewServiceBuyRate(String(serviceToEdit.buy));
-      setNewServiceSellRate(String(serviceToEdit.sell));
+      setNewServiceBuyRateLocal(String(serviceToEdit.buy));
+      setNewServiceSellRateLocal(String(serviceToEdit.sell));
       setShowAddServiceForm(true);
     }
   };
   
   const handleAddOrUpdateServiceFee = () => {
     const keyToUse = editingServiceKey || newServiceKey.toUpperCase().replace(/\s+/g, '_');
-    if (!keyToUse || !newServiceDisplayDescription || !newServiceUnit || !newServiceBuyRate || !newServiceSellRate) {
+    if (!keyToUse || !newServiceDisplayDescription || !newServiceUnit || !newServiceBuyRateLocal || !newServiceSellRateLocal) {
         toast({ title: "Missing Fields", description: "Please fill in all fields for the service/fee.", variant: "destructive" });
         return;
     }
-    const buyRateNum = parseFloat(newServiceBuyRate);
-    const sellRateNum = parseFloat(newServiceSellRate);
-     if (isNaN(buyRateNum) || isNaN(sellRateNum) || buyRateNum < 0 || sellRateNum < 0) {
+    const buyRateNum = parseFloat(newServiceBuyRateLocal);
+    const sellRateNum = parseFloat(newServiceSellRateLocal);
+    if (isNaN(buyRateNum) || isNaN(sellRateNum) || buyRateNum < 0 || sellRateNum < 0) {
         toast({ title: "Invalid Rates", description: "Buy and Sell rates must be valid non-negative numbers.", variant: "destructive" });
         return;
     }
 
-    setOtherCostRates(prev => ({
-        ...prev,
+    const updatedServiceFeeRates = {
+        ...currentServiceFeeRates,
         [keyToUse]: { 
             displayDescription: newServiceDisplayDescription,
             buy: buyRateNum, 
             sell: sellRateNum, 
             unitDescription: newServiceUnit 
         }
-    }));
+    };
 
-    setNewServiceKey('');
-    setNewServiceDisplayDescription('');
-    setNewServiceUnit('');
-    setNewServiceBuyRate('');
-    setNewServiceSellRate('');
-    setShowAddServiceForm(false);
-    setEditingServiceKey(null);
-    toast({ title: "Success", description: `Service/Fee ${editingServiceKey ? 'updated' : 'added'} (client-side).` });
+    if (!companyProfile) {
+        toast({ title: "Error", description: "Company profile not loaded.", variant: "destructive"});
+        return;
+    }
+
+    const updatedProfile: CompanyProfile = {
+        ...companyProfile,
+        serviceFeeRates: updatedServiceFeeRates,
+    };
+    
+    startSavingServiceFeeTransition(async () => {
+        try {
+            await saveCompanyProfile(updatedProfile);
+            setCurrentServiceFeeRates(updatedServiceFeeRates); // Update local state immediately for UI
+            setCompanyProfile(updatedProfile); // Update the main profile state
+            toast({ title: "Success", description: `Service/Fee ${editingServiceKey ? 'updated' : 'added'} in Firestore.` });
+            handleCancelEditServiceFee();
+        } catch (error) {
+            console.error("Failed to save service/fee rate:", error);
+            toast({ title: "Error Saving Service/Fee", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
+        }
+    });
   };
 
   const handleCancelEditServiceFee = () => {
@@ -203,21 +215,39 @@ export default function QuoteConfigPage() {
     setNewServiceKey('');
     setNewServiceDisplayDescription('');
     setNewServiceUnit('');
-    setNewServiceBuyRate('');
-    setNewServiceSellRate('');
+    setNewServiceBuyRateLocal('');
+    setNewServiceSellRateLocal('');
     setShowAddServiceForm(false);
   };
 
-  const handleDeleteServiceFee = (key: string) => {
-    setOtherCostRates(prev => {
-      const updated = { ...prev };
-      delete updated[key];
-      return updated;
-    });
-     if (editingServiceKey === key) {
-      handleCancelEditServiceFee();
+  const handleDeleteServiceFee = (keyToDelete: string) => {
+    if (!companyProfile) {
+        toast({ title: "Error", description: "Company profile not loaded.", variant: "destructive"});
+        return;
     }
-    toast({ title: "Success", description: "Service/Fee deleted (client-side)." });
+    
+    const updatedServiceFeeRates = { ...currentServiceFeeRates };
+    delete updatedServiceFeeRates[keyToDelete];
+
+    const updatedProfile: CompanyProfile = {
+        ...companyProfile,
+        serviceFeeRates: updatedServiceFeeRates,
+    };
+
+    startSavingServiceFeeTransition(async () => {
+        try {
+            await saveCompanyProfile(updatedProfile);
+            setCurrentServiceFeeRates(updatedServiceFeeRates);
+            setCompanyProfile(updatedProfile);
+            toast({ title: "Success", description: "Service/Fee deleted from Firestore." });
+            if (editingServiceKey === keyToDelete) {
+              handleCancelEditServiceFee();
+            }
+        } catch (error) {
+            console.error("Failed to delete service/fee rate:", error);
+            toast({ title: "Error Deleting Service/Fee", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
+        }
+    });
   };
 
   const getAircraftDisplayLabel = (aircraftId: string): string => {
@@ -225,8 +255,9 @@ export default function QuoteConfigPage() {
     return aircraft ? `${aircraft.tailNumber} - ${aircraft.model}` : aircraftId;
   };
 
-  // Filter fleet to only include aircraft not already in aircraftRates when adding new rate
   const availableFleetForNewRate = fleet.filter(ac => !aircraftRates.find(r => r.id === ac.id));
+
+  const isLoading = isLoadingAircraftRates || isLoadingFleet || isLoadingCompanyProfile;
 
 
   return (
@@ -308,9 +339,10 @@ export default function QuoteConfigPage() {
               </Card>
             )}
             {isLoadingAircraftRates || isLoadingFleet ? (
-                 <div className="flex items-center justify-center py-6">
-                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                    <p className="ml-2 text-muted-foreground">Loading aircraft rates & fleet from Firestore...</p>
+                <div className="space-y-2 py-4">
+                    <Skeleton className="h-8 w-full" />
+                    <Skeleton className="h-8 w-full" />
+                    <Skeleton className="h-8 w-full" />
                 </div>
             ) : (
                 <Table>
@@ -324,7 +356,7 @@ export default function QuoteConfigPage() {
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {aircraftRates.length === 0 && !isLoadingAircraftRates && (
+                    {aircraftRates.length === 0 && (
                         <TableRow>
                             <TableCell colSpan={5} className="text-center text-muted-foreground py-4">No aircraft rates configured yet.</TableCell>
                         </TableRow>
@@ -363,11 +395,11 @@ export default function QuoteConfigPage() {
           <CardHeader>
              <div className="flex justify-between items-center">
                 <div>
-                    <CardTitle className="flex items-center gap-2"><Percent className="h-5 w-5 text-primary"/> Standard Service & Fee Rates</CardTitle>
-                    <CardDescription>Default buy and sell rates for various services and fees. (Client-side only for this demo)</CardDescription>
+                    <CardTitle className="flex items-center gap-2"><Percent className="h-5 w-5 text-primary"/> Standard Service &amp; Fee Rates</CardTitle>
+                    <CardDescription>Default buy and sell rates for various services and fees. (Connected to Firestore)</CardDescription>
                 </div>
                 {!showAddServiceForm && (
-                  <Button variant="outline" size="sm" onClick={() => { setEditingServiceKey(null); setShowAddServiceForm(true); setNewServiceKey(''); setNewServiceDisplayDescription(''); setNewServiceUnit(''); setNewServiceBuyRate(''); setNewServiceSellRate(''); }}>
+                  <Button variant="outline" size="sm" onClick={() => { setEditingServiceKey(null); setShowAddServiceForm(true); setNewServiceKey(''); setNewServiceDisplayDescription(''); setNewServiceUnit(''); setNewServiceBuyRateLocal(''); setNewServiceSellRateLocal(''); }}>
                       <PlusCircle className="mr-2 h-4 w-4" /> Add Service/Fee
                   </Button>
                 )}
@@ -377,12 +409,13 @@ export default function QuoteConfigPage() {
             {showAddServiceForm && (
                  <Card className="p-4 mb-4 bg-muted/50 border-dashed">
                     <CardTitle className="text-lg mb-2">
-                      {editingServiceKey ? `Edit Service/Fee: ${otherCostRates[editingServiceKey]?.displayDescription || editingServiceKey}` : 'Add New Service/Fee'}
+                      {editingServiceKey ? `Edit Service/Fee: ${currentServiceFeeRates[editingServiceKey]?.displayDescription || editingServiceKey}` : 'Add New Service/Fee'}
                     </CardTitle>
                     <div className="space-y-3">
                         <div>
                             <Label htmlFor="newServiceKey">Unique Key (ALL_CAPS_SNAKE_CASE)</Label>
                             <Input id="newServiceKey" value={newServiceKey} onChange={(e) => setNewServiceKey(e.target.value)} placeholder="e.g., INTERNATIONAL_HANDLING_FEE" disabled={!!editingServiceKey}/>
+                             {editingServiceKey && <p className="text-xs text-muted-foreground">Key cannot be changed during edit.</p>}
                         </div>
                         <div>
                             <Label htmlFor="newServiceDisplayDescription">Display Description</Label>
@@ -394,25 +427,32 @@ export default function QuoteConfigPage() {
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div>
-                                <Label htmlFor="newServiceBuyRate">Buy Rate</Label>
-                                <Input id="newServiceBuyRate" type="number" value={newServiceBuyRate} onChange={(e) => setNewServiceBuyRate(e.target.value)} placeholder="e.g., 200" min="0"/>
+                                <Label htmlFor="newServiceBuyRateLocal">Buy Rate</Label>
+                                <Input id="newServiceBuyRateLocal" type="number" value={newServiceBuyRateLocal} onChange={(e) => setNewServiceBuyRateLocal(e.target.value)} placeholder="e.g., 200" min="0"/>
                             </div>
                             <div>
-                                <Label htmlFor="newServiceSellRate">Sell Rate</Label>
-                                <Input id="newServiceSellRate" type="number" value={newServiceSellRate} onChange={(e) => setNewServiceSellRate(e.target.value)} placeholder="e.g., 250" min="0"/>
+                                <Label htmlFor="newServiceSellRateLocal">Sell Rate</Label>
+                                <Input id="newServiceSellRateLocal" type="number" value={newServiceSellRateLocal} onChange={(e) => setNewServiceSellRateLocal(e.target.value)} placeholder="e.g., 250" min="0"/>
                             </div>
                         </div>
                         <div className="flex gap-2">
-                          <Button onClick={handleAddOrUpdateServiceFee} size="sm">
-                            <Save className="mr-2 h-4 w-4"/>{editingServiceKey ? 'Update Service/Fee' : 'Save New Service/Fee'}
+                          <Button onClick={handleAddOrUpdateServiceFee} size="sm" disabled={isSavingServiceFee}>
+                            {isSavingServiceFee ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4"/>}
+                            {editingServiceKey ? 'Update Service/Fee' : 'Save New Service/Fee'}
                           </Button>
-                          <Button variant="outline" onClick={handleCancelEditServiceFee} size="sm">
+                          <Button variant="outline" onClick={handleCancelEditServiceFee} size="sm" disabled={isSavingServiceFee}>
                               <XCircle className="mr-2 h-4 w-4"/>Cancel
                           </Button>
                         </div>
                     </div>
                  </Card>
             )}
+            {isLoadingCompanyProfile ? (
+                 <div className="space-y-2 py-4">
+                    <Skeleton className="h-8 w-full" />
+                    <Skeleton className="h-8 w-full" />
+                </div>
+            ) : (
              <Table>
               <TableHeader>
                 <TableRow>
@@ -425,7 +465,12 @@ export default function QuoteConfigPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {Object.entries(otherCostRates).map(([key, rates]) => {
+                {Object.entries(currentServiceFeeRates).length === 0 && (
+                    <TableRow>
+                        <TableCell colSpan={6} className="text-center text-muted-foreground py-4">No service or fee rates configured yet.</TableCell>
+                    </TableRow>
+                )}
+                {Object.entries(currentServiceFeeRates).map(([key, rates]) => {
                   const margin = rates.sell - rates.buy;
                   const marginPercent = rates.buy > 0 && rates.buy !== 0 ? (margin / rates.buy) * 100 : 0;
                   return (
@@ -438,11 +483,11 @@ export default function QuoteConfigPage() {
                         {formatCurrency(margin)} <span className={margin >= 0 ? 'text-green-600' : 'text-red-600'}>({marginPercent.toFixed(1)}%)</span>
                       </TableCell>
                        <TableCell className="text-right">
-                        <Button variant="ghost" size="icon" onClick={() => handleEditServiceFeeClick(key)} className="mr-1 hover:text-primary">
+                        <Button variant="ghost" size="icon" onClick={() => handleEditServiceFeeClick(key)} className="mr-1 hover:text-primary" disabled={isSavingServiceFee}>
                             <Edit className="h-4 w-4" />
                             <span className="sr-only">Edit {rates.displayDescription}</span>
                         </Button>
-                        <Button variant="ghost" size="icon" onClick={() => handleDeleteServiceFee(key)} className="text-destructive hover:text-destructive">
+                        <Button variant="ghost" size="icon" onClick={() => handleDeleteServiceFee(key)} className="text-destructive hover:text-destructive" disabled={isSavingServiceFee}>
                           <Trash2 className="h-4 w-4" />
                            <span className="sr-only">Delete {rates.displayDescription}</span>
                         </Button>
@@ -450,13 +495,9 @@ export default function QuoteConfigPage() {
                     </TableRow>
                   );
                 })}
-                 {Object.keys(otherCostRates).length === 0 && (
-                    <TableRow>
-                        <TableCell colSpan={6} className="text-center text-muted-foreground py-4">No service or fee rates configured yet.</TableCell>
-                    </TableRow>
-                )}
               </TableBody>
             </Table>
+            )}
           </CardContent>
         </Card>
         
@@ -466,8 +507,8 @@ export default function QuoteConfigPage() {
             </CardHeader>
             <CardContent>
                  <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
-                    <li>Aircraft Fleet data (in Company Settings) and Aircraft Hourly Rates (above) are now connected to Firestore.</li>
-                    <li>Service & Fee rates (above) are currently client-side only and will reset on page refresh. Firestore integration for these can be added next.</li>
+                    <li>Aircraft Fleet data (in Company Settings), Aircraft Hourly Rates, and Standard Service &amp; Fee Rates (this page) are now connected to Firestore.</li>
+                    <li>Changes made here will be saved to the main company profile document.</li>
                     <li>Ensure your Firebase project's Firestore security rules are properly configured.</li>
                 </ul>
             </CardContent>
