@@ -27,6 +27,7 @@ import { format, parse, addDays, isValid, addMonths, addYears, endOfMonth, parse
 import { useToast } from '@/hooks/use-toast';
 import { fetchFleetAircraft, saveFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
 import { fetchMaintenanceTasksForAircraft, saveMaintenanceTask, deleteMaintenanceTask, type MaintenanceTask as FlowMaintenanceTask } from '@/ai/flows/manage-maintenance-tasks-flow';
+import { PageHeader } from '@/components/page-header'; // Uncommented PageHeader
 
 // MOCK_COMPONENT_VALUES_DATA remains client-side for now
 export const MOCK_COMPONENT_VALUES_DATA: Record<string, Record<string, { time?: number; cycles?: number }>> = {
@@ -142,8 +143,8 @@ export default function AircraftMaintenanceDetailPage() {
       };
     });
   
-    setEditableComponentTimes(JSON.parse(JSON.stringify(initialTimes)));
-    setOriginalComponentTimes(JSON.parse(JSON.stringify(initialTimes)));
+    setEditableComponentTimes(JSON.parse(JSON.stringify(initialTimes))); // Deep copy
+    setOriginalComponentTimes(JSON.parse(JSON.stringify(initialTimes))); // Deep copy
   }, []);
 
 
@@ -343,20 +344,15 @@ export default function AircraftMaintenanceDetailPage() {
       const daysRemaining = differenceInCalendarDays(dueDate, now);
       return { text: `${daysRemaining} days`, numeric: daysRemaining, unit: 'days', isOverdue: daysRemaining < 0 };
     }
-
+    
     // 2. Hour or Cycle based due
     let currentRelevantTime: number | undefined = undefined;
     let currentRelevantCycles: number | undefined = undefined;
-    let componentNameToUse: string;
-    let componentUsedForCalcMessage = "";
-
-    if (item.associatedComponent && item.associatedComponent.trim() !== "") {
-      componentNameToUse = item.associatedComponent.trim();
-    } else {
-      componentNameToUse = "Airframe"; // Default to Airframe
-    }
-    componentUsedForCalcMessage = componentNameToUse;
-
+    
+    const componentNameToUse = (item.associatedComponent && item.associatedComponent.trim() !== "") 
+      ? item.associatedComponent.trim() 
+      : "Airframe"; // Default to Airframe
+    
     const currentTimesForComponent = editableComponentTimes.find(c => c.componentName.trim() === componentNameToUse);
 
     if (currentTimesForComponent) {
@@ -364,7 +360,6 @@ export default function AircraftMaintenanceDetailPage() {
       currentRelevantCycles = currentTimesForComponent.currentCycles;
     } else {
       // If the specific component (or default 'Airframe') isn't found, we can't accurately calculate.
-      // This state indicates missing current time/cycle data for the relevant component.
       if (item.dueAtHours != null) return { text: `N/A (No time for ${componentNameToUse})`, numeric: Infinity, unit: 'hrs', isOverdue: false };
       if (item.dueAtCycles != null) return { text: `N/A (No cycles for ${componentNameToUse})`, numeric: Infinity, unit: 'cycles', isOverdue: false };
       return { text: 'N/A (Comp. data missing)', numeric: Infinity, unit: 'N/A', isOverdue: false };
@@ -373,13 +368,13 @@ export default function AircraftMaintenanceDetailPage() {
     // Check for Hours Due
     if (item.dueAtHours != null && currentRelevantTime !== undefined) {
       const hoursRemaining = parseFloat((item.dueAtHours - currentRelevantTime).toFixed(1));
-      return { text: `${hoursRemaining.toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1})} hrs (from ${componentUsedForCalcMessage})`, numeric: hoursRemaining, unit: 'hrs', isOverdue: hoursRemaining < 0 };
+      return { text: `${hoursRemaining.toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1})} hrs (from ${componentNameToUse})`, numeric: hoursRemaining, unit: 'hrs', isOverdue: hoursRemaining < 0 };
     }
   
     // Check for Cycles Due
     if (item.dueAtCycles != null && currentRelevantCycles !== undefined) {
       const cyclesRemaining = item.dueAtCycles - currentRelevantCycles;
-      return { text: `${cyclesRemaining.toLocaleString()} cycles (from ${componentUsedForCalcMessage})`, numeric: cyclesRemaining, unit: 'cycles', isOverdue: cyclesRemaining < 0 };
+      return { text: `${cyclesRemaining.toLocaleString()} cycles (from ${componentNameToUse})`, numeric: cyclesRemaining, unit: 'cycles', isOverdue: cyclesRemaining < 0 };
     }
     
     return { text: 'N/A (Not Date/Hr/Cycle)', numeric: Infinity, unit: 'N/A', isOverdue: false };
@@ -405,29 +400,57 @@ export default function AircraftMaintenanceDetailPage() {
     return { icon: <CheckCircle2 className="h-5 w-5" />, colorClass: 'text-green-500', label: 'OK' };
   };
 
+  // Still keeping the main JSX return simplified for now
+  // return (
+  //   <div>
+  //     Hello World - Aircraft Maintenance Detail Page Simplified. Progressively uncommenting.
+  //   </div>
+  // );
 
-  // if (isLoadingAircraft) {
-  //   return <div className="flex items-center justify-center h-screen"><Loader2 className="h-12 w-12 animate-spin text-primary" /><p className="ml-3 text-lg text-muted-foreground">Loading aircraft details...</p></div>;
-  // }
-  // if (!tailNumber || !currentAircraft) {
-  //   return <div>{/*<PageHeader title="Aircraft Not Found" icon={Wrench} />*/}<Card><CardContent className="pt-6"><p>Aircraft "{tailNumber || 'Unknown'}" not found.</p><Button asChild variant="outline" className="mt-4"><Link href="/aircraft/currency"><ArrowLeft className="mr-2 h-4 w-4" /> Back to Overview</Link></Button></CardContent></Card></div>;
-  // }
-  // if (!currentAircraft.isMaintenanceTracked) {
-  //   return <div>{/*<PageHeader title={`Data for ${currentAircraft.tailNumber}`} icon={PlaneIcon} />*/}<Card className="mb-6"><CardHeader><CardTitle>Aircraft Information</CardTitle></CardHeader><CardContent><p className="text-sm text-muted-foreground">Model: {currentAircraft.model}</p></CardContent></Card><Card><CardContent className="pt-6"><p>Maintenance tracking not enabled for "{currentAircraft.tailNumber}".</p><Button asChild variant="outline" className="mt-4"><Link href="/aircraft/currency"><ArrowLeft className="mr-2 h-4 w-4" /> Back to Overview</Link></Button></CardContent></Card></div>;
-  // }
+  if (isLoadingAircraft) {
+    return <div className="flex items-center justify-center h-screen"><Loader2 className="h-12 w-12 animate-spin text-primary" /><p className="ml-3 text-lg text-muted-foreground">Loading aircraft details...</p></div>;
+  }
+  if (!tailNumber || !currentAircraft) {
+    return (
+      <div>
+        <PageHeader title="Aircraft Not Found" icon={Wrench} />
+        <Card>
+          <CardContent className="pt-6">
+            <p>Aircraft "{tailNumber || 'Unknown'}" not found.</p>
+            <Button asChild variant="outline" className="mt-4">
+              <Link href="/aircraft/currency"><ArrowLeft className="mr-2 h-4 w-4" /> Back to Overview</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+  if (!currentAircraft.isMaintenanceTracked) {
+     return (
+        <div>
+            <PageHeader title={`Data for ${currentAircraft.tailNumber}`} icon={PlaneIcon} />
+            <Card className="mb-6">
+                <CardHeader><CardTitle>Aircraft Information</CardTitle></CardHeader>
+                <CardContent><p className="text-sm text-muted-foreground">Model: {currentAircraft.model}</p></CardContent>
+            </Card>
+            <Card>
+                <CardContent className="pt-6">
+                    <p>Maintenance tracking not enabled for "{currentAircraft.tailNumber}".</p>
+                    <Button asChild variant="outline" className="mt-4">
+                        <Link href="/aircraft/currency"><ArrowLeft className="mr-2 h-4 w-4" /> Back to Overview</Link>
+                    </Button>
+                </CardContent>
+            </Card>
+        </div>
+    );
+  }
 
-  // // Placeholder for PageHeader to be re-added later
-  // // const pageHeaderTitle = `Maintenance Details for ${currentAircraft.tailNumber}`;
-  // // const pageHeaderDescription = `Tracked items & component status for ${currentAircraft.model} (${currentAircraft.tailNumber}).`;
+  const pageHeaderTitle = `Maintenance Details for ${currentAircraft.tailNumber}`;
+  const pageHeaderDescription = `Tracked items & component status for ${currentAircraft.model} (${currentAircraft.tailNumber}).`;
+
 
   return (
     <div>
-      Hello World - Aircraft Maintenance Detail Page Simplified. JavaScript logic is being progressively uncommented.
-      {/* 
-      Original Full JSX for PageHeader and the rest of the page content remains commented out.
-      It will be restored step-by-step once the basic JS logic above this return statement is confirmed to be error-free.
-      
-      Example of restoring PageHeader:
       <PageHeader
         title={pageHeaderTitle}
         description={pageHeaderDescription}
@@ -449,9 +472,179 @@ export default function AircraftMaintenanceDetailPage() {
       />
       
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-         ... rest of the card layout ...
+        <Card className="shadow-lg lg:col-span-2">
+           <CardHeader className="flex flex-row items-start justify-between">
+            <div className="flex items-center gap-2"><PlaneIcon className="h-6 w-6 text-primary" /><CardTitle>Current Hours & Cycles</CardTitle></div>
+            {!isEditingComponentTimes ? (
+                <Button variant="outline" size="icon" onClick={() => setIsEditingComponentTimes(true)} disabled={isSavingComponentTimes}>
+                    <Edit className="h-4 w-4" /> <span className="sr-only">Edit Component Times</span>
+                </Button>
+            ) : (
+                <div className="flex gap-2">
+                    <Button variant="ghost" size="icon" onClick={handleCancelEditComponentTimes} disabled={isSavingComponentTimes}>
+                        <XCircle className="h-4 w-4" /><span className="sr-only">Cancel Edit</span>
+                    </Button>
+                    <Button size="icon" onClick={handleSaveComponentTimes} disabled={isSavingComponentTimes}>
+                        {isSavingComponentTimes ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                        <span className="sr-only">Save Component Times</span>
+                    </Button>
+                </div>
+            )}
+           </CardHeader>
+           <CardContent>
+            {editableComponentTimes.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No components configured for time tracking. Update in Company Settings.</p>
+            ) : (
+                <div className="space-y-3">
+                {editableComponentTimes.map(comp => (
+                    <div key={comp.componentName} className="grid grid-cols-3 items-center gap-2 border-b pb-2 last:border-b-0 last:pb-0">
+                        <span className="col-span-1 text-sm font-medium">{comp.componentName}</span>
+                        {isEditingComponentTimes ? (
+                        <>
+                            <Input 
+                                type="number" 
+                                value={comp.currentTime} 
+                                onChange={(e) => handleComponentTimeChange(comp.componentName, 'currentTime', e.target.value)}
+                                placeholder="Hours"
+                                className="text-sm h-8"
+                            />
+                            <Input 
+                                type="number" 
+                                value={comp.currentCycles} 
+                                onChange={(e) => handleComponentTimeChange(comp.componentName, 'currentCycles', e.target.value)}
+                                placeholder="Cycles"
+                                className="text-sm h-8"
+                            />
+                        </>
+                        ) : (
+                        <>
+                            <span className="col-span-1 text-sm text-right">{comp.currentTime.toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1})} hrs</span>
+                            <span className="col-span-1 text-sm text-right">{comp.currentCycles.toLocaleString()} cyc</span>
+                        </>
+                        )}
+                    </div>
+                ))}
+                </div>
+            )}
+           </CardContent>
+        </Card>
+
+        <Card className="shadow-lg">
+          <CardHeader>
+            <div className="flex justify-between items-start">
+              <CardTitle className="flex items-center gap-2"><InfoIcon className="h-6 w-6 text-primary" />Aircraft Information</CardTitle>
+              {/* Aircraft Info Edit form related buttons and form will be re-added when aircraftInfoForm logic is uncommented */}
+            </div>
+          </CardHeader>
+          <CardContent>
+            {/* Display mode for aircraft info */}
+            <div className="space-y-2 text-sm">
+              <p><strong className="text-muted-foreground">Model:</strong> {currentAircraft.model}</p>
+              <p><strong className="text-muted-foreground">Serial #:</strong> {currentAircraft.serialNumber || 'N/A'}</p>
+              <p><strong className="text-muted-foreground">Base:</strong> {currentAircraft.baseLocation || 'N/A'}</p>
+              {currentAircraft.primaryContactName && <p><strong className="text-muted-foreground">Contact:</strong> {currentAircraft.primaryContactName} {currentAircraft.primaryContactPhone && `(${currentAircraft.primaryContactPhone})`}</p>}
+              {currentAircraft.engineDetails && currentAircraft.engineDetails.length > 0 && (
+                <div className="pt-2">
+                  <h4 className="font-semibold text-muted-foreground">Engine Details:</h4>
+                  <ul className="list-disc list-inside pl-2">
+                    {currentAircraft.engineDetails.map((engine, idx) => (
+                      <li key={idx}>
+                        {engine.model || `Engine ${idx+1}`}
+                        {engine.serialNumber && ` (S/N: ${engine.serialNumber})`}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
       </div>
-      */}
+
+      <Card className="mt-6 shadow-lg">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><Wrench className="h-6 w-6 text-primary" />Maintenance Items</CardTitle>
+          <CardDescription>
+            Overview of scheduled and upcoming maintenance tasks for {currentAircraft.tailNumber}.
+            Calculated "To Go" is based on the values in "Current Hours & Cycles" above.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {isLoadingTasks ? (
+            <div className="flex items-center justify-center py-10"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2 text-muted-foreground">Loading maintenance tasks...</p></div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Item</TableHead>
+                  <TableHead>Associated Component</TableHead>
+                  <TableHead>Last Done</TableHead>
+                  <TableHead>Due At</TableHead>
+                  <TableHead>To Go</TableHead>
+                  <TableHead className="text-center">Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {maintenanceTasks.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center text-muted-foreground py-10">
+                      No maintenance tasks found for this aircraft. 
+                      <Button variant="link" className="p-0 ml-1" onClick={handleOpenAddTaskModal}>Add one now?</Button>
+                    </TableCell>
+                  </TableRow>
+                )}
+                {maintenanceTasks.map((item) => {
+                  const toGo = calculateToGo(item);
+                  const status = getReleaseStatus(toGo);
+                  let dueAtDisplay = "N/A";
+                  if (item.dueAtDate) {
+                    try { dueAtDisplay = format(parse(item.dueAtDate, 'yyyy-MM-dd', new Date()), 'MM/dd/yy'); } catch {}
+                  } else if (item.dueAtHours !== undefined) {
+                    dueAtDisplay = `${item.dueAtHours.toLocaleString()} hrs`;
+                  } else if (item.dueAtCycles !== undefined) {
+                    dueAtDisplay = `${item.dueAtCycles.toLocaleString()} cyc`;
+                  }
+
+                  let lastDoneDisplay = "N/A";
+                  if (item.lastCompletedDate) {
+                     try { lastDoneDisplay = format(parseISO(item.lastCompletedDate), 'MM/dd/yy'); } catch {}
+                  } else if (item.lastCompletedHours !== undefined) {
+                    lastDoneDisplay = `${item.lastCompletedHours.toLocaleString()} hrs`;
+                  } else if (item.lastCompletedCycles !== undefined) {
+                    lastDoneDisplay = `${item.lastCompletedCycles.toLocaleString()} cyc`;
+                  }
+
+                  return (
+                    <TableRow key={item.id} className={item.isActive ? '' : 'opacity-50 bg-muted/30 hover:bg-muted/40'}>
+                      <TableCell className="font-medium">
+                        {item.itemTitle}
+                        {!item.isActive && <Badge variant="outline" className="ml-2 text-xs">Inactive</Badge>}
+                        <p className="text-xs text-muted-foreground">{item.itemType}</p>
+                      </TableCell>
+                      <TableCell>{item.associatedComponent || 'Airframe'}</TableCell>
+                      <TableCell>{lastDoneDisplay}</TableCell>
+                      <TableCell>{dueAtDisplay}</TableCell>
+                      <TableCell className={`font-semibold ${status.colorClass}`}>{toGo.text}</TableCell>
+                      <TableCell className="text-center">
+                        <div className={`flex flex-col items-center justify-center ${status.colorClass}`}>
+                          {status.icon}
+                          <span className="text-xs mt-1">{status.label}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button variant="ghost" size="icon" onClick={() => handleOpenEditTaskModal(item)}>
+                          <Edit3 className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
