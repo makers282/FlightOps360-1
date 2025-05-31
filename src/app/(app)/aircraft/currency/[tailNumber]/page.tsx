@@ -33,7 +33,7 @@ export const MOCK_COMPONENT_VALUES_DATA: Record<string, Record<string, { time?: 
   'N123AB': { 'Airframe': { time: 1200.5, cycles: 850 }, 'Engine 1': { time: 1190.2, cycles: 840 }, 'Engine 2': { time: 1185.7, cycles: 835 }, 'APU': { time: 300.1, cycles: 400 } },
   'N456CD': { 'Airframe': { time: 2500.0, cycles: 1200 }, 'Engine 1': { time: 2450.0, cycles: 1180 }, 'Engine 2': { time: 2440.0, cycles: 1170 }, 'APU': { time: 550.5, cycles: 600 } },
   'N789EF': { 'Airframe': { time: 350.0, cycles: 120 }, 'Engine 1': { time: 345.0, cycles: 118 }, 'Engine 2': { time: 340.0, cycles: 115 }, 'APU': { time: 80.2, cycles: 90 }, 'Air Conditioning': { time: 150.5, cycles: 75 } },
-  'N630MW': { 'Airframe': { time: 12540.0, cycles: 8978 }, 'Engine 1': { time: 12471.2, cycles: 9058 }, 'Propeller 1': { time: 245.3, cycles: 88 } },
+  'N630MW': { 'Airframe': { time: 12540.0, cycles: 8978 }, 'Engine 1': { time: 12471.2, cycles: 8978 }, 'Propeller 1': { time: 245.3, cycles: 888 } },
 };
 
 // This is the type for tasks displayed in the UI, including calculated due dates.
@@ -86,7 +86,7 @@ export default function AircraftMaintenanceDetailPage() {
 
     const actualLastCompletedDateObj = task.lastCompletedDate && isValid(parseISO(task.lastCompletedDate))
       ? parseISO(task.lastCompletedDate)
-      : new Date();
+      : new Date(); // Default to now if no valid last completed date for interval calculations
     const actualLastCompletedHours = Number(task.lastCompletedHours || 0);
     const actualLastCompletedCycles = Number(task.lastCompletedCycles || 0);
 
@@ -109,7 +109,7 @@ export default function AircraftMaintenanceDetailPage() {
         dueAtCycles = actualLastCompletedCycles + Number(task.cyclesDue);
       }
     } else if (task.trackType === "One Time") {
-      if (task.isDaysDueEnabled && task.daysDueValue && isValid(parseISO(task.daysDueValue))) {
+      if (task.isDaysDueEnabled && task.daysDueValue && isValid(parseISO(task.daysDueValue))) { // Expect YYYY-MM-DD for one-time
         dueAtDate = task.daysDueValue;
       }
       if (task.isHoursDueEnabled && task.hoursDue) dueAtHours = Number(task.hoursDue);
@@ -127,16 +127,23 @@ export default function AircraftMaintenanceDetailPage() {
     const aircraftKeyInMock = aircraft.id || aircraft.tailNumber;
     const componentValuesForAircraft = MOCK_COMPONENT_VALUES_DATA[aircraftKeyInMock] || {};
     const trackedComponents = aircraft.trackedComponentNames || ['Airframe', 'Engine 1'];
-    
-    const initialTimes = trackedComponents.map(name => ({
-      componentName: name,
-      currentTime: componentValuesForAircraft[name]?.time ?? 0,
-      currentCycles: componentValuesForAircraft[name]?.cycles ?? 0,
-    }));
-    
+
+    const initialTimes = trackedComponents.map(name => {
+      const trimmedName = name.trim();
+      const mockDataForComponent = componentValuesForAircraft[trimmedName] ||
+                                   Object.entries(componentValuesForAircraft)
+                                         .find(([key, _]) => key.trim() === trimmedName)?.[1];
+      return {
+        componentName: trimmedName,
+        currentTime: mockDataForComponent?.time ?? 0,
+        currentCycles: mockDataForComponent?.cycles ?? 0,
+      };
+    });
+
     setEditableComponentTimes(JSON.parse(JSON.stringify(initialTimes)));
     setOriginalComponentTimes(JSON.parse(JSON.stringify(initialTimes)));
   }, []);
+
 
   const loadMaintenanceTasks = useCallback(async (aircraftId: string) => {
     setIsLoadingTasks(true);
@@ -172,7 +179,7 @@ export default function AircraftMaintenanceDetailPage() {
             primaryContactPhone: foundAircraft.primaryContactPhone || '',
           });
           initializeComponentTimes(foundAircraft);
-          await loadMaintenanceTasks(foundAircraft.id); // Load tasks for this aircraft
+          await loadMaintenanceTasks(foundAircraft.id);
         } else {
           setCurrentAircraft(null);
           setMaintenanceTasks([]);
@@ -236,8 +243,8 @@ export default function AircraftMaintenanceDetailPage() {
   };
 
   const handleOpenEditTaskModal = (taskToEdit: FlowMaintenanceTask) => {
-    setEditingTaskOriginalId(taskToEdit.id); // This is the Firestore document ID
-    const formData: MaintenanceTaskFormData = { // Map FlowMaintenanceTask to MaintenanceTaskFormData
+    setEditingTaskOriginalId(taskToEdit.id);
+    const formData: MaintenanceTaskFormData = {
       itemTitle: taskToEdit.itemTitle,
       referenceNumber: taskToEdit.referenceNumber || '',
       partNumber: taskToEdit.partNumber || '',
@@ -274,9 +281,9 @@ export default function AircraftMaintenanceDetailPage() {
     if (!currentAircraft) return;
 
     const taskToSave: FlowMaintenanceTask = {
-      ...taskFormData, // Spread the form data
-      id: editingTaskOriginalId || `MX-${Date.now()}-${Math.random().toString(16).slice(2)}`, // Generate new ID if not editing
-      aircraftId: currentAircraft.id, // Associate with current aircraft
+      ...taskFormData,
+      id: editingTaskOriginalId || `MX-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      aircraftId: currentAircraft.id,
     };
 
     try {
@@ -285,7 +292,7 @@ export default function AircraftMaintenanceDetailPage() {
         title: editingTaskOriginalId ? "Task Updated" : "New Task Added",
         description: `Task "${taskToSave.itemTitle}" for ${currentAircraft.tailNumber} saved to Firestore.`,
       });
-      await loadMaintenanceTasks(currentAircraft.id); // Reload tasks
+      await loadMaintenanceTasks(currentAircraft.id);
       setIsTaskModalOpen(false);
       setEditingTaskOriginalId(null);
       setInitialModalFormData(null);
@@ -300,7 +307,7 @@ export default function AircraftMaintenanceDetailPage() {
     try {
       await deleteMaintenanceTask({ taskId });
       toast({ title: "Task Deleted", description: `Task ID ${taskId} removed from Firestore.` });
-      await loadMaintenanceTasks(currentAircraft.id); // Reload tasks
+      await loadMaintenanceTasks(currentAircraft.id);
     } catch (error) {
       console.error("Failed to delete task:", error);
       toast({ title: "Error Deleting Task", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
@@ -309,33 +316,64 @@ export default function AircraftMaintenanceDetailPage() {
 
   const calculateToGo = (item: DisplayMaintenanceItem): { text: string; numeric: number; unit: 'days' | 'hrs' | 'cycles' | 'N/A'; isOverdue: boolean } => {
     const now = new Date();
-    const currentAirframeTime = editableComponentTimes.find(c => c.componentName === 'Airframe')?.currentTime ?? 0;
-    const currentAirframeCycles = editableComponentTimes.find(c => c.componentName === 'Airframe')?.currentCycles ?? 0;
 
-    if (item.dueAtDate) {
-      try {
-        const dueDate = parse(item.dueAtDate, 'yyyy-MM-dd', new Date());
-        const daysRemaining = differenceInCalendarDays(dueDate, now);
-        return { text: `${daysRemaining} days`, numeric: daysRemaining, unit: 'days', isOverdue: daysRemaining < 0 };
-      } catch (e) { return { text: 'Invalid Date', numeric: Infinity, unit: 'N/A', isOverdue: true }; }
+    if (item.dueAtDate && isValid(parse(item.dueAtDate, 'yyyy-MM-dd', new Date()))) {
+      const dueDate = parse(item.dueAtDate, 'yyyy-MM-dd', new Date());
+      const daysRemaining = differenceInCalendarDays(dueDate, now);
+      return { text: `${daysRemaining} days`, numeric: daysRemaining, unit: 'days', isOverdue: daysRemaining < 0 };
     }
+
+    let currentRelevantTime: number | undefined = undefined;
+    let currentRelevantCycles: number | undefined = undefined;
+    let componentTimeFound = false;
+
+    const componentNameToUse = (item.associatedComponent && item.associatedComponent.trim() !== "") 
+      ? item.associatedComponent.trim() 
+      : "Airframe";
+      
+    const currentTimesForComponent = editableComponentTimes.find(c => c.componentName === componentNameToUse);
+
+    if (currentTimesForComponent) {
+      currentRelevantTime = currentTimesForComponent.currentTime;
+      currentRelevantCycles = currentTimesForComponent.currentCycles;
+      componentTimeFound = true;
+    }
+
     if (item.dueAtHours != null) {
-      const hoursRemaining = parseFloat((item.dueAtHours - currentAirframeTime).toFixed(1));
+      if (!componentTimeFound) {
+        return { text: `N/A (No time for ${componentNameToUse})`, numeric: Infinity, unit: 'hrs', isOverdue: false };
+      }
+      if (currentRelevantTime === undefined) { // Should not happen if componentTimeFound is true, but as a safe guard
+         return { text: `N/A (Missing time for ${componentNameToUse})`, numeric: Infinity, unit: 'hrs', isOverdue: false };
+      }
+      const hoursRemaining = parseFloat((item.dueAtHours - currentRelevantTime).toFixed(1));
       return { text: `${hoursRemaining} hrs`, numeric: hoursRemaining, unit: 'hrs', isOverdue: hoursRemaining < 0 };
     }
+
     if (item.dueAtCycles != null) {
-      const cyclesRemaining = item.dueAtCycles - currentAirframeCycles;
+      if (!componentTimeFound) {
+        return { text: `N/A (No cycles for ${componentNameToUse})`, numeric: Infinity, unit: 'cycles', isOverdue: false };
+      }
+       if (currentRelevantCycles === undefined) {
+         return { text: `N/A (Missing cycles for ${componentNameToUse})`, numeric: Infinity, unit: 'cycles', isOverdue: false };
+      }
+      const cyclesRemaining = item.dueAtCycles - currentRelevantCycles;
       return { text: `${cyclesRemaining} cycles`, numeric: cyclesRemaining, unit: 'cycles', isOverdue: cyclesRemaining < 0 };
     }
-    return { text: 'N/A', numeric: Infinity, unit: 'N/A', isOverdue: false };
+    
+    return { text: 'N/A (Not Date/Hr/Cycle)', numeric: Infinity, unit: 'N/A', isOverdue: false };
   };
 
-  const getReleaseStatus = (toGo: { numeric: number; unit: 'days' | 'hrs' | 'cycles' | 'N/A'; isOverdue: boolean }): { icon: JSX.Element; colorClass: string; label: string } => {
+
+  const getReleaseStatus = (toGo: { text: string; numeric: number; unit: 'days' | 'hrs' | 'cycles' | 'N/A'; isOverdue: boolean }): { icon: JSX.Element; colorClass: string; label: string } => {
+    if (toGo.text.startsWith('N/A (No time for') || toGo.text.startsWith('N/A (No cycles for') || toGo.text.startsWith('N/A (Missing time for') || toGo.text.startsWith('N/A (Missing cycles for') || toGo.text === 'N/A (Comp. Data)') {
+      return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-orange-500', label: 'Missing Comp. Data' };
+    }
     if (toGo.isOverdue) return { icon: <XCircleIcon className="h-5 w-5" />, colorClass: 'text-red-500', label: 'Overdue' };
     if (toGo.unit === 'days' && toGo.numeric < 30) return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-yellow-500', label: 'Due Soon' };
     if (toGo.unit === 'hrs' && toGo.numeric < 25) return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-yellow-500', label: 'Due Soon' };
     if (toGo.unit === 'cycles' && toGo.numeric < 50) return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-yellow-500', label: 'Due Soon' };
-    if (toGo.text === 'N/A') return { icon: <CheckCircle2 className="h-5 w-5" />, colorClass: 'text-gray-400', label: 'N/A' };
+    if (toGo.text === 'N/A (Not Date/Hr/Cycle)' || toGo.text === 'Invalid Date') return { icon: <InfoIcon className="h-5 w-5" />, colorClass: 'text-gray-400', label: 'Check Due Info' };
     return { icon: <CheckCircle2 className="h-5 w-5" />, colorClass: 'text-green-500', label: 'OK' };
   };
 
@@ -352,7 +390,7 @@ export default function AircraftMaintenanceDetailPage() {
 
   return (
     <>
-      <PageHeader
+      {/* <PageHeader
         title={`Maintenance Details for ${currentAircraft.tailNumber}`}
         description={`Tracked items & component status for ${currentAircraft.model} (${currentAircraft.tailNumber}).`}
         icon={Wrench}
@@ -360,21 +398,20 @@ export default function AircraftMaintenanceDetailPage() {
           <div className="flex flex-col sm:flex-row gap-2">
             <Button asChild variant="outline" className="w-full sm:w-auto"><Link href="/aircraft/currency"><ArrowLeft className="mr-2 h-4 w-4" /> Back to Overview</Link></Button>
             <AddMaintenanceTaskModal
-              key={editingTaskOriginalId || 'add-new-task'}
               aircraft={currentAircraft}
               onSave={handleSaveTask}
               onDelete={handleDeleteTask}
               isOpen={isTaskModalOpen}
               setIsOpen={setIsTaskModalOpen}
-              initialData={initialModalFormData} 
+              initialData={initialModalFormData}
               isEditing={!!editingTaskOriginalId}
               currentTaskId={editingTaskOriginalId}
             >
-              <Button className="w-full sm:w-auto" onClick={handleOpenAddTaskModal}><PlusCircle className="mr-2 h-4 w-4" /> Add New Task</Button>
+              <Button className="w-full sm:w-auto"><PlusCircle className="mr-2 h-4 w-4" /> Add New Task</Button>
             </AddMaintenanceTaskModal>
           </div>
         }
-      />
+      /> */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         <Card className="shadow-lg lg:col-span-2">
            <CardHeader className="flex flex-row items-start justify-between">
@@ -437,7 +474,7 @@ export default function AircraftMaintenanceDetailPage() {
                 <div className="flex justify-between"><span className="text-muted-foreground">Base Location:</span><span className="font-medium">{currentAircraft.baseLocation || 'N/A'}</span></div>
                 {currentAircraft.engineDetails && currentAircraft.engineDetails.length > 0 && (<div><h4 className="font-medium text-muted-foreground mt-2 mb-1">Engine Details:</h4>{currentAircraft.engineDetails.map((engine, idx) => (<div key={idx} className="pl-2 text-xs border-l ml-2 mb-1"><p><strong>Engine {idx + 1} Model:</strong> {engine.model || 'N/A'}</p><p><strong>Engine {idx + 1} S/N:</strong> {engine.serialNumber || 'N/A'}</p></div>))}</div>)}
                 {(currentAircraft.primaryContactName || currentAircraft.primaryContactPhone) && (<div className="pt-2 border-t mt-3">{currentAircraft.primaryContactName && (<div className="flex items-center gap-2"><UserCircle className="h-4 w-4 text-muted-foreground" /><span>{currentAircraft.primaryContactName}</span></div>)}{currentAircraft.primaryContactPhone && (<div className="flex items-center gap-2"><Phone className="h-4 w-4 text-muted-foreground" /><span>{currentAircraft.primaryContactPhone}</span></div>)}</div>)}
-                <div className="mt-4 flex justify-end">{!isEditingAircraftInfo && (<Button variant="outline" size="sm" onClick={() => setIsEditingAircraftInfo(true)}><Edit className="mr-2 h-4 w-4" /> Edit Aircraft Info</Button>)}</div>
+                <div className="mt-4 flex justify-end">{!isEditingAircraftInfo && (<Button variant="outline" size="sm" onClick={() => setIsEditingAircraftInfo(true)}><Edit className="mr-2 h-4 w-4" /> Edit Aircraft Info</Button>)}
               </>
             )}
           </CardContent>
@@ -459,7 +496,7 @@ export default function AircraftMaintenanceDetailPage() {
             </div>
           ) : (
             <Table>
-              <TableHeader><TableRow><TableHead>Item Description</TableHead><TableHead>Type</TableHead><TableHead className="text-center">Due At</TableHead><TableHead className="text-center">To Go</TableHead><TableHead className="text-center">Status</TableHead><TableHead>Notes</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
+              <TableHeader><TableRow><TableHead>Item Description</TableHead><TableHead>Component</TableHead><TableHead className="text-center">Due At</TableHead><TableHead className="text-center">To Go</TableHead><TableHead className="text-center">Status</TableHead><TableHead>Notes</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
               <TableBody>
                 {maintenanceTasks.length === 0 ? (
                   <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-10">No maintenance items tracked for this aircraft. Click "Add New Task" to begin.</TableCell></TableRow>
@@ -467,13 +504,15 @@ export default function AircraftMaintenanceDetailPage() {
                   maintenanceTasks.map((item) => {
                     const toGoData = calculateToGo(item);
                     const status = getReleaseStatus(toGoData);
-                    let dueAtDisplay = 'N/A', dueType = 'N/A';
-                    if (item.dueAtDate) { try { dueAtDisplay = format(parse(item.dueAtDate, 'yyyy-MM-dd', new Date()), 'MM/dd/yyyy'); dueType = 'Date'; } catch { dueAtDisplay = "Invalid Date"; dueType = 'Date';}} 
-                    else if (item.dueAtHours != null) { dueAtDisplay = `${item.dueAtHours.toLocaleString()} hrs`; dueType = 'Hours'; } 
-                    else if (item.dueAtCycles != null) { dueAtDisplay = `${item.dueAtCycles.toLocaleString()} cycles`; dueType = 'Cycles'; }
+                    let dueAtDisplay = 'N/A';
+                    if (item.dueAtDate) { try { dueAtDisplay = format(parse(item.dueAtDate, 'yyyy-MM-dd', new Date()), 'MM/dd/yyyy'); } catch { dueAtDisplay = "Invalid Date";}}
+                    else if (item.dueAtHours != null) { dueAtDisplay = `${item.dueAtHours.toLocaleString()} hrs`; }
+                    else if (item.dueAtCycles != null) { dueAtDisplay = `${item.dueAtCycles.toLocaleString()} cycles`; }
                     return (
                       <TableRow key={item.id} className="hover:bg-muted/50">
-                        <TableCell className="font-medium">{item.itemTitle}</TableCell><TableCell>{dueType}</TableCell><TableCell className="text-center">{dueAtDisplay}</TableCell>
+                        <TableCell className="font-medium">{item.itemTitle}</TableCell>
+                        <TableCell>{item.associatedComponent || 'Airframe'}</TableCell>
+                        <TableCell className="text-center">{dueAtDisplay}</TableCell>
                         <TableCell className={`text-center font-medium ${status.colorClass}`}>{toGoData.text}</TableCell>
                         <TableCell className={`text-center ${status.colorClass}`}><div className="flex flex-col items-center">{status.icon}<span className="text-xs mt-1">{status.label}</span></div></TableCell>
                         <TableCell className="text-xs text-muted-foreground">{item.details || '-'}</TableCell>
@@ -490,3 +529,4 @@ export default function AircraftMaintenanceDetailPage() {
     </>
   );
 }
+
