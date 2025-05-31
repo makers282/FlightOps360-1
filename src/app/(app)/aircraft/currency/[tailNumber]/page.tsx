@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useEffect, useTransition, useCallback, useMemo } from 'react';
-import { useParams, useRouter } from 'next/navigation'; // Added useRouter
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
@@ -17,13 +17,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox'; // Added Checkbox
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { z } from 'zod';
 import { AddMaintenanceTaskModal, type MaintenanceTaskFormData, defaultMaintenanceTaskFormValues } from './components/add-maintenance-task-modal';
 import { Badge } from '@/components/ui/badge';
 
-import { Wrench, PlusCircle, ArrowLeft, PlaneIcon, Edit, Loader2, InfoIcon, Phone, UserCircle, MapPin, Save, XCircle, Edit2, Edit3, AlertTriangle, CheckCircle2, XCircle as XCircleIcon, Search, ArrowUpDown, ArrowDown, ArrowUp } from 'lucide-react';
+import { Wrench, PlusCircle, ArrowLeft, PlaneIcon, Edit, Loader2, InfoIcon, Phone, UserCircle, MapPin, Save, XCircle, Edit2, Edit3, AlertTriangle, CheckCircle2, XCircle as XCircleIcon, Search, ArrowUpDown, ArrowDown, ArrowUp, Printer } from 'lucide-react'; // Added Printer
 import { format, parse, addDays, isValid, addMonths, addYears, endOfMonth, parseISO, differenceInCalendarDays } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { fetchFleetAircraft, saveFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
@@ -58,12 +59,12 @@ interface SortConfig {
 
 export default function AircraftMaintenanceDetailPage() {
   const params = useParams();
-  const router = useRouter(); // For back button navigation
+  const router = useRouter(); 
   const tailNumber = typeof params.tailNumber === 'string' ? decodeURIComponent(params.tailNumber) : undefined;
   const { toast } = useToast();
 
   const [currentAircraft, setCurrentAircraft] = useState<FleetAircraft | null>(null);
-  const [maintenanceTasks, setMaintenanceTasks] = useState<FlowMaintenanceTask[]>([]); // Store raw tasks
+  const [maintenanceTasks, setMaintenanceTasks] = useState<FlowMaintenanceTask[]>([]); 
   
   const [editableComponentTimes, setEditableComponentTimes] = useState<Array<{ componentName: string; currentTime: number; currentCycles: number }>>([]);
   const [originalComponentTimes, setOriginalComponentTimes] = useState<Array<{ componentName: string; currentTime: number; currentCycles: number }>>([]);
@@ -84,6 +85,9 @@ export default function AircraftMaintenanceDetailPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'dueSoon' | 'overdue'>('all');
   const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'toGoNumeric', direction: 'ascending' });
+
+  const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]); // State for selected task IDs
+  const [isGeneratingReport, startReportGenerationTransition] = useTransition();
 
   const aircraftInfoForm = useForm<AircraftInfoEditFormData>({ resolver: zodResolver(aircraftInfoEditSchema) });
 
@@ -211,7 +215,7 @@ export default function AircraftMaintenanceDetailPage() {
     setIsLoadingTasks(true);
     try {
       const tasksFromDb = await fetchMaintenanceTasksForAircraft({ aircraftId });
-      setMaintenanceTasks(tasksFromDb); // Store raw tasks
+      setMaintenanceTasks(tasksFromDb); 
     } catch (error) {
       console.error("Failed to load maintenance tasks:", error);
       toast({ title: "Error", description: "Could not load maintenance tasks.", variant: "destructive" });
@@ -441,7 +445,7 @@ export default function AircraftMaintenanceDetailPage() {
   };
 
   const displayedTasks = useMemo(() => {
-    if (isLoadingComponentTimes) return []; // Don't process until component times are loaded
+    if (isLoadingComponentTimes) return []; 
 
     let filtered = maintenanceTasks.map(task => calculateDisplayFields(task, editableComponentTimes));
 
@@ -459,7 +463,7 @@ export default function AircraftMaintenanceDetailPage() {
       filtered = filtered.filter(task => {
         if (statusFilter === 'active') return task.isActive;
         if (statusFilter === 'inactive') return !task.isActive;
-        if (!task.isActive) return false; // Further status filters only apply to active tasks
+        if (!task.isActive) return false; 
 
         const status = getReleaseStatus(task.toGoData!);
         if (statusFilter === 'overdue') return status.label === 'Overdue';
@@ -512,6 +516,155 @@ export default function AircraftMaintenanceDetailPage() {
       return <ArrowUpDown className="ml-2 h-3 w-3 opacity-50" />;
     }
     return sortConfig.direction === 'ascending' ? <ArrowUp className="ml-2 h-3 w-3" /> : <ArrowDown className="ml-2 h-3 w-3" />;
+  };
+
+  const handleSelectTask = (taskId: string, checked: boolean) => {
+    setSelectedTaskIds(prev => 
+      checked ? [...prev, taskId] : prev.filter(id => id !== taskId)
+    );
+  };
+
+  const handleSelectAllTasks = (checked: boolean) => {
+    if (checked) {
+      setSelectedTaskIds(displayedTasks.map(task => task.id));
+    } else {
+      setSelectedTaskIds([]);
+    }
+  };
+
+  const generateWorkOrderHtml = (
+    tasksToReport: DisplayMaintenanceItem[], 
+    aircraft: FleetAircraft, 
+    componentTimes: Array<{ componentName: string; currentTime: number; currentCycles: number }>
+  ): string => {
+    const airframeTime = componentTimes.find(c => c.componentName.toLowerCase() === 'airframe')?.currentTime ?? 'N/A';
+    const airframeCycles = componentTimes.find(c => c.componentName.toLowerCase() === 'airframe')?.currentCycles ?? 'N/A';
+    
+    const tasksHtml = tasksToReport.map(task => {
+      let lastDoneStr = "N/A";
+      if (task.lastCompletedDate) { try { lastDoneStr = format(parseISO(task.lastCompletedDate), 'MM/dd/yy'); } catch {} }
+      else if (task.lastCompletedHours !== undefined) lastDoneStr = `${task.lastCompletedHours.toLocaleString()} hrs`;
+      else if (task.lastCompletedCycles !== undefined) lastDoneStr = `${task.lastCompletedCycles.toLocaleString()} cyc`;
+
+      let dueAtStr = "N/A";
+      if (task.dueAtDate) { try { dueAtStr = format(parse(task.dueAtDate, 'yyyy-MM-dd', new Date()), 'MM/dd/yy'); } catch {} }
+      else if (task.dueAtHours !== undefined) dueAtStr = `${task.dueAtHours.toLocaleString()} hrs`;
+      else if (task.dueAtCycles !== undefined) dueAtStr = `${task.dueAtCycles.toLocaleString()} cyc`;
+
+      return `
+        <tr>
+          <td>${task.itemTitle}</td>
+          <td>${task.referenceNumber || '-'}</td>
+          <td>${task.itemType}</td>
+          <td>${task.associatedComponent || 'Airframe'}</td>
+          <td>${lastDoneStr}</td>
+          <td>${dueAtStr}</td>
+          <td>${task.toGoData?.text || 'N/A'}</td>
+          <td style="min-width: 200px; max-width: 400px; word-break: break-word;">${task.details || '-'}</td>
+          <td style="height: 60px; border-bottom: 1px solid #ccc;"></td>
+        </tr>
+      `;
+    }).join('');
+
+    return `
+      <html>
+      <head>
+        <title>Work Order - ${aircraft.tailNumber}</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 20px; font-size: 10pt; }
+          .header-info, .component-times-info { margin-bottom: 15px; border: 1px solid #eee; padding: 10px; border-radius: 5px; }
+          .header-info h1 { margin-top: 0; font-size: 16pt; }
+          .header-info p, .component-times-info p { margin: 3px 0; }
+          .component-times-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 5px; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 9pt; }
+          th, td { border: 1px solid #ccc; padding: 6px; text-align: left; vertical-align: top; }
+          th { background-color: #f0f0f0; }
+          .signatures { margin-top: 30px; display: flex; justify-content: space-between; page-break-inside: avoid; }
+          .signatures div { width: 45%; }
+          .signatures div p { margin-bottom: 40px; }
+          .print-button { position: fixed; top: 10px; right: 10px; padding: 8px 12px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+          @media print {
+            .print-button { display: none; }
+            body { margin: 0.5in; font-size: 9pt; }
+            .header-info, .component-times-info { border: none; padding: 0; }
+             table { font-size: 8pt; }
+             th, td { padding: 4px; }
+          }
+        </style>
+      </head>
+      <body>
+        <button class="print-button" onclick="window.print()">Print Work Order</button>
+        <div class="header-info">
+          <h1>Work Order</h1>
+          <p><strong>Aircraft:</strong> ${aircraft.tailNumber} (${aircraft.model})</p>
+          <p><strong>Serial Number:</strong> ${aircraft.serialNumber || 'N/A'}</p>
+          <p><strong>Date Generated:</strong> ${format(new Date(), "PPP HH:mm")}</p>
+        </div>
+        <div class="component-times-info">
+          <strong>Current Component Times:</strong>
+          <div class="component-times-grid">
+            ${componentTimes.map(c => `<p>${c.componentName}: ${c.currentTime.toLocaleString(undefined, {minimumFractionDigits:1, maximumFractionDigits:1})} hrs / ${c.currentCycles.toLocaleString()} cyc</p>`).join('')}
+          </div>
+        </div>
+        <h2>Selected Maintenance Tasks</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Task Title</th>
+              <th>Ref #</th>
+              <th>Type</th>
+              <th>Component</th>
+              <th>Last Done</th>
+              <th>Due At</th>
+              <th>To Go</th>
+              <th>Work Instructions</th>
+              <th>Work Performed / Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tasksHtml}
+          </tbody>
+        </table>
+        <div class="signatures">
+          <div>
+            <p>Shop Signature: _________________________</p>
+            <p>Date: ____________</p>
+          </div>
+          <div>
+            <p>Inspector Signature: _________________________</p>
+            <p>Date: ____________</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+  };
+
+  const handleGenerateWorkOrder = () => {
+    if (!currentAircraft) {
+      toast({ title: "Error", description: "Aircraft data not loaded.", variant: "destructive" });
+      return;
+    }
+    if (selectedTaskIds.length === 0) {
+      toast({ title: "No Tasks Selected", description: "Please select at least one maintenance task to include in the work order.", variant: "info" });
+      return;
+    }
+
+    startReportGenerationTransition(() => {
+      const tasksToReport = displayedTasks.filter(task => selectedTaskIds.includes(task.id));
+      const reportHtml = generateWorkOrderHtml(tasksToReport, currentAircraft, editableComponentTimes);
+      
+      const reportWindow = window.open('', '_blank');
+      if (reportWindow) {
+        reportWindow.document.open();
+        reportWindow.document.write(reportHtml);
+        reportWindow.document.close();
+        // reportWindow.print(); // Optionally trigger print automatically
+      } else {
+        toast({ title: "Popup Blocked?", description: "Could not open the report window. Please check your popup blocker.", variant: "destructive" });
+      }
+      toast({ title: "Work Order Generated", description: "A new window with the work order should have opened.", variant: "default" });
+    });
   };
 
 
@@ -576,6 +729,10 @@ export default function AircraftMaintenanceDetailPage() {
           <div className="flex gap-2">
             <Button asChild variant="outline">
                 <Link href="/aircraft/currency"><ArrowLeft className="mr-2 h-4 w-4" /> Back to Overview</Link>
+            </Button>
+             <Button onClick={handleGenerateWorkOrder} disabled={selectedTaskIds.length === 0 || isGeneratingReport}>
+              {isGeneratingReport ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Printer className="mr-2 h-4 w-4" />}
+              Generate Work Order ({selectedTaskIds.length})
             </Button>
             <AddMaintenanceTaskModal 
               aircraft={currentAircraft} 
@@ -752,6 +909,14 @@ export default function AircraftMaintenanceDetailPage() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-10">
+                     <Checkbox 
+                        checked={selectedTaskIds.length === displayedTasks.length && displayedTasks.length > 0}
+                        onCheckedChange={(checked) => handleSelectAllTasks(Boolean(checked))}
+                        aria-label="Select all tasks"
+                        disabled={displayedTasks.length === 0}
+                      />
+                  </TableHead>
                   <TableHead>Ref #</TableHead>
                   <TableHead>
                     <Button variant="ghost" size="sm" onClick={() => requestSort('itemTitle')} className="px-1 -ml-2">
@@ -775,7 +940,7 @@ export default function AircraftMaintenanceDetailPage() {
               <TableBody>
                 {displayedTasks.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center text-muted-foreground py-10">
+                    <TableCell colSpan={11} className="text-center text-muted-foreground py-10">
                       No maintenance tasks match your criteria. 
                       <Button variant="link" className="p-0 ml-1" onClick={handleOpenAddTaskModal}>Add one now?</Button>
                     </TableCell>
@@ -803,7 +968,14 @@ export default function AircraftMaintenanceDetailPage() {
                   }
 
                   return (
-                    <TableRow key={item.id} className={item.isActive ? '' : 'opacity-50 bg-muted/30 hover:bg-muted/40'}>
+                    <TableRow key={item.id} className={item.isActive ? '' : 'opacity-50 bg-muted/30 hover:bg-muted/40'} data-state={selectedTaskIds.includes(item.id) ? "selected" : ""}>
+                      <TableCell>
+                        <Checkbox
+                          checked={selectedTaskIds.includes(item.id)}
+                          onCheckedChange={(checked) => handleSelectTask(item.id, Boolean(checked))}
+                          aria-label={`Select task ${item.itemTitle}`}
+                        />
+                      </TableCell>
                       <TableCell className="text-xs text-muted-foreground">{item.referenceNumber || '-'}</TableCell>
                       <TableCell className="font-medium">
                         {item.itemTitle}
@@ -837,4 +1009,3 @@ export default function AircraftMaintenanceDetailPage() {
     </div>
   );
 }
-
