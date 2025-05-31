@@ -25,7 +25,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
@@ -45,42 +44,41 @@ const itemTypes = ["Inspection", "Service Bulletin", "Airworthiness Directive", 
 const trackTypes = ["Interval", "One Time", "Dont Alert"] as const;
 const daysIntervalTypes = ["days", "months_specific_day", "months_eom", "years_specific_day"] as const;
 
-// Default values for the form, extracted for reuse
-export const defaultMaintenanceTaskFormValues = {
+export const defaultMaintenanceTaskFormValues: MaintenanceTaskFormData = {
   itemTitle: '',
   referenceNumber: '',
   partNumber: '',
   serialNumber: '',
-  itemType: 'Inspection' as typeof itemTypes[number],
+  itemType: 'Inspection',
   associatedComponent: '',
   details: '',
   isActive: true,
-  trackType: 'Interval' as typeof trackTypes[number],
+  trackType: 'Interval',
   isTripsNotAffected: false,
   lastCompletedDate: '',
-  lastCompletedHours: undefined as number | undefined, 
-  lastCompletedCycles: undefined as number | undefined, 
+  lastCompletedHours: undefined, 
+  lastCompletedCycles: undefined, 
   lastCompletedNotes: '',
   isHoursDueEnabled: false,
-  hoursDue: undefined as number | undefined,
-  hoursTolerance: undefined as number | undefined,
-  alertHoursPrior: undefined as number | undefined,
+  hoursDue: undefined,
+  hoursTolerance: undefined,
+  alertHoursPrior: undefined,
   isCyclesDueEnabled: false,
-  cyclesDue: undefined as number | undefined,
-  cyclesTolerance: undefined as number | undefined,
-  alertCyclesPrior: undefined as number | undefined,
+  cyclesDue: undefined,
+  cyclesTolerance: undefined,
+  alertCyclesPrior: undefined,
   isDaysDueEnabled: false,
-  daysIntervalType: 'days' as typeof daysIntervalTypes[number],
+  daysIntervalType: 'days',
   daysDueValue: '', 
-  daysTolerance: undefined as number | undefined,
-  alertDaysPrior: undefined as number | undefined,
+  daysTolerance: undefined,
+  alertDaysPrior: undefined,
 };
 
 
 const maintenanceTaskSchema = z.object({
   lastCompletedDate: z.string().optional().refine(val => !val || isValid(parseDate(val, 'yyyy-MM-dd', new Date())), { message: "Invalid date format for last completion." }),
-  lastCompletedHours: z.coerce.number({invalid_type_error: "Must be a number"}).nonnegative("Cannot be negative").optional().or(z.literal(0)).or(z.nan()).default(0),
-  lastCompletedCycles: z.coerce.number({invalid_type_error: "Must be a number"}).nonnegative("Cannot be negative").int("Must be an integer").optional().or(z.literal(0)).or(z.nan()).default(0),
+  lastCompletedHours: z.coerce.number({invalid_type_error: "Must be a number"}).nonnegative("Cannot be negative").optional().default(0),
+  lastCompletedCycles: z.coerce.number({invalid_type_error: "Must be a number"}).nonnegative("Cannot be negative").int("Must be an integer").optional().default(0),
   lastCompletedNotes: z.string().optional(),
 
   itemTitle: z.string().min(1, "Item title is required"),
@@ -96,26 +94,26 @@ const maintenanceTaskSchema = z.object({
   isTripsNotAffected: z.boolean().default(false),
 
   isHoursDueEnabled: z.boolean().default(false),
-  hoursDue: z.coerce.number({invalid_type_error: "Must be a number"}).positive("Must be positive").optional().or(z.literal(0)).or(z.nan()),
-  hoursTolerance: z.coerce.number({invalid_type_error: "Must be a number"}).min(0, "Cannot be negative").optional().or(z.literal(0)).or(z.nan()),
-  alertHoursPrior: z.coerce.number({invalid_type_error: "Must be a number"}).min(0, "Cannot be negative").optional().or(z.literal(0)).or(z.nan()),
+  hoursDue: z.coerce.number({invalid_type_error: "Must be a number"}).positive("Must be positive when enabled.").optional(),
+  hoursTolerance: z.coerce.number({invalid_type_error: "Must be a number"}).min(0, "Cannot be negative").optional(),
+  alertHoursPrior: z.coerce.number({invalid_type_error: "Must be a number"}).min(0, "Cannot be negative").optional(),
 
   isCyclesDueEnabled: z.boolean().default(false),
-  cyclesDue: z.coerce.number({invalid_type_error: "Must be a number"}).positive("Must be positive").int("Must be an integer").optional().or(z.literal(0)).or(z.nan()),
-  cyclesTolerance: z.coerce.number({invalid_type_error: "Must be a number"}).min(0, "Cannot be negative").int("Must be an integer").optional().or(z.literal(0)).or(z.nan()),
-  alertCyclesPrior: z.coerce.number({invalid_type_error: "Must be a number"}).min(0, "Cannot be negative").int("Must be an integer").optional().or(z.literal(0)).or(z.nan()),
+  cyclesDue: z.coerce.number({invalid_type_error: "Must be a number"}).positive("Must be positive when enabled.").int("Must be an integer").optional(),
+  cyclesTolerance: z.coerce.number({invalid_type_error: "Must be a number"}).min(0, "Cannot be negative").int("Must be an integer").optional(),
+  alertCyclesPrior: z.coerce.number({invalid_type_error: "Must be a number"}).min(0, "Cannot be negative").int("Must be an integer").optional(),
 
   isDaysDueEnabled: z.boolean().default(false),
   daysIntervalType: z.enum(daysIntervalTypes).optional(),
   daysDueValue: z.string().optional(), 
-  daysTolerance: z.coerce.number({invalid_type_error: "Must be a number"}).min(0, "Cannot be negative").int("Must be an integer").optional().or(z.literal(0)).or(z.nan()),
-  alertDaysPrior: z.coerce.number({invalid_type_error: "Must be a number"}).min(0, "Cannot be negative").int("Must be an integer").optional().or(z.literal(0)).or(z.nan()),
+  daysTolerance: z.coerce.number({invalid_type_error: "Must be a number"}).min(0, "Cannot be negative").int("Must be an integer").optional(),
+  alertDaysPrior: z.coerce.number({invalid_type_error: "Must be a number"}).min(0, "Cannot be negative").int("Must be an integer").optional(),
 })
 .superRefine((data, ctx) => {
-    if (data.isHoursDueEnabled && (data.hoursDue === undefined || data.hoursDue === null || isNaN(data.hoursDue) || data.hoursDue <=0)) {
+    if (data.isHoursDueEnabled && (data.hoursDue === undefined || data.hoursDue === null || data.hoursDue <=0)) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Hours Due value must be a positive number when enabled.", path: ["hoursDue"]});
     }
-    if (data.isCyclesDueEnabled && (data.cyclesDue === undefined || data.cyclesDue === null || isNaN(data.cyclesDue) || data.cyclesDue <=0)) {
+    if (data.isCyclesDueEnabled && (data.cyclesDue === undefined || data.cyclesDue === null || data.cyclesDue <=0)) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Cycles Due value must be a positive integer when enabled.", path: ["cyclesDue"]});
     }
     
@@ -166,7 +164,6 @@ export function AddMaintenanceTaskModal({ aircraft, onSave, children, isOpen, se
   const isCyclesDueEnabled = watch("isCyclesDueEnabled");
   const isDaysDueEnabled = watch("isDaysDueEnabled");
   const daysIntervalType = watch("daysIntervalType");
-  const lastCompletedDateValue = watch("lastCompletedDate");
 
 
   useEffect(() => {
@@ -180,21 +177,21 @@ export function AddMaintenanceTaskModal({ aircraft, onSave, children, isOpen, se
     setIsSubmitting(true);
     const cleanedData: MaintenanceTaskFormData = {
       ...data,
-      lastCompletedHours: Number(data.lastCompletedHours) || 0,
-      lastCompletedCycles: Number(data.lastCompletedCycles) || 0,
+      lastCompletedHours: data.lastCompletedHours, // Already number | undefined via form
+      lastCompletedCycles: data.lastCompletedCycles, // Already number | undefined via form
       
-      hoursDue: data.isHoursDueEnabled ? (Number(data.hoursDue) || undefined) : undefined,
-      hoursTolerance: data.isHoursDueEnabled ? (Number(data.hoursTolerance) || 0) : undefined,
-      alertHoursPrior: data.isHoursDueEnabled ? (Number(data.alertHoursPrior) || 0) : undefined,
+      hoursDue: data.isHoursDueEnabled ? data.hoursDue : undefined,
+      hoursTolerance: data.isHoursDueEnabled ? data.hoursTolerance : undefined,
+      alertHoursPrior: data.isHoursDueEnabled ? data.alertHoursPrior : undefined,
       
-      cyclesDue: data.isCyclesDueEnabled ? (Number(data.cyclesDue) || undefined) : undefined,
-      cyclesTolerance: data.isCyclesDueEnabled ? (Number(data.cyclesTolerance) || 0) : undefined,
-      alertCyclesPrior: data.isCyclesDueEnabled ? (Number(data.alertCyclesPrior) || 0) : undefined,
+      cyclesDue: data.isCyclesDueEnabled ? data.cyclesDue : undefined,
+      cyclesTolerance: data.isCyclesDueEnabled ? data.cyclesTolerance : undefined,
+      alertCyclesPrior: data.isCyclesDueEnabled ? data.alertCyclesPrior : undefined,
       
       daysIntervalType: data.isDaysDueEnabled && data.trackType === 'Interval' ? data.daysIntervalType : undefined,
       daysDueValue: data.isDaysDueEnabled ? data.daysDueValue : undefined,
-      daysTolerance: data.isDaysDueEnabled ? (Number(data.daysTolerance) || 0) : undefined,
-      alertDaysPrior: data.isDaysDueEnabled ? (Number(data.alertDaysPrior) || 0) : undefined,
+      daysTolerance: data.isDaysDueEnabled ? data.daysTolerance : undefined,
+      alertDaysPrior: data.isDaysDueEnabled ? data.alertDaysPrior : undefined,
     };
     await new Promise(resolve => setTimeout(resolve, 500)); 
     onSave(cleanedData); 
@@ -218,7 +215,7 @@ export function AddMaintenanceTaskModal({ aircraft, onSave, children, isOpen, se
   };
   
   const currentTaskValues = getValues();
-  const hasLastCompletionDetails = !!currentTaskValues.lastCompletedDate || !!currentTaskValues.lastCompletedHours || !!currentTaskValues.lastCompletedCycles || !!currentTaskValues.lastCompletedNotes;
+  const hasLastCompletionDetails = !!currentTaskValues.lastCompletedDate || currentTaskValues.lastCompletedHours !== undefined || currentTaskValues.lastCompletedCycles !== undefined || !!currentTaskValues.lastCompletedNotes;
 
 
   return (
@@ -271,18 +268,28 @@ export function AddMaintenanceTaskModal({ aircraft, onSave, children, isOpen, se
                   <FormField control={control} name="lastCompletedHours" render={({ field }) => (
                     <FormItem>
                       <FormLabel>Hours</FormLabel>
-                      <FormControl><Input type="number" placeholder="e.g., 1250.5" {...field} 
-                        value={field.value === undefined || isNaN(Number(field.value)) ? '' : field.value}
-                        onChange={e => field.onChange(parseFloat(e.target.value))} /></FormControl>
+                      <FormControl><Input type="number" placeholder="e.g., 1250.5" 
+                        value={field.value === undefined ? '' : String(field.value)}
+                        onChange={e => {
+                          const valStr = e.target.value;
+                          if (valStr === '') field.onChange(undefined);
+                          else { const num = parseFloat(valStr); field.onChange(isNaN(num) ? undefined : num); }
+                        }} 
+                      /></FormControl>
                       <FormMessage />
                     </FormItem>
                   )} />
                   <FormField control={control} name="lastCompletedCycles" render={({ field }) => (
                     <FormItem>
                       <FormLabel>Cycles</FormLabel>
-                      <FormControl><Input type="number" placeholder="e.g., 900" {...field} 
-                        value={field.value === undefined || isNaN(Number(field.value)) ? '' : field.value}
-                        onChange={e => field.onChange(parseInt(e.target.value, 10))} /></FormControl>
+                      <FormControl><Input type="number" placeholder="e.g., 900" 
+                        value={field.value === undefined ? '' : String(field.value)}
+                        onChange={e => {
+                          const valStr = e.target.value;
+                          if (valStr === '') field.onChange(undefined);
+                          else { const num = parseInt(valStr, 10); field.onChange(isNaN(num) ? undefined : num); }
+                        }} 
+                      /></FormControl>
                       <FormMessage />
                     </FormItem>
                   )} />
@@ -330,30 +337,60 @@ export function AddMaintenanceTaskModal({ aircraft, onSave, children, isOpen, se
                 <FormField control={control} name="isHoursDueEnabled" render={({ field }) => (<FormItem className="flex flex-row items-center space-x-3 space-y-0 p-3 border rounded-md bg-muted/30"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><FormLabel className="font-normal">Hours Due</FormLabel></FormItem>)} />
                 {isHoursDueEnabled && (
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pl-8">
-                    <FormField control={control} name="hoursDue" render={({ field }) => (<FormItem><FormLabel>{trackType === 'Interval' ? 'Due In (hrs)' : 'Due At (hrs)'}</FormLabel><FormControl><Input type="number" placeholder="e.g., 100" {...field} 
-                        value={field.value === undefined || isNaN(Number(field.value)) ? '' : field.value}
-                        onChange={e => field.onChange(parseFloat(e.target.value))} /></FormControl><FormMessage /></FormItem>)} />
-                    <FormField control={control} name="hoursTolerance" render={({ field }) => (<FormItem><FormLabel>Tolerance (hrs)</FormLabel><FormControl><Input type="number" placeholder="e.g., 10" {...field} 
-                        value={field.value === undefined || isNaN(Number(field.value)) ? '' : field.value}
-                        onChange={e => field.onChange(parseFloat(e.target.value))} /></FormControl><FormMessage /></FormItem>)} />
-                    <FormField control={control} name="alertHoursPrior" render={({ field }) => (<FormItem><FormLabel>Alert Prior (hrs)</FormLabel><FormControl><Input type="number" placeholder="e.g., 25" {...field} 
-                        value={field.value === undefined || isNaN(Number(field.value)) ? '' : field.value}
-                        onChange={e => field.onChange(parseFloat(e.target.value))} /></FormControl><FormMessage /></FormItem>)} />
+                    <FormField control={control} name="hoursDue" render={({ field }) => (<FormItem><FormLabel>{trackType === 'Interval' ? 'Due In (hrs)' : 'Due At (hrs)'}</FormLabel><FormControl><Input type="number" placeholder="e.g., 100" 
+                        value={field.value === undefined ? '' : String(field.value)}
+                        onChange={e => {
+                          const valStr = e.target.value;
+                          if (valStr === '') field.onChange(undefined);
+                          else { const num = parseFloat(valStr); field.onChange(isNaN(num) ? undefined : num); }
+                        }} 
+                    /></FormControl><FormMessage /></FormItem>)} />
+                    <FormField control={control} name="hoursTolerance" render={({ field }) => (<FormItem><FormLabel>Tolerance (hrs)</FormLabel><FormControl><Input type="number" placeholder="e.g., 10" 
+                        value={field.value === undefined ? '' : String(field.value)}
+                        onChange={e => {
+                          const valStr = e.target.value;
+                          if (valStr === '') field.onChange(undefined);
+                          else { const num = parseFloat(valStr); field.onChange(isNaN(num) ? undefined : num); }
+                        }} 
+                    /></FormControl><FormMessage /></FormItem>)} />
+                    <FormField control={control} name="alertHoursPrior" render={({ field }) => (<FormItem><FormLabel>Alert Prior (hrs)</FormLabel><FormControl><Input type="number" placeholder="e.g., 25" 
+                        value={field.value === undefined ? '' : String(field.value)}
+                        onChange={e => {
+                          const valStr = e.target.value;
+                          if (valStr === '') field.onChange(undefined);
+                          else { const num = parseFloat(valStr); field.onChange(isNaN(num) ? undefined : num); }
+                        }} 
+                    /></FormControl><FormMessage /></FormItem>)} />
                   </div>
                 )}
 
                 <FormField control={control} name="isCyclesDueEnabled" render={({ field }) => (<FormItem className="flex flex-row items-center space-x-3 space-y-0 p-3 border rounded-md bg-muted/30"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><FormLabel className="font-normal">Cycles Due</FormLabel></FormItem>)} />
                 {isCyclesDueEnabled && (
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pl-8">
-                    <FormField control={control} name="cyclesDue" render={({ field }) => (<FormItem><FormLabel>{trackType === 'Interval' ? 'Due In (cycles)' : 'Due At (cycles)'}</FormLabel><FormControl><Input type="number" placeholder="e.g., 100" {...field} 
-                        value={field.value === undefined || isNaN(Number(field.value)) ? '' : field.value}
-                        onChange={e => field.onChange(parseInt(e.target.value, 10))} /></FormControl><FormMessage /></FormItem>)} />
-                    <FormField control={control} name="cyclesTolerance" render={({ field }) => (<FormItem><FormLabel>Tolerance (cycles)</FormLabel><FormControl><Input type="number" placeholder="e.g., 10" {...field} 
-                        value={field.value === undefined || isNaN(Number(field.value)) ? '' : field.value}
-                        onChange={e => field.onChange(parseInt(e.target.value, 10))} /></FormControl><FormMessage /></FormItem>)} />
-                    <FormField control={control} name="alertCyclesPrior" render={({ field }) => (<FormItem><FormLabel>Alert Prior (cycles)</FormLabel><FormControl><Input type="number" placeholder="e.g., 25" {...field} 
-                        value={field.value === undefined || isNaN(Number(field.value)) ? '' : field.value}
-                        onChange={e => field.onChange(parseInt(e.target.value, 10))} /></FormControl><FormMessage /></FormItem>)} />
+                    <FormField control={control} name="cyclesDue" render={({ field }) => (<FormItem><FormLabel>{trackType === 'Interval' ? 'Due In (cycles)' : 'Due At (cycles)'}</FormLabel><FormControl><Input type="number" placeholder="e.g., 100" 
+                        value={field.value === undefined ? '' : String(field.value)}
+                        onChange={e => {
+                          const valStr = e.target.value;
+                          if (valStr === '') field.onChange(undefined);
+                          else { const num = parseInt(valStr, 10); field.onChange(isNaN(num) ? undefined : num); }
+                        }} 
+                    /></FormControl><FormMessage /></FormItem>)} />
+                    <FormField control={control} name="cyclesTolerance" render={({ field }) => (<FormItem><FormLabel>Tolerance (cycles)</FormLabel><FormControl><Input type="number" placeholder="e.g., 10" 
+                        value={field.value === undefined ? '' : String(field.value)}
+                        onChange={e => {
+                          const valStr = e.target.value;
+                          if (valStr === '') field.onChange(undefined);
+                          else { const num = parseInt(valStr, 10); field.onChange(isNaN(num) ? undefined : num); }
+                        }} 
+                    /></FormControl><FormMessage /></FormItem>)} />
+                    <FormField control={control} name="alertCyclesPrior" render={({ field }) => (<FormItem><FormLabel>Alert Prior (cycles)</FormLabel><FormControl><Input type="number" placeholder="e.g., 25" 
+                        value={field.value === undefined ? '' : String(field.value)}
+                        onChange={e => {
+                          const valStr = e.target.value;
+                          if (valStr === '') field.onChange(undefined);
+                          else { const num = parseInt(valStr, 10); field.onChange(isNaN(num) ? undefined : num); }
+                        }} 
+                    /></FormControl><FormMessage /></FormItem>)} />
                   </div>
                 )}
 
@@ -400,17 +437,32 @@ export function AddMaintenanceTaskModal({ aircraft, onSave, children, isOpen, se
                             </PopoverContent>
                           </Popover>
                         ) : (
-                          <FormControl><Input type="number" placeholder="e.g., 30" {...field} onChange={e => field.onChange(e.target.value)} /></FormControl>
+                          <FormControl><Input type="number" placeholder="e.g., 30" {...field} 
+                            value={field.value === undefined ? '' : String(field.value)} // Assuming daysDueValue is string from schema for interval number
+                            onChange={e => { // For interval, this should still be a number string
+                                field.onChange(e.target.value); // Keep as string for numeric interval daysDueValue
+                            }} 
+                          /></FormControl>
                         )}
                         <FormMessage />
                       </FormItem>
                     )} />
-                    <FormField control={control} name="daysTolerance" render={({ field }) => (<FormItem><FormLabel>Tolerance (days)</FormLabel><FormControl><Input type="number" placeholder="e.g., 5" {...field} 
-                        value={field.value === undefined || isNaN(Number(field.value)) ? '' : field.value}
-                        onChange={e => field.onChange(parseInt(e.target.value, 10))} /></FormControl><FormMessage /></FormItem>)} />
-                    <FormField control={control} name="alertDaysPrior" render={({ field }) => (<FormItem><FormLabel>Alert Prior (days)</FormLabel><FormControl><Input type="number" placeholder="e.g., 7" {...field} 
-                        value={field.value === undefined || isNaN(Number(field.value)) ? '' : field.value}
-                        onChange={e => field.onChange(parseInt(e.target.value, 10))} /></FormControl><FormMessage /></FormItem>)} />
+                    <FormField control={control} name="daysTolerance" render={({ field }) => (<FormItem><FormLabel>Tolerance (days)</FormLabel><FormControl><Input type="number" placeholder="e.g., 5" 
+                        value={field.value === undefined ? '' : String(field.value)}
+                        onChange={e => {
+                          const valStr = e.target.value;
+                          if (valStr === '') field.onChange(undefined);
+                          else { const num = parseInt(valStr, 10); field.onChange(isNaN(num) ? undefined : num); }
+                        }} 
+                    /></FormControl><FormMessage /></FormItem>)} />
+                    <FormField control={control} name="alertDaysPrior" render={({ field }) => (<FormItem><FormLabel>Alert Prior (days)</FormLabel><FormControl><Input type="number" placeholder="e.g., 7" 
+                        value={field.value === undefined ? '' : String(field.value)}
+                        onChange={e => {
+                          const valStr = e.target.value;
+                          if (valStr === '') field.onChange(undefined);
+                          else { const num = parseInt(valStr, 10); field.onChange(isNaN(num) ? undefined : num); }
+                        }} 
+                    /></FormControl><FormMessage /></FormItem>)} />
                   </div>
                 )}
               </section>
@@ -451,8 +503,8 @@ export function AddMaintenanceTaskModal({ aircraft, onSave, children, isOpen, se
                 ) : (
                     <p><strong>Date:</strong> Not specified</p>
                 )}
-                <p><strong>Hours:</strong> {currentTaskValues.lastCompletedHours?.toLocaleString() ?? 'N/A'}</p>
-                <p><strong>Cycles:</strong> {currentTaskValues.lastCompletedCycles?.toLocaleString() ?? 'N/A'}</p>
+                <p><strong>Hours:</strong> {currentTaskValues.lastCompletedHours !== undefined ? currentTaskValues.lastCompletedHours.toLocaleString() : 'N/A'}</p>
+                <p><strong>Cycles:</strong> {currentTaskValues.lastCompletedCycles !== undefined ? currentTaskValues.lastCompletedCycles.toLocaleString() : 'N/A'}</p>
                 <p><strong>Notes:</strong></p>
                 <ScrollArea className="h-24 w-full rounded-md border p-2 bg-muted/50">
                    {currentTaskValues.lastCompletedNotes || "No notes provided."}
