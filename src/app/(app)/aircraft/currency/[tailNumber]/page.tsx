@@ -20,10 +20,10 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { z } from 'zod';
-import { AddMaintenanceTaskModal, type MaintenanceTaskFormData } from './components/add-maintenance-task-modal';
+import { AddMaintenanceTaskModal, type MaintenanceTaskFormData, defaultMaintenanceTaskFormValues } from './components/add-maintenance-task-modal';
 
 import { Wrench, PlusCircle, ArrowLeft, PlaneIcon, Edit, Loader2, InfoIcon, Phone, UserCircle, MapPin, Save, XCircle, Edit2, Edit3 } from 'lucide-react';
-import { format, parse, addDays, isValid, addMonths, addYears, endOfMonth } from 'date-fns';
+import { format, parse, addDays, isValid, addMonths, addYears, endOfMonth, parse as parseDate } from 'date-fns';
 import { sampleMaintenanceData, calculateToGo, getReleaseStatus, type MaintenanceItem } from '../page';
 import { useToast } from '@/hooks/use-toast';
 import { fetchFleetAircraft, saveFleetAircraft, type FleetAircraft, type EngineDetail } from '@/ai/flows/manage-fleet-flow';
@@ -41,7 +41,6 @@ export const MOCK_COMPONENT_VALUES_DATA: Record<string, Record<string, { time?: 
   'N630MW': {
     'Airframe': { time: 12540.0, cycles: 8978 },
     'Engine 1': { time: 12471.2, cycles: 9058 },
-    // 'Engine 2': { time: 12439.9, cycles: 10721 }, // PC-12 is single engine
     'Propeller 1': { time: 245.3, cycles: 88 },
   },
 };
@@ -66,8 +65,8 @@ const createOrUpdateMaintenanceItem = (
   let dueAtHours: number | undefined = undefined;
   let dueAtCycles: number | undefined = undefined;
 
-  const actualLastCompletedDateObj = formData.lastCompletedDate && isValid(parse(formData.lastCompletedDate, 'yyyy-MM-dd', new Date()))
-    ? parse(formData.lastCompletedDate, 'yyyy-MM-dd', new Date())
+  const actualLastCompletedDateObj = formData.lastCompletedDate && isValid(parseDate(formData.lastCompletedDate, 'yyyy-MM-dd', new Date()))
+    ? parseDate(formData.lastCompletedDate, 'yyyy-MM-dd', new Date())
     : new Date(); 
   const actualLastCompletedHours = Number(formData.lastCompletedHours || 0);
   const actualLastCompletedCycles = Number(formData.lastCompletedCycles || 0);
@@ -105,7 +104,7 @@ const createOrUpdateMaintenanceItem = (
       }
     }
   } else if (formData.trackType === "One Time") {
-    if (formData.isDaysDueEnabled && formData.daysDueValue && isValid(parse(formData.daysDueValue, 'yyyy-MM-dd', new Date()))) {
+    if (formData.isDaysDueEnabled && formData.daysDueValue && isValid(parseDate(formData.daysDueValue, 'yyyy-MM-dd', new Date()))) {
       dueAtDate = formData.daysDueValue;
     }
     if (formData.isHoursDueEnabled && formData.hoursDue) {
@@ -116,22 +115,44 @@ const createOrUpdateMaintenanceItem = (
     }
   }
 
-  const aircraftKey = aircraft.id || aircraft.tailNumber;
-  const currentAirframeTimeForTask = MOCK_COMPONENT_VALUES_DATA[aircraftKey]?.['Airframe']?.time || 0;
-  const currentAirframeCyclesForTask = MOCK_COMPONENT_VALUES_DATA[aircraftKey]?.['Airframe']?.cycles || 0;
-
-
   return {
-    id: existingItemId || `MX-${Date.now()}`,
-    tailNumber: aircraft.tailNumber,
+    id: existingItemId || `MX-${aircraft.tailNumber}-${Date.now()}`, // Ensure unique ID
     aircraftModel: aircraft.model,
-    currentAirframeTime: currentAirframeTimeForTask, 
-    currentAirframeCycles: currentAirframeCyclesForTask, 
-    nextDueItemDescription: formData.itemTitle,
+    tailNumber: aircraft.tailNumber,
+
+    // Store all original form data
+    itemTitle: formData.itemTitle,
+    referenceNumber: formData.referenceNumber,
+    partNumber: formData.partNumber,
+    serialNumber: formData.serialNumber,
+    itemType: formData.itemType,
+    associatedComponent: formData.associatedComponent,
+    details: formData.details,
+    isActive: formData.isActive,
+    trackType: formData.trackType,
+    isTripsNotAffected: formData.isTripsNotAffected,
+    lastCompletedDate: formData.lastCompletedDate,
+    lastCompletedHours: formData.lastCompletedHours,
+    lastCompletedCycles: formData.lastCompletedCycles,
+    lastCompletedNotes: formData.lastCompletedNotes,
+    isHoursDueEnabled: formData.isHoursDueEnabled,
+    hoursDue: formData.hoursDue,
+    hoursTolerance: formData.hoursTolerance,
+    alertHoursPrior: formData.alertHoursPrior,
+    isCyclesDueEnabled: formData.isCyclesDueEnabled,
+    cyclesDue: formData.cyclesDue,
+    cyclesTolerance: formData.cyclesTolerance,
+    alertCyclesPrior: formData.alertCyclesPrior,
+    isDaysDueEnabled: formData.isDaysDueEnabled,
+    daysIntervalType: formData.daysIntervalType,
+    daysDueValue: formData.daysDueValue,
+    daysTolerance: formData.daysTolerance,
+    alertDaysPrior: formData.alertDaysPrior,
+    
+    // Store calculated due fields for display/sorting
     dueAtDate, 
     dueAtHours, 
-    dueAtCycles, 
-    notes: formData.details || formData.lastCompletedNotes || '',
+    dueAtCycles,
   };
 };
 
@@ -288,15 +309,41 @@ export default function AircraftMaintenanceDetailPage() {
 
   const handleOpenAddTaskModal = () => {
     setEditingTaskOriginalId(null);
-    setInitialModalFormData(null); 
+    setInitialModalFormData(null); // Or defaultMaintenanceTaskFormValues if you want to ensure it's fully typed
     setIsTaskModalOpen(true);
   };
 
   const handleOpenEditTaskModal = (taskToEdit: MaintenanceItem) => {
     setEditingTaskOriginalId(taskToEdit.id);
-    const formData: Partial<MaintenanceTaskFormData> = {
-      itemTitle: taskToEdit.nextDueItemDescription,
-      details: taskToEdit.notes,
+    // Construct full MaintenanceTaskFormData from MaintenanceItem
+    const formData: MaintenanceTaskFormData = {
+      itemTitle: taskToEdit.itemTitle,
+      referenceNumber: taskToEdit.referenceNumber || '',
+      partNumber: taskToEdit.partNumber || '',
+      serialNumber: taskToEdit.serialNumber || '',
+      itemType: taskToEdit.itemType,
+      associatedComponent: taskToEdit.associatedComponent || '',
+      details: taskToEdit.details || '',
+      isActive: taskToEdit.isActive,
+      trackType: taskToEdit.trackType,
+      isTripsNotAffected: taskToEdit.isTripsNotAffected || false,
+      lastCompletedDate: taskToEdit.lastCompletedDate || '',
+      lastCompletedHours: taskToEdit.lastCompletedHours,
+      lastCompletedCycles: taskToEdit.lastCompletedCycles,
+      lastCompletedNotes: taskToEdit.lastCompletedNotes || '',
+      isHoursDueEnabled: taskToEdit.isHoursDueEnabled || false,
+      hoursDue: taskToEdit.hoursDue,
+      hoursTolerance: taskToEdit.hoursTolerance,
+      alertHoursPrior: taskToEdit.alertHoursPrior,
+      isCyclesDueEnabled: taskToEdit.isCyclesDueEnabled || false,
+      cyclesDue: taskToEdit.cyclesDue,
+      cyclesTolerance: taskToEdit.cyclesTolerance,
+      alertCyclesPrior: taskToEdit.alertCyclesPrior,
+      isDaysDueEnabled: taskToEdit.isDaysDueEnabled || false,
+      daysIntervalType: taskToEdit.daysIntervalType || 'days',
+      daysDueValue: taskToEdit.daysDueValue || '',
+      daysTolerance: taskToEdit.daysTolerance,
+      alertDaysPrior: taskToEdit.alertDaysPrior,
     };
     setInitialModalFormData(formData);
     setIsTaskModalOpen(true);
@@ -321,14 +368,14 @@ export default function AircraftMaintenanceDetailPage() {
 
       toast({
         title: "Task Updated (Client-Side)",
-        description: `Task "${newItem.nextDueItemDescription}" updated for ${currentAircraft.tailNumber}.`,
+        description: `Task "${newItem.itemTitle}" updated for ${currentAircraft.tailNumber}.`,
       });
     } else {
       sampleMaintenanceData.push(newItem); 
       setMaintenanceTasks(prev => [...prev, newItem]);
       toast({
         title: "New Task Added (Client-Side)",
-        description: `Task "${newItem.nextDueItemDescription}" added for ${currentAircraft.tailNumber}.`,
+        description: `Task "${newItem.itemTitle}" added for ${currentAircraft.tailNumber}.`,
       });
     }
 
@@ -407,6 +454,7 @@ export default function AircraftMaintenanceDetailPage() {
               </Link>
             </Button>
             <AddMaintenanceTaskModal
+              key={editingTaskOriginalId || 'add-new-task'} // Force remount on task change
               aircraft={currentAircraft}
               onSave={handleSaveTask}
               isOpen={isTaskModalOpen}
@@ -502,7 +550,6 @@ export default function AircraftMaintenanceDetailPage() {
               <InfoIcon className="h-6 w-6 text-primary" />
               <CardTitle>Aircraft Information</CardTitle>
             </div>
-           
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
             {isEditingAircraftInfo ? (
@@ -669,16 +716,17 @@ export default function AircraftMaintenanceDetailPage() {
                   </TableRow>
                 ) : (
                   maintenanceTasks.map((item) => {
-                    const aircraftId = currentAircraft.id || currentAircraft.tailNumber;
                     const airframeComponent = editableComponentTimes.find(c => c.componentName === 'Airframe');
-                    const itemCurrentAirframeTime = airframeComponent?.currentTime ?? item.currentAirframeTime;
-                    const itemCurrentAirframeCycles = airframeComponent?.currentCycles ?? item.currentAirframeCycles;
+                    // Use the component values for the aircraft from MOCK_COMPONENT_VALUES_DATA if available for this item
+                    const aircraftKey = currentAircraft.id || currentAircraft.tailNumber;
+                    const currentAirframeTimeForTask = MOCK_COMPONENT_VALUES_DATA[aircraftKey]?.['Airframe']?.time ?? (airframeComponent?.currentTime ?? 0);
+                    const currentAirframeCyclesForTask = MOCK_COMPONENT_VALUES_DATA[aircraftKey]?.['Airframe']?.cycles ?? (airframeComponent?.currentCycles ?? 0);
 
 
                     const toGoData = calculateToGo({
-                      ...item,
-                      currentAirframeTime: itemCurrentAirframeTime,
-                      currentAirframeCycles: itemCurrentAirframeCycles
+                      ...item, // Pass the full item which now contains original definition
+                      currentAirframeTime: currentAirframeTimeForTask, // Pass live airframe time
+                      currentAirframeCycles: currentAirframeCyclesForTask, // Pass live airframe cycles
                     });
 
                     const status = getReleaseStatus(toGoData);
@@ -704,7 +752,7 @@ export default function AircraftMaintenanceDetailPage() {
 
                     return (
                       <TableRow key={item.id} className="hover:bg-muted/50">
-                        <TableCell className="font-medium">{item.nextDueItemDescription}</TableCell>
+                        <TableCell className="font-medium">{item.itemTitle}</TableCell>
                         <TableCell>{dueType}</TableCell>
                         <TableCell className="text-center">{dueAtDisplay}</TableCell>
                         <TableCell className={`text-center font-medium ${status.colorClass}`}>
@@ -716,7 +764,7 @@ export default function AircraftMaintenanceDetailPage() {
                             <span className="text-xs mt-1">{status.label}</span>
                           </div>
                         </TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{item.notes || '-'}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{item.details || '-'}</TableCell>
                         <TableCell className="text-right">
                           <Button variant="ghost" size="icon" className="hover:text-primary" onClick={() => handleOpenEditTaskModal(item) }>
                             <Edit2 className="h-4 w-4" />
@@ -744,5 +792,3 @@ export default function AircraftMaintenanceDetailPage() {
     </>
   );
 }
-
-    
