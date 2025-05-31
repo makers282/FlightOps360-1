@@ -37,14 +37,15 @@ export async function saveCustomer(input: SaveCustomerInput): Promise<Customer> 
   
   const dataToSaveInDb = {
     ...input,
+    isActive: input.isActive === undefined ? true : input.isActive, // Default isActive to true if not provided
     // Timestamps are handled by serverTimestamp in the flow
   };
   // Remove id from data if it was passed in, as it's the doc key
   if (dataToSaveInDb.id) {
-    delete dataToSaveInDb.id;
+    delete (dataToSaveInDb as any).id; // Cast to any to allow deletion of 'id' for type safety with spread
   }
 
-  return saveCustomerFlow({ customerId, customerData: dataToSaveInDb });
+  return saveCustomerFlow({ customerId, customerData: dataToSaveInDb as Omit<SaveCustomerInput, 'id'> });
 }
 
 export async function deleteCustomer(input: { customerId: string }): Promise<{ success: boolean; customerId: string }> {
@@ -72,6 +73,7 @@ const fetchCustomersFlow = ai.defineFlow(
           ...data,
           createdAt: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
           updatedAt: (data.updatedAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
+          isActive: data.isActive === undefined ? true : data.isActive, // Ensure isActive has a default for older data
         } as Customer;
       });
       console.log('Fetched customers from Firestore:', customersList.length, 'customers.');
@@ -102,6 +104,7 @@ const saveCustomerFlow = ai.defineFlow(
       const docSnap = await getDoc(customerDocRef);
       const dataWithTimestamps = {
         ...customerData,
+        isActive: customerData.isActive === undefined ? true : customerData.isActive, // Default again before saving
         updatedAt: serverTimestamp(),
         createdAt: docSnap.exists() ? docSnap.data().createdAt : serverTimestamp(), // Preserve original createdAt if doc exists
       };
@@ -109,9 +112,6 @@ const saveCustomerFlow = ai.defineFlow(
       await setDoc(customerDocRef, dataWithTimestamps, { merge: true });
       console.log('Saved customer in Firestore:', customerId);
       
-      // For the return value, we need to simulate what the timestamps would be after saving
-      // This is tricky because serverTimestamp() is resolved by Firestore servers.
-      // For now, let's fetch the doc again to return accurate data, or approximate for immediate UX.
       const savedDoc = await getDoc(customerDocRef);
       const savedData = savedDoc.data();
 
@@ -120,7 +120,8 @@ const saveCustomerFlow = ai.defineFlow(
         ...savedData,
         createdAt: (savedData?.createdAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
         updatedAt: (savedData?.updatedAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
-      } as Customer; // Cast to Customer, ensuring all fields are present
+        isActive: savedData?.isActive === undefined ? true : savedData.isActive,
+      } as Customer; 
     } catch (error) {
       console.error('Error saving customer to Firestore:', error);
       throw new Error(`Failed to save customer ${customerId}: ${error instanceof Error ? error.message : String(error)}`);
@@ -147,3 +148,4 @@ const deleteCustomerFlow = ai.defineFlow(
     }
   }
 );
+

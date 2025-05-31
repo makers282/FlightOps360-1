@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useTransition } from 'react';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { UsersRound, PlusCircle, Edit3, Trash2, Search, Loader2 } from 'lucide-react';
+import { UsersRound, PlusCircle, Edit3, Trash2, Search, Loader2, CheckCircle2, XCircle } from 'lucide-react'; // Added CheckCircle2, XCircle
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -31,11 +31,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Badge } from '@/components/ui/badge'; // Import Badge
 import { useToast } from '@/hooks/use-toast';
 import { fetchCustomers, saveCustomer, deleteCustomer } from '@/ai/flows/manage-customers-flow';
 import type { Customer, SaveCustomerInput } from '@/ai/schemas/customer-schemas';
-import { AddEditCustomerModal, type CustomerFormData } from './components/add-edit-customer-modal'; // Ensure this path is correct
-import { format } from 'date-fns';
+import { AddEditCustomerModal, type CustomerFormData } from './components/add-edit-customer-modal';
+import { format, parseISO, isValid } from 'date-fns';
 
 export default function CustomersPage() {
   const [customersList, setCustomersList] = useState<Customer[]>([]);
@@ -84,7 +85,7 @@ export default function CustomersPage() {
         await saveCustomer(data);
         toast({ title: "Success", description: `Customer ${isEditingMode ? 'updated' : 'added'} successfully.` });
         setIsModalOpen(false);
-        await loadCustomers(); // Refresh list
+        await loadCustomers(); 
       } catch (error) {
         console.error("Failed to save customer:", error);
         toast({ title: "Error Saving Customer", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
@@ -103,7 +104,7 @@ export default function CustomersPage() {
         await deleteCustomer({ customerId: customerToDelete.id });
         toast({ title: "Success", description: `Customer "${customerToDelete.name}" deleted.` });
         setCustomerToDelete(null);
-        await loadCustomers(); // Refresh list
+        await loadCustomers(); 
       } catch (error) {
         console.error("Failed to delete customer:", error);
         toast({ title: "Error Deleting Customer", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
@@ -114,16 +115,22 @@ export default function CustomersPage() {
 
   const filteredCustomers = customersList.filter(customer =>
     customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (customer.company && customer.company.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    customer.email.toLowerCase().includes(searchTerm.toLowerCase())
+    (customer.contactFirstName && customer.contactFirstName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (customer.contactLastName && customer.contactLastName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (customer.email && customer.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (customer.customerType && customer.customerType.toLowerCase().includes(searchTerm.toLowerCase()))
   );
   
   const formatDate = (dateString: string | undefined) => {
-    if (!dateString) return 'N/A';
+    if (!dateString) return '-';
     try {
-      return format(new Date(dateString), 'PP'); // Format as 'Aug 15, 2024'
+      const parsedDate = parseISO(dateString);
+      if (isValid(parsedDate)) {
+        return format(parsedDate, 'PP'); // Format as 'Aug 15, 2024'
+      }
+      return dateString; // Return original if not a valid ISO date string
     } catch (e) {
-      return dateString; // Return original if not a valid date string
+      return dateString; 
     }
   };
 
@@ -146,8 +153,8 @@ export default function CustomersPage() {
            <div className="mt-2 relative">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input 
-              placeholder="Search customers (name, company, email)..." 
-              className="pl-8 w-full sm:w-1/3" 
+              placeholder="Search customers (name, contact, email, type)..." 
+              className="pl-8 w-full sm:w-1/2 lg:w-1/3" 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -164,11 +171,11 @@ export default function CustomersPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
-                  <TableHead>Company</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Contact Person</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Phone</TableHead>
-                  <TableHead>Last Activity</TableHead>
-                  <TableHead>Notes</TableHead>
+                  <TableHead>Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -183,23 +190,14 @@ export default function CustomersPage() {
                   filteredCustomers.map((customer) => (
                     <TableRow key={customer.id}>
                       <TableCell className="font-medium">{customer.name}</TableCell>
-                      <TableCell>{customer.company || '-'}</TableCell>
-                      <TableCell>{customer.email}</TableCell>
+                      <TableCell><Badge variant={customer.customerType === "Internal" ? "secondary" : "outline"}>{customer.customerType}</Badge></TableCell>
+                      <TableCell>{customer.contactFirstName || customer.contactLastName ? `${customer.contactFirstName || ''} ${customer.contactLastName || ''}`.trim() : '-'}</TableCell>
+                      <TableCell>{customer.email || '-'}</TableCell>
                       <TableCell>{customer.phone || '-'}</TableCell>
-                      <TableCell>{customer.lastActivity ? formatDate(customer.lastActivity) : '-'}</TableCell>
-                      <TableCell>
-                        {customer.notes && customer.notes.length > 50 ? (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span className="cursor-default text-xs">{customer.notes.substring(0, 50)}...</span>
-                            </TooltipTrigger>
-                            <TooltipContent side="top" align="start" className="max-w-xs p-2 bg-popover text-popover-foreground border shadow-md rounded-md">
-                              <p className="text-sm">{customer.notes}</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        ) : (
-                          <span className="text-xs">{customer.notes || '-'}</span>
-                        )}
+                      <TableCell className="text-center">
+                        {customer.isActive ? 
+                          <CheckCircle2 className="h-5 w-5 text-green-500 inline-block" /> : 
+                          <XCircle className="h-5 w-5 text-red-500 inline-block" />}
                       </TableCell>
                       <TableCell className="text-right">
                         <Tooltip>
@@ -261,3 +259,4 @@ export default function CustomersPage() {
     </TooltipProvider>
   );
 }
+

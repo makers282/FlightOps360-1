@@ -4,14 +4,35 @@
  */
 import { z } from 'zod';
 
+export const customerTypes = ["Charter", "Owner", "Internal", "Retail", "Broker", "Other"] as const;
+
 export const CustomerSchema = z.object({
   id: z.string().describe("Unique Firestore document ID for the customer."),
-  name: z.string().min(1, "Customer name is required."),
-  company: z.string().optional().describe("Company name, if applicable."),
-  email: z.string().email("Invalid email format."),
-  phone: z.string().optional().describe("Contact phone number."),
-  notes: z.string().optional().describe("General notes about the customer."),
-  lastActivity: z.string().optional().describe("Timestamp of last interaction or activity."), // Keeping for now, can be enhanced later
+  name: z.string().min(1, "Customer name is required (can be company or individual)."),
+  customerType: z.enum(customerTypes).default("Charter").describe("Type of customer."),
+  
+  contactFirstName: z.string().optional(),
+  contactLastName: z.string().optional(),
+  
+  email: z.string().email("Invalid email format.").optional().or(z.literal('')), // Main email can be optional if contact person has one
+  email2: z.string().email("Invalid email format.").optional().or(z.literal('')),
+  
+  phone: z.string().optional(), // Main phone
+  phone2: z.string().optional(),
+
+  streetAddress1: z.string().optional(),
+  streetAddress2: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(), // Or province
+  postalCode: z.string().optional(),
+  country: z.string().optional(),
+
+  startDate: z.string().optional().describe("YYYY-MM-DD format, when the customer record started or became active."),
+  isActive: z.boolean().default(true).describe("Whether the customer is currently active."),
+  
+  internalNotes: z.string().optional().describe("General internal notes about the customer."),
+  crewNotes: z.string().optional().describe("Specific notes for crew regarding this customer."),
+
   createdAt: z.string().describe("ISO string format, server-generated timestamp."),
   updatedAt: z.string().describe("ISO string format, server-generated timestamp."),
 });
@@ -39,3 +60,4 @@ export const DeleteCustomerOutputSchema = z.object({
   success: z.boolean(),
   customerId: z.string(),
 });
+
