@@ -1,7 +1,7 @@
 
 'use server';
 /**
- * @fileOverview Genkit flows for managing the company's aircraft fleet using mock in-memory storage.
+ * @fileOverview Genkit flows for managing the company's aircraft fleet using Firestore.
  *
  * - fetchFleetAircraft - Fetches all aircraft in the fleet.
  * - saveFleetAircraft - Saves (adds or updates) an aircraft in the fleet.
@@ -10,6 +10,8 @@
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
+import { db } from '@/lib/firebase';
+import { collection, doc, getDocs, setDoc, deleteDoc, query, where, writeBatch } from 'firebase/firestore';
 
 // Define the structure for an engine detail
 const EngineDetailSchema = z.object({
@@ -49,83 +51,27 @@ const DeleteFleetAircraftOutputSchema = z.object({
   aircraftId: z.string(),
 });
 
-// Mock in-memory storage
-let MOCK_FLEET_AIRCRAFT_DATA: FleetAircraft[] = [
-  { 
-    id: 'N123AB', 
-    tailNumber: 'N123AB', 
-    model: 'Cessna Citation CJ3', 
-    isMaintenanceTracked: true, 
-    trackedComponentNames: ['Airframe', 'Engine 1', 'Engine 2', 'APU'],
-    serialNumber: 'CJ3-0123',
-    baseLocation: 'KHPN',
-    engineDetails: [
-      { model: 'Williams FJ44-3A', serialNumber: 'E1-SN123' },
-      { model: 'Williams FJ44-3A', serialNumber: 'E2-SN124' }
-    ],
-    primaryContactName: 'Ops Manager',
-    primaryContactPhone: '555-123-4567'
-  },
-  { 
-    id: 'N456CD', 
-    tailNumber: 'N456CD', 
-    model: 'Bombardier Global 6000', 
-    isMaintenanceTracked: true, 
-    trackedComponentNames: ['Airframe', 'Engine 1', 'Engine 2', 'APU'],
-    serialNumber: 'GL6000-9456',
-    baseLocation: 'KTEB',
-    engineDetails: [
-      { model: 'Rolls-Royce BR710A2-20', serialNumber: 'RR-E1-SN456' },
-      { model: 'Rolls-Royce BR710A2-20', serialNumber: 'RR-E2-SN457' }
-    ],
-    primaryContactName: 'Chief Pilot',
-    primaryContactPhone: '555-987-6543'
-  },
-  { 
-    id: 'N789EF', 
-    tailNumber: 'N789EF', 
-    model: 'Gulfstream G650ER', 
-    isMaintenanceTracked: true, 
-    trackedComponentNames: ['Airframe', 'Engine 1', 'Engine 2', 'APU', 'Air Conditioning'],
-    serialNumber: 'G650-6789',
-    baseLocation: 'KDAL',
-    engineDetails: [
-      { model: 'Rolls-Royce BR725', serialNumber: 'RR-G1-SN789' },
-      { model: 'Rolls-Royce BR725', serialNumber: 'RR-G2-SN790' }
-    ],
-  },
-  { 
-    id: 'N630MW', 
-    tailNumber: 'N630MW', 
-    model: 'Pilatus PC-12 NG', 
-    isMaintenanceTracked: false, 
-    trackedComponentNames: ['Airframe', 'Engine 1', 'Propeller 1'],
-    serialNumber: 'PC12-1630',
-    baseLocation: 'KAPA',
-    engineDetails: [
-      { model: 'Pratt & Whitney PT6A-67P', serialNumber: 'PWC-PT6-SN630' }
-    ],
-  }, 
-];
+const FLEET_COLLECTION = 'fleet';
+const AIRCRAFT_RATES_COLLECTION = 'aircraftRates'; // For cascading delete
 
 // Exported async functions that clients will call
 export async function fetchFleetAircraft(): Promise<FleetAircraft[]> {
-  console.log('[ManageFleetFlow MOCK] Attempting to fetch fleet aircraft.');
+  console.log('[ManageFleetFlow Firestore] Attempting to fetch fleet aircraft.');
   return fetchFleetAircraftFlow();
 }
 
 export async function saveFleetAircraft(input: SaveFleetAircraftInput): Promise<FleetAircraft> {
-  console.log('[ManageFleetFlow MOCK] Attempting to save fleet aircraft:', input.id, 'Data:', JSON.stringify(input));
+  console.log('[ManageFleetFlow Firestore] Attempting to save fleet aircraft:', input.id, 'Data:', JSON.stringify(input));
   const aircraftToSave: FleetAircraft = {
     ...input,
     isMaintenanceTracked: input.isMaintenanceTracked ?? true, 
-    trackedComponentNames: input.trackedComponentNames && input.trackedComponentNames.length > 0 ? input.trackedComponentNames : ['Airframe', 'Engine 1'], // Ensure default if empty
+    trackedComponentNames: input.trackedComponentNames && input.trackedComponentNames.length > 0 ? input.trackedComponentNames : ['Airframe', 'Engine 1'],
   };
   return saveFleetAircraftFlow(aircraftToSave);
 }
 
 export async function deleteFleetAircraft(input: DeleteFleetAircraftInput): Promise<{ success: boolean; aircraftId: string }> {
-  console.log('[ManageFleetFlow MOCK] Attempting to delete fleet aircraft:', input.aircraftId);
+  console.log('[ManageFleetFlow Firestore] Attempting to delete fleet aircraft:', input.aircraftId);
   return deleteFleetAircraftFlow(input);
 }
 
@@ -136,10 +82,17 @@ const fetchFleetAircraftFlow = ai.defineFlow(
     outputSchema: FetchFleetAircraftOutputSchema,
   },
   async () => {
-    console.log('Executing fetchFleetAircraftFlow - MOCK');
-    await new Promise(resolve => setTimeout(resolve, 100)); // Simulate async
-    console.log('Fetched fleet from MOCK_FLEET_AIRCRAFT_DATA:', MOCK_FLEET_AIRCRAFT_DATA.length, 'aircraft.');
-    return MOCK_FLEET_AIRCRAFT_DATA;
+    console.log('Executing fetchFleetAircraftFlow - Firestore');
+    try {
+      const fleetCollectionRef = collection(db, FLEET_COLLECTION);
+      const snapshot = await getDocs(fleetCollectionRef);
+      const aircraftList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FleetAircraft));
+      console.log('Fetched fleet from Firestore:', aircraftList.length, 'aircraft.');
+      return aircraftList;
+    } catch (error) {
+      console.error('Error fetching fleet from Firestore:', error);
+      throw new Error(`Failed to fetch fleet: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 );
 
@@ -150,18 +103,28 @@ const saveFleetAircraftFlow = ai.defineFlow(
     outputSchema: SaveFleetAircraftOutputSchema,
   },
   async (input) => {
-    console.log('Executing saveFleetAircraftFlow with input - MOCK:', JSON.stringify(input));
-    await new Promise(resolve => setTimeout(resolve, 100)); // Simulate async
-    
-    const existingIndex = MOCK_FLEET_AIRCRAFT_DATA.findIndex(ac => ac.id === input.id);
-    if (existingIndex !== -1) {
-      MOCK_FLEET_AIRCRAFT_DATA[existingIndex] = input; 
-      console.log('Updated aircraft in MOCK_FLEET_AIRCRAFT_DATA:', input);
-    } else {
-      MOCK_FLEET_AIRCRAFT_DATA.push(input); 
-      console.log('Added new aircraft to MOCK_FLEET_AIRCRAFT_DATA:', input);
+    console.log('Executing saveFleetAircraftFlow with input - Firestore:', JSON.stringify(input));
+    try {
+      const aircraftDocRef = doc(db, FLEET_COLLECTION, input.id);
+      // Ensure all fields are present, even if undefined, to handle updates correctly
+      const dataToSet = {
+        tailNumber: input.tailNumber,
+        model: input.model,
+        isMaintenanceTracked: input.isMaintenanceTracked ?? true,
+        trackedComponentNames: input.trackedComponentNames ?? ['Airframe', 'Engine 1'],
+        serialNumber: input.serialNumber ?? null, // Use null for Firestore if undefined
+        baseLocation: input.baseLocation ?? null,
+        engineDetails: input.engineDetails ?? [],
+        primaryContactName: input.primaryContactName ?? null,
+        primaryContactPhone: input.primaryContactPhone ?? null,
+      };
+      await setDoc(aircraftDocRef, dataToSet, { merge: true }); // Use merge:true to handle updates
+      console.log('Saved/Updated aircraft in Firestore:', input.id);
+      return { ...input, ...dataToSet }; // Return the full input object as saved
+    } catch (error) {
+      console.error('Error saving aircraft to Firestore:', error);
+      throw new Error(`Failed to save aircraft ${input.id}: ${error instanceof Error ? error.message : String(error)}`);
     }
-    return input;
   }
 );
 
@@ -172,18 +135,27 @@ const deleteFleetAircraftFlow = ai.defineFlow(
     outputSchema: DeleteFleetAircraftOutputSchema,
   },
   async (input) => {
-    console.log('Executing deleteFleetAircraftFlow for ID - MOCK:', input.aircraftId);
-    await new Promise(resolve => setTimeout(resolve, 100)); // Simulate async
-    
-    const initialLength = MOCK_FLEET_AIRCRAFT_DATA.length;
-    MOCK_FLEET_AIRCRAFT_DATA = MOCK_FLEET_AIRCRAFT_DATA.filter(ac => ac.id !== input.aircraftId);
-    const success = MOCK_FLEET_AIRCRAFT_DATA.length < initialLength;
-    
-    if (success) {
-      console.log('Deleted fleet aircraft from MOCK_FLEET_AIRCRAFT_DATA:', input.aircraftId);
-    } else {
-      console.warn(`Aircraft with ID ${input.aircraftId} not found for deletion in MOCK_FLEET_AIRCRAFT_DATA.`);
+    console.log('Executing deleteFleetAircraftFlow for ID - Firestore:', input.aircraftId);
+    try {
+      const batch = writeBatch(db);
+
+      // Delete the aircraft document
+      const aircraftDocRef = doc(db, FLEET_COLLECTION, input.aircraftId);
+      batch.delete(aircraftDocRef);
+
+      // Delete the associated aircraft rate document
+      const aircraftRateDocRef = doc(db, AIRCRAFT_RATES_COLLECTION, input.aircraftId);
+      batch.delete(aircraftRateDocRef);
+      
+      // TODO: In a real app, also delete associated maintenance tasks, component times, performance data, etc.
+      // For now, we only handle aircraft and its rate.
+
+      await batch.commit();
+      console.log('Deleted fleet aircraft and associated rate from Firestore:', input.aircraftId);
+      return { success: true, aircraftId: input.aircraftId };
+    } catch (error) {
+      console.error('Error deleting aircraft from Firestore:', error);
+      throw new Error(`Failed to delete aircraft ${input.aircraftId}: ${error instanceof Error ? error.message : String(error)}`);
     }
-    return { success, aircraftId: input.aircraftId };
   }
 );

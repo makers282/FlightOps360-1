@@ -9,10 +9,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { SlidersHorizontal, DollarSign, Edit, Percent, PlusCircle, Trash2, Save, XCircle, Loader2 } from 'lucide-react';
+import { SlidersHorizontal, DollarSign, Edit, Percent, PlusCircle, Trash2, Save, XCircle, Loader2, Info } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { fetchAircraftRates, saveAircraftRate, deleteAircraftRate, type AircraftRate } from '@/ai/flows/manage-aircraft-rates-flow';
 import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+
 
 interface ServiceFeeRate {
   displayDescription: string;
@@ -21,6 +23,7 @@ interface ServiceFeeRate {
   unitDescription: string;
 }
 
+// This data is now client-side only, not connected to Firestore for this iteration.
 const INITIAL_OTHER_COST_RATES_DATA: { [key: string]: ServiceFeeRate } = {
   FUEL_SURCHARGE_PER_BLOCK_HOUR: { displayDescription: "Fuel Surcharge", buy: 300, sell: 400, unitDescription: "Per Block Hour" },
   LANDING_FEE_PER_LEG: { displayDescription: "Landing Fee", buy: 400, sell: 500, unitDescription: "Per Leg" },
@@ -42,6 +45,7 @@ export default function QuoteConfigPage() {
   const [isLoadingFleet, setIsLoadingFleet] = useState(true);
   const [isSavingAircraftRate, startSavingTransition] = useTransition();
   const [isDeletingAircraftRate, startDeletingTransition] = useTransition();
+  const [currentDeletingRateId, setCurrentDeletingRateId] = useState<string | null>(null);
   const { toast } = useToast();
 
   const [showAddAircraftRateForm, setShowAddAircraftRateForm] = useState(false);
@@ -59,31 +63,32 @@ export default function QuoteConfigPage() {
   const [newServiceSellRate, setNewServiceSellRate] = useState('');
   const [editingServiceKey, setEditingServiceKey] = useState<string | null>(null);
 
+  const loadInitialData = async () => {
+    setIsLoadingAircraftRates(true);
+    setIsLoadingFleet(true);
+    try {
+      const [fetchedRates, fetchedFleet] = await Promise.all([
+        fetchAircraftRates(),
+        fetchFleetAircraft()
+      ]);
+      setAircraftRates(fetchedRates);
+      setFleet(fetchedFleet);
+    } catch (error) {
+      console.error("Failed to load quote configuration data:", error);
+      toast({ title: "Error", description: "Could not load configuration data.", variant: "destructive" });
+    } finally {
+      setIsLoadingAircraftRates(false);
+      setIsLoadingFleet(false);
+    }
+  };
+
   useEffect(() => {
-    const loadData = async () => {
-      setIsLoadingAircraftRates(true);
-      setIsLoadingFleet(true);
-      try {
-        const [fetchedRates, fetchedFleet] = await Promise.all([
-          fetchAircraftRates(),
-          fetchFleetAircraft()
-        ]);
-        setAircraftRates(fetchedRates);
-        setFleet(fetchedFleet);
-      } catch (error) {
-        console.error("Failed to load quote configuration data:", error);
-        toast({ title: "Error", description: "Could not load configuration data.", variant: "destructive" });
-      } finally {
-        setIsLoadingAircraftRates(false);
-        setIsLoadingFleet(false);
-      }
-    };
-    loadData();
-  }, [toast]);
+    loadInitialData();
+  }, [toast]); // loadInitialData is stable, toast for error display
 
   const handleEditAircraftRateClick = (rate: AircraftRate) => {
     setEditingAircraftRateId(rate.id);
-    setSelectedFleetAircraftIdForRate(rate.id); // The rate.id is the fleetAircraft.id
+    setSelectedFleetAircraftIdForRate(rate.id); 
     setNewAircraftBuyRate(String(rate.buy));
     setNewAircraftSellRate(String(rate.sell));
     setShowAddAircraftRateForm(true);
@@ -96,35 +101,26 @@ export default function QuoteConfigPage() {
     }
     const buyRateNum = parseFloat(newAircraftBuyRate);
     const sellRateNum = parseFloat(newAircraftSellRate);
-    if (isNaN(buyRateNum) || isNaN(sellRateNum)) {
-        toast({ title: "Invalid Rates", description: "Buy and Sell rates must be valid numbers.", variant: "destructive" });
+    if (isNaN(buyRateNum) || isNaN(sellRateNum) || buyRateNum < 0 || sellRateNum < 0) {
+        toast({ title: "Invalid Rates", description: "Buy and Sell rates must be valid non-negative numbers.", variant: "destructive" });
         return;
     }
 
     const rateData: AircraftRate = {
-      id: selectedFleetAircraftIdForRate, // ID is the selected fleet aircraft's ID
+      id: selectedFleetAircraftIdForRate, 
       buy: buyRateNum,
       sell: sellRateNum,
     };
 
     startSavingTransition(async () => {
       try {
-        const savedRate = await saveAircraftRate(rateData);
-        if (editingAircraftRateId) { 
-          setAircraftRates(prev => prev.map(r => r.id === editingAircraftRateId ? savedRate : r));
-        } else { 
-          // Check if rate for this aircraft already exists to prevent duplicates in client state
-          if (!aircraftRates.find(r => r.id === savedRate.id)) {
-            setAircraftRates(prev => [...prev, savedRate]);
-          } else {
-             setAircraftRates(prev => prev.map(r => r.id === savedRate.id ? savedRate : r));
-          }
-        }
+        await saveAircraftRate(rateData);
+        await loadInitialData(); // Reload all data to reflect changes
         toast({ title: "Success", description: `Aircraft rate ${editingAircraftRateId ? 'updated' : 'added/updated'}.` });
         handleCancelEditAircraftRate();
       } catch (error) {
         console.error("Failed to save aircraft rate:", error);
-        toast({ title: "Error", description: `Could not ${editingAircraftRateId ? 'update' : 'add'} aircraft rate.`, variant: "destructive" });
+        toast({ title: "Error", description: `Could not ${editingAircraftRateId ? 'update' : 'add'} aircraft rate. ${error instanceof Error ? error.message : ''}`, variant: "destructive" });
       }
     });
   };
@@ -138,17 +134,20 @@ export default function QuoteConfigPage() {
   };
 
   const handleDeleteAircraftRate = (aircraftIdToDelete: string) => {
+    setCurrentDeletingRateId(aircraftIdToDelete);
     startDeletingTransition(async () => {
       try {
         await deleteAircraftRate({ aircraftId: aircraftIdToDelete });
-        setAircraftRates(prev => prev.filter(rate => rate.id !== aircraftIdToDelete));
+        await loadInitialData(); // Reload all data
         toast({ title: "Success", description: "Aircraft rate deleted." });
         if (editingAircraftRateId === aircraftIdToDelete) { 
           handleCancelEditAircraftRate();
         }
       } catch (error) {
         console.error("Failed to delete aircraft rate:", error);
-        toast({ title: "Error", description: "Could not delete aircraft rate.", variant: "destructive" });
+        toast({ title: "Error", description: `Could not delete aircraft rate. ${error instanceof Error ? error.message : ''}`, variant: "destructive" });
+      } finally {
+        setCurrentDeletingRateId(null);
       }
     });
   };
@@ -174,8 +173,8 @@ export default function QuoteConfigPage() {
     }
     const buyRateNum = parseFloat(newServiceBuyRate);
     const sellRateNum = parseFloat(newServiceSellRate);
-     if (isNaN(buyRateNum) || isNaN(sellRateNum)) {
-        toast({ title: "Invalid Rates", description: "Buy and Sell rates must be valid numbers.", variant: "destructive" });
+     if (isNaN(buyRateNum) || isNaN(sellRateNum) || buyRateNum < 0 || sellRateNum < 0) {
+        toast({ title: "Invalid Rates", description: "Buy and Sell rates must be valid non-negative numbers.", variant: "destructive" });
         return;
     }
 
@@ -226,6 +225,9 @@ export default function QuoteConfigPage() {
     return aircraft ? `${aircraft.tailNumber} - ${aircraft.model}` : aircraftId;
   };
 
+  // Filter fleet to only include aircraft not already in aircraftRates when adding new rate
+  const availableFleetForNewRate = fleet.filter(ac => !aircraftRates.find(r => r.id === ac.id));
+
 
   return (
     <>
@@ -241,7 +243,7 @@ export default function QuoteConfigPage() {
             <div className="flex justify-between items-center">
                 <div>
                     <CardTitle className="flex items-center gap-2"><DollarSign className="h-5 w-5 text-primary"/> Aircraft Hourly Rates</CardTitle>
-                    <CardDescription>Set buy and sell rates for aircraft from your fleet. Backend connected (Firestore placeholders).</CardDescription>
+                    <CardDescription>Set buy and sell rates for aircraft. (Connected to Firestore)</CardDescription>
                 </div>
                 {!showAddAircraftRateForm && (
                     <Button variant="outline" size="sm" onClick={() => { setEditingAircraftRateId(null); setShowAddAircraftRateForm(true); setSelectedFleetAircraftIdForRate(''); setNewAircraftBuyRate(''); setNewAircraftSellRate(''); }}>
@@ -268,12 +270,17 @@ export default function QuoteConfigPage() {
                             <SelectValue placeholder={isLoadingFleet ? "Loading fleet..." : "Select an aircraft"} />
                         </SelectTrigger>
                         <SelectContent>
-                            {fleet.map(ac => (
+                            {editingAircraftRateId && fleet.find(ac => ac.id === editingAircraftRateId) && (
+                                <SelectItem value={editingAircraftRateId}>
+                                    {getAircraftDisplayLabel(editingAircraftRateId)}
+                                </SelectItem>
+                            )}
+                            {!editingAircraftRateId && availableFleetForNewRate.map(ac => (
                                 <SelectItem key={ac.id} value={ac.id}>
                                     {ac.tailNumber} - {ac.model}
                                 </SelectItem>
                             ))}
-                             {fleet.length === 0 && !isLoadingFleet && <SelectItem value="no-fleet" disabled>No aircraft in fleet</SelectItem>}
+                            {!editingAircraftRateId && availableFleetForNewRate.length === 0 && !isLoadingFleet && <SelectItem value="no-fleet" disabled>All fleet aircraft have rates or no fleet.</SelectItem>}
                         </SelectContent>
                     </Select>
                     {editingAircraftRateId && <p className="text-xs text-muted-foreground">Aircraft selection is disabled during edit.</p>}
@@ -281,15 +288,15 @@ export default function QuoteConfigPage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                         <Label htmlFor="newAircraftBuyRate">Buy Rate (/hr)</Label>
-                        <Input id="newAircraftBuyRate" type="number" value={newAircraftBuyRate} onChange={(e) => setNewAircraftBuyRate(e.target.value)} placeholder="e.g., 5000" />
+                        <Input id="newAircraftBuyRate" type="number" value={newAircraftBuyRate} onChange={(e) => setNewAircraftBuyRate(e.target.value)} placeholder="e.g., 5000" min="0" />
                     </div>
                     <div>
                         <Label htmlFor="newAircraftSellRate">Sell Rate (/hr)</Label>
-                        <Input id="newAircraftSellRate" type="number" value={newAircraftSellRate} onChange={(e) => setNewAircraftSellRate(e.target.value)} placeholder="e.g., 5500" />
+                        <Input id="newAircraftSellRate" type="number" value={newAircraftSellRate} onChange={(e) => setNewAircraftSellRate(e.target.value)} placeholder="e.g., 5500" min="0" />
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    <Button onClick={handleAddOrUpdateAircraftRate} size="sm" disabled={isSavingAircraftRate || isLoadingFleet}>
+                    <Button onClick={handleAddOrUpdateAircraftRate} size="sm" disabled={isSavingAircraftRate || isLoadingFleet || (!editingAircraftRateId && availableFleetForNewRate.length === 0)}>
                         {isSavingAircraftRate ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4"/>}
                         {editingAircraftRateId ? 'Update Rate' : 'Save New Rate'}
                     </Button>
@@ -303,7 +310,7 @@ export default function QuoteConfigPage() {
             {isLoadingAircraftRates || isLoadingFleet ? (
                  <div className="flex items-center justify-center py-6">
                     <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                    <p className="ml-2 text-muted-foreground">Loading aircraft rates & fleet...</p>
+                    <p className="ml-2 text-muted-foreground">Loading aircraft rates & fleet from Firestore...</p>
                 </div>
             ) : (
                 <Table>
@@ -331,15 +338,15 @@ export default function QuoteConfigPage() {
                         <TableCell className="text-right">{formatCurrency(rate.buy)}</TableCell>
                         <TableCell className="text-right">{formatCurrency(rate.sell)}</TableCell>
                         <TableCell className="text-right">
-                            {formatCurrency(margin)} ({marginPercent.toFixed(1)}%)
+                            {formatCurrency(margin)} <span className={margin >= 0 ? 'text-green-600' : 'text-red-600'}>({marginPercent.toFixed(1)}%)</span>
                         </TableCell>
                         <TableCell className="text-right">
                             <Button variant="ghost" size="icon" onClick={() => handleEditAircraftRateClick(rate)} className="mr-1 hover:text-primary" disabled={isSavingAircraftRate || isDeletingAircraftRate}>
                                 <Edit className="h-4 w-4" />
                                 <span className="sr-only">Edit rate for {rate.id}</span>
                             </Button>
-                            <Button variant="ghost" size="icon" onClick={() => handleDeleteAircraftRate(rate.id)} className="text-destructive hover:text-destructive" disabled={isSavingAircraftRate || isDeletingAircraftRate}>
-                            {isDeletingAircraftRate && editingAircraftRateId === rate.id ? <Loader2 className="h-4 w-4 animate-spin"/> : <Trash2 className="h-4 w-4" />}
+                            <Button variant="ghost" size="icon" onClick={() => handleDeleteAircraftRate(rate.id)} className="text-destructive hover:text-destructive" disabled={isSavingAircraftRate || (isDeletingAircraftRate && currentDeletingRateId === rate.id)}>
+                            {isDeletingAircraftRate && currentDeletingRateId === rate.id ? <Loader2 className="h-4 w-4 animate-spin"/> : <Trash2 className="h-4 w-4" />}
                             <span className="sr-only">Delete rate for {rate.id}</span>
                             </Button>
                         </TableCell>
@@ -370,7 +377,7 @@ export default function QuoteConfigPage() {
             {showAddServiceForm && (
                  <Card className="p-4 mb-4 bg-muted/50 border-dashed">
                     <CardTitle className="text-lg mb-2">
-                      {editingServiceKey ? `Edit Service/Fee: ${editingServiceKey}` : 'Add New Service/Fee'}
+                      {editingServiceKey ? `Edit Service/Fee: ${otherCostRates[editingServiceKey]?.displayDescription || editingServiceKey}` : 'Add New Service/Fee'}
                     </CardTitle>
                     <div className="space-y-3">
                         <div>
@@ -388,11 +395,11 @@ export default function QuoteConfigPage() {
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <Label htmlFor="newServiceBuyRate">Buy Rate</Label>
-                                <Input id="newServiceBuyRate" type="number" value={newServiceBuyRate} onChange={(e) => setNewServiceBuyRate(e.target.value)} placeholder="e.g., 200" />
+                                <Input id="newServiceBuyRate" type="number" value={newServiceBuyRate} onChange={(e) => setNewServiceBuyRate(e.target.value)} placeholder="e.g., 200" min="0"/>
                             </div>
                             <div>
                                 <Label htmlFor="newServiceSellRate">Sell Rate</Label>
-                                <Input id="newServiceSellRate" type="number" value={newServiceSellRate} onChange={(e) => setNewServiceSellRate(e.target.value)} placeholder="e.g., 250" />
+                                <Input id="newServiceSellRate" type="number" value={newServiceSellRate} onChange={(e) => setNewServiceSellRate(e.target.value)} placeholder="e.g., 250" min="0"/>
                             </div>
                         </div>
                         <div className="flex gap-2">
@@ -428,7 +435,7 @@ export default function QuoteConfigPage() {
                       <TableCell className="text-right">{formatCurrency(rates.buy)}</TableCell>
                       <TableCell className="text-right">{formatCurrency(rates.sell)}</TableCell>
                       <TableCell className="text-right">
-                        {formatCurrency(margin)} ({marginPercent.toFixed(1)}%)
+                        {formatCurrency(margin)} <span className={margin >= 0 ? 'text-green-600' : 'text-red-600'}>({marginPercent.toFixed(1)}%)</span>
                       </TableCell>
                        <TableCell className="text-right">
                         <Button variant="ghost" size="icon" onClick={() => handleEditServiceFeeClick(key)} className="mr-1 hover:text-primary">
@@ -443,6 +450,11 @@ export default function QuoteConfigPage() {
                     </TableRow>
                   );
                 })}
+                 {Object.keys(otherCostRates).length === 0 && (
+                    <TableRow>
+                        <TableCell colSpan={6} className="text-center text-muted-foreground py-4">No service or fee rates configured yet.</TableCell>
+                    </TableRow>
+                )}
               </TableBody>
             </Table>
           </CardContent>
@@ -450,17 +462,13 @@ export default function QuoteConfigPage() {
         
         <Card className="shadow-md border-primary/30">
             <CardHeader>
-                <CardTitle>Backend Implementation Notes</CardTitle>
-                <CardDescription>
-                    Aircraft fleet and their associated rates are now connected to backend flows (with Firestore placeholders). 
-                    You will need to implement the Firestore read/write logic in <code>src/ai/flows/manage-fleet-flow.ts</code> and <code>src/ai/flows/manage-aircraft-rates-flow.ts</code>.
-                    Service & Fee rates are still client-side only for this demo.
-                </CardDescription>
+                <CardTitle className="flex items-center gap-2"><Info className="h-5 w-5 text-blue-500"/> Implementation Status</CardTitle>
             </CardHeader>
             <CardContent>
                  <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
-                    <li>When editing aircraft rates, the aircraft is selected from your fleet and cannot be changed during the edit of that specific rate.</li>
-                    <li>For service fees, the "Unique Key" is not editable once created.</li>
+                    <li>Aircraft Fleet data (in Company Settings) and Aircraft Hourly Rates (above) are now connected to Firestore.</li>
+                    <li>Service & Fee rates (above) are currently client-side only and will reset on page refresh. Firestore integration for these can be added next.</li>
+                    <li>Ensure your Firebase project's Firestore security rules are properly configured.</li>
                 </ul>
             </CardContent>
         </Card>

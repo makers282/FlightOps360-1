@@ -12,7 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Building2, Plane, PlusCircle, Trash2, Save, XCircle, Loader2, Edit, CheckSquare, Square, Info } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { fetchFleetAircraft, saveFleetAircraft, deleteFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
+import { fetchFleetAircraft, saveFleetAircraft, deleteFleetAircraft, type FleetAircraft, type SaveFleetAircraftInput } from '@/ai/flows/manage-fleet-flow';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
 // Define local type including fields not directly editable via simple form inputs
@@ -67,7 +67,7 @@ export default function CompanySettingsPage() {
     setCompanyAddress("123 Aviation Way, Hangar B, Anytown, USA 12345");
     setCompanyEmail("ops@flightops360.example.com");
     setCompanyPhone("(555) 012-3456");
-  }, [toast]);
+  }, [toast]); // Removed loadFleetData from dependency array to avoid re-triggering, toast is fine.
 
   const resetAircraftFormFields = () => {
     setNewTailNumber('');
@@ -126,7 +126,7 @@ export default function CompanySettingsPage() {
         handleCancelEditAircraft();
       } catch (error) {
         console.error("Failed to save aircraft:", error);
-        toast({ title: "Error", description: `Could not ${editingAircraftId ? 'update' : 'add'} aircraft.`, variant: "destructive" });
+        toast({ title: "Error", description: `Could not ${editingAircraftId ? 'update' : 'add'} aircraft. ${error instanceof Error ? error.message : ''}`, variant: "destructive" });
       }
     });
   };
@@ -148,13 +148,15 @@ export default function CompanySettingsPage() {
         }
       } catch (error) {
         console.error("Failed to delete aircraft:", error);
-        toast({ title: "Error", description: "Could not delete aircraft.", variant: "destructive" });
+        toast({ title: "Error", description: `Could not delete aircraft. ${error instanceof Error ? error.message : ''}`, variant: "destructive" });
       }
     });
   };
 
   const handleSaveCompanyInfo = () => {
     startSavingCompanyInfoTransition(() => {
+      // In a real app, this would save to Firestore or another backend.
+      // For now, we'll just log it and show a toast.
       console.log("Saving company information:", {
         companyName,
         companyAddress,
@@ -163,7 +165,7 @@ export default function CompanySettingsPage() {
       });
       toast({
         title: "Company Information Saved (Simulated)",
-        description: "In a real app, this would save to a backend.",
+        description: "This data is not yet connected to Firestore.",
       });
     });
   };
@@ -181,7 +183,7 @@ export default function CompanySettingsPage() {
         <Card className="shadow-md">
           <CardHeader>
             <CardTitle>Company Information</CardTitle>
-            <CardDescription>Update your company's profile details.</CardDescription>
+            <CardDescription>Update your company's profile details. (Not connected to Firestore yet)</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
@@ -217,7 +219,7 @@ export default function CompanySettingsPage() {
             <div className="flex justify-between items-center">
               <div>
                 <CardTitle className="flex items-center gap-2"><Plane className="h-5 w-5 text-primary"/> Manage Aircraft Fleet</CardTitle>
-                <CardDescription>Add, edit, or remove aircraft from your company's fleet.</CardDescription>
+                <CardDescription>Add, edit, or remove aircraft. (Connected to Firestore)</CardDescription>
               </div>
               {!showAddAircraftForm && (
                 <Button variant="outline" size="sm" onClick={() => { setEditingAircraftId(null); resetAircraftFormFields(); setShowAddAircraftForm(true); setNewTrackedComponentNamesStr('Airframe, Engine 1');}}>
@@ -235,9 +237,10 @@ export default function CompanySettingsPage() {
                 <div className="space-y-3">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
-                      <Label htmlFor="newTailNumber">Tail Number</Label>
+                      <Label htmlFor="newTailNumber">Tail Number (ID)</Label>
                       <Input id="newTailNumber" value={newTailNumber} onChange={(e) => setNewTailNumber(e.target.value)} placeholder="e.g., N123AB" disabled={!!editingAircraftId} />
                       {editingAircraftId && <p className="text-xs text-muted-foreground">Tail number (ID) cannot be changed during edit.</p>}
+                       {!editingAircraftId && <p className="text-xs text-muted-foreground">This will be used as the document ID in Firestore.</p>}
                     </div>
                     <div>
                       <Label htmlFor="newModel">Model</Label>
@@ -300,21 +303,15 @@ export default function CompanySettingsPage() {
             {isLoadingFleet ? (
               <div className="flex items-center justify-center py-6">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                <p className="ml-2 text-muted-foreground">Loading fleet...</p>
+                <p className="ml-2 text-muted-foreground">Loading fleet from Firestore...</p>
               </div>
             ) : (
               <>
               <Alert className="mb-4">
                 <Info className="h-4 w-4" />
                 <AlertDescription className="text-xs">
-                  Sample tracked components for existing aircraft:
-                  <ul className="list-disc list-inside pl-4">
-                    <li>N123AB: Airframe, Engine 1, Engine 2, APU</li>
-                    <li>N456CD: Airframe, Engine 1, Engine 2, APU</li>
-                    <li>N789EF: Airframe, Engine 1, Engine 2, APU, Air Conditioning</li>
-                    <li>N630MW: Airframe, Engine 1, Propeller 1</li>
-                  </ul>
-                  Newly added aircraft default to 'Airframe, Engine 1' for tracked components if not specified.
+                  Aircraft data is now managed in Firestore. Ensure your Firestore rules are set up for security.
+                  Deleting an aircraft here will also delete its associated rate from the 'aircraftRates' collection.
                 </AlertDescription>
               </Alert>
               <Table>
@@ -324,7 +321,6 @@ export default function CompanySettingsPage() {
                     <TableHead>Model</TableHead>
                     <TableHead>S/N</TableHead>
                     <TableHead>Maintenance Tracked</TableHead>
-                    {/* <TableHead>Tracked Components</TableHead> */}
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -344,15 +340,12 @@ export default function CompanySettingsPage() {
                           <CheckSquare className="h-5 w-5 text-green-500" /> : 
                           <Square className="h-5 w-5 text-muted-foreground" />}
                       </TableCell>
-                      {/* <TableCell className="text-xs text-muted-foreground">
-                        {(aircraft.trackedComponentNames || []).join(', ') || 'Default (Airframe, Engine 1)'}
-                      </TableCell> */}
                       <TableCell className="text-right">
                         <Button variant="ghost" size="icon" onClick={() => handleEditAircraftClick(aircraft)} className="mr-1 hover:text-primary" disabled={isSavingAircraft || isDeletingAircraft}>
                           <Edit className="h-4 w-4" />
                           <span className="sr-only">Edit {aircraft.tailNumber}</span>
                         </Button>
-                        <Button variant="ghost" size="icon" onClick={() => handleDeleteAircraft(aircraft.id)} className="text-destructive hover:text-destructive" disabled={isSavingAircraft || isDeletingAircraft}>
+                        <Button variant="ghost" size="icon" onClick={() => handleDeleteAircraft(aircraft.id)} className="text-destructive hover:text-destructive" disabled={isSavingAircraft || (isDeletingAircraft && editingAircraftId === aircraft.id) }>
                           {isDeletingAircraft && editingAircraftId === aircraft.id ? <Loader2 className="h-4 w-4 animate-spin"/> : <Trash2 className="h-4 w-4" />}
                           <span className="sr-only">Delete {aircraft.tailNumber}</span>
                         </Button>
