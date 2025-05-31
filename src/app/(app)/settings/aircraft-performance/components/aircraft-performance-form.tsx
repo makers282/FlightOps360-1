@@ -22,6 +22,7 @@ import {
   type AircraftPerformanceData
 } from '@/ai/flows/manage-aircraft-performance-flow';
 import type { SaveAircraftPerformanceInput } from '@/ai/schemas/aircraft-performance-schemas';
+import { Skeleton } from '@/components/ui/skeleton'; // Added Skeleton import
 
 
 // Schema for form validation, aligned with AircraftPerformanceData
