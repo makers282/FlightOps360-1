@@ -537,8 +537,13 @@ export default function AircraftMaintenanceDetailPage() {
     aircraft: FleetAircraft, 
     componentTimes: Array<{ componentName: string; currentTime: number; currentCycles: number }>
   ): string => {
-    const airframeTime = componentTimes.find(c => c.componentName.toLowerCase() === 'airframe')?.currentTime ?? 'N/A';
-    const airframeCycles = componentTimes.find(c => c.componentName.toLowerCase() === 'airframe')?.currentCycles ?? 'N/A';
+    
+    const companyName = "FlightOps360 Demo"; // Placeholder
+    const companyLogoSvg = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-plane">
+        <path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>
+      </svg>
+    `;
     
     const tasksHtml = tasksToReport.map(task => {
       let lastDoneStr = "N/A";
@@ -560,8 +565,8 @@ export default function AircraftMaintenanceDetailPage() {
           <td>${lastDoneStr}</td>
           <td>${dueAtStr}</td>
           <td>${task.toGoData?.text || 'N/A'}</td>
-          <td style="min-width: 200px; max-width: 400px; word-break: break-word;">${task.details || '-'}</td>
-          <td style="height: 60px; border-bottom: 1px solid #ccc;"></td>
+          <td style="min-width: 200px; max-width: 350px; word-break: break-word; white-space: pre-wrap;">${task.details || '-'}</td>
+          <td style="height: 60px; border-bottom: 1px solid #ccc; min-width: 150px;"></td>
         </tr>
       `;
     }).join('');
@@ -571,60 +576,88 @@ export default function AircraftMaintenanceDetailPage() {
       <head>
         <title>Work Order - ${aircraft.tailNumber}</title>
         <style>
-          body { font-family: Arial, sans-serif; margin: 20px; font-size: 10pt; }
-          .header-info, .component-times-info { margin-bottom: 15px; border: 1px solid #eee; padding: 10px; border-radius: 5px; }
-          .header-info h1 { margin-top: 0; font-size: 16pt; }
-          .header-info p, .component-times-info p { margin: 3px 0; }
-          .component-times-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 5px; }
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol"; margin: 20px; font-size: 10pt; color: #333; }
+          .header-container { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #007bff; }
+          .company-info h1 { margin: 0; font-size: 20pt; color: #007bff; }
+          .company-info p { margin: 2px 0; font-size: 9pt; }
+          .logo-container { width: 50px; height: 50px; }
+          .report-info, .component-times-info { margin-bottom: 15px; border: 1px solid #e0e0e0; padding: 12px; border-radius: 6px; background-color: #f9f9f9; }
+          .report-info h2 { margin-top: 0; font-size: 14pt; color: #333; }
+          .report-info p, .component-times-info p { margin: 4px 0; }
+          .component-times-info strong { font-size: 11pt; display: block; margin-bottom: 8px; }
+          .component-times-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px 15px; }
+          .component-times-grid p { display: flex; justify-content: space-between; border-bottom: 1px dotted #eee; padding-bottom: 3px; margin-bottom: 3px; }
+          .component-times-grid p span:first-child { font-weight: 500; margin-right: 10px; color: #555; }
+          .tasks-section h2 { font-size: 13pt; margin-top: 20px; margin-bottom: 10px; color: #333; border-bottom: 1px solid #ccc; padding-bottom: 5px;}
           table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 9pt; }
-          th, td { border: 1px solid #ccc; padding: 6px; text-align: left; vertical-align: top; }
-          th { background-color: #f0f0f0; }
-          .signatures { margin-top: 30px; display: flex; justify-content: space-between; page-break-inside: avoid; }
+          th, td { border: 1px solid #ccc; padding: 8px; text-align: left; vertical-align: top; }
+          th { background-color: #e9ecef; color: #495057; font-weight: 600; }
+          tr:nth-child(even) { background-color: #f8f9fa; }
+          .signatures { margin-top: 40px; display: flex; justify-content: space-between; page-break-inside: avoid; }
           .signatures div { width: 45%; }
-          .signatures div p { margin-bottom: 40px; }
-          .print-button { position: fixed; top: 10px; right: 10px; padding: 8px 12px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+          .signatures div p { margin-bottom: 50px; font-size: 10pt; }
+          .print-button { position: fixed; top: 15px; right: 15px; padding: 10px 15px; background-color: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.1); font-size: 10pt;}
           @media print {
             .print-button { display: none; }
-            body { margin: 0.5in; font-size: 9pt; }
-            .header-info, .component-times-info { border: none; padding: 0; }
-             table { font-size: 8pt; }
-             th, td { padding: 4px; }
+            body { margin: 0.5in; font-size: 9pt; color: #000; }
+            .header-container { border-bottom: 2px solid #007bff; }
+            .company-info h1 { color: #007bff; }
+            .report-info, .component-times-info { border: 1px solid #ccc; background-color: #fff; }
+            th { background-color: #f0f0f0 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            tr:nth-child(even) { background-color: #f8f8f8 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            table { font-size: 8pt; }
+            th, td { padding: 5px; border: 1px solid #999; }
           }
         </style>
       </head>
       <body>
         <button class="print-button" onclick="window.print()">Print Work Order</button>
-        <div class="header-info">
-          <h1>Work Order</h1>
+        <div class="header-container">
+            <div class="company-info">
+                <h1>${companyName}</h1>
+                <p>Aircraft Work Order</p>
+            </div>
+            <div class="logo-container">
+                ${companyLogoSvg}
+            </div>
+        </div>
+
+        <div class="report-info">
+          <h2>Aircraft Details</h2>
           <p><strong>Aircraft:</strong> ${aircraft.tailNumber} (${aircraft.model})</p>
           <p><strong>Serial Number:</strong> ${aircraft.serialNumber || 'N/A'}</p>
           <p><strong>Date Generated:</strong> ${format(new Date(), "PPP HH:mm")}</p>
         </div>
+        
         <div class="component-times-info">
-          <strong>Current Component Times:</strong>
+          <strong>Current Component Times (as of report generation):</strong>
           <div class="component-times-grid">
-            ${componentTimes.map(c => `<p>${c.componentName}: ${c.currentTime.toLocaleString(undefined, {minimumFractionDigits:1, maximumFractionDigits:1})} hrs / ${c.currentCycles.toLocaleString()} cyc</p>`).join('')}
+            ${componentTimes.map(c => `<p><span>${c.componentName}:</span> <span>${c.currentTime.toLocaleString(undefined, {minimumFractionDigits:1, maximumFractionDigits:1})} hrs / ${c.currentCycles.toLocaleString()} cyc</span></p>`).join('')}
           </div>
         </div>
-        <h2>Selected Maintenance Tasks</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Task Title</th>
-              <th>Ref #</th>
-              <th>Type</th>
-              <th>Component</th>
-              <th>Last Done</th>
-              <th>Due At</th>
-              <th>To Go</th>
-              <th>Work Instructions</th>
-              <th>Work Performed / Notes</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${tasksHtml}
-          </tbody>
-        </table>
+
+        <div class="tasks-section">
+            <h2>Selected Maintenance Tasks</h2>
+            <table>
+            <thead>
+                <tr>
+                <th>Task Title</th>
+                <th>Ref #</th>
+                <th>Type</th>
+                <th>Component</th>
+                <th>Last Done</th>
+                <th>Due At</th>
+                <th>To Go</th>
+                <th style="width: 30%;">Work Instructions</th>
+                <th style="width: 20%;">Work Performed / Notes</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${tasksHtml}
+            </tbody>
+            </table>
+        </div>
+        
         <div class="signatures">
           <div>
             <p>Shop Signature: _________________________</p>
@@ -659,7 +692,6 @@ export default function AircraftMaintenanceDetailPage() {
         reportWindow.document.open();
         reportWindow.document.write(reportHtml);
         reportWindow.document.close();
-        // reportWindow.print(); // Optionally trigger print automatically
       } else {
         toast({ title: "Popup Blocked?", description: "Could not open the report window. Please check your popup blocker.", variant: "destructive" });
       }
@@ -669,7 +701,7 @@ export default function AircraftMaintenanceDetailPage() {
 
 
   if (isLoadingAircraft || isLoadingComponentTimes) {
-    return <div className="flex items-center justify-center h-screen"><Loader2 className="h-12 w-12 animate-spin text-primary" /><p className="ml-3 text-lg text-muted-foreground">Loading aircraft details & component times...</p></div>;
+    return <div className="flex items-center justify-center h-screen"><Loader2 className="h-12 w-12 animate-spin text-primary" /><p className="ml-3 text-lg text-muted-foreground">Loading aircraft details &amp; component times...</p></div>;
   }
   if (!tailNumber || !currentAircraft) {
     return (
@@ -717,7 +749,7 @@ export default function AircraftMaintenanceDetailPage() {
   }
 
   const pageHeaderTitle = `Maintenance Details for ${currentAircraft.tailNumber}`;
-  const pageHeaderDescription = `Tracked items & component status for ${currentAircraft.model} (${currentAircraft.tailNumber}). Component times are loaded from Firestore.`;
+  const pageHeaderDescription = `Tracked items &amp; component status for ${currentAircraft.model} (${currentAircraft.tailNumber}). Component times are loaded from Firestore.`;
 
   return (
     <div>
@@ -753,7 +785,7 @@ export default function AircraftMaintenanceDetailPage() {
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         <Card className="shadow-lg lg:col-span-2">
            <CardHeader className="flex flex-row items-start justify-between">
-            <div className="flex items-center gap-2"><PlaneIcon className="h-6 w-6 text-primary" /><CardTitle>Current Hours & Cycles</CardTitle></div>
+            <div className="flex items-center gap-2"><PlaneIcon className="h-6 w-6 text-primary" /><CardTitle>Current Hours &amp; Cycles</CardTitle></div>
             {!isEditingComponentTimes ? (
                 <Button variant="outline" size="icon" onClick={() => setIsEditingComponentTimes(true)} disabled={isSavingComponentTimes}>
                     <Edit className="h-4 w-4" /> <span className="sr-only">Edit Component Times</span>
@@ -870,7 +902,7 @@ export default function AircraftMaintenanceDetailPage() {
           <CardTitle className="flex items-center gap-2"><Wrench className="h-6 w-6 text-primary" />Maintenance Items</CardTitle>
           <CardDescription>
             Overview of scheduled and upcoming maintenance tasks for {currentAircraft.tailNumber}.
-            Calculated "To Go" is based on the values in "Current Hours & Cycles" above.
+            Calculated "To Go" is based on the values in "Current Hours &amp; Cycles" above.
           </CardDescription>
           <div className="mt-4 flex flex-col sm:flex-row gap-2">
             <div className="relative flex-grow">
@@ -1009,3 +1041,4 @@ export default function AircraftMaintenanceDetailPage() {
     </div>
   );
 }
+
