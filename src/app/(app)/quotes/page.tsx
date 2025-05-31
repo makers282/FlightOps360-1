@@ -20,6 +20,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import type { quoteStatuses } from '@/ai/schemas/quote-schemas'; // Import the type
 
 const quoteData = [
   { id: 'QT-A1B2C', clientName: 'Aero Corp', route: 'KJFK -> KLAX', aircraft: 'Global 6000', status: 'Sent', quoteDate: '2024-08-10', amount: '$25,500.00' },
@@ -27,13 +28,18 @@ const quoteData = [
   { id: 'QT-P5Q6R', clientName: 'Global Reach Ltd.', route: 'EGLL -> LSGG', aircraft: 'Gulfstream G650', status: 'Draft', quoteDate: '2024-08-12', amount: '$45,000.00' },
   { id: 'QT-M7N8O', clientName: 'Executive Flights', route: 'KHPN -> KORD', aircraft: 'Phenom 300', status: 'Expired', quoteDate: '2024-07-15', amount: '$9,200.00' },
   { id: 'QT-K9J1H', clientName: 'SkyHigh Charters', route: 'KSFO -> KSDL', aircraft: 'Learjet 75', status: 'Rejected', quoteDate: '2024-08-01', amount: '$15,000.00' },
+  { id: 'QT-B00K1', clientName: 'JetSetters Co.', route: 'KVNY -> KMDW', aircraft: 'Challenger 350', status: 'Booked', quoteDate: '2024-08-11', amount: '$18,500.00' },
 ];
 
-const getStatusBadgeVariant = (status: string): "default" | "secondary" | "outline" | "destructive" => {
+const getStatusBadgeVariant = (status: typeof quoteStatuses[number]): "default" | "secondary" | "outline" | "destructive" => {
   switch (status.toLowerCase()) {
-    case 'accepted': return 'default'; // Greenish / Primary
-    case 'sent': return 'secondary'; // Blueish / Active
-    case 'draft': return 'outline'; // Neutral / In progress
+    case 'accepted':
+    case 'booked':
+      return 'default'; // Greenish / Primary
+    case 'sent': 
+      return 'secondary'; // Blueish / Active
+    case 'draft': 
+      return 'outline'; // Neutral / In progress
     case 'expired':
     case 'rejected': 
       return 'destructive'; // Reddish / Warning
@@ -87,7 +93,7 @@ export default function AllQuotesPage() {
                   <TableCell>{quote.route}</TableCell>
                   <TableCell>{quote.aircraft}</TableCell>
                   <TableCell>
-                    <Badge variant={getStatusBadgeVariant(quote.status)}>{quote.status}</Badge>
+                    <Badge variant={getStatusBadgeVariant(quote.status as typeof quoteStatuses[number])}>{quote.status}</Badge>
                   </TableCell>
                   <TableCell>{quote.quoteDate}</TableCell>
                   <TableCell>{quote.amount}</TableCell>

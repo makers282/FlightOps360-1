@@ -14,7 +14,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
-import { CalendarIcon, Loader2, Users, Briefcase, Utensils, Landmark, BedDouble, PlaneTakeoff, PlaneLanding, PlusCircle, Trash2, GripVertical, Wand2, Info, Eye, Send, Building, UserSearch, DollarSign, Fuel } from 'lucide-react';
+import { CalendarIcon, Loader2, Users, Briefcase, Utensils, Landmark, BedDouble, PlaneTakeoff, PlaneLanding, PlusCircle, Trash2, GripVertical, Wand2, Info, Eye, Send, Building, UserSearch, DollarSign, Fuel, SaveIcon } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { format, isValid as isValidDate } from "date-fns";
 import { useToast } from '@/hooks/use-toast';
@@ -39,11 +39,12 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { LegsSummaryTable } from './legs-summary-table';
 import { CostsSummaryDisplay, type LineItem } from './costs-summary-display';
 import { saveQuote } from '@/ai/flows/manage-quotes-flow';
-import type { Quote, SaveQuoteInput, QuoteLeg, QuoteLineItem } from '@/ai/schemas/quote-schemas';
+import type { Quote, SaveQuoteInput, QuoteLeg, QuoteLineItem, quoteStatuses as QuoteStatusType } from '@/ai/schemas/quote-schemas';
+import { quoteStatuses } from '@/ai/schemas/quote-schemas';
 import { useRouter } from 'next/navigation';
 
 
-export const legTypes = [ // Exporting for use in quote-schemas
+export const legTypes = [ 
   "Charter", "Owner", "Positioning", "Ambulance", "Cargo", "Maintenance", "Ferry"
 ] as const;
 
@@ -125,7 +126,7 @@ const sampleCustomerData = [
 ];
 
 export function CreateQuoteForm() {
-  const [isGeneratingQuote, startQuoteGenerationTransition] = useTransition();
+  const [isSaving, startSavingTransition] = useTransition();
   const [estimatingLegIndex, setEstimatingLegIndex] = useState<number | null>(null);
   const { toast } = useToast();
   const router = useRouter();
@@ -197,10 +198,14 @@ export function CreateQuoteForm() {
     name: "legs",
   });
 
+  const generateNewQuoteId = useCallback(() => {
+    return `QT-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+  }, []);
+
   useEffect(() => {
     setIsClient(true);
     if (!getValues('quoteId')) {
-      setValue('quoteId', `QT-${Math.random().toString(36).substring(2, 7).toUpperCase()}`);
+      setValue('quoteId', generateNewQuoteId());
     }
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -234,7 +239,7 @@ export function CreateQuoteForm() {
       }
     };
     loadInitialData();
-  }, [setValue, getValues, toast]);
+  }, [setValue, getValues, toast, generateNewQuoteId]);
 
   useEffect(() => {
     if (legsArray && legEstimates.length !== legsArray.length) {
@@ -278,19 +283,14 @@ export function CreateQuoteForm() {
             totalFlightTimeSellCost += flightTime * aircraftSellRate;
             totalRevenueFlightHours += flightTime;
         } else if (flightTime > 0 && ["Positioning", "Ferry", "Maintenance"].includes(leg.legType)) {
-             // For non-revenue, typically buy rate is applied, sell might be 0 or same as buy
             totalFlightTimeBuyCost += flightTime * aircraftBuyRate;
-            // Assuming positioning legs are billed at cost or a specific configured rate.
-            // For now, let's assume positioning sell rate matches buy rate for this example unless configured otherwise.
-            // A more complex system would fetch a specific "positioning" rate from AircraftRateSchema.
-            totalFlightTimeSellCost += flightTime * aircraftBuyRate; // Example: positioning billed at cost
+            totalFlightTimeSellCost += flightTime * aircraftBuyRate; 
         }
     });
 
     const selectedAircraftInfo = aircraftSelectOptions.find(ac => ac.value === aircraftId);
     const aircraftDisplayName = selectedAircraftInfo ? selectedAircraftInfo.label : "Selected Aircraft";
     
-    // Using revenue flight hours for primary billing, or total block if no rev flight hours (e.g. pure positioning quote)
     const billableHoursForAircraft = totalRevenueFlightHours > 0 ? totalRevenueFlightHours : (totalBlockHours > 0 ? totalBlockHours : 0);
 
     if (billableHoursForAircraft > 0) {
@@ -301,8 +301,8 @@ export function CreateQuoteForm() {
             sellRate: aircraftSellRate,
             unitDescription: 'Hour (Std.)',
             quantity: parseFloat(billableHoursForAircraft.toFixed(2)),
-            buyTotal: totalFlightTimeBuyCost, // Use sum of all legs buy costs
-            sellTotal: totalFlightTimeSellCost, // Use sum of all legs sell costs
+            buyTotal: totalFlightTimeBuyCost, 
+            sellTotal: totalFlightTimeSellCost, 
         });
     }
     
@@ -459,8 +459,15 @@ export function CreateQuoteForm() {
     }
   }, [getValues, legEstimates, toast, estimatingLegIndex, setValue, setLegEstimates, setEstimatingLegIndex, aircraftSelectOptions]);
 
-  const onSendQuote: SubmitHandler<FullQuoteFormData> = (data) => { 
-    startQuoteGenerationTransition(async () => {
+  const handleSave = async (status: typeof QuoteStatusType[number]) => {
+    const isValidForm = await trigger();
+    if (!isValidForm) {
+      toast({ title: "Validation Error", description: "Please check the form for errors.", variant: "destructive" });
+      return;
+    }
+
+    startSavingTransition(async () => {
+      const data = getValues();
       const selectedAircraftInfo = aircraftSelectOptions.find(ac => ac.value === data.aircraftId);
       const totalBuyCost = calculatedLineItems.reduce((sum, item) => sum + item.buyTotal, 0);
       const totalSellPrice = calculatedLineItems.reduce((sum, item) => sum + item.sellTotal, 0);
@@ -475,8 +482,7 @@ export function CreateQuoteForm() {
         clientPhone: data.clientPhone,
         aircraftId: data.aircraftId,
         aircraftLabel: selectedAircraftInfo?.label,
-        legs: data.legs.map((leg, index) => {
-          const estimate = legEstimates[index];
+        legs: data.legs.map((leg) => {
           const originTaxi = Number(leg.originTaxiTimeMinutes || 0);
           const destTaxi = Number(leg.destinationTaxiTimeMinutes || 0);
           const flightTime = Number(leg.flightTimeHours || 0);
@@ -507,22 +513,30 @@ export function CreateQuoteForm() {
         totalSellPrice,
         marginAmount,
         marginPercentage,
-        status: "Sent", // Assuming "Send Quote" means it's sent
+        status: status,
       };
       
       try {
         const savedQuote = await saveQuote(quoteToSave);
         toast({
-          title: "Quote Saved & Sent (Simulated)",
-          description: `Quote ${savedQuote.quoteId} has been saved to Firestore.`,
+          title: `Quote ${status === 'Draft' ? 'Saved as Draft' : 'Saved & Sent'}`,
+          description: `Quote ${savedQuote.quoteId} (${status}) has been saved to Firestore.`,
           variant: "default",
         });
-        // Potentially redirect or clear form
-        // router.push('/quotes'); 
-        form.reset();
-        setValue('quoteId', `QT-${Math.random().toString(36).substring(2, 7).toUpperCase()}`);
+        
+        form.reset({
+          quoteId: generateNewQuoteId(),
+          selectedCustomerId: undefined,
+          clientName: '', clientEmail: '', clientPhone: '',
+          legs: [{ origin: '', destination: '', legType: 'Charter', departureDateTime: undefined, passengerCount: 1, originFbo: '', destinationFbo: '', originTaxiTimeMinutes: 15, destinationTaxiTimeMinutes: 15, flightTimeHours: undefined }],
+          aircraftId: undefined,
+          medicsRequested: false, cateringRequested: false, includeLandingFees: true, estimatedOvernights: 0, fuelSurchargeRequested: true,
+          cateringNotes: "", notes: '',
+          sellPriceFuelSurchargePerHour: undefined, sellPriceMedics: undefined, sellPriceCatering: undefined, sellPriceLandingFeePerLeg: undefined, sellPriceOvernight: undefined,
+        });
         setLegEstimates([]);
         setCalculatedLineItems([]);
+
       } catch (error) {
         console.error("Failed to save quote:", error);
         toast({
@@ -534,8 +548,12 @@ export function CreateQuoteForm() {
     });
   };
 
-  const handlePreviewQuote = () => {
-    trigger(); 
+  const handlePreviewQuote = async () => {
+    const isValidForm = await trigger();
+    if (!isValidForm) {
+      toast({ title: "Validation Error", description: "Please check the form for errors before previewing.", variant: "destructive" });
+      return;
+    }
     const data = getValues();
     const selectedAircraftInfo = aircraftSelectOptions.find(ac => ac.value === data.aircraftId);
     const totalBuyCost = calculatedLineItems.reduce((sum, item) => sum + item.buyTotal, 0);
@@ -574,7 +592,7 @@ export function CreateQuoteForm() {
       totalSellPrice,
       marginAmount,
       marginPercentage,
-      status: "Draft", // Preview is typically a draft
+      status: "Draft", 
     };
     console.log("Preview Quote Clicked. Current form data:", previewData);
     toast({
@@ -675,9 +693,9 @@ export function CreateQuoteForm() {
         <CardDescription>Fill in the client and trip information to generate a quote.</CardDescription>
       </CardHeader>
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSendQuote)}>
-          <CardContent className="space-y-8">
-            <FormField control={control} name="quoteId" render={({ field }) => ( <FormItem className="mb-6"> <FormLabel>Quote ID</FormLabel> <FormControl><Input placeholder="e.g., QT-ABCDE" {...field} value={field.value || ''} readOnly className="bg-muted/50" /></FormControl> <FormMessage /> </FormItem> )} />
+        {/* No form tag here, buttons will trigger submission via type="button" and handler */}
+        <CardContent className="space-y-8">
+          <FormField control={control} name="quoteId" render={({ field }) => ( <FormItem className="mb-6"> <FormLabel>Quote ID</FormLabel> <FormControl><Input placeholder="e.g., QT-ABCDE" {...field} value={field.value || ''} readOnly className="bg-muted/50" /></FormControl> <FormMessage /> </FormItem> )} />
             
             <section>
               <CardTitle className="text-xl border-b pb-2 mb-4">Client Information</CardTitle>
@@ -785,7 +803,7 @@ export function CreateQuoteForm() {
                               type="number" 
                               placeholder="e.g., 15" 
                               {...field} 
-                              value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : field.value}
+                              value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : String(field.value)}
                               onChange={e => {
                                 const val = parseInt(e.target.value, 10);
                                 field.onChange(isNaN(val) ? undefined : val);
@@ -801,7 +819,7 @@ export function CreateQuoteForm() {
                               step="0.1" 
                               placeholder="e.g., 2.5" 
                               {...field} 
-                              value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : field.value}
+                              value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : String(field.value)}
                               onChange={e => {
                                 const val = parseFloat(e.target.value);
                                 field.onChange(isNaN(val) ? undefined : val);
@@ -815,7 +833,7 @@ export function CreateQuoteForm() {
                               type="number" 
                               placeholder="e.g., 15" 
                               {...field} 
-                              value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : field.value}
+                              value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : String(field.value)}
                               onChange={e => {
                                 const val = parseInt(e.target.value, 10);
                                 field.onChange(isNaN(val) ? undefined : val);
@@ -898,7 +916,7 @@ export function CreateQuoteForm() {
                           type="number" 
                           placeholder={`Default: $${(fetchedCompanyProfile?.serviceFeeRates?.[SERVICE_KEY_FUEL_SURCHARGE]?.sell || DEFAULT_SERVICE_RATES[SERVICE_KEY_FUEL_SURCHARGE]?.sell || 0).toLocaleString()}`} 
                           {...field} 
-                          value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : field.value}
+                          value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : String(field.value)}
                           onChange={e => { const val = parseFloat(e.target.value); field.onChange(isNaN(val) ? undefined : val); }}
                         />
                       </FormControl> 
@@ -907,50 +925,57 @@ export function CreateQuoteForm() {
                     <FormField control={control} name="medicsRequested" render={({ field }) => ( <FormItem className="flex flex-row items-center space-x-3 space-y-0 p-3 border rounded-md hover:bg-muted/50"> <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl> <div className="space-y-1 leading-none"><FormLabel className="flex items-center gap-2"><Users className="h-4 w-4 text-primary" /> {getServiceLabel(SERVICE_KEY_MEDICS, "Medics Requested")}</FormLabel></div> </FormItem> )} />
                     {medicsRequested && <FormField control={control} name="sellPriceMedics" render={({ field }) => (<FormItem className="pl-8"> <FormLabel>Medics Fee Sell Price</FormLabel> 
                       <FormControl>
-                        <Input type="number" placeholder={`Default: $${(fetchedCompanyProfile?.serviceFeeRates?.[SERVICE_KEY_MEDICS]?.sell || DEFAULT_SERVICE_RATES[SERVICE_KEY_MEDICS]?.sell || 0).toLocaleString()}`}  {...field} value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : field.value} onChange={e => { const val = parseFloat(e.target.value); field.onChange(isNaN(val) ? undefined : val); }} />
+                        <Input type="number" placeholder={`Default: $${(fetchedCompanyProfile?.serviceFeeRates?.[SERVICE_KEY_MEDICS]?.sell || DEFAULT_SERVICE_RATES[SERVICE_KEY_MEDICS]?.sell || 0).toLocaleString()}`}  {...field} value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : String(field.value)} onChange={e => { const val = parseFloat(e.target.value); field.onChange(isNaN(val) ? undefined : val); }} />
                       </FormControl> 
                     <FormMessage /> </FormItem> )} />}
                     
                     <FormField control={control} name="cateringRequested" render={({ field }) => ( <FormItem className="flex flex-row items-center space-x-3 space-y-0 p-3 border rounded-md hover:bg-muted/50"> <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl> <div className="space-y-1 leading-none"><FormLabel className="flex items-center gap-2"><Utensils className="h-4 w-4 text-primary" /> {getServiceLabel(SERVICE_KEY_CATERING, "Catering Requested")}</FormLabel></div> </FormItem> )} />
-                    {cateringRequested && ( <FormField control={control} name="cateringNotes" render={({ field }) => ( <FormItem className="pl-8"> <FormLabel>Catering Notes</FormLabel> <FormControl><Textarea placeholder="Specify catering details..." {...field} rows={3} /></FormControl> <FormMessage /> </FormItem> )} /> )}
+                    {cateringRequested && ( <FormField control={control} name="cateringNotes" render={({ field }) => ( <FormItem className="pl-8"> <FormLabel>Catering Notes</FormLabel> <FormControl><Textarea placeholder="Specify catering details..." {...field} value={field.value || ''} rows={3} /></FormControl> <FormMessage /> </FormItem> )} /> )}
                     {cateringRequested && <FormField control={control} name="sellPriceCatering" render={({ field }) => (<FormItem className="pl-8"> <FormLabel>Catering Fee Sell Price</FormLabel> 
                       <FormControl>
-                        <Input type="number" placeholder={`Default: $${(fetchedCompanyProfile?.serviceFeeRates?.[SERVICE_KEY_CATERING]?.sell || DEFAULT_SERVICE_RATES[SERVICE_KEY_CATERING]?.sell || 0).toLocaleString()}`} {...field} value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : field.value} onChange={e => { const val = parseFloat(e.target.value); field.onChange(isNaN(val) ? undefined : val); }}/>
+                        <Input type="number" placeholder={`Default: $${(fetchedCompanyProfile?.serviceFeeRates?.[SERVICE_KEY_CATERING]?.sell || DEFAULT_SERVICE_RATES[SERVICE_KEY_CATERING]?.sell || 0).toLocaleString()}`} {...field} value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : String(field.value)} onChange={e => { const val = parseFloat(e.target.value); field.onChange(isNaN(val) ? undefined : val); }}/>
                       </FormControl> 
                     <FormMessage /> </FormItem> )} />}
 
                     <FormField control={control} name="includeLandingFees" render={({ field }) => ( <FormItem className="flex flex-row items-center space-x-3 space-y-0 p-3 border rounded-md hover:bg-muted/50"> <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl> <div className="space-y-1 leading-none"><FormLabel className="flex items-center gap-2"><Landmark className="h-4 w-4 text-primary" /> {getServiceLabel(SERVICE_KEY_LANDING_FEES, "Include Landing Fees", "Leg")}</FormLabel></div> </FormItem> )} />
                     {includeLandingFees && <FormField control={control} name="sellPriceLandingFeePerLeg" render={({ field }) => (<FormItem className="pl-8"> <FormLabel>Landing Fee Sell Price (per Leg)</FormLabel> 
                       <FormControl>
-                        <Input type="number" placeholder={`Default: $${(fetchedCompanyProfile?.serviceFeeRates?.[SERVICE_KEY_LANDING_FEES]?.sell || DEFAULT_SERVICE_RATES[SERVICE_KEY_LANDING_FEES]?.sell || 0).toLocaleString()}`} {...field} value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : field.value} onChange={e => { const val = parseFloat(e.target.value); field.onChange(isNaN(val) ? undefined : val); }}/>
+                        <Input type="number" placeholder={`Default: $${(fetchedCompanyProfile?.serviceFeeRates?.[SERVICE_KEY_LANDING_FEES]?.sell || DEFAULT_SERVICE_RATES[SERVICE_KEY_LANDING_FEES]?.sell || 0).toLocaleString()}`} {...field} value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : String(field.value)} onChange={e => { const val = parseFloat(e.target.value); field.onChange(isNaN(val) ? undefined : val); }}/>
                       </FormControl> 
                     <FormMessage /> </FormItem> )} />}
 
                     <FormField control={control} name="estimatedOvernights" render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-2"><BedDouble className="h-4 w-4 text-primary"/> {getServiceLabel(SERVICE_KEY_OVERNIGHT_FEES, "Estimated Overnights", "Night")}</FormLabel> 
                       <FormControl>
-                        <Input type="number" placeholder="e.g., 0" {...field} value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : field.value} onChange={e => { const val = parseInt(e.target.value, 10); field.onChange(isNaN(val) ? undefined : val); }} min="0"/>
+                        <Input type="number" placeholder="e.g., 0" {...field} value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : String(field.value)} onChange={e => { const val = parseInt(e.target.value, 10); field.onChange(isNaN(val) ? undefined : val); }} min="0"/>
                       </FormControl> 
                     <FormDescription>Number of overnight stays for crew/aircraft.</FormDescription> <FormMessage /> </FormItem> )} />
                     {Number(currentEstimatedOvernights || 0) > 0 && <FormField control={control} name="sellPriceOvernight" render={({ field }) => (<FormItem className="pl-8"> <FormLabel>Overnight Fee Sell Price (per Night)</FormLabel> 
                       <FormControl>
-                        <Input type="number" placeholder={`Default: $${(fetchedCompanyProfile?.serviceFeeRates?.[SERVICE_KEY_OVERNIGHT_FEES]?.sell || DEFAULT_SERVICE_RATES[SERVICE_KEY_OVERNIGHT_FEES]?.sell || 0).toLocaleString()}`} {...field} value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : field.value} onChange={e => { const val = parseFloat(e.target.value); field.onChange(isNaN(val) ? undefined : val); }}/>
+                        <Input type="number" placeholder={`Default: $${(fetchedCompanyProfile?.serviceFeeRates?.[SERVICE_KEY_OVERNIGHT_FEES]?.sell || DEFAULT_SERVICE_RATES[SERVICE_KEY_OVERNIGHT_FEES]?.sell || 0).toLocaleString()}`} {...field} value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : String(field.value)} onChange={e => { const val = parseFloat(e.target.value); field.onChange(isNaN(val) ? undefined : val); }}/>
                       </FormControl> 
                     <FormMessage /> </FormItem> )} />}
                 </div>
             </section>
 
             <Separator />
-            <FormField control={control} name="notes" render={({ field }) => ( <FormItem> <FormLabel>General Quote Notes (Optional)</FormLabel> <FormControl><Textarea placeholder="e.g., Specific client preferences, discount applied..." {...field} rows={4} /></FormControl> <FormMessage /> </FormItem> )} />
+            <FormField control={control} name="notes" render={({ field }) => ( <FormItem> <FormLabel>General Quote Notes (Optional)</FormLabel> <FormControl><Textarea placeholder="e.g., Specific client preferences, discount applied..." {...field} value={field.value || ''} rows={4} /></FormControl> <FormMessage /> </FormItem> )} />
 
             <Separator className="my-6" />
             <CostsSummaryDisplay lineItems={calculatedLineItems} />
 
           </CardContent>
-          <CardFooter className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={handlePreviewQuote}> <Eye className="mr-2 h-4 w-4" /> Preview Quote </Button>
-            <Button type="submit" disabled={isGeneratingQuote}> {isGeneratingQuote ? ( <Loader2 className="mr-2 h-4 w-4 animate-spin" /> ) : ( <Send className="mr-2 h-4 w-4" /> )} Save & Send Quote </Button>
+          <CardFooter className="flex flex-col sm:flex-row justify-end gap-2 pt-6">
+            <Button type="button" variant="outline" onClick={handlePreviewQuote} disabled={isSaving}> <Eye className="mr-2 h-4 w-4" /> Preview Quote </Button>
+            <Button type="button" variant="secondary" onClick={() => handleSave("Draft")} disabled={isSaving}> 
+              {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <SaveIcon className="mr-2 h-4 w-4" />}
+              Save as Draft 
+            </Button>
+            <Button type="button" onClick={() => handleSave("Sent")} disabled={isSaving}> 
+              {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+              Save & Send Quote
+            </Button>
           </CardFooter>
-        </form>
+        {/* </form> */} {/* Form tag removed as buttons handle submission type */}
       </Form>
     </Card>
   );
