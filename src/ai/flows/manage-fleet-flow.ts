@@ -32,6 +32,7 @@ const FleetAircraftSchema = z.object({
   engineDetails: z.array(EngineDetailSchema).optional().describe("Details for each engine."),
   primaryContactName: z.string().optional().describe("Primary contact person for the aircraft."),
   primaryContactPhone: z.string().optional().describe("Primary contact phone for the aircraft."),
+  primaryContactEmail: z.string().email("Invalid email format.").optional().describe("Primary contact email for the aircraft."),
 });
 export type FleetAircraft = z.infer<typeof FleetAircraftSchema>;
 
@@ -117,6 +118,7 @@ const saveFleetAircraftFlow = ai.defineFlow(
         engineDetails: input.engineDetails ?? [],
         primaryContactName: input.primaryContactName ?? null,
         primaryContactPhone: input.primaryContactPhone ?? null,
+        primaryContactEmail: input.primaryContactEmail ?? null,
       };
       await setDoc(aircraftDocRef, dataToSet, { merge: true }); // Use merge:true to handle updates
       console.log('Saved/Updated aircraft in Firestore:', input.id);

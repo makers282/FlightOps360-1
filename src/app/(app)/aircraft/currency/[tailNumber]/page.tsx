@@ -24,7 +24,7 @@ import { z } from 'zod';
 import { AddMaintenanceTaskModal, type MaintenanceTaskFormData, defaultMaintenanceTaskFormValues } from './components/add-maintenance-task-modal';
 import { Badge } from '@/components/ui/badge';
 
-import { Wrench, PlusCircle, ArrowLeft, PlaneIcon, Edit, Loader2, InfoIcon, Phone, UserCircle, MapPin, Save, XCircle, Edit2, Edit3, AlertTriangle, CheckCircle2, XCircle as XCircleIcon, Search, ArrowUpDown, ArrowDown, ArrowUp, Printer, Filter } from 'lucide-react';
+import { Wrench, PlusCircle, ArrowLeft, PlaneIcon, Edit, Loader2, InfoIcon, Phone, UserCircle, MapPin, Save, XCircle, Edit2, Edit3, AlertTriangle, CheckCircle2, XCircle as XCircleIcon, Search, ArrowUpDown, ArrowDown, ArrowUp, Printer, Filter, Mail } from 'lucide-react';
 import { format, parse, addDays, isValid, addMonths, addYears, endOfMonth, parseISO, differenceInCalendarDays } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { fetchFleetAircraft, saveFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
@@ -47,6 +47,7 @@ const aircraftInfoEditSchema = z.object({
   baseLocation: z.string().optional(),
   primaryContactName: z.string().optional(),
   primaryContactPhone: z.string().optional(),
+  primaryContactEmail: z.string().email("Invalid email format.").optional(),
 });
 type AircraftInfoEditFormData = z.infer<typeof aircraftInfoEditSchema>;
 
@@ -245,6 +246,7 @@ export default function AircraftMaintenanceDetailPage() {
             baseLocation: foundAircraft.baseLocation || '',
             primaryContactName: foundAircraft.primaryContactName || '',
             primaryContactPhone: foundAircraft.primaryContactPhone || '',
+            primaryContactEmail: foundAircraft.primaryContactEmail || '',
           });
           await loadAndInitializeComponentTimes(foundAircraft); 
           await loadMaintenanceTasks(foundAircraft.id);
@@ -563,6 +565,7 @@ export default function AircraftMaintenanceDetailPage() {
 
     const aircraftContactName = aircraft.primaryContactName || "N/A";
     const aircraftContactPhone = aircraft.primaryContactPhone || "N/A";
+    const aircraftContactEmail = aircraft.primaryContactEmail || "N/A";
 
     const companyLogoSvg = `
       <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-plane">
@@ -662,6 +665,7 @@ export default function AircraftMaintenanceDetailPage() {
             <h2>Aircraft Contact</h2>
             <p><strong>Name:</strong> ${aircraftContactName}</p>
             <p><strong>Phone:</strong> ${aircraftContactPhone}</p>
+            <p><strong>Email:</strong> ${aircraftContactEmail}</p>
             <p><strong>Base:</strong> ${aircraft.baseLocation || 'N/A'}</p>
           </div>
         </div>
@@ -899,7 +903,7 @@ export default function AircraftMaintenanceDetailPage() {
                 </Button>
               ) : (
                 <div className="flex gap-2">
-                  <Button variant="ghost" size="icon" onClick={() => { setIsEditingAircraftInfo(false); aircraftInfoForm.reset({ model: currentAircraft.model, serialNumber: currentAircraft.serialNumber || '', baseLocation: currentAircraft.baseLocation || '', primaryContactName: currentAircraft.primaryContactName || '', primaryContactPhone: currentAircraft.primaryContactPhone || '' }); }} disabled={isSavingAircraftInfo}>
+                  <Button variant="ghost" size="icon" onClick={() => { setIsEditingAircraftInfo(false); aircraftInfoForm.reset({ model: currentAircraft.model, serialNumber: currentAircraft.serialNumber || '', baseLocation: currentAircraft.baseLocation || '', primaryContactName: currentAircraft.primaryContactName || '', primaryContactPhone: currentAircraft.primaryContactPhone || '', primaryContactEmail: currentAircraft.primaryContactEmail || '' }); }} disabled={isSavingAircraftInfo}>
                     <XCircle className="h-4 w-4" /><span className="sr-only">Cancel</span>
                   </Button>
                   <Button size="icon" onClick={aircraftInfoForm.handleSubmit(onSubmitAircraftInfo)} disabled={isSavingAircraftInfo}>
@@ -917,8 +921,9 @@ export default function AircraftMaintenanceDetailPage() {
                   <FormField control={aircraftInfoForm.control} name="model" render={({ field }) => (<FormItem><FormLabel>Model</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
                   <FormField control={aircraftInfoForm.control} name="serialNumber" render={({ field }) => (<FormItem><FormLabel>Serial Number</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
                   <FormField control={aircraftInfoForm.control} name="baseLocation" render={({ field }) => (<FormItem><FormLabel>Base Location</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
-                  <FormField control={aircraftInfoForm.control} name="primaryContactName" render={({ field }) => (<FormItem><FormLabel>Primary Contact</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
+                  <FormField control={aircraftInfoForm.control} name="primaryContactName" render={({ field }) => (<FormItem><FormLabel>Primary Contact Name</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
                   <FormField control={aircraftInfoForm.control} name="primaryContactPhone" render={({ field }) => (<FormItem><FormLabel>Contact Phone</FormLabel><FormControl><Input type="tel" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                  <FormField control={aircraftInfoForm.control} name="primaryContactEmail" render={({ field }) => (<FormItem><FormLabel>Contact Email</FormLabel><FormControl><Input type="email" {...field} /></FormControl><FormMessage /></FormItem>)} />
                 </form>
               </Form>
             ) : (
@@ -926,7 +931,9 @@ export default function AircraftMaintenanceDetailPage() {
                 <p><strong className="text-muted-foreground">Model:</strong> {currentAircraft.model}</p>
                 <p><strong className="text-muted-foreground">Serial #:</strong> {currentAircraft.serialNumber || 'N/A'}</p>
                 <p><strong className="text-muted-foreground">Base:</strong> {currentAircraft.baseLocation || 'N/A'}</p>
-                {currentAircraft.primaryContactName && <p><strong className="text-muted-foreground">Contact:</strong> {currentAircraft.primaryContactName} {currentAircraft.primaryContactPhone && `(${currentAircraft.primaryContactPhone})`}</p>}
+                <p><strong className="text-muted-foreground">Contact Name:</strong> {currentAircraft.primaryContactName || 'N/A'}</p>
+                <p><strong className="text-muted-foreground">Contact Phone:</strong> {currentAircraft.primaryContactPhone || 'N/A'}</p>
+                <p><strong className="text-muted-foreground">Contact Email:</strong> {currentAircraft.primaryContactEmail || 'N/A'}</p>
                 {currentAircraft.engineDetails && currentAircraft.engineDetails.length > 0 && (
                   <div className="pt-2">
                     <h4 className="font-semibold text-muted-foreground">Engine Details:</h4>
@@ -1102,4 +1109,3 @@ export default function AircraftMaintenanceDetailPage() {
     </div>
   );
 }
-

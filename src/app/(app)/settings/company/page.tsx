@@ -10,12 +10,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Building2, Plane, PlusCircle, Trash2, Save, XCircle, Loader2, Edit, CheckSquare, Square, Info } from 'lucide-react';
+import { Building2, Plane, PlusCircle, Trash2, Save, XCircle, Loader2, Edit, CheckSquare, Square, Info, Mail } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { fetchFleetAircraft, saveFleetAircraft, deleteFleetAircraft, type FleetAircraft, type SaveFleetAircraftInput } from '@/ai/flows/manage-fleet-flow';
-import { fetchCompanyProfile, saveCompanyProfile, type CompanyProfile } from '@/ai/flows/manage-company-profile-flow'; // Import new flows
+import { fetchCompanyProfile, saveCompanyProfile, type CompanyProfile } from '@/ai/flows/manage-company-profile-flow'; 
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Skeleton } from '@/components/ui/skeleton'; // Added Skeleton import
+import { Skeleton } from '@/components/ui/skeleton'; 
 
 // Define local type including fields not directly editable via simple form inputs
 // but that might be part of the FleetAircraft type from the flow
@@ -42,7 +42,7 @@ export default function CompanySettingsPage() {
   const [newBaseLocation, setNewBaseLocation] = useState('');
   const [newPrimaryContactName, setNewPrimaryContactName] = useState('');
   const [newPrimaryContactPhone, setNewPrimaryContactPhone] = useState('');
-  // Engine details are not directly editable in this form for simplicity
+  const [newPrimaryContactEmail, setNewPrimaryContactEmail] = useState(''); // New state for email
 
   // State for company information
   const [companyName, setCompanyName] = useState('');
@@ -93,7 +93,7 @@ export default function CompanySettingsPage() {
   useEffect(() => {
     loadFleetData();
     loadCompanyProfileData();
-  }, [toast]); 
+  }, []); 
 
   const resetAircraftFormFields = () => {
     setNewTailNumber('');
@@ -104,6 +104,7 @@ export default function CompanySettingsPage() {
     setNewBaseLocation('');
     setNewPrimaryContactName('');
     setNewPrimaryContactPhone('');
+    setNewPrimaryContactEmail(''); // Reset email field
   };
 
   const handleEditAircraftClick = (aircraft: CompanyPageFleetAircraft) => {
@@ -116,6 +117,7 @@ export default function CompanySettingsPage() {
     setNewBaseLocation(aircraft.baseLocation || '');
     setNewPrimaryContactName(aircraft.primaryContactName || '');
     setNewPrimaryContactPhone(aircraft.primaryContactPhone || '');
+    setNewPrimaryContactEmail(aircraft.primaryContactEmail || ''); // Set email field for editing
     setShowAddAircraftForm(true);
   };
   
@@ -123,6 +125,10 @@ export default function CompanySettingsPage() {
     if (!newTailNumber || !newModel) {
       toast({ title: "Missing Fields", description: "Please fill in Tail Number and Model for the aircraft.", variant: "destructive" });
       return;
+    }
+    if (newPrimaryContactEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newPrimaryContactEmail)) {
+        toast({ title: "Invalid Email", description: "Please enter a valid email address for the aircraft contact.", variant: "destructive" });
+        return;
     }
 
     const parsedTrackedComponentNames = newTrackedComponentNamesStr
@@ -140,6 +146,7 @@ export default function CompanySettingsPage() {
       baseLocation: newBaseLocation.trim() || undefined,
       primaryContactName: newPrimaryContactName.trim() || undefined,
       primaryContactPhone: newPrimaryContactPhone.trim() || undefined,
+      primaryContactEmail: newPrimaryContactEmail.trim() || undefined, // Add email to data
       engineDetails: editingAircraftId ? fleet.find(ac => ac.id === editingAircraftId)?.engineDetails : undefined,
     };
 
@@ -181,7 +188,7 @@ export default function CompanySettingsPage() {
   const handleSaveCompanyInfo = () => {
     startSavingCompanyInfoTransition(async () => {
       const profileData: CompanyProfile = {
-        id: 'main', // Fixed ID for the company profile document
+        id: 'main', 
         companyName: companyName.trim(),
         companyAddress: companyAddress.trim(),
         companyEmail: companyEmail.trim(),
@@ -296,14 +303,18 @@ export default function CompanySettingsPage() {
                       <Input id="newBaseLocation" value={newBaseLocation} onChange={(e) => setNewBaseLocation(e.target.value)} placeholder="e.g., KTEB" />
                     </div>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div>
-                      <Label htmlFor="newPrimaryContactName">Primary Contact Name</Label>
-                      <Input id="newPrimaryContactName" value={newPrimaryContactName} onChange={(e) => setNewPrimaryContactName(e.target.value)} placeholder="e.g., John Doe" />
-                    </div>
+                  <div>
+                    <Label htmlFor="newPrimaryContactName">Primary Contact Name</Label>
+                    <Input id="newPrimaryContactName" value={newPrimaryContactName} onChange={(e) => setNewPrimaryContactName(e.target.value)} placeholder="e.g., John Doe" />
+                  </div>
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
                       <Label htmlFor="newPrimaryContactPhone">Primary Contact Phone</Label>
                       <Input id="newPrimaryContactPhone" type="tel" value={newPrimaryContactPhone} onChange={(e) => setNewPrimaryContactPhone(e.target.value)} placeholder="e.g., (555) 123-4567" />
+                    </div>
+                    <div>
+                      <Label htmlFor="newPrimaryContactEmail">Primary Contact Email</Label>
+                      <Input id="newPrimaryContactEmail" type="email" value={newPrimaryContactEmail} onChange={(e) => setNewPrimaryContactEmail(e.target.value)} placeholder="e.g., contact@aircraft.com" />
                     </div>
                   </div>
                   <div className="flex items-center space-x-2 pt-2">
