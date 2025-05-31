@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useEffect, useTransition } from 'react';
+import React, { useState, useEffect, useTransition, useCallback } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { z } from 'zod';
@@ -15,9 +15,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { PlaneTakeoff as PerformanceIcon, Save, Copy, Wand2, Loader2, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { suggestAircraftPerformance, type SuggestAircraftPerformanceInput, type AircraftPerformanceOutput } from '@/ai/flows/suggest-aircraft-performance-flow';
-import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow'; // Use new fleet flow
+import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
+import { 
+  fetchAircraftPerformance, 
+  saveAircraftPerformance,
+  type AircraftPerformanceData
+} from '@/ai/flows/manage-aircraft-performance-flow';
+import type { SaveAircraftPerformanceInput } from '@/ai/schemas/aircraft-performance-schemas';
 
-const aircraftPerformanceSchema = z.object({
+
+// Schema for form validation, aligned with AircraftPerformanceData
+const aircraftPerformanceFormValidationSchema = z.object({
   takeoffSpeed: z.coerce.number().min(0).optional(),
   landingSpeed: z.coerce.number().min(0).optional(),
   climbSpeed: z.coerce.number().min(0).optional(),
@@ -32,7 +40,8 @@ const aircraftPerformanceSchema = z.object({
   maxAllowableTakeoffWeight: z.coerce.number().min(0).optional(),
 });
 
-type AircraftPerformanceFormData = z.infer<typeof aircraftPerformanceSchema>;
+// Type for form data matches AircraftPerformanceData
+type AircraftPerformanceFormData = AircraftPerformanceData;
 
 interface FleetAircraftSelectOption {
   id: string;    // aircraft.id from fleet
@@ -42,27 +51,18 @@ interface FleetAircraftSelectOption {
 
 const fuelTypes = ["Jet Fuel", "Avgas", "Other"];
 
-// Placeholder for initial data for each aircraft, keyed by aircraft.id from fleet
-const initialPerformanceData: Record<string, Partial<AircraftPerformanceFormData>> = {
-  'N123AB': { takeoffSpeed: 100, cruiseSpeed: 415, cruiseAltitude: 45000, fuelBurn: 150, maxRange: 1800, maxAllowableTakeoffWeight: 13870, fuelType: "Jet Fuel" },
-  'N456CD': { takeoffSpeed: 130, cruiseSpeed: 488, cruiseAltitude: 51000, fuelBurn: 450, maxRange: 6000, maxAllowableTakeoffWeight: 99500, fuelType: "Jet Fuel" },
-  'N630MW': { takeoffSpeed: 101, landingSpeed: 104, climbSpeed: 165, climbRate: 1750, cruiseSpeed: 255, cruiseAltitude: 25000, descentSpeed: 255, descentRate: 1500, fuelType: "Jet Fuel", fuelBurn: 81.0, maxRange: 1145, maxAllowableTakeoffWeight: 9474 },
-  'N789EF': { takeoffSpeed: 140, cruiseSpeed: 516, cruiseAltitude: 51000, fuelBurn: 500, maxRange: 7500, maxAllowableTakeoffWeight: 103600, fuelType: "Jet Fuel" },
-};
-
-
 export function AircraftPerformanceForm() {
   const [selectedAircraftId, setSelectedAircraftId] = useState<string | undefined>(undefined);
-  const [performanceDataStore, setPerformanceDataStore] = useState(initialPerformanceData);
   const { toast } = useToast();
   const [isSaving, startSaveTransition] = useTransition();
   const [isSuggestingWithAi, startAiSuggestionTransition] = useTransition();
+  const [isFetchingPerformance, startFetchingPerformanceTransition] = useTransition();
 
   const [fleetSelectOptions, setFleetSelectOptions] = useState<FleetAircraftSelectOption[]>([]);
   const [isLoadingAircraft, setIsLoadingAircraft] = useState(true);
 
   const form = useForm<AircraftPerformanceFormData>({
-    resolver: zodResolver(aircraftPerformanceSchema),
+    resolver: zodResolver(aircraftPerformanceFormValidationSchema),
     defaultValues: {}, 
   });
 
@@ -78,7 +78,7 @@ export function AircraftPerformanceForm() {
         }));
         setFleetSelectOptions(options);
         if (options.length > 0 && !selectedAircraftId) {
-          setSelectedAircraftId(options[0].id); 
+          // Don't auto-select here, let user choose or load from URL param in future
         }
       } catch (error) {
         console.error("Failed to fetch aircraft options:", error);
@@ -88,29 +88,55 @@ export function AircraftPerformanceForm() {
       }
     };
     loadFleet();
-  }, [toast, selectedAircraftId]); 
+  }, [toast]); 
+
+  const loadPerformanceDataForAircraft = useCallback(async (aircraftId: string) => {
+    startFetchingPerformanceTransition(async () => {
+      form.reset({}); // Clear form while loading
+      try {
+        const data = await fetchAircraftPerformance({ aircraftId });
+        if (data) {
+          form.reset(data);
+          toast({ title: "Performance Data Loaded", description: `Showing data for ${fleetSelectOptions.find(ac => ac.id === aircraftId)?.label}.`, variant: "default" });
+        } else {
+          form.reset({}); // Clear form if no data found, ready for AI or manual input
+          toast({ title: "No Saved Data", description: `No performance data found for this aircraft. You can enter new data or use AI suggestion.`, variant: "default" });
+        }
+      } catch (error) {
+        console.error("Failed to fetch performance data:", error);
+        toast({ title: "Error Loading Data", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
+        form.reset({});
+      }
+    });
+  }, [form, toast, fleetSelectOptions, startFetchingPerformanceTransition]);
 
   useEffect(() => {
     if (selectedAircraftId) {
-      form.reset(performanceDataStore[selectedAircraftId] || {});
+      loadPerformanceDataForAircraft(selectedAircraftId);
     } else {
-      form.reset({}); 
+      form.reset({}); // Clear form if no aircraft selected
     }
-  }, [selectedAircraftId, performanceDataStore, form]);
+  }, [selectedAircraftId, loadPerformanceDataForAircraft, form]);
 
-  const onSubmit: SubmitHandler<AircraftPerformanceFormData> = (data) => {
-    startSaveTransition(() => {
-      if (!selectedAircraftId) {
-        toast({ title: "Error", description: "Please select an aircraft.", variant: "destructive" });
-        return;
+
+  const onSubmit: SubmitHandler<AircraftPerformanceFormData> = (formData) => {
+    if (!selectedAircraftId) {
+      toast({ title: "Error", description: "Please select an aircraft to save settings for.", variant: "destructive" });
+      return;
+    }
+    startSaveTransition(async () => {
+      try {
+        const inputToSave: SaveAircraftPerformanceInput = {
+          aircraftId: selectedAircraftId,
+          performanceData: formData, // formData already matches AircraftPerformanceData
+        };
+        await saveAircraftPerformance(inputToSave);
+        const selectedAircraftLabel = fleetSelectOptions.find(ac => ac.id === selectedAircraftId)?.label || selectedAircraftId;
+        toast({ title: "Success", description: `Performance settings for ${selectedAircraftLabel} saved to Firestore.` });
+      } catch (error) {
+        console.error("Failed to save performance data:", error);
+        toast({ title: "Error Saving Data", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
       }
-      setPerformanceDataStore(prev => ({
-        ...prev,
-        [selectedAircraftId]: data,
-      }));
-      const selectedAircraftLabel = fleetSelectOptions.find(ac => ac.id === selectedAircraftId)?.label || selectedAircraftId;
-      toast({ title: "Success", description: `Performance settings for ${selectedAircraftLabel} saved (client-side).` });
-      console.log("Saved data for", selectedAircraftId, data);
     });
   };
 
@@ -127,18 +153,20 @@ export function AircraftPerformanceForm() {
 
     startAiSuggestionTransition(async () => {
       try {
-        const aiInput: SuggestAircraftPerformanceInput = { aircraftName: selectedAircraftObject.model }; // Use the model for AI
+        const aiInput: SuggestAircraftPerformanceInput = { aircraftName: selectedAircraftObject.model };
         const suggestedData: AircraftPerformanceOutput = await suggestAircraftPerformance(aiInput);
         
+        // Prepare data for form reset, ensuring numbers are numbers
         const validatedData: Partial<AircraftPerformanceFormData> = {};
         for (const key in suggestedData) {
             const typedKey = key as keyof AircraftPerformanceOutput;
             if (suggestedData[typedKey] !== null && suggestedData[typedKey] !== undefined) {
-                if (aircraftPerformanceSchema.shape[typedKey as keyof typeof aircraftPerformanceSchema.shape]) {
-                    if (typeof aircraftPerformanceSchema.shape[typedKey as keyof typeof aircraftPerformanceSchema.shape]._def.typeName === 'ZodNumber') {
+                if (aircraftPerformanceFormValidationSchema.shape[typedKey as keyof typeof aircraftPerformanceFormValidationSchema.shape]) {
+                    const fieldSchema = aircraftPerformanceFormValidationSchema.shape[typedKey as keyof typeof aircraftPerformanceFormValidationSchema.shape];
+                    if (fieldSchema instanceof z.ZodNumber || (fieldSchema instanceof z.ZodOptional && fieldSchema._def.innerType instanceof z.ZodNumber)) {
                         (validatedData as any)[typedKey] = Number(suggestedData[typedKey]);
                     } else {
-                        (validatedData as any)[typedKey] = suggestedData[typedKey];
+                         (validatedData as any)[typedKey] = suggestedData[typedKey];
                     }
                 }
             }
@@ -167,10 +195,11 @@ export function AircraftPerformanceForm() {
                 type={type} 
                 placeholder={placeholder || "0"} 
                 {...field} 
-                value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : field.value}
+                value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : String(field.value)}
                 onChange={e => {
-                  const val = parseFloat(e.target.value);
-                  field.onChange(isNaN(val) ? undefined : val);
+                  const valStr = e.target.value;
+                  if (valStr === '') field.onChange(undefined);
+                  else { const num = parseFloat(valStr); field.onChange(isNaN(num) ? undefined : num); }
                 }}
               />
             </FormControl>
@@ -192,7 +221,7 @@ export function AircraftPerformanceForm() {
                 <CardTitle>Select Aircraft</CardTitle>
                 <CardDescription>Choose an aircraft to view or edit its performance settings.</CardDescription>
               </div>
-              <Button type="button" variant="outline" onClick={handleSetupWithAi} disabled={!selectedAircraftId || isSuggestingWithAi || isSaving || isLoadingAircraft}>
+              <Button type="button" variant="outline" onClick={handleSetupWithAi} disabled={!selectedAircraftId || isSuggestingWithAi || isSaving || isLoadingAircraft || isFetchingPerformance}>
                 {isSuggestingWithAi ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}
                 Setup with AI
               </Button>
@@ -202,7 +231,7 @@ export function AircraftPerformanceForm() {
             <Select 
               onValueChange={setSelectedAircraftId} 
               value={selectedAircraftId || ""} 
-              disabled={isLoadingAircraft}
+              disabled={isLoadingAircraft || isFetchingPerformance}
             >
               <SelectTrigger className="w-full sm:w-[350px]">
                 <SelectValue placeholder={isLoadingAircraft ? "Loading aircraft..." : "Select an aircraft"} />
@@ -217,7 +246,7 @@ export function AircraftPerformanceForm() {
               </SelectContent>
             </Select>
             <div className="flex items-center space-x-2">
-              <Checkbox id="copy-type" disabled /> {/* Placeholder */}
+              <Checkbox id="copy-type" disabled />
               <label
                 htmlFor="copy-type"
                 className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
@@ -228,7 +257,23 @@ export function AircraftPerformanceForm() {
           </CardContent>
         </Card>
 
-        {selectedAircraftId && (
+        {isFetchingPerformance && selectedAircraftId && (
+             <Card className="shadow-md">
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                        Loading Performance Data...
+                    </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <Skeleton className="h-8 w-full" />
+                    <Skeleton className="h-8 w-3/4" />
+                    <Skeleton className="h-8 w-full" />
+                </CardContent>
+             </Card>
+        )}
+
+        {selectedAircraftId && !isFetchingPerformance && (
           <Card className="shadow-md">
             <CardHeader>
               <div className="flex items-center gap-2">
@@ -276,14 +321,14 @@ export function AircraftPerformanceForm() {
               </div>
             </CardContent>
             <CardFooter>
-              <Button type="submit" disabled={isSaving || isSuggestingWithAi || isLoadingAircraft}>
+              <Button type="submit" disabled={isSaving || isSuggestingWithAi || isLoadingAircraft || isFetchingPerformance}>
                 {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                 Save Performance Settings
               </Button>
             </CardFooter>
           </Card>
         )}
-        {!selectedAircraftId && !isLoadingAircraft && (
+        {!selectedAircraftId && !isLoadingAircraft && !isFetchingPerformance && (
             <div className="text-center py-10 text-muted-foreground">
                 Please select an aircraft to view or edit its performance settings.
             </div>
@@ -297,3 +342,4 @@ export function AircraftPerformanceForm() {
     </Form>
   );
 }
+
