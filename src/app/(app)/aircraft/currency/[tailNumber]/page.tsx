@@ -124,15 +124,15 @@ export default function AircraftMaintenanceDetailPage() {
       setOriginalComponentTimes([]);
       return;
     }
-    const aircraftKeyInMock = aircraft.id || aircraft.tailNumber;
+    const aircraftKeyInMock = aircraft.id || aircraft.tailNumber; // Use id first, fallback to tailNumber
     const componentValuesForAircraft = MOCK_COMPONENT_VALUES_DATA[aircraftKeyInMock] || {};
     const trackedComponents = aircraft.trackedComponentNames || ['Airframe', 'Engine 1'];
 
     const initialTimes = trackedComponents.map(name => {
-      const trimmedName = name.trim();
+      const trimmedName = name.trim(); // Trim here
       const mockDataForComponent = componentValuesForAircraft[trimmedName] ||
                                    Object.entries(componentValuesForAircraft)
-                                         .find(([key, _]) => key.trim() === trimmedName)?.[1];
+                                         .find(([key, _]) => key.trim() === trimmedName)?.[1]; // Trim for lookup too
       return {
         componentName: trimmedName,
         currentTime: mockDataForComponent?.time ?? 0,
@@ -322,42 +322,26 @@ export default function AircraftMaintenanceDetailPage() {
       const daysRemaining = differenceInCalendarDays(dueDate, now);
       return { text: `${daysRemaining} days`, numeric: daysRemaining, unit: 'days', isOverdue: daysRemaining < 0 };
     }
-
-    let currentRelevantTime: number | undefined = undefined;
-    let currentRelevantCycles: number | undefined = undefined;
-    let componentTimeFound = false;
-
+    
     const componentNameToUse = (item.associatedComponent && item.associatedComponent.trim() !== "") 
       ? item.associatedComponent.trim() 
       : "Airframe";
       
     const currentTimesForComponent = editableComponentTimes.find(c => c.componentName === componentNameToUse);
 
-    if (currentTimesForComponent) {
-      currentRelevantTime = currentTimesForComponent.currentTime;
-      currentRelevantCycles = currentTimesForComponent.currentCycles;
-      componentTimeFound = true;
-    }
-
     if (item.dueAtHours != null) {
-      if (!componentTimeFound) {
+      if (!currentTimesForComponent || currentTimesForComponent.currentTime === undefined) {
         return { text: `N/A (No time for ${componentNameToUse})`, numeric: Infinity, unit: 'hrs', isOverdue: false };
       }
-      if (currentRelevantTime === undefined) { // Should not happen if componentTimeFound is true, but as a safe guard
-         return { text: `N/A (Missing time for ${componentNameToUse})`, numeric: Infinity, unit: 'hrs', isOverdue: false };
-      }
-      const hoursRemaining = parseFloat((item.dueAtHours - currentRelevantTime).toFixed(1));
+      const hoursRemaining = parseFloat((item.dueAtHours - currentTimesForComponent.currentTime).toFixed(1));
       return { text: `${hoursRemaining} hrs`, numeric: hoursRemaining, unit: 'hrs', isOverdue: hoursRemaining < 0 };
     }
 
     if (item.dueAtCycles != null) {
-      if (!componentTimeFound) {
+      if (!currentTimesForComponent || currentTimesForComponent.currentCycles === undefined) {
         return { text: `N/A (No cycles for ${componentNameToUse})`, numeric: Infinity, unit: 'cycles', isOverdue: false };
       }
-       if (currentRelevantCycles === undefined) {
-         return { text: `N/A (Missing cycles for ${componentNameToUse})`, numeric: Infinity, unit: 'cycles', isOverdue: false };
-      }
-      const cyclesRemaining = item.dueAtCycles - currentRelevantCycles;
+      const cyclesRemaining = item.dueAtCycles - currentTimesForComponent.currentCycles;
       return { text: `${cyclesRemaining} cycles`, numeric: cyclesRemaining, unit: 'cycles', isOverdue: cyclesRemaining < 0 };
     }
     
@@ -366,8 +350,8 @@ export default function AircraftMaintenanceDetailPage() {
 
 
   const getReleaseStatus = (toGo: { text: string; numeric: number; unit: 'days' | 'hrs' | 'cycles' | 'N/A'; isOverdue: boolean }): { icon: JSX.Element; colorClass: string; label: string } => {
-    if (toGo.text.startsWith('N/A (No time for') || toGo.text.startsWith('N/A (No cycles for') || toGo.text.startsWith('N/A (Missing time for') || toGo.text.startsWith('N/A (Missing cycles for') || toGo.text === 'N/A (Comp. Data)') {
-      return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-orange-500', label: 'Missing Comp. Data' };
+    if (toGo.text.startsWith('N/A (No time for') || toGo.text.startsWith('N/A (No cycles for')) {
+      return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-orange-500', label: 'Missing Comp. Time' };
     }
     if (toGo.isOverdue) return { icon: <XCircleIcon className="h-5 w-5" />, colorClass: 'text-red-500', label: 'Overdue' };
     if (toGo.unit === 'days' && toGo.numeric < 30) return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-yellow-500', label: 'Due Soon' };
@@ -390,28 +374,30 @@ export default function AircraftMaintenanceDetailPage() {
 
   return (
     <>
-      {/* <PageHeader
-        title={`Maintenance Details for ${currentAircraft.tailNumber}`}
-        description={`Tracked items & component status for ${currentAircraft.model} (${currentAircraft.tailNumber}).`}
-        icon={Wrench}
-        actions={
-          <div className="flex flex-col sm:flex-row gap-2">
-            <Button asChild variant="outline" className="w-full sm:w-auto"><Link href="/aircraft/currency"><ArrowLeft className="mr-2 h-4 w-4" /> Back to Overview</Link></Button>
-            <AddMaintenanceTaskModal
-              aircraft={currentAircraft}
-              onSave={handleSaveTask}
-              onDelete={handleDeleteTask}
-              isOpen={isTaskModalOpen}
-              setIsOpen={setIsTaskModalOpen}
-              initialData={initialModalFormData}
-              isEditing={!!editingTaskOriginalId}
-              currentTaskId={editingTaskOriginalId}
-            >
-              <Button className="w-full sm:w-auto"><PlusCircle className="mr-2 h-4 w-4" /> Add New Task</Button>
-            </AddMaintenanceTaskModal>
-          </div>
-        }
-      /> */}
+      {false && ( /* Conditionally render PageHeader with 'false &&' to remove it for debugging */
+        <PageHeader
+          title={`Maintenance Details for ${currentAircraft.tailNumber}`}
+          description={`Tracked items & component status for ${currentAircraft.model} (${currentAircraft.tailNumber}).`}
+          icon={Wrench}
+          actions={
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Button asChild variant="outline" className="w-full sm:w-auto"><Link href="/aircraft/currency"><ArrowLeft className="mr-2 h-4 w-4" /> Back to Overview</Link></Button>
+              <AddMaintenanceTaskModal
+                aircraft={currentAircraft}
+                onSave={handleSaveTask}
+                onDelete={handleDeleteTask}
+                isOpen={isTaskModalOpen}
+                setIsOpen={setIsTaskModalOpen}
+                initialData={initialModalFormData}
+                isEditing={!!editingTaskOriginalId}
+                currentTaskId={editingTaskOriginalId}
+              >
+                <Button className="w-full sm:w-auto"><PlusCircle className="mr-2 h-4 w-4" /> Add New Task</Button>
+              </AddMaintenanceTaskModal>
+            </div>
+          }
+        />
+      )}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         <Card className="shadow-lg lg:col-span-2">
            <CardHeader className="flex flex-row items-start justify-between">
@@ -444,7 +430,7 @@ export default function AircraftMaintenanceDetailPage() {
                   </div>
                 )}
               </div>
-            ) : (<p className="text-muted-foreground">No specific components configured.</p>)}
+            ) : (<p className="text-muted-foreground">No specific components configured for tracking actual times/cycles. Ensure components are added in Company Settings -> Fleet and mock data is present.</p>)}
           </CardContent>
         </Card>
 
@@ -529,4 +515,3 @@ export default function AircraftMaintenanceDetailPage() {
     </>
   );
 }
-
