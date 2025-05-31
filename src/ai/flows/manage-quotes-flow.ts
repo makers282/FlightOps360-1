@@ -4,21 +4,21 @@
  * @fileOverview Genkit flows for managing quotes using Firestore.
  *
  * - saveQuote - Saves (adds or updates) a quote.
- * - fetchQuotes - Fetches all quotes (future use).
+ * - fetchQuotes - Fetches all quotes.
  * - fetchQuoteById - Fetches a single quote by its ID (future use).
  * - deleteQuote - Deletes a quote (future use).
  */
 
 import { ai } from '@/ai/genkit';
 import { db } from '@/lib/firebase';
-import { collection, doc, setDoc, getDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
-import { z } from 'zod'; // Added Zod import here
+import { collection, doc, setDoc, getDoc, getDocs, serverTimestamp, Timestamp, query, orderBy } from 'firebase/firestore';
+import { z } from 'zod';
 import type { Quote, SaveQuoteInput } from '@/ai/schemas/quote-schemas';
 import { 
     QuoteSchema, // Used for output type
     SaveQuoteInputSchema, 
     SaveQuoteOutputSchema,
-    // FetchQuotesOutputSchema, // For future use
+    FetchQuotesOutputSchema, // For future use
     // FetchQuoteByIdInputSchema, // For future use
     // DeleteQuoteInputSchema, // For future use
     // DeleteQuoteOutputSchema, // For future use
@@ -30,7 +30,6 @@ const QUOTES_COLLECTION = 'quotes';
 export async function saveQuote(input: SaveQuoteInput): Promise<Quote> {
   console.log('[ManageQuotesFlow Firestore] Attempting to save quote ID:', input.quoteId);
   // The document ID in Firestore will be the input.quoteId for simplicity of retrieval using user-facing ID.
-  // If a truly unique Firestore ID is preferred, it could be auto-generated here.
   const firestoreDocId = input.quoteId; 
   return saveQuoteFlow({ firestoreDocId, quoteData: input });
 }
@@ -116,14 +115,45 @@ const saveQuoteFlow = ai.defineFlow(
   }
 );
 
-// Future flows (stubs for now)
-/*
+// Fetch all quotes
 export async function fetchQuotes(): Promise<Quote[]> {
   console.log('[ManageQuotesFlow Firestore] Attempting to fetch all quotes.');
-  // return fetchQuotesFlow();
-  return []; // Placeholder
+  return fetchQuotesFlow();
 }
 
+const fetchQuotesFlow = ai.defineFlow(
+  {
+    name: 'fetchQuotesFlow',
+    outputSchema: FetchQuotesOutputSchema,
+  },
+  async () => {
+    console.log('Executing fetchQuotesFlow - Firestore');
+    try {
+      const quotesCollectionRef = collection(db, QUOTES_COLLECTION);
+      // Order by createdAt in descending order to get newest quotes first
+      const q = query(quotesCollectionRef, orderBy("createdAt", "desc"));
+      const snapshot = await getDocs(q);
+      const quotesList = snapshot.docs.map(docSnapshot => {
+        const data = docSnapshot.data();
+        return {
+          id: docSnapshot.id,
+          ...data,
+          createdAt: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
+          updatedAt: (data.updatedAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
+        } as Quote;
+      });
+      console.log('Fetched quotes from Firestore:', quotesList.length, 'quotes.');
+      return quotesList;
+    } catch (error) {
+      console.error('Error fetching quotes from Firestore:', error);
+      throw new Error(`Failed to fetch quotes: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+);
+
+
+// Future flows (stubs for now)
+/*
 export async function fetchQuoteById(input: { quoteId: string }): Promise<Quote | null> {
   console.log('[ManageQuotesFlow Firestore] Attempting to fetch quote by ID:', input.quoteId);
   // return fetchQuoteByIdFlow(input);
@@ -139,17 +169,6 @@ export async function deleteQuote(input: { quoteId: string }): Promise<{ success
 
 // Placeholder Genkit flow definitions for future use
 /*
-const fetchQuotesFlow = ai.defineFlow(
-  {
-    name: 'fetchQuotesFlow',
-    outputSchema: FetchQuotesOutputSchema,
-  },
-  async () => {
-    // Implementation to fetch all quotes
-    return [];
-  }
-);
-
 const fetchQuoteByIdFlow = ai.defineFlow(
   {
     name: 'fetchQuoteByIdFlow',
@@ -174,3 +193,4 @@ const deleteQuoteFlow = ai.defineFlow(
   }
 );
 */
+

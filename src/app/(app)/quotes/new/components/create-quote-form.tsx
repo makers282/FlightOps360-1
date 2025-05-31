@@ -40,11 +40,10 @@ import { LegsSummaryTable } from './legs-summary-table';
 import { CostsSummaryDisplay, type LineItem } from './costs-summary-display';
 import { saveQuote } from '@/ai/flows/manage-quotes-flow';
 import type { Quote, SaveQuoteInput, QuoteLeg, QuoteLineItem, quoteStatuses as QuoteStatusType } from '@/ai/schemas/quote-schemas';
-import { quoteStatuses, legTypes } from '@/ai/schemas/quote-schemas'; // Import legTypes from quote-schemas
+import { quoteStatuses, legTypes } from '@/ai/schemas/quote-schemas';
 import { useRouter } from 'next/navigation';
+import { fetchCustomers, type Customer } from '@/ai/flows/manage-customers-flow';
 
-
-// legTypes is now imported from @/ai/schemas/quote-schemas
 
 const legSchema = z.object({
   origin: z.string().min(3, "Origin airport code (e.g., JFK).").max(5, "Origin airport code too long.").toUpperCase(),
@@ -118,11 +117,6 @@ const DEFAULT_SERVICE_RATES: Record<string, ServiceFeeRate> = {
   [SERVICE_KEY_CATERING]: { displayDescription: "Catering", buy: 350, sell: 500, unitDescription: "Service" },
 };
 
-const sampleCustomerData = [
-  { id: 'CUST001', name: 'John Doe', company: 'Doe Industries', email: 'john.doe@example.com', phone: '555-1234' },
-  { id: 'CUST002', name: 'Jane Smith', company: 'Smith Corp', email: 'jane.smith@example.com', phone: '555-5678' },
-];
-
 export function CreateQuoteForm() {
   const [isSaving, startSavingTransition] = useTransition();
   const [estimatingLegIndex, setEstimatingLegIndex] = useState<number | null>(null);
@@ -139,6 +133,9 @@ export function CreateQuoteForm() {
   const [fetchedAircraftRates, setFetchedAircraftRates] = useState<AircraftRate[]>([]);
   const [fetchedCompanyProfile, setFetchedCompanyProfile] = useState<CompanyProfile | null>(null);
   const [isLoadingDynamicRates, setIsLoadingDynamicRates] = useState(true);
+
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [isLoadingCustomers, setIsLoadingCustomers] = useState(true);
 
   const form = useForm<FullQuoteFormData>({ 
     resolver: zodResolver(formSchema),
@@ -212,11 +209,13 @@ export function CreateQuoteForm() {
     const loadInitialData = async () => {
       setIsLoadingAircraftList(true);
       setIsLoadingDynamicRates(true);
+      setIsLoadingCustomers(true);
       try {
-        const [fleet, rates, profile] = await Promise.all([
+        const [fleet, rates, profile, fetchedCustomers] = await Promise.all([
           fetchFleetAircraft(),
           fetchAircraftRates(),
-          fetchCompanyProfile()
+          fetchCompanyProfile(),
+          fetchCustomers()
         ]);
         
         const options = fleet.map(ac => ({ 
@@ -227,13 +226,15 @@ export function CreateQuoteForm() {
         setAircraftSelectOptions(options);
         setFetchedAircraftRates(rates);
         setFetchedCompanyProfile(profile);
+        setCustomers(fetchedCustomers);
 
       } catch (error) {
         console.error("Failed to load initial data for quote form:", error);
-        toast({ title: "Error Loading Configuration", description: "Could not load aircraft or pricing data. Using defaults.", variant: "destructive" });
+        toast({ title: "Error Loading Configuration", description: "Could not load aircraft, pricing, or customer data. Using defaults where possible.", variant: "destructive" });
       } finally {
         setIsLoadingAircraftList(false);
         setIsLoadingDynamicRates(false);
+        setIsLoadingCustomers(false);
       }
     };
     loadInitialData();
@@ -663,10 +664,10 @@ export function CreateQuoteForm() {
       setValue('clientPhone', '');
       return;
     }
-    const selectedCustomer = sampleCustomerData.find(c => c.id === customerId);
+    const selectedCustomer = customers.find(c => c.id === customerId);
     if (selectedCustomer) {
       setValue('clientName', selectedCustomer.name);
-      setValue('clientEmail', selectedCustomer.email);
+      setValue('clientEmail', selectedCustomer.email || '');
       setValue('clientPhone', selectedCustomer.phone || '');
     }
   };
@@ -691,13 +692,34 @@ export function CreateQuoteForm() {
         <CardDescription>Fill in the client and trip information to generate a quote.</CardDescription>
       </CardHeader>
       <Form {...form}>
-        {/* No form tag here, buttons will trigger submission via type="button" and handler */}
         <CardContent className="space-y-8">
           <FormField control={control} name="quoteId" render={({ field }) => ( <FormItem className="mb-6"> <FormLabel>Quote ID</FormLabel> <FormControl><Input placeholder="e.g., QT-ABCDE" {...field} value={field.value || ''} readOnly className="bg-muted/50" /></FormControl> <FormMessage /> </FormItem> )} />
             
             <section>
               <CardTitle className="text-xl border-b pb-2 mb-4">Client Information</CardTitle>
-              <FormField control={control} name="selectedCustomerId" render={({ field }) => ( <FormItem className="mb-4"> <FormLabel className="flex items-center gap-1"><UserSearch className="h-4 w-4" /> Select Existing Client (Optional)</FormLabel> <Select onValueChange={(value) => { handleCustomerSelect(value); field.onChange(value); }} value={field.value || ""} name={field.name} > <FormControl><SelectTrigger><SelectValue placeholder="Select a client to auto-fill details" /></SelectTrigger></FormControl> <SelectContent>{sampleCustomerData.map(customer => (<SelectItem key={customer.id} value={customer.id}>{customer.name} ({customer.company})</SelectItem>))}</SelectContent> </Select> <FormDescription>Choosing a client will auto-populate their details below.</FormDescription> <FormMessage /> </FormItem> )} />
+              <FormField 
+                control={control} 
+                name="selectedCustomerId" 
+                render={({ field }) => ( 
+                  <FormItem className="mb-4"> 
+                    <FormLabel className="flex items-center gap-1"><UserSearch className="h-4 w-4" /> Select Existing Client (Optional)</FormLabel> 
+                    <Select 
+                      onValueChange={(value) => { handleCustomerSelect(value); field.onChange(value); }} 
+                      value={field.value || ""} 
+                      name={field.name}
+                      disabled={isLoadingCustomers}
+                    > 
+                      <FormControl><SelectTrigger><SelectValue placeholder={isLoadingCustomers ? "Loading customers..." : "Select a client"} /></SelectTrigger></FormControl> 
+                      <SelectContent>
+                        {!isLoadingCustomers && customers.length === 0 && <SelectItem value="NO_CUSTOMERS_PLACEHOLDER" disabled>No customers found</SelectItem>}
+                        {customers.map(customer => (<SelectItem key={customer.id} value={customer.id}>{customer.name} {customer.customerType && `(${customer.customerType})`}</SelectItem>))}
+                      </SelectContent> 
+                    </Select> 
+                    <FormDescription>Choosing a client will auto-populate their details below.</FormDescription> 
+                    <FormMessage /> 
+                  </FormItem> 
+                )} 
+              />
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 mb-4">
                 <FormField control={control} name="clientName" render={({ field }) => ( <FormItem> <FormLabel>Client Name</FormLabel> <FormControl><Input placeholder="e.g., John Doe" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
                 <FormField control={control} name="clientEmail" render={({ field }) => ( <FormItem> <FormLabel>Client Email</FormLabel> <FormControl><Input type="email" placeholder="e.g., john.doe@example.com" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
@@ -973,8 +995,8 @@ export function CreateQuoteForm() {
               Save & Send Quote
             </Button>
           </CardFooter>
-        {/* </form> */} {/* Form tag removed as buttons handle submission type */}
       </Form>
     </Card>
   );
 }
+

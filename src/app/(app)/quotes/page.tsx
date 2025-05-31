@@ -1,8 +1,11 @@
 
+"use client"; // Make this a client component
+
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { FileArchive, PlusCircle, Edit3, Trash2, Search, Eye } from 'lucide-react';
+import { FileArchive, PlusCircle, Edit3, Trash2, Search, Eye, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -20,39 +23,78 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import type { quoteStatuses } from '@/ai/schemas/quote-schemas'; // Import the type
+import { fetchQuotes } from '@/ai/flows/manage-quotes-flow'; // Import the flow
+import type { Quote, quoteStatuses } from '@/ai/schemas/quote-schemas'; // Import Quote type
+import { useToast } from '@/hooks/use-toast';
+import { format, parseISO } from 'date-fns';
 
-const quoteData = [
-  { id: 'QT-A1B2C', clientName: 'Aero Corp', route: 'KJFK -> KLAX', aircraft: 'Global 6000', status: 'Sent', quoteDate: '2024-08-10', amount: '$25,500.00' },
-  { id: 'QT-X3Y4Z', clientName: 'VIP Travel Inc.', route: 'KTEB -> KMIA', aircraft: 'Citation CJ3', status: 'Accepted', quoteDate: '2024-08-05', amount: '$12,800.00' },
-  { id: 'QT-P5Q6R', clientName: 'Global Reach Ltd.', route: 'EGLL -> LSGG', aircraft: 'Gulfstream G650', status: 'Draft', quoteDate: '2024-08-12', amount: '$45,000.00' },
-  { id: 'QT-M7N8O', clientName: 'Executive Flights', route: 'KHPN -> KORD', aircraft: 'Phenom 300', status: 'Expired', quoteDate: '2024-07-15', amount: '$9,200.00' },
-  { id: 'QT-K9J1H', clientName: 'SkyHigh Charters', route: 'KSFO -> KSDL', aircraft: 'Learjet 75', status: 'Rejected', quoteDate: '2024-08-01', amount: '$15,000.00' },
-  { id: 'QT-B00K1', clientName: 'JetSetters Co.', route: 'KVNY -> KMDW', aircraft: 'Challenger 350', status: 'Booked', quoteDate: '2024-08-11', amount: '$18,500.00' },
-];
+// Helper function to format currency
+const formatCurrency = (amount: number | undefined) => {
+  if (amount === undefined) return 'N/A';
+  return amount.toLocaleString(undefined, { style: "currency", currency: "USD" });
+};
 
-const getStatusBadgeVariant = (status: typeof quoteStatuses[number]): "default" | "secondary" | "outline" | "destructive" => {
-  switch (status.toLowerCase()) {
+const getStatusBadgeVariant = (status?: typeof quoteStatuses[number]): "default" | "secondary" | "outline" | "destructive" => {
+  switch (status?.toLowerCase()) {
     case 'accepted':
     case 'booked':
-      return 'default'; // Greenish / Primary
+      return 'default'; 
     case 'sent': 
-      return 'secondary'; // Blueish / Active
+      return 'secondary'; 
     case 'draft': 
-      return 'outline'; // Neutral / In progress
+      return 'outline'; 
     case 'expired':
     case 'rejected': 
-      return 'destructive'; // Reddish / Warning
+      return 'destructive'; 
     default: return 'outline';
   }
 };
 
 export default function AllQuotesPage() {
+  const [quotesList, setQuotesList] = useState<Quote[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const { toast } = useToast();
+
+  useEffect(() => {
+    const loadQuotes = async () => {
+      setIsLoading(true);
+      try {
+        const fetchedQuotes = await fetchQuotes();
+        setQuotesList(fetchedQuotes);
+      } catch (error) {
+        console.error("Failed to load quotes:", error);
+        toast({ title: "Error Loading Quotes", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadQuotes();
+  }, [toast]);
+
+  const filteredQuotes = quotesList.filter(quote =>
+    (quote.quoteId && quote.quoteId.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (quote.clientName && quote.clientName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (quote.aircraftLabel && quote.aircraftLabel.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (quote.status && quote.status.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (quote.legs && quote.legs.length > 0 && 
+      `${quote.legs[0].origin} -> ${quote.legs[quote.legs.length - 1].destination}`.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
+
+  const getRouteDisplay = (legs: Quote['legs']) => {
+    if (!legs || legs.length === 0) return 'N/A';
+    const origin = legs[0].origin || 'UNK';
+    const destination = legs[legs.length - 1].destination || 'UNK';
+    if (legs.length === 1) return `${origin} -> ${destination}`;
+    return `${origin} -> ... -> ${destination} (${legs.length} legs)`;
+  };
+
+
   return (
     <TooltipProvider>
       <PageHeader 
         title="All Quotes" 
-        description="Browse, manage, and track all flight quotes."
+        description="Browse, manage, and track all flight quotes from Firestore."
         icon={FileArchive}
         actions={
           <Button asChild>
@@ -68,77 +110,91 @@ export default function AllQuotesPage() {
           <CardDescription>Review and manage all generated quotes.</CardDescription>
            <div className="mt-2 relative">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Search quotes (e.g., ID, client, route)..." className="pl-8 w-full sm:w-1/2" />
+            <Input 
+              placeholder="Search quotes (ID, client, route, aircraft, status)..." 
+              className="pl-8 w-full sm:w-1/2 lg:w-1/3"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
           </div>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Quote ID</TableHead>
-                <TableHead>Client Name</TableHead>
-                <TableHead>Route</TableHead>
-                <TableHead>Aircraft</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Quote Date</TableHead>
-                <TableHead>Amount</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {quoteData.map((quote) => (
-                <TableRow key={quote.id}>
-                  <TableCell className="font-medium">{quote.id}</TableCell>
-                  <TableCell>{quote.clientName}</TableCell>
-                  <TableCell>{quote.route}</TableCell>
-                  <TableCell>{quote.aircraft}</TableCell>
-                  <TableCell>
-                    <Badge variant={getStatusBadgeVariant(quote.status as typeof quoteStatuses[number])}>{quote.status}</Badge>
-                  </TableCell>
-                  <TableCell>{quote.quoteDate}</TableCell>
-                  <TableCell>{quote.amount}</TableCell>
-                  <TableCell className="text-right space-x-1">
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                          <Eye className="h-4 w-4" />
-                          <span className="sr-only">View Quote</span>
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent><p>View Quote</p></TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                          <Edit3 className="h-4 w-4" />
-                          <span className="sr-only">Edit Quote</span>
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent><p>Edit Quote</p></TooltipContent>
-                    </Tooltip>
-                     <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
-                            <Trash2 className="h-4 w-4" />
-                            <span className="sr-only">Delete Quote</span>
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent><p>Delete Quote</p></TooltipContent>
-                    </Tooltip>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          {quoteData.length === 0 && (
-            <div className="text-center py-10 col-span-full"> {/* Ensure col-span-full if inside a grid-like table structure */}
-              <FileArchive className="mx-auto h-12 w-12 text-muted-foreground" />
-              <h3 className="mt-2 text-sm font-medium text-foreground">No quotes found</h3>
-              <p className="mt-1 text-sm text-muted-foreground">Get started by creating a new quote.</p>
+          {isLoading ? (
+            <div className="flex items-center justify-center py-10">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <p className="ml-2 text-muted-foreground">Loading quotes from Firestore...</p>
             </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Quote ID</TableHead>
+                  <TableHead>Client Name</TableHead>
+                  <TableHead>Route</TableHead>
+                  <TableHead>Aircraft</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Quote Date</TableHead>
+                  <TableHead>Amount</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredQuotes.length === 0 && !isLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center text-muted-foreground py-10">
+                      No quotes found. {searchTerm ? "Try adjusting your search." : ""}
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredQuotes.map((quote) => (
+                    <TableRow key={quote.id}>
+                      <TableCell className="font-medium">{quote.quoteId}</TableCell>
+                      <TableCell>{quote.clientName || 'N/A'}</TableCell>
+                      <TableCell>{getRouteDisplay(quote.legs)}</TableCell>
+                      <TableCell>{quote.aircraftLabel || 'N/A'}</TableCell>
+                      <TableCell>
+                        <Badge variant={getStatusBadgeVariant(quote.status as typeof quoteStatuses[number])}>{quote.status}</Badge>
+                      </TableCell>
+                      <TableCell>{quote.createdAt ? format(parseISO(quote.createdAt), 'yyyy-MM-dd') : 'N/A'}</TableCell>
+                      <TableCell>{formatCurrency(quote.totalSellPrice)}</TableCell>
+                      <TableCell className="text-right space-x-1">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button variant="ghost" size="icon" disabled>
+                              <Eye className="h-4 w-4" />
+                              <span className="sr-only">View Quote</span>
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent><p>View Quote (Coming Soon)</p></TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button variant="ghost" size="icon" disabled>
+                              <Edit3 className="h-4 w-4" />
+                              <span className="sr-only">Edit Quote</span>
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent><p>Edit Quote (Coming Soon)</p></TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" disabled>
+                                <Trash2 className="h-4 w-4" />
+                                <span className="sr-only">Delete Quote</span>
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent><p>Delete Quote (Coming Soon)</p></TooltipContent>
+                        </Tooltip>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
           )}
         </CardContent>
       </Card>
     </TooltipProvider>
   );
 }
+
