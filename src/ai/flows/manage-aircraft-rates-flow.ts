@@ -10,13 +10,13 @@
  */
 
 import {ai} from '@/ai/genkit';
-import {z} from 'genkit';
+import {z}from 'genkit';
 import { db } from '@/lib/firebase';
 import { collection, doc, getDocs, setDoc, deleteDoc, getDoc } from 'firebase/firestore';
 
-// Define the structure for an aircraft rate
+// Define the structure for an aircraft rate (simplified back to direct buy/sell)
 // The 'id' here should correspond to an 'id' from the FleetAircraftSchema in manage-fleet-flow.ts
-const AircraftRateSchema = z.object({
+export const AircraftRateSchema = z.object({
   id: z.string().describe("The unique identifier for the aircraft from the fleet (e.g., N123AB or a Firestore doc ID)."),
   buy: z.number().min(0).describe("The buy rate per hour for the aircraft."),
   sell: z.number().min(0).describe("The sell rate per hour for the aircraft."),
@@ -24,6 +24,7 @@ const AircraftRateSchema = z.object({
 export type AircraftRate = z.infer<typeof AircraftRateSchema>;
 
 // Schemas for flow inputs and outputs
+// SaveAircraftRateInputSchema matches AircraftRateSchema directly
 const SaveAircraftRateInputSchema = AircraftRateSchema;
 export type SaveAircraftRateInput = z.infer<typeof SaveAircraftRateInputSchema>;
 
@@ -69,7 +70,26 @@ const fetchAircraftRatesFlow = ai.defineFlow(
     try {
       const ratesCollectionRef = collection(db, AIRCRAFT_RATES_COLLECTION);
       const snapshot = await getDocs(ratesCollectionRef);
-      const ratesList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AircraftRate));
+      const ratesList = snapshot.docs.map(docSnapshot => {
+        const data = docSnapshot.data();
+        // Handle potential old format (with nested rates.standardCharter) or new simple format
+        let buy = 0;
+        let sell = 0;
+
+        if (data.rates && data.rates.standardCharter) { // Check for old categorized structure
+          buy = data.rates.standardCharter.buy || 0;
+          sell = data.rates.standardCharter.sell || 0;
+        } else if (data.buy !== undefined && data.sell !== undefined) { // Check for direct buy/sell
+          buy = data.buy;
+          sell = data.sell;
+        }
+        
+        return { 
+          id: docSnapshot.id, 
+          buy, 
+          sell 
+        } as AircraftRate;
+      });
       console.log('Fetched aircraft rates from Firestore:', ratesList.length, 'rates.');
       return ratesList;
     } catch (error) {
@@ -89,14 +109,15 @@ const saveAircraftRateFlow = ai.defineFlow(
     console.log('Executing saveAircraftRateFlow with input - Firestore:', input);
     try {
       const rateDocRef = doc(db, AIRCRAFT_RATES_COLLECTION, input.id);
-      // Only store buy and sell, id is the document key
+      // Data to set should be flat buy/sell as per the simplified schema
       const dataToSet = {
         buy: input.buy,
         sell: input.sell,
       };
-      await setDoc(rateDocRef, dataToSet);
+      await setDoc(rateDocRef, dataToSet); // Overwrite with new simple structure
       console.log('Saved aircraft rate in Firestore:', input.id);
-      return input; // Return the full input object as it was passed
+      // Return the input which matches the AircraftRate schema (id, buy, sell)
+      return {id: input.id, buy: input.buy, sell: input.sell}; 
     } catch (error) {
       console.error('Error saving aircraft rate to Firestore:', error);
       throw new Error(`Failed to save aircraft rate for ${input.id}: ${error instanceof Error ? error.message : String(error)}`);
@@ -124,7 +145,8 @@ const deleteAircraftRateFlow = ai.defineFlow(
       await deleteDoc(rateDocRef);
       console.log('Deleted aircraft rate from Firestore:', input.aircraftId);
       return { success: true, aircraftId: input.aircraftId };
-    } catch (error) {
+    } catch (error)
+       {
       console.error('Error deleting aircraft rate from Firestore:', error);
       throw new Error(`Failed to delete aircraft rate for ${input.aircraftId}: ${error instanceof Error ? error.message : String(error)}`);
     }

@@ -32,8 +32,6 @@ import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-
 import {
   fetchAircraftRates,
   type AircraftRate,
-  type RateCategoryKey,
-  type RateCategory
 } from '@/ai/flows/manage-aircraft-rates-flow';
 import {
   fetchCompanyProfile,
@@ -109,15 +107,10 @@ const SERVICE_KEY_CATERING = "CATERING";
 const SERVICE_KEY_LANDING_FEES = "LANDING_FEES_PER_LEG";
 const SERVICE_KEY_OVERNIGHT_FEES = "OVERNIGHT_FEES_PER_NIGHT";
 
-const DEFAULT_AIRCRAFT_RATES_FALLBACK: AircraftRate = {
-  id: 'FALLBACK_DEFAULT',
-  rates: {
-    standardCharter: { buy: 3500, sell: 4000 },
-    owner: { buy: 3200, sell: 3500 },
-    medical: { buy: 4000, sell: 4800 },
-    cargo: { buy: 3000, sell: 3600 },
-    positioning: { buy: 2000, sell: 2000 }, // Example: positioning at cost
-  }
+// Simplified fallback for a single buy/sell rate per aircraft
+const DEFAULT_AIRCRAFT_RATE_FALLBACK: Pick<AircraftRate, 'buy' | 'sell'> = {
+  buy: 3500,
+  sell: 4000,
 };
 
 const DEFAULT_SERVICE_RATES: Record<string, ServiceFeeRate> = {
@@ -266,7 +259,7 @@ export function CreateQuoteForm() {
 
   useEffect(() => {
     const newItems: LineItem[] = [];
-    if (isLoadingDynamicRates) {
+    if (isLoadingDynamicRates || !aircraftId) {
         setCalculatedLineItems([]);
         return;
     }
@@ -275,19 +268,10 @@ export function CreateQuoteForm() {
     let totalFlightTimeSellCost = 0;
     let totalBlockHours = 0;
     let totalRevenueFlightHours = 0;
-
-    const mapLegTypeToRateKey = (legType: LegFormData['legType']): RateCategoryKey => {
-        switch (legType) {
-            case 'Owner': return 'owner';
-            case 'Ambulance': return 'medical';
-            case 'Cargo': return 'cargo';
-            case 'Positioning': case 'Ferry': case 'Maintenance': return 'positioning';
-            case 'Charter':
-            default: return 'standardCharter';
-        }
-    };
     
-    const fallbackAircraftRate = DEFAULT_AIRCRAFT_RATES_FALLBACK;
+    const selectedAircraftRateProfile = fetchedAircraftRates.find(r => r.id === aircraftId);
+    const aircraftBuyRate = selectedAircraftRateProfile?.buy ?? DEFAULT_AIRCRAFT_RATE_FALLBACK.buy;
+    const aircraftSellRate = selectedAircraftRateProfile?.sell ?? DEFAULT_AIRCRAFT_RATE_FALLBACK.sell;
 
     legsArray.forEach(leg => {
         const flightTime = Number(leg.flightTimeHours || 0);
@@ -296,56 +280,38 @@ export function CreateQuoteForm() {
         const legBlockMinutes = originTaxi + (flightTime * 60) + destTaxi;
         totalBlockHours += parseFloat((legBlockMinutes / 60).toFixed(2));
 
-        if (flightTime > 0) {
-            let legBuyRate = fallbackAircraftRate.rates.standardCharter!.buy;
-            let legSellRate = fallbackAircraftRate.rates.standardCharter!.sell;
-
-            const selectedAircraftFullRateProfile = fetchedAircraftRates.find(r => r.id === aircraftId);
-
-            if (selectedAircraftFullRateProfile?.rates) {
-                const rateKeyForLeg = mapLegTypeToRateKey(leg.legType);
-                const specificCategoryRate = selectedAircraftFullRateProfile.rates[rateKeyForLeg];
-                const standardCharterRate = selectedAircraftFullRateProfile.rates.standardCharter;
-
-                if (specificCategoryRate && specificCategoryRate.sell > 0) {
-                    legBuyRate = specificCategoryRate.buy;
-                    legSellRate = specificCategoryRate.sell;
-                } else if (standardCharterRate && standardCharterRate.sell > 0) {
-                    legBuyRate = standardCharterRate.buy;
-                    legSellRate = standardCharterRate.sell;
-                } else { // Fallback if specific and standard charter are not useful
-                    const fallbackCategoryRate = fallbackAircraftRate.rates[rateKeyForLeg] || fallbackAircraftRate.rates.standardCharter!;
-                    legBuyRate = fallbackCategoryRate.buy;
-                    legSellRate = fallbackCategoryRate.sell;
-                }
-            }
-            
-            if (["Charter", "Owner", "Ambulance", "Cargo"].includes(leg.legType)) {
-                totalFlightTimeBuyCost += flightTime * legBuyRate;
-                totalFlightTimeSellCost += flightTime * legSellRate;
-                totalRevenueFlightHours += flightTime;
-            } else if (["Positioning", "Ferry", "Maintenance"].includes(leg.legType)) {
-                 // Optionally bill positioning legs if their sell rate is configured and > 0
-                 if (legSellRate > 0) { // Could also check legBuyRate if we bill at cost
-                    totalFlightTimeBuyCost += flightTime * legBuyRate;
-                    totalFlightTimeSellCost += flightTime * legSellRate;
-                    // totalRevenueFlightHours += flightTime; // Decide if positioning counts towards "revenue" hours display
-                 }
-            }
+        // For simplicity, all billable leg types use the aircraft's standard rate.
+        // Positioning/Ferry/Maintenance might be billed differently or at cost in a more complex setup.
+        if (flightTime > 0 && ["Charter", "Owner", "Ambulance", "Cargo"].includes(leg.legType)) {
+            totalFlightTimeBuyCost += flightTime * aircraftBuyRate;
+            totalFlightTimeSellCost += flightTime * aircraftSellRate;
+            totalRevenueFlightHours += flightTime;
+        } else if (flightTime > 0 && ["Positioning", "Ferry", "Maintenance"].includes(leg.legType)) {
+            // Example: Bill positioning at cost or a specific configured rate if available.
+            // For this simplified model, we assume positioning cost is covered by the operator
+            // or handled by a specific sell rate in a more advanced setup.
+            // For now, let's assume positioning might be billed if its sell rate is > 0 or matches buy.
+            // Here, we'll just accumulate its cost for now.
+             totalFlightTimeBuyCost += flightTime * aircraftBuyRate; // Operator's cost
+             // If positioning sell rate is specifically set (e.g. to match buy or zero), it could be added here.
+             // For this iteration, let's assume sell rate for positioning is 0 or covered by main leg.
+             // Or, if we want to bill positioning at a specific rate, we'd need that from config.
+             // For now, we'll use the standard sell rate for simplicity in this reverted model.
+             totalFlightTimeSellCost += flightTime * aircraftSellRate; 
         }
     });
 
     const selectedAircraftInfo = aircraftSelectOptions.find(ac => ac.value === aircraftId);
     const aircraftDisplayName = selectedAircraftInfo ? selectedAircraftInfo.label : "Selected Aircraft";
 
-    if (totalRevenueFlightHours > 0 || (totalFlightTimeSellCost > 0 && totalRevenueFlightHours === 0) ) { // Add if there's any calculated cost/sell for "revenue" type legs or if explicitly billed positioning legs
+    if (totalRevenueFlightHours > 0 || totalFlightTimeSellCost > 0) {
         newItems.push({
             id: 'aircraftFlightTimeCost',
             description: `Aircraft Flight Time (${aircraftDisplayName})`,
-            buyRate: totalRevenueFlightHours > 0 ? totalFlightTimeBuyCost / totalRevenueFlightHours : 0,
-            sellRate: totalRevenueFlightHours > 0 ? totalFlightTimeSellCost / totalRevenueFlightHours : (totalFlightTimeSellCost > 0 ? totalFlightTimeSellCost / totalBlockHours : 0), // Handle if only billed positioning
-            unitDescription: 'Flight Hour (Blended)',
-            quantity: parseFloat(totalRevenueFlightHours > 0 ? totalRevenueFlightHours.toFixed(2) : (totalFlightTimeSellCost > 0 ? totalBlockHours.toFixed(2) : "0.00")),
+            buyRate: totalRevenueFlightHours > 0 ? totalFlightTimeBuyCost / totalRevenueFlightHours : (totalBlockHours > 0 ? totalFlightTimeBuyCost / totalBlockHours : 0),
+            sellRate: totalRevenueFlightHours > 0 ? totalFlightTimeSellCost / totalRevenueFlightHours : (totalBlockHours > 0 ? totalFlightTimeSellCost / totalBlockHours : 0),
+            unitDescription: 'Flight Hour (Std.)',
+            quantity: parseFloat(totalRevenueFlightHours > 0 ? totalRevenueFlightHours.toFixed(2) : (totalBlockHours > 0 ? totalBlockHours.toFixed(2) : "0.00")),
             buyTotal: totalFlightTimeBuyCost,
             sellTotal: totalFlightTimeSellCost,
         });
@@ -944,6 +910,3 @@ export function CreateQuoteForm() {
     </Card>
   );
 }
-
-
-    
