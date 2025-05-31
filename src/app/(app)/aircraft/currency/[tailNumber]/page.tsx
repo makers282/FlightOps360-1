@@ -17,20 +17,20 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox'; // Added Checkbox
+import { Checkbox } from '@/components/ui/checkbox';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { z } from 'zod';
 import { AddMaintenanceTaskModal, type MaintenanceTaskFormData, defaultMaintenanceTaskFormValues } from './components/add-maintenance-task-modal';
 import { Badge } from '@/components/ui/badge';
 
-import { Wrench, PlusCircle, ArrowLeft, PlaneIcon, Edit, Loader2, InfoIcon, Phone, UserCircle, MapPin, Save, XCircle, Edit2, Edit3, AlertTriangle, CheckCircle2, XCircle as XCircleIcon, Search, ArrowUpDown, ArrowDown, ArrowUp, Printer } from 'lucide-react'; // Added Printer
+import { Wrench, PlusCircle, ArrowLeft, PlaneIcon, Edit, Loader2, InfoIcon, Phone, UserCircle, MapPin, Save, XCircle, Edit2, Edit3, AlertTriangle, CheckCircle2, XCircle as XCircleIcon, Search, ArrowUpDown, ArrowDown, ArrowUp, Printer, Filter } from 'lucide-react';
 import { format, parse, addDays, isValid, addMonths, addYears, endOfMonth, parseISO, differenceInCalendarDays } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { fetchFleetAircraft, saveFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
 import { fetchMaintenanceTasksForAircraft, saveMaintenanceTask, deleteMaintenanceTask, type MaintenanceTask as FlowMaintenanceTask } from '@/ai/flows/manage-maintenance-tasks-flow';
 import { fetchComponentTimesForAircraft, saveComponentTimesForAircraft, type AircraftComponentTimes } from '@/ai/flows/manage-component-times-flow';
-import { fetchCompanyProfile, type CompanyProfile } from '@/ai/flows/manage-company-profile-flow'; // Added for company info
+import { fetchCompanyProfile, type CompanyProfile } from '@/ai/flows/manage-company-profile-flow';
 import { PageHeader } from '@/components/page-header';
 
 
@@ -85,9 +85,10 @@ export default function AircraftMaintenanceDetailPage() {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'dueSoon' | 'overdue'>('all');
+  const [componentFilter, setComponentFilter] = useState<string>('all');
   const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'toGoNumeric', direction: 'ascending' });
 
-  const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]); // State for selected task IDs
+  const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
   const [isGeneratingReport, startReportGenerationTransition] = useTransition();
 
   const aircraftInfoForm = useForm<AircraftInfoEditFormData>({ resolver: zodResolver(aircraftInfoEditSchema) });
@@ -445,6 +446,18 @@ export default function AircraftMaintenanceDetailPage() {
     return { icon: <CheckCircle2 className="h-5 w-5" />, colorClass: 'text-green-500', label: 'OK' };
   };
 
+  const availableComponentsForFilter = useMemo(() => {
+    const uniqueComponents = new Set<string>();
+    maintenanceTasks.forEach(task => {
+      if (task.associatedComponent && task.associatedComponent.trim() !== "") {
+        uniqueComponents.add(task.associatedComponent.trim());
+      } else {
+         uniqueComponents.add("Airframe"); // Default if not specified
+      }
+    });
+    return Array.from(uniqueComponents).sort();
+  }, [maintenanceTasks]);
+
   const displayedTasks = useMemo(() => {
     if (isLoadingComponentTimes) return []; 
 
@@ -471,6 +484,10 @@ export default function AircraftMaintenanceDetailPage() {
         if (statusFilter === 'dueSoon') return status.label === 'Due Soon';
         return true;
       });
+    }
+
+    if (componentFilter !== 'all') {
+      filtered = filtered.filter(task => (task.associatedComponent || "Airframe") === componentFilter);
     }
     
     if (sortConfig !== null) {
@@ -502,7 +519,7 @@ export default function AircraftMaintenanceDetailPage() {
     }
 
     return filtered;
-  }, [maintenanceTasks, searchTerm, statusFilter, sortConfig, calculateDisplayFields, editableComponentTimes, isLoadingComponentTimes]);
+  }, [maintenanceTasks, searchTerm, statusFilter, componentFilter, sortConfig, calculateDisplayFields, editableComponentTimes, isLoadingComponentTimes]);
 
   const requestSort = (key: SortKey) => {
     let direction: SortDirection = 'ascending';
@@ -540,8 +557,13 @@ export default function AircraftMaintenanceDetailPage() {
     companyProfile: CompanyProfile | null
   ): string => {
     
-    const companyName = companyProfile?.companyName || "SkyBase Operations"; // Use fetched or default
-    // Logo handling: for now, use the SVG. If companyProfile.logoUrl exists, it could be used.
+    const companyName = companyProfile?.companyName || "FlightOps360";
+    const companyAddress = companyProfile?.companyAddress || "";
+    const companyContact = [companyProfile?.companyEmail, companyProfile?.companyPhone].filter(Boolean).join(' | ');
+
+    const aircraftContactName = aircraft.primaryContactName || "N/A";
+    const aircraftContactPhone = aircraft.primaryContactPhone || "N/A";
+
     const companyLogoSvg = `
       <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-plane">
         <path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>
@@ -561,8 +583,8 @@ export default function AircraftMaintenanceDetailPage() {
 
       return `
         <tr>
-          <td>${task.itemTitle}</td>
           <td style="white-space: nowrap;">${task.referenceNumber || '-'}</td>
+          <td>${task.itemTitle}</td>
           <td>${task.itemType}</td>
           <td>${task.associatedComponent || 'Airframe'}</td>
           <td>${lastDoneStr}</td>
@@ -584,9 +606,10 @@ export default function AircraftMaintenanceDetailPage() {
           .company-info h1 { margin: 0; font-size: 20pt; color: #007bff; }
           .company-info p { margin: 2px 0; font-size: 9pt; }
           .logo-container { width: 50px; height: 50px; }
-          .report-info, .component-times-info { margin-bottom: 15px; border: 1px solid #e0e0e0; padding: 12px; border-radius: 6px; background-color: #f9f9f9; }
-          .report-info h2 { margin-top: 0; font-size: 14pt; color: #333; }
-          .report-info p, .component-times-info p { margin: 4px 0; }
+          .report-meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 15px; }
+          .report-info, .aircraft-contact-info, .component-times-info { border: 1px solid #e0e0e0; padding: 12px; border-radius: 6px; background-color: #f9f9f9; }
+          .report-info h2, .aircraft-contact-info h2 { margin-top: 0; font-size: 12pt; color: #333; }
+          .report-info p, .aircraft-contact-info p, .component-times-info p { margin: 4px 0; }
           .component-times-info strong { font-size: 11pt; display: block; margin-bottom: 8px; }
           .component-times-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px 15px; }
           .component-times-grid p { display: flex; justify-content: space-between; border-bottom: 1px dotted #eee; padding-bottom: 3px; margin-bottom: 3px; }
@@ -595,7 +618,7 @@ export default function AircraftMaintenanceDetailPage() {
           table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 9pt; }
           th, td { border: 1px solid #ccc; padding: 8px; text-align: left; vertical-align: top; }
           th { background-color: #e9ecef; color: #495057; font-weight: 600; }
-          td[style*="white-space: nowrap;"] { min-width: 70px; } /* Ensure Ref # column is wide enough */
+          td[style*="white-space: nowrap;"] { min-width: 70px; }
           tr:nth-child(even) { background-color: #f8f9fa; }
           .signatures { margin-top: 40px; display: flex; justify-content: space-between; page-break-inside: avoid; }
           .signatures div { width: 45%; }
@@ -608,7 +631,7 @@ export default function AircraftMaintenanceDetailPage() {
             body { margin: 0.5in; font-size: 9pt; color: #000; }
             .header-container { border-bottom: 2px solid #007bff; }
             .company-info h1 { color: #007bff; }
-            .report-info, .component-times-info { border: 1px solid #ccc; background-color: #fff; }
+            .report-info, .aircraft-contact-info, .component-times-info { border: 1px solid #ccc; background-color: #fff; }
             th { background-color: #f0f0f0 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             tr:nth-child(even) { background-color: #f8f8f8 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             table { font-size: 8pt; }
@@ -620,18 +643,27 @@ export default function AircraftMaintenanceDetailPage() {
         <div class="header-container">
             <div class="company-info">
                 <h1>${companyName}</h1>
-                <p>Aircraft Work Order</p>
+                <p>${companyAddress}</p>
+                <p>${companyContact}</p>
             </div>
             <div class="logo-container">
                 ${companyLogoSvg}
             </div>
         </div>
-
-        <div class="report-info">
-          <h2>Aircraft Details</h2>
-          <p><strong>Aircraft:</strong> ${aircraft.tailNumber} (${aircraft.model})</p>
-          <p><strong>Serial Number:</strong> ${aircraft.serialNumber || 'N/A'}</p>
-          <p><strong>Date Generated:</strong> ${format(new Date(), "PPP HH:mm")}</p>
+        
+        <div class="report-meta-grid">
+          <div class="report-info">
+            <h2>Aircraft Details</h2>
+            <p><strong>Aircraft:</strong> ${aircraft.tailNumber} (${aircraft.model})</p>
+            <p><strong>Serial Number:</strong> ${aircraft.serialNumber || 'N/A'}</p>
+            <p><strong>Date Generated:</strong> ${format(new Date(), "PPP HH:mm")}</p>
+          </div>
+          <div class="aircraft-contact-info">
+            <h2>Aircraft Contact</h2>
+            <p><strong>Name:</strong> ${aircraftContactName}</p>
+            <p><strong>Phone:</strong> ${aircraftContactPhone}</p>
+            <p><strong>Base:</strong> ${aircraft.baseLocation || 'N/A'}</p>
+          </div>
         </div>
         
         <div class="component-times-info">
@@ -646,8 +678,8 @@ export default function AircraftMaintenanceDetailPage() {
             <table>
             <thead>
                 <tr>
-                <th>Task Title</th>
                 <th>Ref #</th>
+                <th>Task Title</th>
                 <th>Type</th>
                 <th>Component</th>
                 <th>Last Done</th>
@@ -677,7 +709,7 @@ export default function AircraftMaintenanceDetailPage() {
             <button class="print-button" onclick="window.print()">Print Work Order</button>
         </div>
         <div class="footer-powered-by">
-            Powered by SkyBase
+            Powered by FlightOps360
         </div>
       </body>
       </html>
@@ -696,7 +728,7 @@ export default function AircraftMaintenanceDetailPage() {
 
     startReportGenerationTransition(async () => {
       try {
-        const companyProfile = await fetchCompanyProfile(); // Fetch company profile
+        const companyProfile = await fetchCompanyProfile();
         const tasksToReport = displayedTasks.filter(task => selectedTaskIds.includes(task.id));
         const reportHtml = generateWorkOrderHtml(tasksToReport, currentAircraft, editableComponentTimes, companyProfile);
         
@@ -921,8 +953,8 @@ export default function AircraftMaintenanceDetailPage() {
             Overview of scheduled and upcoming maintenance tasks for {currentAircraft.tailNumber}.
             Calculated "To Go" is based on the values in "Current Hours &amp; Cycles" above.
           </CardDescription>
-          <div className="mt-4 flex flex-col sm:flex-row gap-2">
-            <div className="relative flex-grow">
+          <div className="mt-4 flex flex-col sm:flex-row gap-2 items-center">
+            <div className="relative flex-grow w-full sm:w-auto">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
                 type="search"
@@ -938,15 +970,27 @@ export default function AircraftMaintenanceDetailPage() {
               )}
             </div>
             <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as any)}>
-              <SelectTrigger className="w-full sm:w-[200px]">
+              <SelectTrigger className="w-full sm:w-[180px]">
                 <SelectValue placeholder="Filter by status" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Items</SelectItem>
+                <SelectItem value="all">All Statuses</SelectItem>
                 <SelectItem value="active">Active Items</SelectItem>
                 <SelectItem value="inactive">Inactive Items</SelectItem>
                 <SelectItem value="dueSoon">Due Soon (Active)</SelectItem>
                 <SelectItem value="overdue">Overdue (Active)</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={componentFilter} onValueChange={setComponentFilter}>
+              <SelectTrigger className="w-full sm:w-[200px]">
+                 <Filter className="h-4 w-4 mr-2 opacity-50" />
+                <SelectValue placeholder="Filter by component" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Components</SelectItem>
+                {availableComponentsForFilter.map(comp => (
+                  <SelectItem key={comp} value={comp}>{comp}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
