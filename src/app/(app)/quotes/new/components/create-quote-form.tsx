@@ -28,7 +28,18 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
 import { estimateFlightDetails, type EstimateFlightDetailsInput, type EstimateFlightDetailsOutput } from '@/ai/flows/estimate-flight-details-flow';
-import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow'; // Use new fleet flow
+import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
+import {
+  fetchAircraftRates,
+  type AircraftRate,
+  type RateCategoryKey,
+  type RateCategory
+} from '@/ai/flows/manage-aircraft-rates-flow';
+import {
+  fetchCompanyProfile,
+  type CompanyProfile,
+  type ServiceFeeRate
+} from '@/ai/flows/manage-company-profile-flow';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { LegsSummaryTable } from './legs-summary-table';
 import { CostsSummaryDisplay, type LineItem } from './costs-summary-display';
@@ -81,38 +92,46 @@ export type FullQuoteFormData = z.infer<typeof formSchema>;
 
 type LegEstimate = EstimateFlightDetailsOutput & {
   error?: string;
-  estimatedForInputs?: { origin: string; destination: string; aircraftModel: string }; // Changed from aircraftType to aircraftModel
+  estimatedForInputs?: { origin: string; destination: string; aircraftModel: string };
   blockTimeHours?: number;
 };
 
-interface AircraftSelectOption { // Renamed from AircraftOption to avoid conflict with performance form
-  value: string; // aircraft.id
-  label: string; // tailNumber - model
-  model: string; // aircraft.model for AI flow
+interface AircraftSelectOption {
+  value: string; 
+  label: string; 
+  model: string; 
 }
 
-const AIRCRAFT_RATES: { [key: string]: { buy: number; sell: number } } = { // Keyed by aircraft ID (e.g., tail number or generated ID)
-  'N123AB': { buy: 2800, sell: 3200 }, // Example: ID is 'N123AB'
-  'N456CD': { buy: 5800, sell: 6500 },
-  'N789EF': { buy: 7500, sell: 8500 },
-  'N630MW': { buy: 2200, sell: 2600 },
-  'DEFAULT_AIRCRAFT_RATES': { buy: 3500, sell: 4000 } // Fallback
-};
-const DEFAULT_AIRCRAFT_RATES = AIRCRAFT_RATES['DEFAULT_AIRCRAFT_RATES'];
+// Constants for service fee keys (must match auto-generated keys from QuoteConfigPage)
+const SERVICE_KEY_FUEL_SURCHARGE = "FUEL_SURCHARGE_PER_BLOCK_HOUR";
+const SERVICE_KEY_MEDICS = "MEDICAL_TEAM";
+const SERVICE_KEY_CATERING = "CATERING";
+const SERVICE_KEY_LANDING_FEES = "LANDING_FEES_PER_LEG";
+const SERVICE_KEY_OVERNIGHT_FEES = "OVERNIGHT_FEES_PER_NIGHT";
 
-const OTHER_COST_RATES = {
-  FUEL_SURCHARGE_PER_BLOCK_HOUR: { buy: 300, sell: 400, unitDescription: "Block Hour" },
-  LANDING_FEE_PER_LEG: { buy: 400, sell: 500, unitDescription: "Per Leg" },
-  OVERNIGHT_FEE_PER_NIGHT: { buy: 1000, sell: 1300, unitDescription: "Per Night"},
-  MEDICS_FEE_FLAT: { buy: 1800, sell: 2500, unitDescription: "Service" }, 
-  CATERING_FEE_FLAT: { buy: 350, sell: 500, unitDescription: "Service" },
+const DEFAULT_AIRCRAFT_RATES_FALLBACK: AircraftRate = {
+  id: 'FALLBACK_DEFAULT',
+  rates: {
+    standardCharter: { buy: 3500, sell: 4000 },
+    owner: { buy: 3200, sell: 3500 },
+    medical: { buy: 4000, sell: 4800 },
+    cargo: { buy: 3000, sell: 3600 },
+    positioning: { buy: 2000, sell: 2000 }, // Example: positioning at cost
+  }
 };
+
+const DEFAULT_SERVICE_RATES: Record<string, ServiceFeeRate> = {
+  [SERVICE_KEY_FUEL_SURCHARGE]: { displayDescription: "Fuel Surcharge", buy: 300, sell: 400, unitDescription: "Block Hour" },
+  [SERVICE_KEY_LANDING_FEES]: { displayDescription: "Landing Fees", buy: 400, sell: 500, unitDescription: "Per Leg" },
+  [SERVICE_KEY_OVERNIGHT_FEES]: { displayDescription: "Overnight Fees", buy: 1000, sell: 1300, unitDescription: "Per Night"},
+  [SERVICE_KEY_MEDICS]: { displayDescription: "Medical Team", buy: 1800, sell: 2500, unitDescription: "Service" }, 
+  [SERVICE_KEY_CATERING]: { displayDescription: "Catering", buy: 350, sell: 500, unitDescription: "Service" },
+};
+
 
 const sampleCustomerData = [
   { id: 'CUST001', name: 'John Doe', company: 'Doe Industries', email: 'john.doe@example.com', phone: '555-1234' },
   { id: 'CUST002', name: 'Jane Smith', company: 'Smith Corp', email: 'jane.smith@example.com', phone: '555-5678' },
-  { id: 'CUST003', name: 'Robert Brown', company: 'Brown & Co.', email: 'robert.brown@example.com', phone: '555-8765' },
-  { id: 'CUST004', name: 'Emily White', company: 'White Solutions', email: 'emily.white@example.com', phone: '555-4321' },
 ];
 
 
@@ -126,7 +145,11 @@ export function CreateQuoteForm() {
   const [calculatedLineItems, setCalculatedLineItems] = useState<LineItem[]>([]);
 
   const [aircraftSelectOptions, setAircraftSelectOptions] = useState<AircraftSelectOption[]>([]);
-  const [isLoadingAircraft, setIsLoadingAircraft] = useState(true);
+  const [isLoadingAircraftList, setIsLoadingAircraftList] = useState(true);
+  
+  const [fetchedAircraftRates, setFetchedAircraftRates] = useState<AircraftRate[]>([]);
+  const [fetchedCompanyProfile, setFetchedCompanyProfile] = useState<CompanyProfile | null>(null);
+  const [isLoadingDynamicRates, setIsLoadingDynamicRates] = useState(true);
 
 
   const form = useForm<FullQuoteFormData>({ 
@@ -168,7 +191,7 @@ export function CreateQuoteForm() {
   const { control, setValue, getValues, trigger, formState: { errors } } = form;
   
   const legsArray = useWatch({ control, name: "legs", defaultValue: [] });
-  const aircraftId = useWatch({ control, name: "aircraftId" }); // This is the ID of the aircraft from the fleet
+  const aircraftId = useWatch({ control, name: "aircraftId" });
   const fuelSurchargeRequested = useWatch({ control, name: "fuelSurchargeRequested" });
   const sellPriceFuelSurchargePerHour = useWatch({ control, name: "sellPriceFuelSurchargePerHour" });
   const medicsRequested = useWatch({ control, name: "medicsRequested" });
@@ -195,24 +218,34 @@ export function CreateQuoteForm() {
     today.setHours(0, 0, 0, 0);
     setMinLegDepartureDate(today);
 
-    const loadAircraft = async () => {
-      setIsLoadingAircraft(true);
+    const loadInitialData = async () => {
+      setIsLoadingAircraftList(true);
+      setIsLoadingDynamicRates(true);
       try {
-        const fleet = await fetchFleetAircraft();
+        const [fleet, rates, profile] = await Promise.all([
+          fetchFleetAircraft(),
+          fetchAircraftRates(),
+          fetchCompanyProfile()
+        ]);
+        
         const options = fleet.map(ac => ({ 
           value: ac.id, 
           label: `${ac.tailNumber} - ${ac.model}`,
-          model: ac.model // Store model for AI flow
+          model: ac.model
         }));
         setAircraftSelectOptions(options);
+        setFetchedAircraftRates(rates);
+        setFetchedCompanyProfile(profile);
+
       } catch (error) {
-        console.error("Failed to fetch aircraft options:", error);
-        toast({ title: "Error", description: "Could not load aircraft list for dropdown.", variant: "destructive" });
+        console.error("Failed to load initial data for quote form:", error);
+        toast({ title: "Error Loading Configuration", description: "Could not load aircraft or pricing data. Using defaults.", variant: "destructive" });
       } finally {
-        setIsLoadingAircraft(false);
+        setIsLoadingAircraftList(false);
+        setIsLoadingDynamicRates(false);
       }
     };
-    loadAircraft();
+    loadInitialData();
 
   }, [setValue, getValues, toast]);
 
@@ -233,122 +266,159 @@ export function CreateQuoteForm() {
 
   useEffect(() => {
     const newItems: LineItem[] = [];
-    
-    let totalRevenueFlightHours = 0;
+    if (isLoadingDynamicRates) {
+        setCalculatedLineItems([]);
+        return;
+    }
+
+    let totalFlightTimeBuyCost = 0;
+    let totalFlightTimeSellCost = 0;
     let totalBlockHours = 0;
+    let totalRevenueFlightHours = 0;
+
+    const mapLegTypeToRateKey = (legType: LegFormData['legType']): RateCategoryKey => {
+        switch (legType) {
+            case 'Owner': return 'owner';
+            case 'Ambulance': return 'medical';
+            case 'Cargo': return 'cargo';
+            case 'Positioning': case 'Ferry': case 'Maintenance': return 'positioning';
+            case 'Charter':
+            default: return 'standardCharter';
+        }
+    };
+    
+    const fallbackAircraftRate = DEFAULT_AIRCRAFT_RATES_FALLBACK;
 
     legsArray.forEach(leg => {
-      const flightTime = Number(leg.flightTimeHours || 0);
-      const originTaxi = Number(leg.originTaxiTimeMinutes || 0);
-      const destTaxi = Number(leg.destinationTaxiTimeMinutes || 0);
-      const legBlockMinutes = originTaxi + (flightTime * 60) + destTaxi;
-      totalBlockHours += parseFloat((legBlockMinutes / 60).toFixed(2));
+        const flightTime = Number(leg.flightTimeHours || 0);
+        const originTaxi = Number(leg.originTaxiTimeMinutes || 0);
+        const destTaxi = Number(leg.destinationTaxiTimeMinutes || 0);
+        const legBlockMinutes = originTaxi + (flightTime * 60) + destTaxi;
+        totalBlockHours += parseFloat((legBlockMinutes / 60).toFixed(2));
 
-      if (flightTime > 0 && ["Charter", "Owner", "Ambulance", "Cargo"].includes(leg.legType)) {
-        totalRevenueFlightHours += flightTime;
-      }
+        if (flightTime > 0) {
+            let legBuyRate = fallbackAircraftRate.rates.standardCharter!.buy;
+            let legSellRate = fallbackAircraftRate.rates.standardCharter!.sell;
+
+            const selectedAircraftFullRateProfile = fetchedAircraftRates.find(r => r.id === aircraftId);
+
+            if (selectedAircraftFullRateProfile?.rates) {
+                const rateKeyForLeg = mapLegTypeToRateKey(leg.legType);
+                const specificCategoryRate = selectedAircraftFullRateProfile.rates[rateKeyForLeg];
+                const standardCharterRate = selectedAircraftFullRateProfile.rates.standardCharter;
+
+                if (specificCategoryRate && specificCategoryRate.sell > 0) {
+                    legBuyRate = specificCategoryRate.buy;
+                    legSellRate = specificCategoryRate.sell;
+                } else if (standardCharterRate && standardCharterRate.sell > 0) {
+                    legBuyRate = standardCharterRate.buy;
+                    legSellRate = standardCharterRate.sell;
+                } else { // Fallback if specific and standard charter are not useful
+                    const fallbackCategoryRate = fallbackAircraftRate.rates[rateKeyForLeg] || fallbackAircraftRate.rates.standardCharter!;
+                    legBuyRate = fallbackCategoryRate.buy;
+                    legSellRate = fallbackCategoryRate.sell;
+                }
+            }
+            
+            if (["Charter", "Owner", "Ambulance", "Cargo"].includes(leg.legType)) {
+                totalFlightTimeBuyCost += flightTime * legBuyRate;
+                totalFlightTimeSellCost += flightTime * legSellRate;
+                totalRevenueFlightHours += flightTime;
+            } else if (["Positioning", "Ferry", "Maintenance"].includes(leg.legType)) {
+                 // Optionally bill positioning legs if their sell rate is configured and > 0
+                 if (legSellRate > 0) { // Could also check legBuyRate if we bill at cost
+                    totalFlightTimeBuyCost += flightTime * legBuyRate;
+                    totalFlightTimeSellCost += flightTime * legSellRate;
+                    // totalRevenueFlightHours += flightTime; // Decide if positioning counts towards "revenue" hours display
+                 }
+            }
+        }
     });
-    
-    const selectedAircraft = aircraftSelectOptions.find(ac => ac.value === aircraftId);
-    const aircraftRates = aircraftId ? (AIRCRAFT_RATES[aircraftId] || DEFAULT_AIRCRAFT_RATES) : DEFAULT_AIRCRAFT_RATES;
-    const aircraftDisplayName = selectedAircraft ? selectedAircraft.label : "Selected Aircraft";
 
+    const selectedAircraftInfo = aircraftSelectOptions.find(ac => ac.value === aircraftId);
+    const aircraftDisplayName = selectedAircraftInfo ? selectedAircraftInfo.label : "Selected Aircraft";
 
-    if (totalRevenueFlightHours > 0 && aircraftId) {
-      newItems.push({
-        id: 'revenueFlightTime',
-        description: `Flight Time (${aircraftDisplayName})`,
-        buyRate: aircraftRates.buy,
-        sellRate: aircraftRates.sell,
-        unitDescription: 'Flight Hour',
-        quantity: parseFloat(totalRevenueFlightHours.toFixed(2)),
-        buyTotal: aircraftRates.buy * totalRevenueFlightHours,
-        sellTotal: aircraftRates.sell * totalRevenueFlightHours,
-      });
+    if (totalRevenueFlightHours > 0 || (totalFlightTimeSellCost > 0 && totalRevenueFlightHours === 0) ) { // Add if there's any calculated cost/sell for "revenue" type legs or if explicitly billed positioning legs
+        newItems.push({
+            id: 'aircraftFlightTimeCost',
+            description: `Aircraft Flight Time (${aircraftDisplayName})`,
+            buyRate: totalRevenueFlightHours > 0 ? totalFlightTimeBuyCost / totalRevenueFlightHours : 0,
+            sellRate: totalRevenueFlightHours > 0 ? totalFlightTimeSellCost / totalRevenueFlightHours : (totalFlightTimeSellCost > 0 ? totalFlightTimeSellCost / totalBlockHours : 0), // Handle if only billed positioning
+            unitDescription: 'Flight Hour (Blended)',
+            quantity: parseFloat(totalRevenueFlightHours > 0 ? totalRevenueFlightHours.toFixed(2) : (totalFlightTimeSellCost > 0 ? totalBlockHours.toFixed(2) : "0.00")),
+            buyTotal: totalFlightTimeBuyCost,
+            sellTotal: totalFlightTimeSellCost,
+        });
     }
+    
+    const companyRates = fetchedCompanyProfile?.serviceFeeRates || {};
 
     if (fuelSurchargeRequested && totalBlockHours > 0) {
-      const sellRate = sellPriceFuelSurchargePerHour ?? OTHER_COST_RATES.FUEL_SURCHARGE_PER_BLOCK_HOUR.sell;
+      const config = companyRates[SERVICE_KEY_FUEL_SURCHARGE] || DEFAULT_SERVICE_RATES[SERVICE_KEY_FUEL_SURCHARGE];
+      const buyRate = config.buy;
+      const sellRate = sellPriceFuelSurchargePerHour ?? config.sell;
       newItems.push({
-        id: 'fuelSurcharge',
-        description: 'Fuel Surcharge',
-        buyRate: OTHER_COST_RATES.FUEL_SURCHARGE_PER_BLOCK_HOUR.buy,
-        sellRate: sellRate,
-        unitDescription: OTHER_COST_RATES.FUEL_SURCHARGE_PER_BLOCK_HOUR.unitDescription,
+        id: 'fuelSurcharge', description: config.displayDescription, buyRate, sellRate, unitDescription: config.unitDescription,
         quantity: parseFloat(totalBlockHours.toFixed(2)),
-        buyTotal: OTHER_COST_RATES.FUEL_SURCHARGE_PER_BLOCK_HOUR.buy * totalBlockHours,
-        sellTotal: sellRate * totalBlockHours,
+        buyTotal: buyRate * totalBlockHours, sellTotal: sellRate * totalBlockHours,
       });
     }
-    
+
     if (medicsRequested) {
-      const sellRate = sellPriceMedics ?? OTHER_COST_RATES.MEDICS_FEE_FLAT.sell;
+      const config = companyRates[SERVICE_KEY_MEDICS] || DEFAULT_SERVICE_RATES[SERVICE_KEY_MEDICS];
+      const buyRate = config.buy;
+      const sellRate = sellPriceMedics ?? config.sell;
       newItems.push({
-        id: 'medicsFee',
-        description: 'Medical Team',
-        buyRate: OTHER_COST_RATES.MEDICS_FEE_FLAT.buy,
-        sellRate: sellRate,
-        unitDescription: OTHER_COST_RATES.MEDICS_FEE_FLAT.unitDescription,
-        quantity: 1,
-        buyTotal: OTHER_COST_RATES.MEDICS_FEE_FLAT.buy * 1,
-        sellTotal: sellRate * 1,
+        id: 'medicsFee', description: config.displayDescription, buyRate, sellRate, unitDescription: config.unitDescription,
+        quantity: 1, buyTotal: buyRate, sellTotal: sellRate,
       });
     }
 
     if (cateringRequested) {
-      const sellRate = sellPriceCatering ?? OTHER_COST_RATES.CATERING_FEE_FLAT.sell;
+      const config = companyRates[SERVICE_KEY_CATERING] || DEFAULT_SERVICE_RATES[SERVICE_KEY_CATERING];
+      const buyRate = config.buy;
+      const sellRate = sellPriceCatering ?? config.sell;
       newItems.push({
-        id: 'cateringFee',
-        description: 'Catering',
-        buyRate: OTHER_COST_RATES.CATERING_FEE_FLAT.buy,
-        sellRate: sellRate,
-        unitDescription: OTHER_COST_RATES.CATERING_FEE_FLAT.unitDescription,
-        quantity: 1,
-        buyTotal: OTHER_COST_RATES.CATERING_FEE_FLAT.buy * 1,
-        sellTotal: sellRate * 1,
+        id: 'cateringFee', description: config.displayDescription, buyRate, sellRate, unitDescription: config.unitDescription,
+        quantity: 1, buyTotal: buyRate, sellTotal: sellRate,
       });
     }
 
     const validLegsCount = legsArray.filter(leg => leg.origin && leg.destination && leg.origin.length >=3 && leg.destination.length >=3).length;
     if (includeLandingFees && validLegsCount > 0) {
-      const sellRate = sellPriceLandingFeePerLeg ?? OTHER_COST_RATES.LANDING_FEE_PER_LEG.sell;
+      const config = companyRates[SERVICE_KEY_LANDING_FEES] || DEFAULT_SERVICE_RATES[SERVICE_KEY_LANDING_FEES];
+      const buyRate = config.buy;
+      const sellRate = sellPriceLandingFeePerLeg ?? config.sell;
       newItems.push({
-        id: 'landingFees',
-        description: 'Landing Fees',
-        buyRate: OTHER_COST_RATES.LANDING_FEE_PER_LEG.buy,
-        sellRate: sellRate,
-        unitDescription: OTHER_COST_RATES.LANDING_FEE_PER_LEG.unitDescription,
+        id: 'landingFees', description: config.displayDescription, buyRate, sellRate, unitDescription: config.unitDescription,
         quantity: validLegsCount,
-        buyTotal: OTHER_COST_RATES.LANDING_FEE_PER_LEG.buy * validLegsCount,
-        sellTotal: sellRate * validLegsCount,
+        buyTotal: buyRate * validLegsCount, sellTotal: sellRate * validLegsCount,
       });
     }
 
     const numericEstimatedOvernights = Number(currentEstimatedOvernights || 0);
     if (numericEstimatedOvernights > 0) {
-      const sellRate = sellPriceOvernight ?? OTHER_COST_RATES.OVERNIGHT_FEE_PER_NIGHT.sell;
+      const config = companyRates[SERVICE_KEY_OVERNIGHT_FEES] || DEFAULT_SERVICE_RATES[SERVICE_KEY_OVERNIGHT_FEES];
+      const buyRate = config.buy;
+      const sellRate = sellPriceOvernight ?? config.sell;
       newItems.push({
-        id: 'overnightFees',
-        description: 'Overnight Fees',
-        buyRate: OTHER_COST_RATES.OVERNIGHT_FEE_PER_NIGHT.buy,
-        sellRate: sellRate,
-        unitDescription: OTHER_COST_RATES.OVERNIGHT_FEE_PER_NIGHT.unitDescription,
+        id: 'overnightFees', description: config.displayDescription, buyRate, sellRate, unitDescription: config.unitDescription,
         quantity: numericEstimatedOvernights,
-        buyTotal: OTHER_COST_RATES.OVERNIGHT_FEE_PER_NIGHT.buy * numericEstimatedOvernights,
-        sellTotal: sellRate * numericEstimatedOvernights,
+        buyTotal: buyRate * numericEstimatedOvernights, sellTotal: sellRate * numericEstimatedOvernights,
       });
     }
     
     setCalculatedLineItems(newItems);
 
   }, [
-    legsArray, 
-    aircraftId, aircraftSelectOptions, // Added aircraftSelectOptions
+    legsArray, aircraftId, aircraftSelectOptions,
+    fetchedAircraftRates, fetchedCompanyProfile,
     fuelSurchargeRequested, sellPriceFuelSurchargePerHour,
     medicsRequested, sellPriceMedics,
     cateringRequested, sellPriceCatering,
     includeLandingFees, sellPriceLandingFeePerLeg,
     currentEstimatedOvernights, sellPriceOvernight,
+    isLoadingDynamicRates
   ]);
 
 
@@ -359,7 +429,7 @@ export function CreateQuoteForm() {
        return;
     }
 
-    const legData = getValues(`legs.${index}`);
+    const legData = getValues(`legs.${legIndex}`);
     const currentAircraftId = getValues('aircraftId');
     const selectedAircraft = aircraftSelectOptions.find(ac => ac.value === currentAircraftId);
 
@@ -391,7 +461,7 @@ export function CreateQuoteForm() {
       const result = await estimateFlightDetails({
         origin: legData.origin.toUpperCase(),
         destination: legData.destination.toUpperCase(),
-        aircraftType: aircraftModelForFlow, // Pass the model name
+        aircraftType: aircraftModelForFlow,
       });
       
       setValue(`legs.${legIndex}.flightTimeHours`, result.estimatedFlightTimeHours);
@@ -532,9 +602,9 @@ export function CreateQuoteForm() {
         const previousLegDestTaxiMillis = (Number(previousLeg.destinationTaxiTimeMinutes || 0)) * 60 * 1000;
         
         const estimatedArrivalMillis = previousLegDeparture.getTime() + previousLegFlightMillis + previousLegDestTaxiMillis;
-        newLegDepartureDateTime = new Date(estimatedArrivalMillis + (60 * 60 * 1000)); // Add 1 hour
+        newLegDepartureDateTime = new Date(estimatedArrivalMillis + (60 * 60 * 1000)); 
       } else if (previousLeg.departureDateTime && previousLeg.departureDateTime instanceof Date && !isNaN(previousLeg.departureDateTime.getTime())) {
-         newLegDepartureDateTime = new Date(previousLeg.departureDateTime.getTime() + (3 * 60 * 60 * 1000)); // Add 3 hours if no flight time
+         newLegDepartureDateTime = new Date(previousLeg.departureDateTime.getTime() + (3 * 60 * 60 * 1000)); 
       }
     }
 
@@ -572,6 +642,19 @@ export function CreateQuoteForm() {
       setValue('clientPhone', selectedCustomer.phone || '');
     }
   };
+  
+  const getServiceLabel = (serviceKey: string, defaultLabel: string, unitDescription?: string) => {
+    const serviceConfig = fetchedCompanyProfile?.serviceFeeRates?.[serviceKey] || DEFAULT_SERVICE_RATES[serviceKey];
+    let label = serviceConfig?.displayDescription || defaultLabel;
+    if (serviceConfig?.sell) {
+      label += ` ($${serviceConfig.sell.toLocaleString()}`;
+      if (unitDescription || serviceConfig.unitDescription) {
+        label += `/${unitDescription || serviceConfig.unitDescription}`;
+      }
+      label += ")";
+    }
+    return label;
+  };
 
   return (
     <Card className="shadow-lg max-w-4xl mx-auto">
@@ -608,14 +691,15 @@ export function CreateQuoteForm() {
                                 onValueChange={field.onChange} 
                                 value={field.value || ""}
                                 name={field.name}
+                                disabled={isLoadingAircraftList || isLoadingDynamicRates}
                             > 
                                 <FormControl>
-                                    <SelectTrigger disabled={isLoadingAircraft}>
-                                        <SelectValue placeholder={isLoadingAircraft ? "Loading aircraft..." : "Select an aircraft"} />
+                                    <SelectTrigger>
+                                        <SelectValue placeholder={isLoadingAircraftList ? "Loading aircraft..." : "Select an aircraft"} />
                                     </SelectTrigger>
                                 </FormControl> 
                                 <SelectContent>
-                                    {!isLoadingAircraft && aircraftSelectOptions.length === 0 && <SelectItem value="NO_AIRCRAFT_CONFIGURED_PLACEHOLDER" disabled>No aircraft configured in fleet</SelectItem>}
+                                    {!isLoadingAircraftList && aircraftSelectOptions.length === 0 && <SelectItem value="NO_AIRCRAFT_CONFIGURED_PLACEHOLDER" disabled>No aircraft configured in fleet</SelectItem>}
                                     {aircraftSelectOptions.map(aircraft => (
                                         <SelectItem key={aircraft.value} value={aircraft.value}>
                                             {aircraft.label}
@@ -730,16 +814,17 @@ export function CreateQuoteForm() {
                         <FormMessage /> </FormItem> )} />
                     </div>
 
-                    <Button type="button" variant="outline" size="sm" onClick={() => handleEstimateFlightDetails(index)} disabled={estimatingLegIndex === index || !aircraftId} className="w-full sm:w-auto"> {estimatingLegIndex === index ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />} Estimate Flight Details </Button>
-                    {!aircraftId && <FormDescription className="text-xs text-destructive">Select an aircraft to enable estimation.</FormDescription>}
+                    <Button type="button" variant="outline" size="sm" onClick={() => handleEstimateFlightDetails(index)} disabled={estimatingLegIndex === index || !aircraftId || isLoadingDynamicRates} className="w-full sm:w-auto"> {estimatingLegIndex === index ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />} Estimate Flight Details </Button>
+                    {(!aircraftId && !isLoadingDynamicRates) && <FormDescription className="text-xs text-destructive">Select an aircraft to enable estimation.</FormDescription>}
+                    {(isLoadingDynamicRates || isLoadingAircraftList) && <FormDescription className="text-xs">Loading aircraft & rate data...</FormDescription>}
+
 
                     {legEstimates[index] && (() => {
                       const estimate = legEstimates[index]!;
                       const legData = getValues(`legs.${index}`);
                       let formattedArrivalTime = 'N/A';
                       let formattedBlockTime = 'N/A';
-                      let legCost = 0;
-
+                      
                       const legDepartureDateTime = legData.departureDateTime;
                       const legFlightTimeHours = Number(legData.flightTimeHours || 0); 
 
@@ -762,14 +847,6 @@ export function CreateQuoteForm() {
                         formattedBlockTime = `${String(blockHours).padStart(2, '0')}:${String(blockMinutes).padStart(2, '0')} hrs`;
                       }
                       
-                      const currentAircraftSelectedId = getValues('aircraftId');
-                      const currentAircraftRateInfo = currentAircraftSelectedId ? (AIRCRAFT_RATES[currentAircraftSelectedId] || DEFAULT_AIRCRAFT_RATES) : DEFAULT_AIRCRAFT_RATES;
-                      const hourlyRateForLeg = currentAircraftRateInfo.sell;
-
-                      if (legFlightTimeHours > 0 && ["Charter", "Owner", "Ambulance", "Cargo"].includes(legData.legType)) {
-                        legCost = legFlightTimeHours * hourlyRateForLeg;
-                      }
-
                       return (
                         <Alert variant={estimate.error ? "destructive" : "default"} className="mt-4 text-xs">
                           <Info className={`h-4 w-4 ${estimate.error ? '' : 'text-primary'}`} />
@@ -783,7 +860,6 @@ export function CreateQuoteForm() {
                                 <p><strong>Calc. Block Time:</strong> {formattedBlockTime} (based on current taxi/flight times)</p>
                                 <p><strong>Assumed Speed (AI):</strong> {estimate.assumedCruiseSpeedKts?.toLocaleString()} kts</p>
                                 <p className="mt-1"><em>AI Explanation: {estimate.briefExplanation}</em></p>
-                                {legCost > 0 && <p className="mt-1 font-semibold"><strong>Est. Leg Sell Cost:</strong> ${legCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (based on current flight time & aircraft sell rate)</p>}
                               </>
                             )}
                           </AlertDescription>
@@ -804,98 +880,49 @@ export function CreateQuoteForm() {
             <section>
                 <CardTitle className="text-xl border-b pb-2 mb-4">Additional Quote Options & Pricing</CardTitle>
                 <div className="space-y-4">
-                    <FormField control={control} name="fuelSurchargeRequested" render={({ field }) => ( <FormItem className="flex flex-row items-center space-x-3 space-y-0 p-3 border rounded-md hover:bg-muted/50"> <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl> <div className="space-y-1 leading-none"><FormLabel className="flex items-center gap-2"><Fuel className="h-4 w-4 text-primary" /> Include Fuel Surcharge (${OTHER_COST_RATES.FUEL_SURCHARGE_PER_BLOCK_HOUR.sell}/Block Hr)</FormLabel></div> </FormItem> )} />
+                    <FormField control={control} name="fuelSurchargeRequested" render={({ field }) => ( <FormItem className="flex flex-row items-center space-x-3 space-y-0 p-3 border rounded-md hover:bg-muted/50"> <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl> <div className="space-y-1 leading-none"><FormLabel className="flex items-center gap-2"><Fuel className="h-4 w-4 text-primary" /> {getServiceLabel(SERVICE_KEY_FUEL_SURCHARGE, "Include Fuel Surcharge", "Block Hr")}</FormLabel></div> </FormItem> )} />
                     {fuelSurchargeRequested && <FormField control={control} name="sellPriceFuelSurchargePerHour" render={({ field }) => (<FormItem className="pl-8"> <FormLabel>Fuel Surcharge Sell Price (per Block Hour)</FormLabel> 
                       <FormControl>
                         <Input 
                           type="number" 
-                          placeholder={`Default: $${OTHER_COST_RATES.FUEL_SURCHARGE_PER_BLOCK_HOUR.sell.toLocaleString()}`} 
+                          placeholder={`Default: $${(fetchedCompanyProfile?.serviceFeeRates?.[SERVICE_KEY_FUEL_SURCHARGE]?.sell || DEFAULT_SERVICE_RATES[SERVICE_KEY_FUEL_SURCHARGE]?.sell || 0).toLocaleString()}`} 
                           {...field} 
                           value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : field.value}
-                          onChange={e => {
-                            const val = parseFloat(e.target.value);
-                            field.onChange(isNaN(val) ? undefined : val);
-                          }}
+                          onChange={e => { const val = parseFloat(e.target.value); field.onChange(isNaN(val) ? undefined : val); }}
                         />
                       </FormControl> 
                     <FormMessage /> </FormItem> )} />}
 
-                    <FormField control={control} name="medicsRequested" render={({ field }) => ( <FormItem className="flex flex-row items-center space-x-3 space-y-0 p-3 border rounded-md hover:bg-muted/50"> <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl> <div className="space-y-1 leading-none"><FormLabel className="flex items-center gap-2"><Users className="h-4 w-4 text-primary" /> Medics Requested (${OTHER_COST_RATES.MEDICS_FEE_FLAT.sell.toLocaleString()})</FormLabel></div> </FormItem> )} />
+                    <FormField control={control} name="medicsRequested" render={({ field }) => ( <FormItem className="flex flex-row items-center space-x-3 space-y-0 p-3 border rounded-md hover:bg-muted/50"> <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl> <div className="space-y-1 leading-none"><FormLabel className="flex items-center gap-2"><Users className="h-4 w-4 text-primary" /> {getServiceLabel(SERVICE_KEY_MEDICS, "Medics Requested")}</FormLabel></div> </FormItem> )} />
                     {medicsRequested && <FormField control={control} name="sellPriceMedics" render={({ field }) => (<FormItem className="pl-8"> <FormLabel>Medics Fee Sell Price</FormLabel> 
                       <FormControl>
-                        <Input 
-                          type="number" 
-                          placeholder={`Default: $${OTHER_COST_RATES.MEDICS_FEE_FLAT.sell.toLocaleString()}`} 
-                          {...field} 
-                          value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : field.value}
-                          onChange={e => {
-                            const val = parseFloat(e.target.value);
-                            field.onChange(isNaN(val) ? undefined : val);
-                          }}
-                        />
+                        <Input type="number" placeholder={`Default: $${(fetchedCompanyProfile?.serviceFeeRates?.[SERVICE_KEY_MEDICS]?.sell || DEFAULT_SERVICE_RATES[SERVICE_KEY_MEDICS]?.sell || 0).toLocaleString()}`}  {...field} value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : field.value} onChange={e => { const val = parseFloat(e.target.value); field.onChange(isNaN(val) ? undefined : val); }} />
                       </FormControl> 
                     <FormMessage /> </FormItem> )} />}
                     
-                    <FormField control={control} name="cateringRequested" render={({ field }) => ( <FormItem className="flex flex-row items-center space-x-3 space-y-0 p-3 border rounded-md hover:bg-muted/50"> <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl> <div className="space-y-1 leading-none"><FormLabel className="flex items-center gap-2"><Utensils className="h-4 w-4 text-primary" /> Catering Requested (${OTHER_COST_RATES.CATERING_FEE_FLAT.sell.toLocaleString()})</FormLabel></div> </FormItem> )} />
+                    <FormField control={control} name="cateringRequested" render={({ field }) => ( <FormItem className="flex flex-row items-center space-x-3 space-y-0 p-3 border rounded-md hover:bg-muted/50"> <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl> <div className="space-y-1 leading-none"><FormLabel className="flex items-center gap-2"><Utensils className="h-4 w-4 text-primary" /> {getServiceLabel(SERVICE_KEY_CATERING, "Catering Requested")}</FormLabel></div> </FormItem> )} />
                     {cateringRequested && ( <FormField control={control} name="cateringNotes" render={({ field }) => ( <FormItem className="pl-8"> <FormLabel>Catering Notes</FormLabel> <FormControl><Textarea placeholder="Specify catering details..." {...field} rows={3} /></FormControl> <FormMessage /> </FormItem> )} /> )}
                     {cateringRequested && <FormField control={control} name="sellPriceCatering" render={({ field }) => (<FormItem className="pl-8"> <FormLabel>Catering Fee Sell Price</FormLabel> 
                       <FormControl>
-                        <Input 
-                          type="number" 
-                          placeholder={`Default: $${OTHER_COST_RATES.CATERING_FEE_FLAT.sell.toLocaleString()}`} 
-                          {...field} 
-                          value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : field.value}
-                          onChange={e => {
-                            const val = parseFloat(e.target.value);
-                            field.onChange(isNaN(val) ? undefined : val);
-                          }}
-                        />
+                        <Input type="number" placeholder={`Default: $${(fetchedCompanyProfile?.serviceFeeRates?.[SERVICE_KEY_CATERING]?.sell || DEFAULT_SERVICE_RATES[SERVICE_KEY_CATERING]?.sell || 0).toLocaleString()}`} {...field} value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : field.value} onChange={e => { const val = parseFloat(e.target.value); field.onChange(isNaN(val) ? undefined : val); }}/>
                       </FormControl> 
                     <FormMessage /> </FormItem> )} />}
 
-                    <FormField control={control} name="includeLandingFees" render={({ field }) => ( <FormItem className="flex flex-row items-center space-x-3 space-y-0 p-3 border rounded-md hover:bg-muted/50"> <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl> <div className="space-y-1 leading-none"><FormLabel className="flex items-center gap-2"><Landmark className="h-4 w-4 text-primary" /> Include Landing Fees (${OTHER_COST_RATES.LANDING_FEE_PER_LEG.sell.toLocaleString()}/Leg)</FormLabel></div> </FormItem> )} />
+                    <FormField control={control} name="includeLandingFees" render={({ field }) => ( <FormItem className="flex flex-row items-center space-x-3 space-y-0 p-3 border rounded-md hover:bg-muted/50"> <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl> <div className="space-y-1 leading-none"><FormLabel className="flex items-center gap-2"><Landmark className="h-4 w-4 text-primary" /> {getServiceLabel(SERVICE_KEY_LANDING_FEES, "Include Landing Fees", "Leg")}</FormLabel></div> </FormItem> )} />
                     {includeLandingFees && <FormField control={control} name="sellPriceLandingFeePerLeg" render={({ field }) => (<FormItem className="pl-8"> <FormLabel>Landing Fee Sell Price (per Leg)</FormLabel> 
                       <FormControl>
-                        <Input 
-                          type="number" 
-                          placeholder={`Default: $${OTHER_COST_RATES.LANDING_FEE_PER_LEG.sell.toLocaleString()}`} 
-                          {...field} 
-                          value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : field.value}
-                          onChange={e => {
-                            const val = parseFloat(e.target.value);
-                            field.onChange(isNaN(val) ? undefined : val);
-                          }}
-                        />
+                        <Input type="number" placeholder={`Default: $${(fetchedCompanyProfile?.serviceFeeRates?.[SERVICE_KEY_LANDING_FEES]?.sell || DEFAULT_SERVICE_RATES[SERVICE_KEY_LANDING_FEES]?.sell || 0).toLocaleString()}`} {...field} value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : field.value} onChange={e => { const val = parseFloat(e.target.value); field.onChange(isNaN(val) ? undefined : val); }}/>
                       </FormControl> 
                     <FormMessage /> </FormItem> )} />}
 
-                    <FormField control={control} name="estimatedOvernights" render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-2"><BedDouble className="h-4 w-4 text-primary"/> Estimated Overnights (${OTHER_COST_RATES.OVERNIGHT_FEE_PER_NIGHT.sell.toLocaleString()}/Night)</FormLabel> 
+                    <FormField control={control} name="estimatedOvernights" render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-2"><BedDouble className="h-4 w-4 text-primary"/> {getServiceLabel(SERVICE_KEY_OVERNIGHT_FEES, "Estimated Overnights", "Night")}</FormLabel> 
                       <FormControl>
-                        <Input 
-                          type="number" 
-                          placeholder="e.g., 0" 
-                          {...field} 
-                          value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : field.value}
-                          onChange={e => {
-                            const val = parseInt(e.target.value, 10);
-                            field.onChange(isNaN(val) ? undefined : val);
-                          }}
-                          min="0"
-                        />
+                        <Input type="number" placeholder="e.g., 0" {...field} value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : field.value} onChange={e => { const val = parseInt(e.target.value, 10); field.onChange(isNaN(val) ? undefined : val); }} min="0"/>
                       </FormControl> 
                     <FormDescription>Number of overnight stays for crew/aircraft.</FormDescription> <FormMessage /> </FormItem> )} />
                     {Number(currentEstimatedOvernights || 0) > 0 && <FormField control={control} name="sellPriceOvernight" render={({ field }) => (<FormItem className="pl-8"> <FormLabel>Overnight Fee Sell Price (per Night)</FormLabel> 
                       <FormControl>
-                        <Input 
-                          type="number" 
-                          placeholder={`Default: $${OTHER_COST_RATES.OVERNIGHT_FEE_PER_NIGHT.sell.toLocaleString()}`} 
-                          {...field} 
-                          value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : field.value}
-                          onChange={e => {
-                            const val = parseFloat(e.target.value);
-                            field.onChange(isNaN(val) ? undefined : val);
-                          }}
-                        />
+                        <Input type="number" placeholder={`Default: $${(fetchedCompanyProfile?.serviceFeeRates?.[SERVICE_KEY_OVERNIGHT_FEES]?.sell || DEFAULT_SERVICE_RATES[SERVICE_KEY_OVERNIGHT_FEES]?.sell || 0).toLocaleString()}`} {...field} value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : field.value} onChange={e => { const val = parseFloat(e.target.value); field.onChange(isNaN(val) ? undefined : val); }}/>
                       </FormControl> 
                     <FormMessage /> </FormItem> )} />}
                 </div>
@@ -917,3 +944,6 @@ export function CreateQuoteForm() {
     </Card>
   );
 }
+
+
+    
