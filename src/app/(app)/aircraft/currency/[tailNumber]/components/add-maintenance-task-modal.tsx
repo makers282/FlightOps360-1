@@ -37,7 +37,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { CalendarIcon, Loader2, History, Info, Trash2 } from 'lucide-react';
 import { cn } from "@/lib/utils";
-import { format, parse as parseDate, isValid } from "date-fns";
+import { format, parse as parseDate, isValid, getYear } from "date-fns";
 import type { FleetAircraft } from '@/ai/flows/manage-fleet-flow';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
@@ -157,6 +157,8 @@ export function AddMaintenanceTaskModal({ aircraft, onSave, onDelete, children, 
   const [isDeleting, setIsDeleting] = useState(false);
   const [showHistoryAlert, setShowHistoryAlert] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  
+  const currentYear = getYear(new Date());
 
 
   const form = useForm<MaintenanceTaskFormData>({
@@ -274,6 +276,9 @@ export function AddMaintenanceTaskModal({ aircraft, onSave, onDelete, children, 
                             mode="single"
                             selected={field.value && isValid(parseDate(field.value, 'yyyy-MM-dd', new Date())) ? parseDate(field.value, 'yyyy-MM-dd', new Date()) : undefined}
                             onSelect={(date) => field.onChange(date ? format(date, 'yyyy-MM-dd') : '')}
+                            captionLayout="dropdown-buttons"
+                            fromYear={currentYear - 10}
+                            toYear={currentYear + 10}
                             initialFocus
                           />
                         </PopoverContent>
@@ -448,6 +453,9 @@ export function AddMaintenanceTaskModal({ aircraft, onSave, onDelete, children, 
                                 mode="single"
                                 selected={field.value && isValid(parseDate(field.value, 'yyyy-MM-DD', new Date())) ? parseDate(field.value, 'yyyy-MM-DD', new Date()) : undefined}
                                 onSelect={(date) => field.onChange(date ? format(date, 'yyyy-MM-dd') : '')}
+                                captionLayout="dropdown-buttons"
+                                fromYear={currentYear - 10}
+                                toYear={currentYear + 10}
                                 initialFocus
                               />
                             </PopoverContent>

@@ -30,8 +30,6 @@ import { fetchMaintenanceTasksForAircraft, saveMaintenanceTask, deleteMaintenanc
 import { fetchComponentTimesForAircraft, saveComponentTimesForAircraft, type AircraftComponentTimes } from '@/ai/flows/manage-component-times-flow';
 import { PageHeader } from '@/components/page-header';
 
-// MOCK_COMPONENT_VALUES_DATA is no longer used here, data will come from Firestore.
-// export const MOCK_COMPONENT_VALUES_DATA: Record<string, Record<string, { time?: number; cycles?: number }>> = { ... };
 
 export interface DisplayMaintenanceItem extends FlowMaintenanceTask {
   dueAtDate?: string; 
@@ -142,7 +140,6 @@ export default function AircraftMaintenanceDetailPage() {
     } catch (error) {
       console.error(`Failed to load component times for ${aircraft.id}:`, error);
       toast({ title: "Error Loading Component Times", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
-      // Initialize with defaults if fetch fails
       const trackedComponents = aircraft.trackedComponentNames || ['Airframe', 'Engine 1'];
       const defaultTimesArray = trackedComponents.map(name => ({
         componentName: name.trim(),
@@ -190,7 +187,7 @@ export default function AircraftMaintenanceDetailPage() {
             primaryContactName: foundAircraft.primaryContactName || '',
             primaryContactPhone: foundAircraft.primaryContactPhone || '',
           });
-          await loadAndInitializeComponentTimes(foundAircraft); // Load component times from Firestore
+          await loadAndInitializeComponentTimes(foundAircraft); 
           await loadMaintenanceTasks(foundAircraft.id);
         } else {
           setCurrentAircraft(null);
@@ -359,7 +356,7 @@ export default function AircraftMaintenanceDetailPage() {
     
     const componentNameToUse = (item.associatedComponent && item.associatedComponent.trim() !== "") 
       ? item.associatedComponent.trim() 
-      : "Airframe"; // Default to "Airframe" if no specific component
+      : "Airframe"; 
     
     const currentTimesForComponent = editableComponentTimes.find(c => c.componentName.trim() === componentNameToUse);
 
@@ -384,6 +381,32 @@ export default function AircraftMaintenanceDetailPage() {
     
     return { text: 'N/A (Not Date/Hr/Cycle)', numeric: Infinity, unit: 'N/A', isOverdue: false };
   }, [editableComponentTimes]);
+
+  const formatTaskFrequency = (task: FlowMaintenanceTask): string => {
+    if (task.trackType === "Dont Alert") return "Not Tracked";
+    if (task.trackType === "One Time") return "One Time";
+
+    const frequencies = [];
+    if (task.isHoursDueEnabled && task.hoursDue) {
+      frequencies.push(`${task.hoursDue.toLocaleString()} hrs`);
+    }
+    if (task.isCyclesDueEnabled && task.cyclesDue) {
+      frequencies.push(`${task.cyclesDue.toLocaleString()} cyc`);
+    }
+    if (task.isDaysDueEnabled && task.daysDueValue) {
+        const numVal = Number(task.daysDueValue);
+        let unit = '';
+        switch(task.daysIntervalType) {
+            case 'days': unit = 'days'; break;
+            case 'months_specific_day': 
+            case 'months_eom': unit = 'months'; break;
+            case 'years_specific_day': unit = 'years'; break;
+            default: unit = task.daysIntervalType || 'days';
+        }
+        frequencies.push(`${numVal} ${unit}`);
+    }
+    return frequencies.length > 0 ? frequencies.join(' / ') : 'N/A';
+  };
 
 
   const getReleaseStatus = (toGo: { text: string; numeric: number; unit: 'days' | 'hrs' | 'cycles' | 'N/A'; isOverdue: boolean }): { icon: JSX.Element; colorClass: string; label: string } => {
@@ -600,6 +623,7 @@ export default function AircraftMaintenanceDetailPage() {
                 <TableRow>
                   <TableHead>Item</TableHead>
                   <TableHead>Associated Component</TableHead>
+                  <TableHead>Frequency</TableHead>
                   <TableHead>Last Done</TableHead>
                   <TableHead>Due At</TableHead>
                   <TableHead>To Go</TableHead>
@@ -610,7 +634,7 @@ export default function AircraftMaintenanceDetailPage() {
               <TableBody>
                 {maintenanceTasks.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center text-muted-foreground py-10">
+                    <TableCell colSpan={8} className="text-center text-muted-foreground py-10">
                       No maintenance tasks found for this aircraft. 
                       <Button variant="link" className="p-0 ml-1" onClick={handleOpenAddTaskModal}>Add one now?</Button>
                     </TableCell>
@@ -619,6 +643,7 @@ export default function AircraftMaintenanceDetailPage() {
                 {maintenanceTasks.map((item) => {
                   const toGo = calculateToGo(item);
                   const status = getReleaseStatus(toGo);
+                  const frequency = formatTaskFrequency(item);
                   let dueAtDisplay = "N/A";
                   if (item.dueAtDate) {
                     try { dueAtDisplay = format(parse(item.dueAtDate, 'yyyy-MM-dd', new Date()), 'MM/dd/yy'); } catch {}
@@ -645,6 +670,7 @@ export default function AircraftMaintenanceDetailPage() {
                         <p className="text-xs text-muted-foreground">{item.itemType}</p>
                       </TableCell>
                       <TableCell>{item.associatedComponent || 'Airframe'}</TableCell>
+                      <TableCell>{frequency}</TableCell>
                       <TableCell>{lastDoneDisplay}</TableCell>
                       <TableCell>{dueAtDisplay}</TableCell>
                       <TableCell className={`font-semibold ${status.colorClass}`}>{toGo.text}</TableCell>
