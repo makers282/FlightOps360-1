@@ -25,6 +25,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
@@ -34,7 +35,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { CalendarIcon, Loader2, History, Info } from 'lucide-react';
+import { CalendarIcon, Loader2, History, Info, Trash2 } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { format, parse as parseDate, isValid } from "date-fns";
 import type { FleetAircraft } from '@/ai/flows/manage-fleet-flow';
@@ -76,7 +77,7 @@ export const defaultMaintenanceTaskFormValues: MaintenanceTaskFormData = {
 
 
 const maintenanceTaskSchema = z.object({
-  lastCompletedDate: z.string().optional().refine(val => !val || isValid(parseDate(val, 'yyyy-MM-dd', new Date())), { message: "Invalid date format for last completion." }),
+  lastCompletedDate: z.string().optional().refine(val => !val || val === "" || isValid(parseDate(val, 'yyyy-MM-dd', new Date())), { message: "Invalid date format for last completion." }),
   lastCompletedHours: z.coerce.number({invalid_type_error: "Must be a number"}).nonnegative("Cannot be negative").optional().default(0),
   lastCompletedCycles: z.coerce.number({invalid_type_error: "Must be a number"}).nonnegative("Cannot be negative").int("Must be an integer").optional().default(0),
   lastCompletedNotes: z.string().optional(),
@@ -129,7 +130,7 @@ const maintenanceTaskSchema = z.object({
                 ctx.addIssue({ code: z.ZodIssueCode.custom, message: "For Interval tracking, the due value must be a positive number.", path: ["daysDueValue"]});
             }
         } else if (data.trackType === 'One Time') {
-            if (!isValid(parseDate(data.daysDueValue, 'yyyy-MM-dd', new Date()))) {
+             if (!isValid(parseDate(data.daysDueValue, 'yyyy-MM-dd', new Date()))) {
                  ctx.addIssue({ code: z.ZodIssueCode.custom, message: "For One Time tracking, Due Date must be a valid date (YYYY-MM-DD).", path: ["daysDueValue"]});
             }
         }
@@ -141,17 +142,22 @@ export type MaintenanceTaskFormData = z.infer<typeof maintenanceTaskSchema>;
 
 interface AddMaintenanceTaskModalProps {
   aircraft: FleetAircraft | null;
-  onSave: (data: MaintenanceTaskFormData) => void;
+  onSave: (data: MaintenanceTaskFormData) => Promise<void>; // Make onSave async
+  onDelete: (taskId: string) => Promise<void>; // Add onDelete prop
   children: React.ReactNode;
   isOpen: boolean;
   setIsOpen: (isOpen: boolean) => void;
   initialData?: Partial<MaintenanceTaskFormData> | null; 
   isEditing?: boolean;
+  currentTaskId?: string | null; // Pass the actual task ID for deletion
 }
 
-export function AddMaintenanceTaskModal({ aircraft, onSave, children, isOpen, setIsOpen, initialData, isEditing }: AddMaintenanceTaskModalProps) {
+export function AddMaintenanceTaskModal({ aircraft, onSave, onDelete, children, isOpen, setIsOpen, initialData, isEditing, currentTaskId }: AddMaintenanceTaskModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [showHistoryAlert, setShowHistoryAlert] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
 
   const form = useForm<MaintenanceTaskFormData>({
     resolver: zodResolver(maintenanceTaskSchema),
@@ -177,8 +183,8 @@ export function AddMaintenanceTaskModal({ aircraft, onSave, children, isOpen, se
     setIsSubmitting(true);
     const cleanedData: MaintenanceTaskFormData = {
       ...data,
-      lastCompletedHours: data.lastCompletedHours, // Already number | undefined via form
-      lastCompletedCycles: data.lastCompletedCycles, // Already number | undefined via form
+      lastCompletedHours: data.lastCompletedHours, 
+      lastCompletedCycles: data.lastCompletedCycles, 
       
       hoursDue: data.isHoursDueEnabled ? data.hoursDue : undefined,
       hoursTolerance: data.isHoursDueEnabled ? data.hoursTolerance : undefined,
@@ -193,9 +199,17 @@ export function AddMaintenanceTaskModal({ aircraft, onSave, children, isOpen, se
       daysTolerance: data.isDaysDueEnabled ? data.daysTolerance : undefined,
       alertDaysPrior: data.isDaysDueEnabled ? data.alertDaysPrior : undefined,
     };
-    await new Promise(resolve => setTimeout(resolve, 500)); 
-    onSave(cleanedData); 
+    await onSave(cleanedData); 
     setIsSubmitting(false);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!currentTaskId) return;
+    setIsDeleting(true);
+    await onDelete(currentTaskId);
+    setIsDeleting(false);
+    setShowDeleteConfirm(false);
+    setIsOpen(false); // Close the main modal after deletion
   };
 
   const availableComponents = aircraft?.trackedComponentNames || ['Airframe', 'Engine 1', 'Engine 2', 'APU', 'Propeller 1', 'Landing Gear'];
@@ -221,7 +235,9 @@ export function AddMaintenanceTaskModal({ aircraft, onSave, children, isOpen, se
   return (
     <>
     <Dialog open={isOpen} onOpenChange={(open) => {
-      setIsOpen(open); 
+      if (!isDeleting && !isSubmitting) { // Prevent closing while async ops are in progress via overlay click
+        setIsOpen(open); 
+      }
     }}>
       <DialogTrigger asChild>{children}</DialogTrigger>
       <DialogContent className="sm:max-w-[600px] md:max-w-[750px] lg:max-w-[900px]">
@@ -297,7 +313,7 @@ export function AddMaintenanceTaskModal({ aircraft, onSave, children, isOpen, se
                 <FormField control={control} name="lastCompletedNotes" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Notes (Last Completion)</FormLabel>
-                    <FormControl><Textarea placeholder="Notes about last completion..." {...field} /></FormControl>
+                    <FormControl><Textarea placeholder="Notes about last completion..." value={field.value || ''} onChange={field.onChange} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
@@ -307,19 +323,19 @@ export function AddMaintenanceTaskModal({ aircraft, onSave, children, isOpen, se
                 <h3 className="text-lg font-semibold text-primary">Task Description</h3>
                 <FormField control={control} name="itemTitle" render={({ field }) => (<FormItem><FormLabel>Item Title</FormLabel><FormControl><Input placeholder="e.g., Annual Inspection" {...field} /></FormControl><FormMessage /></FormItem>)} />
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <FormField control={control} name="referenceNumber" render={({ field }) => (<FormItem><FormLabel>Reference #</FormLabel><FormControl><Input placeholder="Ref #" {...field} /></FormControl><FormMessage /></FormItem>)} />
-                  <FormField control={control} name="partNumber" render={({ field }) => (<FormItem><FormLabel>Part #</FormLabel><FormControl><Input placeholder="Part #" {...field} /></FormControl><FormMessage /></FormItem>)} />
-                  <FormField control={control} name="serialNumber" render={({ field }) => (<FormItem><FormLabel>Serial #</FormLabel><FormControl><Input placeholder="Serial #" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                  <FormField control={control} name="referenceNumber" render={({ field }) => (<FormItem><FormLabel>Reference #</FormLabel><FormControl><Input placeholder="Ref #" value={field.value || ''} onChange={field.onChange} /></FormControl><FormMessage /></FormItem>)} />
+                  <FormField control={control} name="partNumber" render={({ field }) => (<FormItem><FormLabel>Part #</FormLabel><FormControl><Input placeholder="Part #" value={field.value || ''} onChange={field.onChange} /></FormControl><FormMessage /></FormItem>)} />
+                  <FormField control={control} name="serialNumber" render={({ field }) => (<FormItem><FormLabel>Serial #</FormLabel><FormControl><Input placeholder="Serial #" value={field.value || ''} onChange={field.onChange} /></FormControl><FormMessage /></FormItem>)} />
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <FormField control={control} name="itemType" render={({ field }) => (
                     <FormItem><FormLabel>Item Type</FormLabel><Select onValueChange={field.onChange} value={field.value} name={field.name}><FormControl><SelectTrigger><SelectValue placeholder="Select item type" /></SelectTrigger></FormControl><SelectContent>{itemTypes.map(type => (<SelectItem key={type} value={type}>{type}</SelectItem>))}</SelectContent></Select><FormMessage /></FormItem>
                   )} />
                   <FormField control={control} name="associatedComponent" render={({ field }) => (
-                    <FormItem><FormLabel>Associated Component</FormLabel><Select onValueChange={field.onChange} value={field.value} name={field.name}><FormControl><SelectTrigger><SelectValue placeholder="Select component" /></SelectTrigger></FormControl><SelectContent>{availableComponents.map(comp => (<SelectItem key={comp} value={comp}>{comp}</SelectItem>))}</SelectContent></Select><FormMessage /></FormItem>
+                    <FormItem><FormLabel>Associated Component</FormLabel><Select onValueChange={field.onChange} value={field.value || ''} name={field.name}><FormControl><SelectTrigger><SelectValue placeholder="Select component" /></SelectTrigger></FormControl><SelectContent>{availableComponents.map(comp => (<SelectItem key={comp} value={comp}>{comp}</SelectItem>))}</SelectContent></Select><FormMessage /></FormItem>
                   )} />
                 </div>
-                <FormField control={control} name="details" render={({ field }) => (<FormItem><FormLabel>Details / Work Instructions</FormLabel><FormControl><Textarea placeholder="Detailed description of the task..." {...field} rows={3} /></FormControl><FormMessage /></FormItem>)} />
+                <FormField control={control} name="details" render={({ field }) => (<FormItem><FormLabel>Details / Work Instructions</FormLabel><FormControl><Textarea placeholder="Detailed description of the task..." value={field.value || ''} onChange={field.onChange} rows={3} /></FormControl><FormMessage /></FormItem>)} />
                 <FormField control={control} name="isActive" render={({ field }) => (
                   <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 shadow-sm"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><FormLabel className="font-normal">Active Task</FormLabel></FormItem>
                 )} />
@@ -437,10 +453,10 @@ export function AddMaintenanceTaskModal({ aircraft, onSave, children, isOpen, se
                             </PopoverContent>
                           </Popover>
                         ) : (
-                          <FormControl><Input type="number" placeholder="e.g., 30" {...field} 
-                            value={field.value === undefined ? '' : String(field.value)} // Assuming daysDueValue is string from schema for interval number
-                            onChange={e => { // For interval, this should still be a number string
-                                field.onChange(e.target.value); // Keep as string for numeric interval daysDueValue
+                          <FormControl><Input type="number" placeholder="e.g., 30" 
+                            value={field.value === undefined ? '' : String(field.value)} 
+                            onChange={e => { 
+                                field.onChange(e.target.value); 
                             }} 
                           /></FormControl>
                         )}
@@ -467,14 +483,19 @@ export function AddMaintenanceTaskModal({ aircraft, onSave, children, isOpen, se
                 )}
               </section>
               <DialogFooter className="pt-6 sticky bottom-0 bg-background py-4 border-t">
-                <Button type="button" variant="destructive" disabled>Delete Task</Button>
-                <Button type="button" variant="ghost" onClick={() => setShowHistoryAlert(true)} disabled={!isEditing || !hasLastCompletionDetails}>
+                {isEditing && currentTaskId && (
+                  <Button type="button" variant="destructive" onClick={() => setShowDeleteConfirm(true)} disabled={isSubmitting || isDeleting}>
+                    {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                    Delete Task
+                  </Button>
+                )}
+                <Button type="button" variant="ghost" onClick={() => setShowHistoryAlert(true)} disabled={!isEditing || !hasLastCompletionDetails || isSubmitting || isDeleting}>
                    <History className="mr-2 h-4 w-4" /> View History
                 </Button>
                 <DialogClose asChild>
-                  <Button type="button" variant="outline">Close</Button>
+                  <Button type="button" variant="outline" disabled={isSubmitting || isDeleting}>Close</Button>
                 </DialogClose>
-                <Button type="submit" disabled={isSubmitting}>
+                <Button type="submit" disabled={isSubmitting || isDeleting}>
                   {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   {isEditing ? 'Save Changes' : 'Add Task'}
                 </Button>
@@ -512,6 +533,26 @@ export function AddMaintenanceTaskModal({ aircraft, onSave, children, isOpen, se
             </div>
             <AlertDialogFooter>
               <AlertDialogAction onClick={() => setShowHistoryAlert(false)}>Close</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
+
+      {showDeleteConfirm && (
+        <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete the task "{form.getValues('itemTitle')}"? This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setShowDeleteConfirm(false)} disabled={isDeleting}>Cancel</AlertDialogCancel>
+              <Button variant="destructive" onClick={handleDeleteConfirm} disabled={isDeleting}>
+                {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Delete
+              </Button>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>

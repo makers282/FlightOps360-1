@@ -14,85 +14,46 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from '@/components/ui/button';
-import { Wrench, CheckCircle2, XCircle, AlertTriangle, Eye, Loader2 } from 'lucide-react';
-import { format, differenceInCalendarDays, parse, addDays, addHours as addDateHours, addMonths, addYears } from 'date-fns';
+import { Wrench, CheckCircle2, XCircle as XCircleIcon, AlertTriangle, Eye, Loader2 } from 'lucide-react'; // Renamed XCircle to XCircleIcon
+import { format, differenceInCalendarDays, parse, parseISO, isValid } from 'date-fns';
 import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow'; 
+import { fetchMaintenanceTasksForAircraft, type MaintenanceTask as FlowMaintenanceTask } from '@/ai/flows/manage-maintenance-tasks-flow'; // Import new flow
 import { useToast } from '@/hooks/use-toast';
+import type { DisplayMaintenanceItem } from './[tailNumber]/page'; // Import type from detail page
 
+// Remove sampleMaintenanceData as it's now fetched from Firestore
+// export const sampleMaintenanceData: MaintenanceItem[] = [ ... ];
 
-export interface MaintenanceItem {
-  id: string;
-  tailNumber: string; 
-  aircraftModel: string; 
-  currentAirframeTime: number;
-  currentAirframeCycles: number;
+// This type is now for the data structure after aggregation for the overview page
+interface AggregatedMaintenanceDisplayItem {
+  fleetAircraftId: string; 
+  tailNumber: string;
+  aircraftModel: string;
+  currentAirframeTime: number; // Still from mock for now
+  currentAirframeCycles: number; // Still from mock for now
   nextDueItemDescription: string;
-  dueAtDate?: string; // yyyy-MM-dd
+  dueAtDate?: string; 
   dueAtHours?: number; 
   dueAtCycles?: number; 
   notes?: string;
+  // Raw task fields if needed for deeper calculation, but generally covered by DisplayMaintenanceItem
+  rawTask?: DisplayMaintenanceItem; 
 }
 
-// This sample data represents the actual maintenance log entries.
-export const sampleMaintenanceData: MaintenanceItem[] = [
-  { id: 'MX001', tailNumber: 'N123AB', aircraftModel: 'Cessna Citation CJ3', currentAirframeTime: 1200.5, currentAirframeCycles: 850, nextDueItemDescription: 'Phase A Inspection', dueAtDate: '2024-09-15', notes: 'Scheduled with Cessna Service.' },
-  { id: 'MX010', tailNumber: 'N123AB', aircraftModel: 'Cessna Citation CJ3', currentAirframeTime: 1200.5, currentAirframeCycles: 850, nextDueItemDescription: 'Engine #1 Hot Section', dueAtHours: 1500 },
-  
-  { id: 'MX002', tailNumber: 'N456CD', aircraftModel: 'Bombardier Global 6000', currentAirframeTime: 2500.0, currentAirframeCycles: 1200, nextDueItemDescription: "Annual Inspection", dueAtDate: '2025-02-28' },
-  { id: 'MX011', tailNumber: 'N456CD', aircraftModel: 'Bombardier Global 6000', currentAirframeTime: 2500.0, currentAirframeCycles: 1200, nextDueItemDescription: 'Landing Gear Overhaul', dueAtCycles: 2000, notes: 'Check torque links.' },
-
-  { id: 'MX003', tailNumber: 'N630MW', aircraftModel: 'Pilatus PC-12 NG', currentAirframeTime: 12540.0, currentAirframeCycles: 8978, nextDueItemDescription: '50 Hour Inspection', dueAtHours: 12590.0 }, 
-  { id: 'MX006', tailNumber: 'N789EF', aircraftModel: 'Gulfstream G650ER', currentAirframeTime: 350.0, currentAirframeCycles: 120, nextDueItemDescription: '12 Month Check', dueAtDate: '2025-01-31' },
-  { id: 'MX007', tailNumber: 'N789EF', aircraftModel: 'Gulfstream G650ER', currentAirframeTime: 350.0, currentAirframeCycles: 120, nextDueItemDescription: 'Engine Oil Change', dueAtHours: 450 },
-];
-
-interface AggregatedMaintenanceDisplayItem extends MaintenanceItem {
-  fleetAircraftId: string; 
-}
-
-const getAggregatedMaintenanceData = (
-  allFleetAircraft: FleetAircraft[], 
-  allMaintenanceItems: MaintenanceItem[]
-): AggregatedMaintenanceDisplayItem[] => {
-  const trackedFleet = allFleetAircraft.filter(ac => ac.isMaintenanceTracked);
-  const aggregated: AggregatedMaintenanceDisplayItem[] = [];
-
-  trackedFleet.forEach(fleetAc => {
-    const itemsForThisAircraft = allMaintenanceItems.filter(item => item.tailNumber === fleetAc.tailNumber);
-
-    if (itemsForThisAircraft.length > 0) {
-      const sortedItems = itemsForThisAircraft.sort((a, b) => {
-        const toGoA = calculateToGo(a);
-        const toGoB = calculateToGo(b);
-        if (toGoA.isOverdue && !toGoB.isOverdue) return -1;
-        if (!toGoA.isOverdue && toGoB.isOverdue) return 1;
-        if (toGoA.isOverdue && toGoB.isOverdue) return toGoA.numeric - toGoB.numeric; 
-        return toGoA.numeric - toGoB.numeric; 
-      });
-      
-      const mostUrgentItem = sortedItems[0];
-      aggregated.push({
-        ...mostUrgentItem,
-        aircraftModel: fleetAc.model, 
-        fleetAircraftId: fleetAc.id,
-      });
-    } else {
-      aggregated.push({
-        id: `NO_MX_${fleetAc.id}`,
-        tailNumber: fleetAc.tailNumber,
-        aircraftModel: fleetAc.model,
-        currentAirframeTime: 0, 
-        currentAirframeCycles: 0, 
-        nextDueItemDescription: 'No items tracked',
-        fleetAircraftId: fleetAc.id,
-      });
-    }
-  });
-  return aggregated;
+// MOCK_COMPONENT_VALUES_DATA remains client-side for now for airframe times
+const MOCK_COMPONENT_VALUES_DATA: Record<string, Record<string, { time?: number; cycles?: number }>> = {
+  'N123AB': { 'Airframe': { time: 1200.5, cycles: 850 } },
+  'N456CD': { 'Airframe': { time: 2500.0, cycles: 1200 } },
+  'N630MW': { 'Airframe': { time: 12540.0, cycles: 8978 } },
+  'N789EF': { 'Airframe': { time: 350.0, cycles: 120 } },
 };
 
 
-export const calculateToGo = (item: MaintenanceItem): { text: string; numeric: number; unit: 'days' | 'hrs' | 'cycles' | 'N/A'; isOverdue: boolean } => {
+export const calculateToGo = (
+  item: Pick<DisplayMaintenanceItem, 'dueAtDate' | 'dueAtHours' | 'dueAtCycles'>, 
+  currentAirframeTime: number, 
+  currentAirframeCycles: number
+): { text: string; numeric: number; unit: 'days' | 'hrs' | 'cycles' | 'N/A'; isOverdue: boolean } => {
   const now = new Date();
   if (item.dueAtDate) {
     try {
@@ -100,20 +61,15 @@ export const calculateToGo = (item: MaintenanceItem): { text: string; numeric: n
       const daysRemaining = differenceInCalendarDays(dueDate, now);
       return { text: `${daysRemaining} days`, numeric: daysRemaining, unit: 'days', isOverdue: daysRemaining < 0 };
     } catch (e) {
-      console.error("Error parsing dueAtDate:", item.dueAtDate, e);
       return { text: 'Invalid Date', numeric: Infinity, unit: 'N/A', isOverdue: true };
     }
   }
-  // Ensure currentAirframeTime and currentAirframeCycles are numbers
-  const currentHours = typeof item.currentAirframeTime === 'number' ? item.currentAirframeTime : 0;
-  const currentCycles = typeof item.currentAirframeCycles === 'number' ? item.currentAirframeCycles : 0;
-
-  if (item.dueAtHours != null && typeof item.dueAtHours === 'number') { 
-    const hoursRemaining = parseFloat((item.dueAtHours - currentHours).toFixed(1));
+  if (item.dueAtHours != null) { 
+    const hoursRemaining = parseFloat((item.dueAtHours - currentAirframeTime).toFixed(1));
     return { text: `${hoursRemaining} hrs`, numeric: hoursRemaining, unit: 'hrs', isOverdue: hoursRemaining < 0 };
   }
-  if (item.dueAtCycles != null && typeof item.dueAtCycles === 'number') { 
-    const cyclesRemaining = item.dueAtCycles - currentCycles;
+  if (item.dueAtCycles != null) { 
+    const cyclesRemaining = item.dueAtCycles - currentAirframeCycles;
     return { text: `${cyclesRemaining} cycles`, numeric: cyclesRemaining, unit: 'cycles', isOverdue: cyclesRemaining < 0 };
   }
   return { text: 'N/A', numeric: Infinity, unit: 'N/A', isOverdue: false };
@@ -121,7 +77,7 @@ export const calculateToGo = (item: MaintenanceItem): { text: string; numeric: n
 
 export const getReleaseStatus = (toGo: { numeric: number; unit: 'days' | 'hrs' | 'cycles' | 'N/A'; isOverdue: boolean }): { icon: JSX.Element; colorClass: string; label: string } => {
   if (toGo.isOverdue) {
-    return { icon: <XCircle className="h-5 w-5" />, colorClass: 'text-red-500', label: 'Overdue' };
+    return { icon: <XCircleIcon className="h-5 w-5" />, colorClass: 'text-red-500', label: 'Overdue' };
   }
   if (toGo.unit === 'days' && toGo.numeric < 30) {
     return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-yellow-500', label: 'Due Soon' };
@@ -138,26 +94,118 @@ export const getReleaseStatus = (toGo: { numeric: number; unit: 'days' | 'hrs' |
   return { icon: <CheckCircle2 className="h-5 w-5" />, colorClass: 'text-green-500', label: 'OK' };
 };
 
+
 export default function AircraftCurrencyPage() {
   const [fleet, setFleet] = useState<FleetAircraft[]>([]);
   const [isLoadingFleet, setIsLoadingFleet] = useState(true);
   const { toast } = useToast();
   const [aggregatedData, setAggregatedData] = useState<AggregatedMaintenanceDisplayItem[]>([]);
+  const [isLoadingAggregated, setIsLoadingAggregated] = useState(true);
 
   useEffect(() => {
     const loadFleetAndAggregate = async () => {
       setIsLoadingFleet(true);
+      setIsLoadingAggregated(true);
       try {
         const fetchedFleet = await fetchFleetAircraft();
         setFleet(fetchedFleet);
-        // Pass a copy of sampleMaintenanceData to avoid direct modification if getAggregatedMaintenanceData sorts it
-        const newAggregatedData = getAggregatedMaintenanceData(fetchedFleet, [...sampleMaintenanceData]);
-        setAggregatedData(newAggregatedData);
+
+        const trackedFleet = fetchedFleet.filter(ac => ac.isMaintenanceTracked);
+        const aggregatedItems: AggregatedMaintenanceDisplayItem[] = [];
+
+        for (const fleetAc of trackedFleet) {
+          const currentAirframeTime = MOCK_COMPONENT_VALUES_DATA[fleetAc.id]?.Airframe?.time ?? 0;
+          const currentAirframeCycles = MOCK_COMPONENT_VALUES_DATA[fleetAc.id]?.Airframe?.cycles ?? 0;
+          
+          let itemsForThisAircraft: DisplayMaintenanceItem[] = [];
+          try {
+            const tasksFromDb = await fetchMaintenanceTasksForAircraft({ aircraftId: fleetAc.id });
+            // This is the function from the detail page, we need to define it here or import it if moved to a util
+            const calculateDisplayFieldsForOverview = (task: FlowMaintenanceTask): DisplayMaintenanceItem => {
+                let dueAtDate: string | undefined = undefined;
+                let dueAtHours: number | undefined = undefined;
+                let dueAtCycles: number | undefined = undefined;
+
+                const actualLastCompletedDateObj = task.lastCompletedDate && isValid(parseISO(task.lastCompletedDate))
+                ? parseISO(task.lastCompletedDate)
+                : new Date();
+                const actualLastCompletedHours = Number(task.lastCompletedHours || 0);
+                const actualLastCompletedCycles = Number(task.lastCompletedCycles || 0);
+
+                if (task.trackType === "Interval") {
+                    if (task.isDaysDueEnabled && task.daysDueValue && task.daysIntervalType) {
+                        const intervalValue = Number(task.daysDueValue);
+                        if (!isNaN(intervalValue) && intervalValue > 0) {
+                        switch (task.daysIntervalType) {
+                            case 'days': dueAtDate = format(addDays(actualLastCompletedDateObj, intervalValue), 'yyyy-MM-dd'); break;
+                            // ... other cases from detail page
+                            default: dueAtDate = format(addDays(actualLastCompletedDateObj, intervalValue), 'yyyy-MM-dd'); break;
+                        }
+                        }
+                    }
+                    if (task.isHoursDueEnabled && task.hoursDue) {
+                        dueAtHours = actualLastCompletedHours + Number(task.hoursDue);
+                    }
+                    if (task.isCyclesDueEnabled && task.cyclesDue) {
+                        dueAtCycles = actualLastCompletedCycles + Number(task.cyclesDue);
+                    }
+                } else if (task.trackType === "One Time") {
+                    if (task.isDaysDueEnabled && task.daysDueValue && isValid(parseISO(task.daysDueValue))) {
+                        dueAtDate = task.daysDueValue;
+                    }
+                     if (task.isHoursDueEnabled && task.hoursDue) dueAtHours = Number(task.hoursDue);
+                    if (task.isCyclesDueEnabled && task.cyclesDue) dueAtCycles = Number(task.cyclesDue);
+                }
+                return { ...task, dueAtDate, dueAtHours, dueAtCycles };
+            };
+            itemsForThisAircraft = tasksFromDb.map(calculateDisplayFieldsForOverview);
+          } catch (taskError) {
+             console.error(`Failed to fetch tasks for ${fleetAc.tailNumber}:`, taskError);
+             // Continue, this aircraft will show "No items tracked" or an error indicator
+          }
+          
+          if (itemsForThisAircraft.length > 0) {
+            const sortedItems = [...itemsForThisAircraft].sort((a, b) => {
+              const toGoA = calculateToGo(a, currentAirframeTime, currentAirframeCycles);
+              const toGoB = calculateToGo(b, currentAirframeTime, currentAirframeCycles);
+              if (toGoA.isOverdue && !toGoB.isOverdue) return -1;
+              if (!toGoA.isOverdue && toGoB.isOverdue) return 1;
+              if (toGoA.isOverdue && toGoB.isOverdue) return toGoA.numeric - toGoB.numeric;
+              return toGoA.numeric - toGoB.numeric;
+            });
+            const mostUrgentItem = sortedItems[0];
+            aggregatedItems.push({
+              fleetAircraftId: fleetAc.id,
+              tailNumber: fleetAc.tailNumber,
+              aircraftModel: fleetAc.model,
+              currentAirframeTime,
+              currentAirframeCycles,
+              nextDueItemDescription: mostUrgentItem.itemTitle,
+              dueAtDate: mostUrgentItem.dueAtDate,
+              dueAtHours: mostUrgentItem.dueAtHours,
+              dueAtCycles: mostUrgentItem.dueAtCycles,
+              notes: mostUrgentItem.details,
+              rawTask: mostUrgentItem,
+            });
+          } else {
+            aggregatedItems.push({
+              fleetAircraftId: fleetAc.id,
+              tailNumber: fleetAc.tailNumber,
+              aircraftModel: fleetAc.model,
+              currentAirframeTime,
+              currentAirframeCycles,
+              nextDueItemDescription: 'No items tracked',
+            });
+          }
+        }
+        setAggregatedData(aggregatedItems);
+
       } catch (error) {
-        console.error("Failed to fetch fleet aircraft:", error);
+        console.error("Failed to fetch fleet or aggregate maintenance data:", error);
         toast({ title: "Error", description: "Could not load aircraft fleet for currency page.", variant: "destructive" });
       } finally {
         setIsLoadingFleet(false);
+        setIsLoadingAggregated(false);
       }
     };
     loadFleetAndAggregate();
@@ -177,10 +225,10 @@ export default function AircraftCurrencyPage() {
           <CardDescription>Most urgent maintenance item per tracked aircraft. Click tail number for complete details.</CardDescription>
         </CardHeader>
         <CardContent>
-          {isLoadingFleet ? (
+          {isLoadingFleet || isLoadingAggregated ? (
             <div className="flex items-center justify-center py-10">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                <p className="ml-2 text-muted-foreground">Loading aircraft fleet...</p>
+                <p className="ml-2 text-muted-foreground">Loading aircraft maintenance overview...</p>
             </div>
           ) : (
             <Table>
@@ -197,7 +245,7 @@ export default function AircraftCurrencyPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {aggregatedData.length === 0 && !isLoadingFleet ? (
+                {aggregatedData.length === 0 && !isLoadingAggregated ? (
                   <TableRow>
                     <TableCell colSpan={8} className="text-center text-muted-foreground py-10">
                       No aircraft being tracked for maintenance or no maintenance items found. Check Company Settings.
@@ -205,24 +253,20 @@ export default function AircraftCurrencyPage() {
                   </TableRow>
                 ) : (
                   aggregatedData.map((item) => {
-                    const toGoData = calculateToGo(item);
+                    const toGoData = calculateToGo(item, item.currentAirframeTime, item.currentAirframeCycles);
                     const status = getReleaseStatus(toGoData);
                     let dueAtDisplay = 'N/A';
                     
                     if (item.nextDueItemDescription === 'No items tracked') {
                         dueAtDisplay = 'N/A';
                     } else if (item.dueAtDate) {
-                        try {
-                            dueAtDisplay = format(parse(item.dueAtDate, 'yyyy-MM-dd', new Date()), 'MM/dd/yyyy');
-                        } catch {
-                            dueAtDisplay = "Invalid Date";
-                        }
+                        try { dueAtDisplay = format(parse(item.dueAtDate, 'yyyy-MM-dd', new Date()), 'MM/dd/yyyy'); } 
+                        catch { dueAtDisplay = "Invalid Date"; }
                     } else if (item.dueAtHours != null) {
                         dueAtDisplay = `${item.dueAtHours.toLocaleString()} hrs`;
                     } else if (item.dueAtCycles != null) {
                         dueAtDisplay = `${item.dueAtCycles.toLocaleString()} cycles`;
                     }
-
 
                     return (
                       <TableRow key={item.fleetAircraftId} className="hover:bg-muted/50">
@@ -232,24 +276,15 @@ export default function AircraftCurrencyPage() {
                           </Link>
                           <span className="block text-xs text-muted-foreground">({item.aircraftModel})</span>
                         </TableCell>
-                        <TableCell className="text-right">{item.currentAirframeTime.toLocaleString()}</TableCell>
+                        <TableCell className="text-right">{item.currentAirframeTime.toLocaleString(undefined, {minimumFractionDigits:1, maximumFractionDigits:1})}</TableCell>
                         <TableCell className="text-right">{item.currentAirframeCycles.toLocaleString()}</TableCell>
                         <TableCell>{item.nextDueItemDescription}</TableCell>
                         <TableCell className="text-center">{dueAtDisplay}</TableCell>
-                        <TableCell className={`text-center font-medium ${status.colorClass}`}>
-                          {toGoData.text}
-                        </TableCell>
-                        <TableCell className={`text-center ${status.colorClass}`}>
-                          <div className="flex flex-col items-center">
-                             {status.icon}
-                             <span className="text-xs mt-1">{status.label}</span>
-                          </div>
-                        </TableCell>
+                        <TableCell className={`text-center font-medium ${status.colorClass}`}>{toGoData.text}</TableCell>
+                        <TableCell className={`text-center ${status.colorClass}`}><div className="flex flex-col items-center">{status.icon}<span className="text-xs mt-1">{status.label}</span></div></TableCell>
                          <TableCell className="text-center">
                           <Button variant="ghost" size="sm" asChild>
-                            <Link href={`/aircraft/currency/${encodeURIComponent(item.tailNumber)}`}>
-                              <Eye className="mr-1 h-4 w-4" /> View
-                            </Link>
+                            <Link href={`/aircraft/currency/${encodeURIComponent(item.tailNumber)}`}><Eye className="mr-1 h-4 w-4" /> View</Link>
                           </Button>
                         </TableCell>
                       </TableRow>
