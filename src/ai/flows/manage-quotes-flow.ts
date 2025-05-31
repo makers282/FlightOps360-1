@@ -12,6 +12,7 @@
 import { ai } from '@/ai/genkit';
 import { db } from '@/lib/firebase';
 import { collection, doc, setDoc, getDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { z } from 'zod'; // Added Zod import here
 import type { Quote, SaveQuoteInput } from '@/ai/schemas/quote-schemas';
 import { 
     QuoteSchema, // Used for output type
