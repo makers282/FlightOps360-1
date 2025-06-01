@@ -226,11 +226,11 @@ export function AircraftPerformanceForm() {
     });
   }, [selectedAircraftId, fleetSelectOptions, startAiSuggestionTransition, form, toast]);
 
-  const renderInputWithUnit = useCallback((name: keyof AircraftPerformanceFormData, label: string, unit: string, placeholder?: string) => {
+  const renderInputWithUnit = useCallback((fieldName: keyof AircraftPerformanceFormData, label: string, unit: string, placeholder?: string) => {
     return (
       <FormField
         control={form.control}
-        name={name}
+        name={fieldName}
         render={({ field }) => (
           <FormItem>
             <FormLabel>{label}</FormLabel>
@@ -305,7 +305,7 @@ export function AircraftPerformanceForm() {
                         <Loader2 className="h-6 w-6 animate-spin text-primary" />
                         Loading Performance Data...
                     </CardTitle>
-                </Header>
+                </CardHeader>
                 <CardContent className="space-y-4 pt-6">
                     <Skeleton className="h-10 w-full mb-2" />
                     <Skeleton className="h-10 w-full mb-2" />
