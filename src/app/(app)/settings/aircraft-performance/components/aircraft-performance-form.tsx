@@ -11,9 +11,9 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { PlaneTakeoff as PerformanceIcon, Save, Wand2, Loader2, AlertTriangle } from 'lucide-react';
+import { PlaneTakeoff as PerformanceIcon, Save, /*Wand2,*/ Loader2 /*, AlertTriangle*/ } from 'lucide-react'; // Wand2 and AlertTriangle might be AI-specific
 import { useToast } from '@/hooks/use-toast';
-import { suggestAircraftPerformance, type SuggestAircraftPerformanceInput, type AircraftPerformanceOutput } from '@/ai/flows/suggest-aircraft-performance-flow';
+// import { suggestAircraftPerformance, type SuggestAircraftPerformanceInput, type AircraftPerformanceOutput } from '@/ai/flows/suggest-aircraft-performance-flow'; // AI-specific
 import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
 import {
   fetchAircraftPerformance,
@@ -37,7 +37,7 @@ export function AircraftPerformanceForm() {
   const [selectedAircraftId, setSelectedAircraftId] = useState<string | undefined>(undefined);
   const { toast } = useToast();
   const [isSaving, startSaveTransition] = useTransition();
-  const [isSuggestingWithAi, startAiSuggestionTransition] = useTransition();
+  // const [isSuggestingWithAi, startAiSuggestionTransition] = useTransition(); // AI-specific
   const [isFetchingPerformance, startFetchingPerformanceTransition] = useTransition();
 
   const [fleetSelectOptions, setFleetSelectOptions] = useState<FleetAircraftSelectOption[]>([]);
@@ -107,7 +107,7 @@ export function AircraftPerformanceForm() {
           const aircraftLabel = fleetSelectOptions.find(ac => ac.id === aircraftId)?.label || `Aircraft ID ${aircraftId}`;
           toast({ title: "Performance Data Loaded", description: `Showing data for ${aircraftLabel}.`, variant: "default" });
         } else {
-          toast({ title: "No Saved Data", description: `No performance data found for this aircraft. You can enter new data or use AI suggestion.`, variant: "default" });
+          toast({ title: "No Saved Data", description: `No performance data found for this aircraft. You can enter new data.`, variant: "default" });
         }
       } catch (error) {
         console.error("Failed to fetch performance data:", error);
@@ -172,6 +172,7 @@ export function AircraftPerformanceForm() {
     });
   };
 
+  /* AI Suggestion Feature - Commented out for now
   const handleSetupWithAi = useCallback(async () => {
     if (!selectedAircraftId) {
       toast({ title: "No Aircraft Selected", description: "Please select an aircraft first.", variant: "destructive" });
@@ -225,6 +226,7 @@ export function AircraftPerformanceForm() {
       }
     });
   }, [selectedAircraftId, fleetSelectOptions, startAiSuggestionTransition, form, toast]);
+  */
 
   const renderInputWithUnit = useCallback((fieldName: keyof AircraftPerformanceFormData, label: string, unit: string, placeholder?: string) => {
     return (
@@ -271,10 +273,12 @@ export function AircraftPerformanceForm() {
                 <CardTitle>Select Aircraft</CardTitle>
                 <CardDescription>Choose an aircraft to view or edit its performance settings.</CardDescription>
               </div>
+              {/* AI Suggestion Button - Commented out
               <Button type="button" variant="outline" onClick={handleSetupWithAi} disabled={!selectedAircraftId || isSuggestingWithAi || isSaving || isLoadingAircraft || isFetchingPerformance}>
                 {isSuggestingWithAi ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}
                 Setup with AI
               </Button>
+              */}
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -326,7 +330,7 @@ export function AircraftPerformanceForm() {
                 <PerformanceIcon className="h-6 w-6 text-primary" />
                 <CardTitle>Performance Settings for {fleetSelectOptions.find(ac => ac.id === selectedAircraftId)?.label || selectedAircraftId}</CardTitle>
               </div>
-              <CardDescription>Adjust the performance parameters below. AI suggestions can provide a starting point.</CardDescription>
+              <CardDescription>Adjust the performance parameters below. Values are saved to Firestore.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6 pt-6">
               <div className="grid grid-cols-1 gap-x-6 gap-y-8 md:grid-cols-2">
@@ -371,7 +375,7 @@ export function AircraftPerformanceForm() {
               </div>
             </CardContent>
             <CardFooter>
-              <Button type="submit" disabled={isSaving || isSuggestingWithAi || isLoadingAircraft || isFetchingPerformance}>
+              <Button type="submit" disabled={isSaving || isLoadingAircraft || isFetchingPerformance /*|| isSuggestingWithAi*/}>
                 {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                 Save Performance Settings
               </Button>
@@ -392,3 +396,4 @@ export function AircraftPerformanceForm() {
     </Form>
   );
 }
+
