@@ -73,10 +73,10 @@ function CustomDay(props: DayProps) {
   const isCurrentMonth = date.getMonth() === displayMonth.getMonth();
 
   if (!isCurrentMonth) {
-    // For days outside the current month (when showOutsideDays=false, this component might still be called for structure by rdp)
-    // Render a div that respects the cell's height but is visually empty and non-interactive.
+    // For days outside the current month, render a simple div that fills the cell
+    // This ensures the <td> maintains its dimensions even if empty.
     // Borders are handled by the `classNames.cell` on the `<td>`.
-    return <div className="h-full w-full bg-muted/10" />;
+    return <div className="h-full w-full" />;
   }
 
   const eventsForDay = useMemo(() => {
@@ -137,7 +137,7 @@ export default function TripCalendarPage() {
   const [isClientReady, setIsClientReady] = useState(false);
 
   useEffect(() => {
-    setCurrentMonth(new Date(2024, 9, 1)); 
+    setCurrentMonth(new Date(2024, 9, 1)); // October 2024
     setIsClientReady(true);
   }, []);
 
@@ -183,18 +183,19 @@ export default function TripCalendarPage() {
             onMonthChange={setCurrentMonth}
             className="w-full rounded-md bg-card"
             classNames={{
-                table: "w-full border-collapse table-fixed", // Added table-fixed
+                table: "w-full border-collapse table-fixed", // Enforce table-fixed layout
                 month: "w-full", 
-                cell: cn(
-                    "p-0 m-0 text-left align-top h-28 sm:h-32 md:h-36 lg:h-40 xl:h-[11rem]",
-                    "border-r border-b border-border/30 w-[calc(100%/7)]" // Added explicit width
-                ),
                 head_row: "border-b border-border/50",
                 head_cell: cn(
-                    "text-muted-foreground align-middle text-center font-normal text-[0.65rem] sm:text-xs py-1.5 border-r border-b border-border/30 last:border-r-0 w-[calc(100%/7)]" // Added explicit width
+                    "text-muted-foreground align-middle text-center font-normal text-[0.65rem] sm:text-xs py-1.5 border-r border-b border-border/30 last:border-r-0 w-[calc(100%/7)]" // Explicit width
                 ),
+                cell: cn(
+                    "p-0 m-0 text-left align-top h-28 sm:h-32 md:h-36 lg:h-40 xl:h-[11rem]", // Significantly increased height
+                    "border-r border-b border-border/30 w-[calc(100%/7)]" // Explicit width and ensure borders
+                ),
+                day_disabled: "opacity-0 pointer-events-none", // Hide disabled days content visually
                 caption: "flex justify-center items-center py-2.5 relative gap-x-1 px-2",
-                caption_label: "text-sm font-medium px-2",
+                caption_label: "text-sm font-medium px-2", // For "Month Year" text
                 nav_button: cn(buttonVariants({ variant: "outline" }), "h-7 w-7 bg-transparent p-0 opacity-80 hover:opacity-100"),
             }}
             components={{
@@ -211,3 +212,5 @@ export default function TripCalendarPage() {
     </>
   );
 }
+
+    
