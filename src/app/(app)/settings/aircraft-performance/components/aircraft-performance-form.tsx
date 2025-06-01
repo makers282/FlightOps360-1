@@ -180,22 +180,37 @@ export function AircraftPerformanceForm() {
         const aiInput: SuggestAircraftPerformanceInput = { aircraftName: selectedAircraftObject.model };
         const suggestedData: AircraftPerformanceOutput = await suggestAircraftPerformance(aiInput);
         
-        const validatedData: Partial<AircraftPerformanceFormData> = {};
+        const processedData: Partial<AircraftPerformanceFormData> = {};
         for (const key in suggestedData) {
             const typedKey = key as keyof AircraftPerformanceOutput;
-            if (suggestedData[typedKey] !== null && suggestedData[typedKey] !== undefined) {
-                 if (AircraftPerformanceDataSchema.shape[typedKey as keyof typeof AircraftPerformanceDataSchema.shape]) {
+            const value = suggestedData[typedKey];
+
+            if (value !== null && value !== undefined) {
+                // Check if the key exists in our target form schema (AircraftPerformanceDataSchema)
+                if (AircraftPerformanceDataSchema.shape[typedKey as keyof typeof AircraftPerformanceDataSchema.shape]) {
                     const fieldSchema = AircraftPerformanceDataSchema.shape[typedKey as keyof typeof AircraftPerformanceDataSchema.shape];
+                    
+                    // Check if it's a numeric field (or optional numeric)
                     if (fieldSchema instanceof z.ZodNumber || (fieldSchema instanceof z.ZodOptional && fieldSchema._def.innerType instanceof z.ZodNumber)) {
-                        (validatedData as any)[typedKey] = Number(suggestedData[typedKey]);
+                        const numValue = Number(value);
+                        if (!isNaN(numValue)) {
+                            // Round all numeric values to the nearest integer
+                            (processedData as any)[typedKey] = Math.round(numValue);
+                        } else {
+                            (processedData as any)[typedKey] = undefined; // If conversion to number fails
+                        }
                     } else {
-                         (validatedData as any)[typedKey] = suggestedData[typedKey];
+                        // For non-numeric fields like fuelType, assign directly
+                        (processedData as any)[typedKey] = value;
                     }
                 }
+            } else {
+                // If AI explicitly returns null/undefined for a key, make it undefined in our form
+                (processedData as any)[typedKey] = undefined;
             }
         }
-        form.reset(validatedData); 
-        toast({ title: "AI Suggestions Applied", description: "Review and save the suggested performance parameters.", variant: "default", action: <Wand2 className="text-green-500"/> });
+        form.reset(processedData); 
+        toast({ title: "AI Suggestions Applied", description: "Review and save the suggested performance parameters. Some fields may be empty if AI had no data.", variant: "default", action: <Wand2 className="text-green-500"/> });
       } catch (e) {
         console.error("Error suggesting aircraft performance:", e);
         const errorMessage = e instanceof Error ? e.message : "AI failed to suggest performance data.";
