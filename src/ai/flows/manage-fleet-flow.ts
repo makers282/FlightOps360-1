@@ -25,14 +25,16 @@ const FleetAircraftSchema = z.object({
   id: z.string().describe("The unique identifier for the aircraft, typically the tail number if unique, or an auto-generated ID."),
   tailNumber: z.string().min(1, "Tail number is required.").describe("The aircraft's tail number (e.g., N123AB)."),
   model: z.string().min(1, "Aircraft model is required.").describe("The aircraft model (e.g., Cessna Citation CJ3)."),
+  serialNumber: z.string().optional().describe("Aircraft serial number."),
+  aircraftYear: z.number().int().min(1900).max(new Date().getFullYear() + 10).optional().describe("Year of manufacture."),
+  baseLocation: z.string().optional().describe("Primary base location of the aircraft (e.g., KTEB)."),
+  engineDetails: z.array(EngineDetailSchema).optional().default([]).describe("Details for each engine."),
   isMaintenanceTracked: z.boolean().optional().default(true).describe("Whether maintenance tracking is enabled for this aircraft."),
   trackedComponentNames: z.array(z.string()).optional().default(['Airframe', 'Engine 1']).describe("List of component names to track hours/cycles for (e.g., Airframe, Engine 1, Propeller 1)."),
-  serialNumber: z.string().optional().describe("Aircraft serial number."),
-  baseLocation: z.string().optional().describe("Primary base location of the aircraft (e.g., KTEB)."),
-  engineDetails: z.array(EngineDetailSchema).optional().describe("Details for each engine."),
   primaryContactName: z.string().optional().describe("Primary contact person for the aircraft."),
   primaryContactPhone: z.string().optional().describe("Primary contact phone for the aircraft."),
   primaryContactEmail: z.string().email("Invalid email format.").optional().describe("Primary contact email for the aircraft."),
+  internalNotes: z.string().optional().describe("Internal operational notes like hangar location, access codes, etc."),
 });
 export type FleetAircraft = z.infer<typeof FleetAircraftSchema>;
 
@@ -67,6 +69,7 @@ export async function saveFleetAircraft(input: SaveFleetAircraftInput): Promise<
     ...input,
     isMaintenanceTracked: input.isMaintenanceTracked ?? true, 
     trackedComponentNames: input.trackedComponentNames && input.trackedComponentNames.length > 0 ? input.trackedComponentNames : ['Airframe', 'Engine 1'],
+    engineDetails: input.engineDetails || [],
   };
   return saveFleetAircraftFlow(aircraftToSave);
 }
@@ -111,18 +114,21 @@ const saveFleetAircraftFlow = ai.defineFlow(
       const dataToSet = {
         tailNumber: input.tailNumber,
         model: input.model,
-        isMaintenanceTracked: input.isMaintenanceTracked ?? true,
-        trackedComponentNames: input.trackedComponentNames ?? ['Airframe', 'Engine 1'],
-        serialNumber: input.serialNumber ?? null, // Use null for Firestore if undefined
+        serialNumber: input.serialNumber ?? null,
+        aircraftYear: input.aircraftYear ?? null,
         baseLocation: input.baseLocation ?? null,
         engineDetails: input.engineDetails ?? [],
+        isMaintenanceTracked: input.isMaintenanceTracked ?? true,
+        trackedComponentNames: input.trackedComponentNames ?? ['Airframe', 'Engine 1'],
         primaryContactName: input.primaryContactName ?? null,
         primaryContactPhone: input.primaryContactPhone ?? null,
         primaryContactEmail: input.primaryContactEmail ?? null,
+        internalNotes: input.internalNotes ?? null,
       };
       await setDoc(aircraftDocRef, dataToSet, { merge: true }); // Use merge:true to handle updates
       console.log('Saved/Updated aircraft in Firestore:', input.id);
-      return { ...input, ...dataToSet }; // Return the full input object as saved
+      // Return the full input object merged with dataToSet to ensure all fields are present
+      return { ...input, ...dataToSet }; 
     } catch (error) {
       console.error('Error saving aircraft to Firestore:', error);
       throw new Error(`Failed to save aircraft ${input.id}: ${error instanceof Error ? error.message : String(error)}`);
@@ -161,3 +167,4 @@ const deleteFleetAircraftFlow = ai.defineFlow(
     }
   }
 );
+

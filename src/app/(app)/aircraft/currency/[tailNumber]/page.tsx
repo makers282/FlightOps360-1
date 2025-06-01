@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/table";
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -24,10 +25,10 @@ import { z } from 'zod';
 import { AddMaintenanceTaskModal, type MaintenanceTaskFormData, defaultMaintenanceTaskFormValues } from './components/add-maintenance-task-modal';
 import { Badge } from '@/components/ui/badge';
 
-import { Wrench, PlusCircle, ArrowLeft, PlaneIcon, Edit, Loader2, InfoIcon, Phone, UserCircle, MapPin, Save, XCircle, Edit2, Edit3, AlertTriangle, CheckCircle2, XCircle as XCircleIcon, Search, ArrowUpDown, ArrowDown, ArrowUp, Printer, Filter, Mail } from 'lucide-react';
+import { Wrench, PlusCircle, ArrowLeft, PlaneIcon, Edit, Loader2, InfoIcon, Phone, UserCircle, MapPin, Save, XCircle, Edit2, Edit3, AlertTriangle, CheckCircle2, XCircle as XCircleIcon, Search, ArrowUpDown, ArrowDown, ArrowUp, Printer, Filter, Mail, BookText, Hash, Tag } from 'lucide-react';
 import { format, parse, addDays, isValid, addMonths, addYears, endOfMonth, parseISO, differenceInCalendarDays } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
-import { fetchFleetAircraft, saveFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
+import { fetchFleetAircraft, saveFleetAircraft, type FleetAircraft, type EngineDetail } from '@/ai/flows/manage-fleet-flow';
 import { fetchMaintenanceTasksForAircraft, saveMaintenanceTask, deleteMaintenanceTask, type MaintenanceTask as FlowMaintenanceTask } from '@/ai/flows/manage-maintenance-tasks-flow';
 import { fetchComponentTimesForAircraft, saveComponentTimesForAircraft, type AircraftComponentTimes } from '@/ai/flows/manage-component-times-flow';
 import { fetchCompanyProfile, type CompanyProfile } from '@/ai/flows/manage-company-profile-flow';
@@ -44,10 +45,13 @@ export interface DisplayMaintenanceItem extends FlowMaintenanceTask {
 const aircraftInfoEditSchema = z.object({
   model: z.string().min(1, "Model is required."),
   serialNumber: z.string().optional(),
+  aircraftYear: z.coerce.number().int().min(1900, "Year seems too old.").max(new Date().getFullYear() + 5, "Year seems too far in future.").optional(),
   baseLocation: z.string().optional(),
   primaryContactName: z.string().optional(),
   primaryContactPhone: z.string().optional(),
-  primaryContactEmail: z.string().email("Invalid email format.").optional(),
+  primaryContactEmail: z.string().email("Invalid email format.").optional().or(z.literal('')),
+  internalNotes: z.string().optional(),
+  // engineDetails are handled separately for display, not directly in this simple edit form
 });
 type AircraftInfoEditFormData = z.infer<typeof aircraftInfoEditSchema>;
 
@@ -85,7 +89,7 @@ export default function AircraftMaintenanceDetailPage() {
   const [initialModalFormData, setInitialModalFormData] = useState<Partial<MaintenanceTaskFormData> | null>(null);
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'dueSoon' | 'overdue'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'dueSoon' | 'overdue' | 'gracePeriod'>('all');
   const [componentFilter, setComponentFilter] = useState<string>('all');
   const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'toGoNumeric', direction: 'ascending' });
 
@@ -243,10 +247,12 @@ export default function AircraftMaintenanceDetailPage() {
           aircraftInfoForm.reset({
             model: foundAircraft.model,
             serialNumber: foundAircraft.serialNumber || '',
+            aircraftYear: foundAircraft.aircraftYear,
             baseLocation: foundAircraft.baseLocation || '',
             primaryContactName: foundAircraft.primaryContactName || '',
             primaryContactPhone: foundAircraft.primaryContactPhone || '',
             primaryContactEmail: foundAircraft.primaryContactEmail || '',
+            internalNotes: foundAircraft.internalNotes || '',
           });
           await loadAndInitializeComponentTimes(foundAircraft); 
           await loadMaintenanceTasks(foundAircraft.id);
@@ -311,11 +317,19 @@ export default function AircraftMaintenanceDetailPage() {
     startSavingAircraftInfoTransition(async () => {
       try {
         const updatedAircraftData: FleetAircraft = { 
-          ...currentAircraft, 
-          ...data,
+          ...currentAircraft, // Spread existing data first
+          model: data.model, // Then specific form fields
+          serialNumber: data.serialNumber || undefined,
+          aircraftYear: data.aircraftYear,
+          baseLocation: data.baseLocation || undefined,
+          primaryContactName: data.primaryContactName || undefined,
+          primaryContactPhone: data.primaryContactPhone || undefined,
+          primaryContactEmail: data.primaryContactEmail || undefined,
+          internalNotes: data.internalNotes || undefined,
+          // isMaintenanceTracked and trackedComponentNames are not in this form, retain from currentAircraft
           isMaintenanceTracked: currentAircraft.isMaintenanceTracked,
           trackedComponentNames: currentAircraft.trackedComponentNames,
-          engineDetails: currentAircraft.engineDetails,
+          engineDetails: currentAircraft.engineDetails, // Keep existing engine details
         };
         await saveFleetAircraft(updatedAircraftData);
         setCurrentAircraft(updatedAircraftData);
@@ -430,22 +444,41 @@ export default function AircraftMaintenanceDetailPage() {
     return frequencies.length > 0 ? frequencies.join(' / ') : 'N/A';
   };
 
-  const getReleaseStatus = (toGo: { text: string; numeric: number; unit: 'days' | 'hrs' | 'cycles' | 'N/A'; isOverdue: boolean }): { icon: JSX.Element; colorClass: string; label: string } => {
+  const getReleaseStatus = (
+      toGo: { text: string; numeric: number; unit: 'days' | 'hrs' | 'cycles' | 'N/A'; isOverdue: boolean },
+      task: DisplayMaintenanceItem 
+    ): { icon: JSX.Element; colorClass: string; label: string } => {
     if (toGo.text.startsWith('N/A (No time for') || toGo.text.startsWith('N/A (No cycles for') || toGo.text.startsWith('N/A (Comp. data missing')) {
       return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-orange-500', label: 'Missing Comp. Time' };
     }
-    if (toGo.isOverdue) return { icon: <XCircleIcon className="h-5 w-5" />, colorClass: 'text-red-500', label: 'Overdue' };
+    if (toGo.isOverdue) {
+        let withinGrace = false;
+        const numericOverdueAmount = Math.abs(toGo.numeric);
+
+        if (toGo.unit === 'days' && typeof task.daysTolerance === 'number' && numericOverdueAmount <= task.daysTolerance) {
+            withinGrace = true;
+        } else if (toGo.unit === 'hrs' && typeof task.hoursTolerance === 'number' && numericOverdueAmount <= task.hoursTolerance) {
+            withinGrace = true;
+        } else if (toGo.unit === 'cycles' && typeof task.cyclesTolerance === 'number' && numericOverdueAmount <= task.cyclesTolerance) {
+            withinGrace = true;
+        }
+
+        if (withinGrace) {
+            return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-yellow-600 dark:text-yellow-500', label: 'Grace Period' };
+        }
+        return { icon: <XCircleIcon className="h-5 w-5" />, colorClass: 'text-red-500 dark:text-red-400', label: 'Overdue' };
+    }
     
     const daysAlertThreshold = 30;
     const hoursAlertThreshold = 25;
     const cyclesAlertThreshold = 50;
 
-    if (toGo.unit === 'days' && toGo.numeric < daysAlertThreshold) return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-yellow-500', label: 'Due Soon' };
-    if (toGo.unit === 'hrs' && toGo.numeric < hoursAlertThreshold) return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-yellow-500', label: 'Due Soon' };
-    if (toGo.unit === 'cycles' && toGo.numeric < cyclesAlertThreshold) return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-yellow-500', label: 'Due Soon' };
+    if (toGo.unit === 'days' && toGo.numeric < daysAlertThreshold) return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-yellow-500 dark:text-yellow-400', label: 'Due Soon' };
+    if (toGo.unit === 'hrs' && toGo.numeric < hoursAlertThreshold) return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-yellow-500 dark:text-yellow-400', label: 'Due Soon' };
+    if (toGo.unit === 'cycles' && toGo.numeric < cyclesAlertThreshold) return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-yellow-500 dark:text-yellow-400', label: 'Due Soon' };
     
     if (toGo.text === 'N/A (Not Date/Hr/Cycle)' || toGo.text === 'Invalid Date') return { icon: <InfoIcon className="h-5 w-5" />, colorClass: 'text-gray-400', label: 'Check Due Info' };
-    return { icon: <CheckCircle2 className="h-5 w-5" />, colorClass: 'text-green-500', label: 'OK' };
+    return { icon: <CheckCircle2 className="h-5 w-5" />, colorClass: 'text-green-500 dark:text-green-400', label: 'OK' };
   };
 
   const availableComponentsForFilter = useMemo(() => {
@@ -454,7 +487,7 @@ export default function AircraftMaintenanceDetailPage() {
       if (task.associatedComponent && task.associatedComponent.trim() !== "") {
         uniqueComponents.add(task.associatedComponent.trim());
       } else {
-         uniqueComponents.add("Airframe"); // Default if not specified
+         uniqueComponents.add("Airframe"); 
       }
     });
     return Array.from(uniqueComponents).sort();
@@ -481,9 +514,10 @@ export default function AircraftMaintenanceDetailPage() {
         if (statusFilter === 'inactive') return !task.isActive;
         if (!task.isActive) return false; 
 
-        const status = getReleaseStatus(task.toGoData!);
+        const status = getReleaseStatus(task.toGoData!, task);
         if (statusFilter === 'overdue') return status.label === 'Overdue';
         if (statusFilter === 'dueSoon') return status.label === 'Due Soon';
+        if (statusFilter === 'gracePeriod') return status.label === 'Grace Period';
         return true;
       });
     }
@@ -903,7 +937,7 @@ export default function AircraftMaintenanceDetailPage() {
                 </Button>
               ) : (
                 <div className="flex gap-2">
-                  <Button variant="ghost" size="icon" onClick={() => { setIsEditingAircraftInfo(false); aircraftInfoForm.reset({ model: currentAircraft.model, serialNumber: currentAircraft.serialNumber || '', baseLocation: currentAircraft.baseLocation || '', primaryContactName: currentAircraft.primaryContactName || '', primaryContactPhone: currentAircraft.primaryContactPhone || '', primaryContactEmail: currentAircraft.primaryContactEmail || '' }); }} disabled={isSavingAircraftInfo}>
+                  <Button variant="ghost" size="icon" onClick={() => { setIsEditingAircraftInfo(false); aircraftInfoForm.reset({ model: currentAircraft.model, serialNumber: currentAircraft.serialNumber || '', aircraftYear: currentAircraft.aircraftYear, baseLocation: currentAircraft.baseLocation || '', primaryContactName: currentAircraft.primaryContactName || '', primaryContactPhone: currentAircraft.primaryContactPhone || '', primaryContactEmail: currentAircraft.primaryContactEmail || '', internalNotes: currentAircraft.internalNotes || '' }); }} disabled={isSavingAircraftInfo}>
                     <XCircle className="h-4 w-4" /><span className="sr-only">Cancel</span>
                   </Button>
                   <Button size="icon" onClick={aircraftInfoForm.handleSubmit(onSubmitAircraftInfo)} disabled={isSavingAircraftInfo}>
@@ -917,34 +951,53 @@ export default function AircraftMaintenanceDetailPage() {
           <CardContent>
             {isEditingAircraftInfo ? (
               <Form {...aircraftInfoForm}>
-                <form onSubmit={aircraftInfoForm.handleSubmit(onSubmitAircraftInfo)} className="space-y-4">
+                <form onSubmit={aircraftInfoForm.handleSubmit(onSubmitAircraftInfo)} className="space-y-3">
                   <FormField control={aircraftInfoForm.control} name="model" render={({ field }) => (<FormItem><FormLabel>Model</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
                   <FormField control={aircraftInfoForm.control} name="serialNumber" render={({ field }) => (<FormItem><FormLabel>Serial Number</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
+                  <FormField control={aircraftInfoForm.control} name="aircraftYear" render={({ field }) => (<FormItem><FormLabel>Year</FormLabel><FormControl><Input type="number" {...field} onChange={e => field.onChange(e.target.value === '' ? undefined : parseInt(e.target.value,10))} /></FormControl><FormMessage /></FormItem>)} />
                   <FormField control={aircraftInfoForm.control} name="baseLocation" render={({ field }) => (<FormItem><FormLabel>Base Location</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
                   <FormField control={aircraftInfoForm.control} name="primaryContactName" render={({ field }) => (<FormItem><FormLabel>Primary Contact Name</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
                   <FormField control={aircraftInfoForm.control} name="primaryContactPhone" render={({ field }) => (<FormItem><FormLabel>Contact Phone</FormLabel><FormControl><Input type="tel" {...field} /></FormControl><FormMessage /></FormItem>)} />
                   <FormField control={aircraftInfoForm.control} name="primaryContactEmail" render={({ field }) => (<FormItem><FormLabel>Contact Email</FormLabel><FormControl><Input type="email" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                  <FormField control={aircraftInfoForm.control} name="internalNotes" render={({ field }) => (<FormItem><FormLabel>Internal Notes</FormLabel><FormControl><Textarea {...field} rows={3} /></FormControl><FormMessage /></FormItem>)} />
+                   {currentAircraft.engineDetails && currentAircraft.engineDetails.length > 0 && (
+                    <div className="pt-2 text-sm">
+                      <h4 className="font-semibold text-muted-foreground mb-1">Engine Details (Read-only):</h4>
+                      {currentAircraft.engineDetails.map((engine, idx) => (
+                        <div key={idx} className="p-2 border rounded-md bg-muted/30 mb-1">
+                           <p><strong className="text-muted-foreground">Engine {idx+1} Model:</strong> {engine.model || 'N/A'}</p>
+                           <p><strong className="text-muted-foreground">Engine {idx+1} S/N:</strong> {engine.serialNumber || 'N/A'}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </form>
               </Form>
             ) : (
-              <div className="space-y-2 text-sm">
-                <p><strong className="text-muted-foreground">Model:</strong> {currentAircraft.model}</p>
-                <p><strong className="text-muted-foreground">Serial #:</strong> {currentAircraft.serialNumber || 'N/A'}</p>
-                <p><strong className="text-muted-foreground">Base:</strong> {currentAircraft.baseLocation || 'N/A'}</p>
-                <p><strong className="text-muted-foreground">Contact Name:</strong> {currentAircraft.primaryContactName || 'N/A'}</p>
-                <p><strong className="text-muted-foreground">Contact Phone:</strong> {currentAircraft.primaryContactPhone || 'N/A'}</p>
-                <p><strong className="text-muted-foreground">Contact Email:</strong> {currentAircraft.primaryContactEmail || 'N/A'}</p>
+              <div className="space-y-1.5 text-sm">
+                <p><strong className="text-muted-foreground w-28 inline-block">Model:</strong> {currentAircraft.model}</p>
+                <p><strong className="text-muted-foreground w-28 inline-block">Serial #:</strong> {currentAircraft.serialNumber || 'N/A'}</p>
+                <p><strong className="text-muted-foreground w-28 inline-block">Year:</strong> {currentAircraft.aircraftYear || 'N/A'}</p>
+                <p><strong className="text-muted-foreground w-28 inline-block">Base:</strong> {currentAircraft.baseLocation || 'N/A'}</p>
+                <p><strong className="text-muted-foreground w-28 inline-block">Contact:</strong> {currentAircraft.primaryContactName || 'N/A'}</p>
+                <p><strong className="text-muted-foreground w-28 inline-block">Phone:</strong> {currentAircraft.primaryContactPhone || 'N/A'}</p>
+                <p><strong className="text-muted-foreground w-28 inline-block">Email:</strong> {currentAircraft.primaryContactEmail || 'N/A'}</p>
+                
                 {currentAircraft.engineDetails && currentAircraft.engineDetails.length > 0 && (
                   <div className="pt-2">
                     <h4 className="font-semibold text-muted-foreground">Engine Details:</h4>
-                    <ul className="list-disc list-inside pl-2">
-                      {currentAircraft.engineDetails.map((engine, idx) => (
-                        <li key={idx}>
-                          {engine.model || `Engine ${idx+1}`}
-                          {engine.serialNumber && ` (S/N: ${engine.serialNumber})`}
-                        </li>
-                      ))}
-                    </ul>
+                    {currentAircraft.engineDetails.map((engine: EngineDetail, idx: number) => (
+                        <div key={idx} className="pl-2 border-l ml-1 mt-1">
+                            <p><strong className="text-muted-foreground w-24 inline-block">Eng {idx+1} Model:</strong> {engine.model || 'N/A'}</p>
+                            <p><strong className="text-muted-foreground w-24 inline-block">Eng {idx+1} S/N:</strong> {engine.serialNumber || 'N/A'}</p>
+                        </div>
+                    ))}
+                  </div>
+                )}
+                {currentAircraft.internalNotes && (
+                   <div className="pt-2">
+                    <h4 className="font-semibold text-muted-foreground">Internal Notes:</h4>
+                    <p className="whitespace-pre-wrap p-2 bg-muted/30 rounded-md text-xs">{currentAircraft.internalNotes}</p>
                   </div>
                 )}
               </div>
@@ -986,6 +1039,7 @@ export default function AircraftMaintenanceDetailPage() {
                 <SelectItem value="inactive">Inactive Items</SelectItem>
                 <SelectItem value="dueSoon">Due Soon (Active)</SelectItem>
                 <SelectItem value="overdue">Overdue (Active)</SelectItem>
+                <SelectItem value="gracePeriod">Grace Period (Active)</SelectItem>
               </SelectContent>
             </Select>
             <Select value={componentFilter} onValueChange={setComponentFilter}>
@@ -1047,7 +1101,7 @@ export default function AircraftMaintenanceDetailPage() {
                   </TableRow>
                 )}
                 {displayedTasks.map((item) => {
-                  const status = getReleaseStatus(item.toGoData!);
+                  const status = getReleaseStatus(item.toGoData!, item);
                   const frequency = formatTaskFrequency(item);
                   let dueAtDisplay = "N/A";
                   if (item.dueAtDate) {
@@ -1086,7 +1140,7 @@ export default function AircraftMaintenanceDetailPage() {
                       <TableCell className="text-xs">{frequency}</TableCell>
                       <TableCell className="text-xs">{lastDoneDisplay}</TableCell>
                       <TableCell className="text-xs">{dueAtDisplay}</TableCell>
-                      <TableCell className={`font-semibold text-xs ${item.toGoData?.isOverdue ? 'text-red-600' : (item.toGoData?.unit === 'days' && item.toGoData?.numeric < 30) || (item.toGoData?.unit === 'hrs' && item.toGoData?.numeric < 25) || (item.toGoData?.unit === 'cycles' && item.toGoData?.numeric < 50) ? 'text-yellow-600' : 'text-green-600'}`}>{item.toGoData?.text}</TableCell>
+                      <TableCell className={`font-semibold text-xs ${item.toGoData?.isOverdue ? (status.label === 'Grace Period' ? 'text-yellow-600' : 'text-red-600') : (item.toGoData?.unit === 'days' && item.toGoData?.numeric < 30) || (item.toGoData?.unit === 'hrs' && item.toGoData?.numeric < 25) || (item.toGoData?.unit === 'cycles' && item.toGoData?.numeric < 50) ? 'text-yellow-600' : 'text-green-600'}`}>{item.toGoData?.text}</TableCell>
                       <TableCell className="text-center">
                         <div className={`flex flex-col items-center justify-center ${status.colorClass}`}>
                           {status.icon}
@@ -1109,3 +1163,4 @@ export default function AircraftMaintenanceDetailPage() {
     </div>
   );
 }
+
