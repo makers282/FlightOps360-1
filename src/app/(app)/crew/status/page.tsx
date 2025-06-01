@@ -4,7 +4,8 @@ import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Users } from 'lucide-react'; // Using Users icon for crew status page
+import { Users, Search } from 'lucide-react'; // Using Users icon for crew status page, added Search
+import { Input } from '@/components/ui/input'; // Added Input
 
 const crewData = [
   { id: 'CRW001', name: 'Capt. Ava Williams', role: 'Pilot', status: 'On Duty', assignment: 'FL123 (KMIA)', avatarUrl: 'https://placehold.co/100x100.png', dataAiHint: 'pilot portrait female' },
@@ -44,6 +45,14 @@ export default function CrewStatusPage() {
         <CardHeader>
           <CardTitle>All Crew Members</CardTitle>
           <CardDescription>Monitor availability and assignments in real-time.</CardDescription>
+          <div className="mt-4 relative">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input 
+              placeholder="Search crew members (name, role, status)..." 
+              className="pl-8 w-full sm:w-1/2 lg:w-1/3" 
+              disabled // Disabled for now, as filtering is not implemented
+            />
+          </div>
         </CardHeader>
         <CardContent>
           {crewData.length === 0 ? (
