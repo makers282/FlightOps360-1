@@ -18,9 +18,8 @@ import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-
 import {
   fetchAircraftPerformance,
   saveAircraftPerformance,
-  type AircraftPerformanceData
 } from '@/ai/flows/manage-aircraft-performance-flow';
-import type { SaveAircraftPerformanceInput } from '@/ai/schemas/aircraft-performance-schemas';
+import type { AircraftPerformanceData, SaveAircraftPerformanceInput } from '@/ai/schemas/aircraft-performance-schemas';
 import { AircraftPerformanceDataSchema } from '@/ai/schemas/aircraft-performance-schemas';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -47,18 +46,9 @@ export function AircraftPerformanceForm() {
   const form = useForm<AircraftPerformanceFormData>({
     resolver: zodResolver(AircraftPerformanceDataSchema),
     defaultValues: {
-        takeoffSpeed: undefined,
-        landingSpeed: undefined,
-        climbSpeed: undefined,
-        climbRate: undefined,
-        cruiseSpeed: undefined,
-        cruiseAltitude: undefined,
-        descentSpeed: undefined,
-        descentRate: undefined,
-        fuelType: undefined,
-        fuelBurn: undefined,
-        maxRange: undefined,
-        maxAllowableTakeoffWeight: undefined,
+        takeoffSpeed: undefined, landingSpeed: undefined, climbSpeed: undefined, climbRate: undefined,
+        cruiseSpeed: undefined, cruiseAltitude: undefined, descentSpeed: undefined, descentRate: undefined,
+        fuelType: undefined, fuelBurn: undefined, maxRange: undefined, maxAllowableTakeoffWeight: undefined,
     },
   });
 
@@ -95,14 +85,20 @@ export function AircraftPerformanceForm() {
         if (data) {
           const numericData: Partial<AircraftPerformanceFormData> = {};
           const schemaKeys = Object.keys(AircraftPerformanceDataSchema.shape) as Array<keyof AircraftPerformanceFormData>;
+          
           schemaKeys.forEach(key => {
             const value = data[key as keyof typeof data];
             if (value !== null && value !== undefined) {
               const fieldSchema = AircraftPerformanceDataSchema.shape[key];
-              if (fieldSchema instanceof z.ZodNumber || (fieldSchema instanceof z.ZodOptional && fieldSchema._def.innerType instanceof z.ZodNumber)) {
-                (numericData as any)[key] = Number(value);
+              // Check if field is numeric (direct or coerced)
+              const isNumericField = (fieldSchema instanceof z.ZodOptional && fieldSchema._def.innerType instanceof z.ZodCoerce && fieldSchema._def.innerType._def.typeName === "ZodNumber") ||
+                                     (fieldSchema instanceof z.ZodCoerce && fieldSchema._def.typeName === "ZodNumber") ||
+                                     (fieldSchema instanceof z.ZodNumber);
+
+              if (isNumericField) {
+                 (numericData as any)[key] = Number(value);
               } else {
-                (numericData as any)[key] = value;
+                 (numericData as any)[key] = value;
               }
             } else {
               (numericData as any)[key] = undefined;
@@ -132,7 +128,6 @@ export function AircraftPerformanceForm() {
     }
   }, [selectedAircraftId, loadPerformanceDataForAircraft, form]);
 
-
   const onSubmit: SubmitHandler<AircraftPerformanceFormData> = (formData) => {
     if (!selectedAircraftId) {
       toast({ title: "Error", description: "Please select an aircraft to save settings for.", variant: "destructive" });
@@ -142,11 +137,15 @@ export function AircraftPerformanceForm() {
       try {
         const dataToSave: Partial<AircraftPerformanceData> = {};
         const schemaKeys = Object.keys(AircraftPerformanceDataSchema.shape) as Array<keyof AircraftPerformanceFormData>;
+        
         schemaKeys.forEach(key => {
             const value = formData[key];
             if (value !== undefined && value !== null && String(value).trim() !== '') {
-                const fieldSchema = AircraftPerformanceDataSchema.shape[key];
-                if (fieldSchema instanceof z.ZodNumber || (fieldSchema instanceof z.ZodOptional && fieldSchema._def.innerType instanceof z.ZodNumber)) {
+                const fieldSchemaDef = (AircraftPerformanceDataSchema.shape[key] as any)._def;
+                const isNumericField = (fieldSchemaDef.typeName === 'ZodNumber') || 
+                                     (fieldSchemaDef.typeName === 'ZodOptional' && fieldSchemaDef.innerType?._def?.typeName === 'ZodNumber') || 
+                                     (fieldSchemaDef.typeName === 'ZodCoerce' && fieldSchemaDef.coerceType === 'number');
+                if (isNumericField) {
                     const numValue = Number(value);
                     if (!isNaN(numValue)) {
                        (dataToSave as any)[key] = numValue;
@@ -185,25 +184,31 @@ export function AircraftPerformanceForm() {
     startAiSuggestionTransition(async () => {
       try {
         const aiInput: SuggestAircraftPerformanceInput = { aircraftName: selectedAircraftObject.model };
-        const suggestedData: AircraftPerformanceOutput = await suggestAircraftPerformance(aiInput);
+        const suggestedDataFromAI: AircraftPerformanceOutput = await suggestAircraftPerformance(aiInput);
         
         const processedData: Partial<AircraftPerformanceFormData> = {};
         const schemaKeys = Object.keys(AircraftPerformanceDataSchema.shape) as Array<keyof AircraftPerformanceFormData>;
 
         schemaKeys.forEach(key => {
-            const aiValue = (suggestedData as any)[key];
-            const fieldSchema = AircraftPerformanceDataSchema.shape[key];
+            const aiValue = (suggestedDataFromAI as any)[key];
+            const fieldSchemaDef = (AircraftPerformanceDataSchema.shape[key] as any)._def;
+            const isNumericField = (fieldSchemaDef.typeName === 'ZodNumber') || 
+                                 (fieldSchemaDef.typeName === 'ZodOptional' && fieldSchemaDef.innerType?._def?.typeName === 'ZodNumber') ||
+                                 (fieldSchemaDef.typeName === 'ZodCoerce' && fieldSchemaDef.coerceType === 'number');
+            const isStringField = (fieldSchemaDef.typeName === 'ZodString') || 
+                                (fieldSchemaDef.typeName === 'ZodOptional' && fieldSchemaDef.innerType?._def?.typeName === 'ZodString');
+
 
             if (aiValue === null || aiValue === undefined || String(aiValue).trim() === '') {
                 (processedData as any)[key] = undefined;
-            } else if (fieldSchema instanceof z.ZodNumber || (fieldSchema instanceof z.ZodOptional && fieldSchema._def.innerType instanceof z.ZodNumber)) {
+            } else if (isNumericField) {
                 const numValue = Number(aiValue);
                 if (isNaN(numValue)) {
                     (processedData as any)[key] = undefined;
                 } else {
                     (processedData as any)[key] = Math.round(numValue);
                 }
-            } else if (fieldSchema instanceof z.ZodString || (fieldSchema instanceof z.ZodOptional && fieldSchema._def.innerType instanceof z.ZodString)) {
+            } else if (isStringField) {
                 const strValue = String(aiValue).trim();
                 (processedData as any)[key] = strValue === '' ? undefined : strValue;
             } else {
@@ -220,7 +225,7 @@ export function AircraftPerformanceForm() {
     });
   }, [selectedAircraftId, fleetSelectOptions, startAiSuggestionTransition, form, toast]);
 
-  const renderInputWithUnit = useCallback((name: keyof AircraftPerformanceFormData, label: string, unit: string, placeholder?: string, type: string = "number") => {
+  const renderInputWithUnit = useCallback((name: keyof AircraftPerformanceFormData, label: string, unit: string, placeholder?: string) => {
     return (
       <FormField
         control={form.control}
@@ -231,21 +236,17 @@ export function AircraftPerformanceForm() {
             <div className="flex items-center gap-2">
               <FormControl>
                 <Input
-                  type={type}
+                  type="number"
                   placeholder={placeholder || "e.g., 120"}
                   {...field}
-                  value={field.value === undefined || field.value === null || (typeof field.value === 'number' && isNaN(field.value)) ? '' : String(field.value)}
+                  value={(field.value === undefined || field.value === null || (typeof field.value === 'number' && isNaN(field.value))) ? '' : String(field.value)}
                   onChange={e => {
                     const valStr = e.target.value;
                     if (valStr === '') {
                        field.onChange(undefined);
                     } else {
-                      if (type === 'number') {
-                          const num = parseFloat(valStr);
-                          field.onChange(isNaN(num) ? undefined : num);
-                      } else {
-                           field.onChange(valStr);
-                      }
+                      const num = parseFloat(valStr);
+                      field.onChange(isNaN(num) ? undefined : num);
                     }
                   }}
                 />
