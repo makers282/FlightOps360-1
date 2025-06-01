@@ -1,17 +1,18 @@
 
 "use client";
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { PageHeader } from '@/components/page-header';
 import { Calendar as CalendarIconLucide, Plane } from 'lucide-react';
 import { Calendar as ShadcnCalendar } from "@/components/ui/calendar";
 import type { DayProps } from "react-day-picker";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardDescription } from '@/components/ui/card';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import Link from 'next/link';
 import { cn } from "@/lib/utils";
 import { format, isSameDay, parseISO, startOfDay, endOfDay, isToday } from 'date-fns';
 import { buttonVariants } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface CalendarEvent {
   id: string;
@@ -26,22 +27,23 @@ interface CalendarEvent {
   description?: string;
 }
 
+// Event times are now UTC
 const mockTripData: Omit<CalendarEvent, 'type' | 'color' | 'textColor' | 'description'>[] = [
-  { id: 'TRP001', title: 'N520PW BD-100 Challenger 300', aircraft: 'N520PW', route: 'VNY > TXKF > VNY', start: parseISO('2024-10-02T08:00:00'), end: parseISO('2024-10-04T17:00:00') },
-  { id: 'TRP002', title: 'N123MW G-7 Gulfstream-G500', aircraft: 'N123MW', route: 'SFO > LAS > TEB > SFO', start: parseISO('2024-10-02T10:00:00'), end: parseISO('2024-10-05T22:00:00') },
-  { id: 'TRP003', title: 'N555VP Gulfstream-G650', aircraft: 'N555VP', route: 'LFPB > LKPR > FLL', start: parseISO('2024-10-08T11:00:00'), end: parseISO('2024-10-09T18:00:00') },
-  { id: 'TRP004', title: 'N123MW G-7 Gulfstream-G500', aircraft: 'N123MW', route: 'SFO > OMA > MMTJ', start: parseISO('2024-10-08T09:00:00'), end: parseISO('2024-10-09T17:00:00') },
-  { id: 'TRP005', title: 'N345AG C-20F-Gulfstream-4', aircraft: 'N345AG', route: 'DAL > OPF > DAL', start: parseISO('2024-10-09T10:00:00'), end: parseISO('2024-10-11T15:00:00') },
-  { id: 'TRP006', title: 'N170SCC BD-700-Global-7000', aircraft: 'N170SCC', route: 'ZBAA > WSSL > VVNB', start: parseISO('2024-10-15T06:00:00'), end: parseISO('2024-10-16T12:00:00') },
-  { id: 'TRP007', title: 'N345AG C-20F-Gulfstream-4', aircraft: 'N345AG', route: 'DAL > LAS > PBI > DAL', start: parseISO('2024-10-16T08:00:00'), end: parseISO('2024-10-18T20:00:00') },
-  { id: 'TRP008', title: 'N520PW BD-100 Challenger 300', aircraft: 'N520PW', route: 'VNY > MMTO > SBGL > SBGR > VNY', start: parseISO('2024-10-22T07:00:00'), end: parseISO('2024-10-26T23:00:00') },
-  { id: 'TRP009', title: 'N555VP Gulfstream-G650', aircraft: 'N555VP', route: 'FLL > EGSS > FLL', start: parseISO('2024-10-28T10:00:00'), end: parseISO('2024-10-30T16:00:00') },
+  { id: 'TRP001', title: 'N520PW BD-100 Challenger 300', aircraft: 'N520PW', route: 'VNY > TXKF > VNY', start: parseISO('2024-10-02T08:00:00Z'), end: parseISO('2024-10-04T17:00:00Z') },
+  { id: 'TRP002', title: 'N123MW G-7 Gulfstream-G500', aircraft: 'N123MW', route: 'SFO > LAS > TEB > SFO', start: parseISO('2024-10-02T10:00:00Z'), end: parseISO('2024-10-05T22:00:00Z') },
+  { id: 'TRP003', title: 'N555VP Gulfstream-G650', aircraft: 'N555VP', route: 'LFPB > LKPR > FLL', start: parseISO('2024-10-08T11:00:00Z'), end: parseISO('2024-10-09T18:00:00Z') },
+  { id: 'TRP004', title: 'N123MW G-7 Gulfstream-G500', aircraft: 'N123MW', route: 'SFO > OMA > MMTJ', start: parseISO('2024-10-08T09:00:00Z'), end: parseISO('2024-10-09T17:00:00Z') },
+  { id: 'TRP005', title: 'N345AG C-20F-Gulfstream-4', aircraft: 'N345AG', route: 'DAL > OPF > DAL', start: parseISO('2024-10-09T10:00:00Z'), end: parseISO('2024-10-11T15:00:00Z') },
+  { id: 'TRP006', title: 'N170SCC BD-700-Global-7000', aircraft: 'N170SCC', route: 'ZBAA > WSSL > VVNB', start: parseISO('2024-10-15T06:00:00Z'), end: parseISO('2024-10-16T12:00:00Z') },
+  { id: 'TRP007', title: 'N345AG C-20F-Gulfstream-4', aircraft: 'N345AG', route: 'DAL > LAS > PBI > DAL', start: parseISO('2024-10-16T08:00:00Z'), end: parseISO('2024-10-18T20:00:00Z') },
+  { id: 'TRP008', title: 'N520PW BD-100 Challenger 300', aircraft: 'N520PW', route: 'VNY > MMTO > SBGL > SBGR > VNY', start: parseISO('2024-10-22T07:00:00Z'), end: parseISO('2024-10-26T23:00:00Z') },
+  { id: 'TRP009', title: 'N555VP Gulfstream-G650', aircraft: 'N555VP', route: 'FLL > EGSS > FLL', start: parseISO('2024-10-28T10:00:00Z'), end: parseISO('2024-10-30T16:00:00Z') },
 ];
 
 const mockMaintenanceData: Omit<CalendarEvent, 'type' | 'color' | 'textColor' | 'description' | 'route'>[] = [
-  { id: 'MX001', title: 'N123AB - A Check', aircraft: 'N123AB', start: parseISO('2024-10-10T08:00:00'), end: parseISO('2024-10-11T17:00:00') },
-  { id: 'MX002', title: 'N789EF - Engine Swap', aircraft: 'N789EF', start: parseISO('2024-10-20T07:00:00'), end: parseISO('2024-10-24T18:00:00') },
-  { id: 'MX003', title: 'Annual Inspection', aircraft: 'N456CD', start: parseISO('2024-10-01T09:00:00'), end: parseISO('2024-10-01T17:00:00') },
+  { id: 'MX001', title: 'N123AB - A Check', aircraft: 'N123AB', start: parseISO('2024-10-10T08:00:00Z'), end: parseISO('2024-10-11T17:00:00Z') },
+  { id: 'MX002', title: 'N789EF - Engine Swap', aircraft: 'N789EF', start: parseISO('2024-10-20T07:00:00Z'), end: parseISO('2024-10-24T18:00:00Z') },
+  { id: 'MX003', title: 'Annual Inspection', aircraft: 'N456CD', start: parseISO('2024-10-01T09:00:00Z'), end: parseISO('2024-10-01T17:00:00Z') },
 ];
 
 const allEvents: CalendarEvent[] = [
@@ -73,12 +75,14 @@ function CustomDay(props: DayProps) {
   const isCurrentMonth = date.getMonth() === displayMonth.getMonth();
 
   const eventsForDay = useMemo(() => {
+    const currentDayStart = startOfDay(date); // Local start of the day
+    const currentDayEnd = endOfDay(date);     // Local end of the day
+
     return allEvents
       .filter(event => {
-        const eventStartDay = startOfDay(event.start);
-        const eventEndDay = endOfDay(event.end);
-        const currentDayStart = startOfDay(date);
-        return currentDayStart >= eventStartDay && currentDayStart <= eventEndDay;
+        // Event times are UTC. We check if the UTC event interval overlaps with the local day interval.
+        // This comparison works because all are Date objects (absolute timestamps).
+        return event.start < currentDayEnd && event.end > currentDayStart;
       })
       .sort((a, b) => a.start.getTime() - b.start.getTime());
   }, [date]);
@@ -88,7 +92,7 @@ function CustomDay(props: DayProps) {
       "relative h-full w-full flex flex-col p-0.5 border-r border-b border-border/30",
       !isCurrentMonth && "bg-muted/20 text-muted-foreground/50" 
     )}>
-      <time dateTime={date.toISOString()} className={cn(
+      <time dateTime={format(date, "yyyy-MM-dd")} className={cn(
         "text-xs self-end mb-0.5 mr-1 mt-0.5",
         isToday(date) && isCurrentMonth && "text-primary font-bold rounded-full bg-primary/20 w-5 h-5 flex items-center justify-center"
       )}>
@@ -115,7 +119,7 @@ function CustomDay(props: DayProps) {
                   <p className="font-semibold">{event.title}</p>
                   {event.route && <p>Route: {event.route}</p>}
                   <p className="text-muted-foreground">
-                    {format(event.start, 'MMM d, H:mm')} - {format(event.end, 'MMM d, H:mm')}
+                    {format(event.start, 'MMM d, H:mm zz')} - {format(event.end, 'MMM d, H:mm zz')}
                   </p>
                   {event.description && <p className="mt-1">{event.description}</p>}
                 </TooltipContent>
@@ -129,7 +133,36 @@ function CustomDay(props: DayProps) {
 }
 
 export default function TripCalendarPage() {
-  const [currentMonth, setCurrentMonth] = useState<Date>(new Date(2024, 9, 1)); // October 2024
+  const [currentMonth, setCurrentMonth] = useState<Date | undefined>(undefined);
+  const [isClientReady, setIsClientReady] = useState(false);
+
+  useEffect(() => {
+    // Initialize currentMonth only on the client side
+    setCurrentMonth(new Date(2024, 9, 1)); // October 2024, local midnight
+    setIsClientReady(true);
+  }, []);
+
+  if (!isClientReady) {
+    return (
+      <>
+        <PageHeader
+          title="Trip & Maintenance Calendar"
+          description="Visual overview of scheduled trips and maintenance events."
+          icon={CalendarIconLucide}
+        />
+        <Card className="shadow-xl border-border/50">
+          <CardHeader className="border-b py-3 px-4">
+            <CardDescription>
+              Loading calendar...
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            <Skeleton className="w-full aspect-[1.5/1] rounded-md" />
+          </CardContent>
+        </Card>
+      </>
+    );
+  }
 
   return (
     <>
@@ -147,7 +180,7 @@ export default function TripCalendarPage() {
         <CardContent className="p-0">
           <ShadcnCalendar
             mode="single"
-            month={currentMonth}
+            month={currentMonth} // Will be defined on client
             onMonthChange={setCurrentMonth}
             className="w-full rounded-md bg-card"
             classNames={{
@@ -158,18 +191,16 @@ export default function TripCalendarPage() {
                 day: "h-full w-full p-0 focus:relative focus:z-10",
                 head_row: "border-b border-border/50",
                 head_cell: "text-muted-foreground align-middle text-center w-[calc(100%/7)] font-normal text-[0.65rem] sm:text-xs py-1.5 border-r border-border/30 last:border-r-0",
-                caption: "flex justify-center items-center py-2 relative gap-x-2", // Simplified caption styling
-                caption_label: "text-sm font-medium", // For "Month Year" text
-                nav_button: cn(buttonVariants({ variant: "outline" }), "h-8 w-8 bg-transparent p-0 opacity-80 hover:opacity-100"),
-                nav_button_previous: "absolute left-2",
-                nav_button_next: "absolute right-2",
+                caption: "flex justify-center items-center py-2.5 relative gap-x-1 px-2",
+                caption_label: "text-sm font-medium",
+                nav_button: cn(buttonVariants({ variant: "outline" }), "h-7 w-7 bg-transparent p-0 opacity-80 hover:opacity-100"),
             }}
             components={{
               Day: CustomDay,
             }}
             showOutsideDays={false}
             numberOfMonths={1}
-            captionLayout="buttons" // Changed from dropdown-buttons
+            captionLayout="buttons"
             fromYear={new Date().getFullYear() - 5} 
             toYear={new Date().getFullYear() + 5}
           />
