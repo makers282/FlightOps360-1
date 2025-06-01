@@ -3,7 +3,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { PageHeader } from '@/components/page-header';
-import { Calendar as CalendarIconLucide, Plane } from 'lucide-react'; // Added Plane icon
+import { Calendar as CalendarIconLucide, Plane } from 'lucide-react';
 import { Calendar as ShadcnCalendar } from "@/components/ui/calendar";
 import type { DayProps } from "react-day-picker";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -20,13 +20,12 @@ interface CalendarEvent {
   end: Date;
   type: 'trip' | 'maintenance';
   aircraft?: string;
-  route?: string; // Added for trip details
-  color: string; // Tailwind background color class
-  textColor: string; // Tailwind text color class
+  route?: string; 
+  color: string; 
+  textColor: string; 
   description?: string;
 }
 
-// Enhanced Mock Data to better match the example's detail
 const mockTripData: Omit<CalendarEvent, 'type' | 'color' | 'textColor' | 'description'>[] = [
   { id: 'TRP001', title: 'N520PW BD-100 Challenger 300', aircraft: 'N520PW', route: 'VNY > TXKF > VNY', start: parseISO('2024-10-02T08:00:00'), end: parseISO('2024-10-04T17:00:00') },
   { id: 'TRP002', title: 'N123MW G-7 Gulfstream-G500', aircraft: 'N123MW', route: 'SFO > LAS > TEB > SFO', start: parseISO('2024-10-02T10:00:00'), end: parseISO('2024-10-05T22:00:00') },
@@ -49,7 +48,6 @@ const allEvents: CalendarEvent[] = [
   ...mockTripData.map(trip => ({ 
     ...trip, 
     type: 'trip' as const, 
-    // Example colors (Tailwind classes)
     color: trip.aircraft === 'N520PW' ? 'bg-cyan-400' : 
            trip.aircraft === 'N123MW' ? 'bg-blue-600' : 
            trip.aircraft === 'N555VP' ? 'bg-red-500' : 
@@ -63,7 +61,7 @@ const allEvents: CalendarEvent[] = [
   ...mockMaintenanceData.map(mx => ({ 
     ...mx, 
     type: 'maintenance' as const, 
-    color: 'bg-yellow-400', // Example: Yellow for maintenance
+    color: 'bg-yellow-400', 
     textColor: 'text-yellow-900', 
     description: `Maintenance for ${mx.aircraft}: ${mx.title}. From ${format(mx.start, 'Pp')} to ${format(mx.end, 'Pp')}.` 
   })),
@@ -82,13 +80,13 @@ function CustomDay(props: DayProps) {
         const currentDayStart = startOfDay(date);
         return currentDayStart >= eventStartDay && currentDayStart <= eventEndDay;
       })
-      .sort((a, b) => a.start.getTime() - b.start.getTime()); // Sort events by start time
+      .sort((a, b) => a.start.getTime() - b.start.getTime());
   }, [date]);
 
   return (
     <div className={cn(
       "relative h-full w-full flex flex-col p-0.5 border-r border-b border-border/30",
-      !isCurrentMonth && "bg-muted/20 text-muted-foreground/50"
+      !isCurrentMonth && "bg-muted/20 text-muted-foreground/50" // This styling will be less visible now
     )}>
       <time dateTime={date.toISOString()} className={cn(
         "text-xs self-end mb-0.5 mr-1 mt-0.5",
@@ -97,7 +95,7 @@ function CustomDay(props: DayProps) {
         {format(date, "d")}
       </time>
       {isCurrentMonth && eventsForDay.length > 0 && (
-        <div className="space-y-0.5 overflow-y-auto flex-grow max-h-[calc(100%-1.25rem)] pr-0.5"> {/* Allow scroll if many events */}
+        <div className="space-y-0.5 overflow-y-auto flex-grow max-h-[calc(100%-1.25rem)] pr-0.5">
           {eventsForDay.map(event => (
             <TooltipProvider key={event.id} delayDuration={100}>
               <Tooltip>
@@ -131,7 +129,7 @@ function CustomDay(props: DayProps) {
 }
 
 export default function TripCalendarPage() {
-  const [currentMonth, setCurrentMonth] = useState<Date>(new Date(2024, 9, 1)); // Set to Oct 2024 for mock data
+  const [currentMonth, setCurrentMonth] = useState<Date>(new Date(2024, 9, 1));
 
   return (
     <>
@@ -141,40 +139,40 @@ export default function TripCalendarPage() {
         icon={CalendarIconLucide}
       />
       <Card className="shadow-xl border-border/50">
-        <CardHeader className="border-b">
-          <CardTitle className="text-xl">Events for {format(currentMonth, 'MMMM yyyy')}</CardTitle>
+        <CardHeader className="border-b py-3 px-4"> {/* Made header more compact */}
+          {/* CardTitle removed, month/year handled by calendar's captionLayout */}
           <CardDescription>
             Colors indicate different aircraft or event types. Hover for details, click to view (placeholder link).
           </CardDescription>
         </CardHeader>
-        <CardContent className="p-0"> {/* Remove padding from CardContent to allow calendar to fill */}
+        <CardContent className="p-0">
           <ShadcnCalendar
-            mode="single" // Still single for navigation, day rendering is custom
+            mode="single"
             month={currentMonth}
             onMonthChange={setCurrentMonth}
-            className="w-full rounded-md bg-card" // Calendar takes full width of card
+            className="w-full rounded-md bg-card"
             classNames={{
-                table: "w-full border-collapse", // Ensure table takes full width
-                month: "w-full", // Ensure month takes full width
+                table: "w-full border-collapse", 
+                month: "w-full", 
                 day_disabled: "text-muted-foreground/30 opacity-50",
-                day_outside: "", // CustomDay handles styling
-                cell: "p-0 m-0 text-left align-top h-24 sm:h-28 md:h-32 lg:h-36 xl:h-40", // Increased cell heights
+                // day_outside class will not be applied by react-day-picker if showOutsideDays is false
+                cell: "p-0 m-0 text-left align-top h-24 sm:h-28 md:h-32 lg:h-36 xl:h-40", 
                 day: "h-full w-full p-0 focus:relative focus:z-10",
                 head_row: "border-b border-border/50",
                 head_cell: "text-muted-foreground align-middle text-center w-[calc(100%/7)] font-normal text-[0.65rem] sm:text-xs py-1.5 border-r border-border/30 last:border-r-0",
-                caption_label: "text-base sm:text-lg font-medium",
+                caption: "flex justify-center items-center py-2 relative", // Added for dropdown-buttons layout
+                caption_label: "text-base sm:text-lg font-medium", // This styles the dropdowns themselves
                 nav_button: cn(buttonVariants({ variant: "outline" }), "h-7 w-7 bg-transparent p-0 opacity-60 hover:opacity-100 sm:h-8 sm:w-8"),
-                nav_button_next: "mr-1",
-                nav_button_previous: "ml-1",
+                nav_button_next: "absolute right-1 top-1/2 -translate-y-1/2 sm:right-2", // Position nav buttons relative to caption
+                nav_button_previous: "absolute left-1 top-1/2 -translate-y-1/2 sm:left-2",
             }}
             components={{
               Day: CustomDay,
             }}
-            fixedWeeks
-            showOutsideDays
+            showOutsideDays={false} // Hide days from other months
             numberOfMonths={1}
-            captionLayout="dropdown-buttons" // Or 'buttons'
-            fromYear={new Date().getFullYear() - 5} // Adjust as needed
+            captionLayout="dropdown-buttons" 
+            fromYear={new Date().getFullYear() - 5} 
             toYear={new Date().getFullYear() + 5}
           />
         </CardContent>
@@ -182,3 +180,4 @@ export default function TripCalendarPage() {
     </>
   );
 }
+
