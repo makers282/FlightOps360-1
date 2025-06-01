@@ -195,7 +195,7 @@ export default function AllQuotesPage() {
                       <TableCell>
                         <Badge variant={getStatusBadgeVariant(quote.status as typeof quoteStatuses[number])}>{quote.status}</Badge>
                       </TableCell>
-                      <TableCell>{quote.createdAt ? format(parseISO(quote.createdAt), 'yyyy-MM-dd') : 'N/A'}</TableCell>
+                      <TableCell>{quote.createdAt ? format(parseISO(quote.createdAt), 'MMM d, yyyy') : 'N/A'}</TableCell>
                       <TableCell>{formatCurrency(quote.totalSellPrice)}</TableCell>
                       <TableCell className="text-right space-x-1">
                         <Tooltip>
