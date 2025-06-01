@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react'; // Added useEffect
 import Link from 'next/link';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -51,6 +51,11 @@ const getStatusBadgeVariant = (status: string): "default" | "secondary" | "outli
 
 export default function TripListPage() {
   const [searchTerm, setSearchTerm] = useState('');
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const filteredTrips = useMemo(() => {
     if (!searchTerm) return mockTripData;
@@ -79,8 +84,6 @@ export default function TripListPage() {
         title="Trip List View"
         description="View all trips in a filterable and sortable list format."
         icon={ListChecks}
-        // Add action button if needed, e.g., New Trip
-        // actions={<Button asChild><Link href="/trips/new">New Trip</Link></Button>}
       />
       <Card className="shadow-lg">
         <CardHeader>
@@ -124,10 +127,9 @@ export default function TripListPage() {
                     <TableCell>
                       <Badge variant={getStatusBadgeVariant(trip.status)}>{trip.status}</Badge>
                     </TableCell>
-                    <TableCell>{formatDate(trip.departure)}</TableCell>
+                    <TableCell>{isMounted ? formatDate(trip.departure) : "Loading..."}</TableCell>
                     <TableCell className="text-right">
                       <Button variant="ghost" size="sm" asChild>
-                        {/* Placeholder link, actual trip detail page would be dynamic */}
                         <Link href={`/trips/details/${trip.id}`}> 
                           <Eye className="mr-2 h-4 w-4" /> View
                         </Link>
