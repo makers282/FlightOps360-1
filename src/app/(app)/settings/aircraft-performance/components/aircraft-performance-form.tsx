@@ -83,29 +83,29 @@ export function AircraftPerformanceForm() {
       try {
         const data = await fetchAircraftPerformance({ aircraftId });
         if (data) {
-          const numericData: Partial<AircraftPerformanceFormData> = {};
+          const processedData: Partial<AircraftPerformanceFormData> = {};
           const schemaKeys = Object.keys(AircraftPerformanceDataSchema.shape) as Array<keyof AircraftPerformanceFormData>;
           
           schemaKeys.forEach(key => {
             const value = data[key as keyof typeof data];
-            if (value !== null && value !== undefined) {
-              const fieldSchema = AircraftPerformanceDataSchema.shape[key];
-              // Check if field is numeric (direct or coerced)
-              const isNumericField = (fieldSchema instanceof z.ZodOptional && fieldSchema._def.innerType instanceof z.ZodCoerce && fieldSchema._def.innerType._def.typeName === "ZodNumber") ||
-                                     (fieldSchema instanceof z.ZodCoerce && fieldSchema._def.typeName === "ZodNumber") ||
-                                     (fieldSchema instanceof z.ZodNumber);
-
+            if (value !== null && value !== undefined && String(value).trim() !== '') {
+              const fieldSchemaDef = (AircraftPerformanceDataSchema.shape[key] as any)._def;
+              const isNumericField = (fieldSchemaDef.typeName === 'ZodNumber') || 
+                                   (fieldSchemaDef.typeName === 'ZodOptional' && fieldSchemaDef.innerType?._def?.typeName === 'ZodNumber') || 
+                                   (fieldSchemaDef.typeName === 'ZodCoerce' && fieldSchemaDef.coerceType === 'number');
               if (isNumericField) {
-                 (numericData as any)[key] = Number(value);
+                 const numValue = Number(value);
+                 (processedData as any)[key] = isNaN(numValue) ? undefined : numValue;
               } else {
-                 (numericData as any)[key] = value;
+                 (processedData as any)[key] = value;
               }
             } else {
-              (numericData as any)[key] = undefined;
+              (processedData as any)[key] = undefined;
             }
           });
-          form.reset(numericData);
-          toast({ title: "Performance Data Loaded", description: `Showing data for ${fleetSelectOptions.find(ac => ac.id === aircraftId)?.label}.`, variant: "default" });
+          form.reset(processedData);
+          const aircraftLabel = fleetSelectOptions.find(ac => ac.id === aircraftId)?.label || `Aircraft ID ${aircraftId}`;
+          toast({ title: "Performance Data Loaded", description: `Showing data for ${aircraftLabel}.`, variant: "default" });
         } else {
           toast({ title: "No Saved Data", description: `No performance data found for this aircraft. You can enter new data or use AI suggestion.`, variant: "default" });
         }
@@ -153,6 +153,8 @@ export function AircraftPerformanceForm() {
                 } else {
                    (dataToSave as any)[key] = value;
                 }
+            } else {
+                (dataToSave as any)[key] = undefined; 
             }
         });
 
@@ -198,7 +200,6 @@ export function AircraftPerformanceForm() {
             const isStringField = (fieldSchemaDef.typeName === 'ZodString') || 
                                 (fieldSchemaDef.typeName === 'ZodOptional' && fieldSchemaDef.innerType?._def?.typeName === 'ZodString');
 
-
             if (aiValue === null || aiValue === undefined || String(aiValue).trim() === '') {
                 (processedData as any)[key] = undefined;
             } else if (isNumericField) {
@@ -225,7 +226,7 @@ export function AircraftPerformanceForm() {
     });
   }, [selectedAircraftId, fleetSelectOptions, startAiSuggestionTransition, form, toast]);
 
-  const renderInputWithUnit = useCallback((name: keyof AircraftPerformanceFormData, label: string, unit: string, placeholder?: string) => {
+  const renderInputWithUnit = (name: keyof AircraftPerformanceFormData, label: string, unit: string, placeholder?: string) => {
     return (
       <FormField
         control={form.control}
@@ -258,7 +259,7 @@ export function AircraftPerformanceForm() {
         )}
       />
     );
-  }, [form.control]);
+  };
 
   return (
     <Form {...form}>
