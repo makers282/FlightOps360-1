@@ -27,7 +27,6 @@ interface CalendarEvent {
   description?: string;
 }
 
-// Event times are UTC
 const mockTripData: Omit<CalendarEvent, 'type' | 'color' | 'textColor' | 'description'>[] = [
   { id: 'TRP001', title: 'N520PW BD-100 Challenger 300', aircraft: 'N520PW', route: 'VNY > TXKF > VNY', start: parseISO('2024-10-02T08:00:00Z'), end: parseISO('2024-10-04T17:00:00Z') },
   { id: 'TRP002', title: 'N123MW G-7 Gulfstream-G500', aircraft: 'N123MW', route: 'SFO > LAS > TEB > SFO', start: parseISO('2024-10-02T10:00:00Z'), end: parseISO('2024-10-05T22:00:00Z') },
@@ -69,10 +68,16 @@ const allEvents: CalendarEvent[] = [
   })),
 ];
 
-
 function CustomDay(props: DayProps) {
   const { date, displayMonth } = props;
   const isCurrentMonth = date.getMonth() === displayMonth.getMonth();
+
+  if (!isCurrentMonth) {
+    // For days outside the current month (when showOutsideDays=false, this component might still be called for structure by rdp)
+    // Render a div that respects the cell's height but is visually empty and non-interactive.
+    // Borders are handled by the `classNames.cell` on the `<td>`.
+    return <div className="h-full w-full bg-muted/10" />;
+  }
 
   const eventsForDay = useMemo(() => {
     const currentDayStart = startOfDay(date); 
@@ -86,18 +91,14 @@ function CustomDay(props: DayProps) {
   }, [date]);
 
   return (
-    <div className={cn(
-      "relative h-full w-full flex flex-col p-0.5 border-r border-b border-border/30",
-      !isCurrentMonth && "bg-muted/20 text-muted-foreground/50 opacity-50 pointer-events-none" 
-    )}>
+    <div className={cn("relative h-full w-full flex flex-col p-0.5")}>
       <time dateTime={format(date, "yyyy-MM-dd")} className={cn(
         "text-xs self-end mb-0.5 mr-1 mt-0.5",
-        isToday(date) && isCurrentMonth && "text-primary font-bold rounded-full bg-primary/20 w-5 h-5 flex items-center justify-center",
-        !isCurrentMonth && "invisible" // Make day number invisible for outside days
+        isToday(date) && "text-primary font-bold rounded-full bg-primary/20 w-5 h-5 flex items-center justify-center"
       )}>
         {format(date, "d")}
       </time>
-      {isCurrentMonth && eventsForDay.length > 0 && (
+      {eventsForDay.length > 0 && (
         <div className="space-y-0.5 overflow-y-auto flex-grow max-h-[calc(100%-1.25rem)] pr-0.5">
           {eventsForDay.map(event => (
             <TooltipProvider key={event.id} delayDuration={100}>
@@ -182,29 +183,25 @@ export default function TripCalendarPage() {
             onMonthChange={setCurrentMonth}
             className="w-full rounded-md bg-card"
             classNames={{
-                table: "w-full border-collapse table-fixed", 
+                table: "w-full border-collapse", // Removed table-fixed
                 month: "w-full", 
-                day_disabled: "text-muted-foreground/30 opacity-50",
+                day_disabled: "text-muted-foreground/30 opacity-50", // Should not be used with showOutsideDays=false for the outside days themselves
                 cell: cn(
                     "p-0 m-0 text-left align-top h-28 sm:h-32 md:h-36 lg:h-40 xl:h-[11rem]",
-                    "w-[calc(100%/7)]" 
+                    "border-r border-b border-border/30" // Cell borders
                 ),
-                day: "h-full w-full p-0 focus:relative focus:z-10",
                 head_row: "border-b border-border/50",
                 head_cell: cn(
-                    "text-muted-foreground align-middle text-center font-normal text-[0.65rem] sm:text-xs py-1.5 border-r border-border/30 last:border-r-0",
-                    "w-[calc(100%/7)]" 
+                    "text-muted-foreground align-middle text-center font-normal text-[0.65rem] sm:text-xs py-1.5 border-r border-b border-border/30 last:border-r-0" // Head cell borders
                 ),
                 caption: "flex justify-center items-center py-2.5 relative gap-x-1 px-2",
-                caption_label: "text-sm font-medium px-2", // Simplified caption label
+                caption_label: "text-sm font-medium px-2",
                 nav_button: cn(buttonVariants({ variant: "outline" }), "h-7 w-7 bg-transparent p-0 opacity-80 hover:opacity-100"),
-                // nav_button_previous is auto-positioned by captionLayout="buttons"
-                // nav_button_next is auto-positioned by captionLayout="buttons"
             }}
             components={{
               Day: CustomDay,
             }}
-            showOutsideDays={false}
+            showOutsideDays={false} // This is key for not showing other month's days
             numberOfMonths={1}
             captionLayout="buttons" 
             fromYear={new Date().getFullYear() - 5} 
