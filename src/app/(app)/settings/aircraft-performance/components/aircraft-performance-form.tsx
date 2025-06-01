@@ -207,7 +207,7 @@ export function AircraftPerformanceForm() {
                 if (isNaN(numValue)) {
                     (processedData as any)[key] = undefined;
                 } else {
-                    (processedData as any)[key] = Math.round(numValue);
+                    (processedData as any)[key] = Math.round(numValue); 
                 }
             } else if (isStringField) {
                 const strValue = String(aiValue).trim();
@@ -226,7 +226,7 @@ export function AircraftPerformanceForm() {
     });
   }, [selectedAircraftId, fleetSelectOptions, startAiSuggestionTransition, form, toast]);
 
-  const renderInputWithUnit = (name: keyof AircraftPerformanceFormData, label: string, unit: string, placeholder?: string) => {
+  const renderInputWithUnit = useCallback((name: keyof AircraftPerformanceFormData, label: string, unit: string, placeholder?: string) => {
     return (
       <FormField
         control={form.control}
@@ -259,7 +259,7 @@ export function AircraftPerformanceForm() {
         )}
       />
     );
-  };
+  }, [form.control]);
 
   return (
     <Form {...form}>
