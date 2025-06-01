@@ -13,9 +13,9 @@ import { db } from '@/lib/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import type { AircraftPerformanceData, FetchAircraftPerformanceInput, SaveAircraftPerformanceInput } from '@/ai/schemas/aircraft-performance-schemas';
 import { 
-    AircraftPerformanceDataSchema,
+    // AircraftPerformanceDataSchema is used for type, not directly in flow schema definition here
     FetchAircraftPerformanceInputSchema, 
-    FetchAircraftPerformanceOutputSchema,
+    FetchAircraftPerformanceOutputSchema, // This is AircraftPerformanceDataSchema.nullable()
     SaveAircraftPerformanceInputSchema,
     SaveAircraftPerformanceOutputSchema
 } from '@/ai/schemas/aircraft-performance-schemas';
@@ -47,7 +47,7 @@ const fetchAircraftPerformanceFlow = ai.defineFlow(
       const docSnap = await getDoc(docRef);
       if (docSnap.exists()) {
         // The document itself contains the performance data fields directly
-        const data = docSnap.data() as AircraftPerformanceData;
+        const data = docSnap.data() as AircraftPerformanceData; // Assume the data matches the schema
         console.log('Fetched performance data from Firestore for aircraft:', input.aircraftId, data);
         return data;
       } else {
@@ -82,3 +82,4 @@ const saveAircraftPerformanceFlow = ai.defineFlow(
     }
   }
 );
+

@@ -10,9 +10,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { Checkbox } from '@/components/ui/checkbox';
+// Removed Checkbox import as it's not used in the final form design
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { PlaneTakeoff as PerformanceIcon, Save, Copy, Wand2, Loader2, AlertTriangle } from 'lucide-react';
+import { PlaneTakeoff as PerformanceIcon, Save, Wand2, Loader2, AlertTriangle } from 'lucide-react'; // Removed Copy icon
 import { useToast } from '@/hooks/use-toast';
 import { suggestAircraftPerformance, type SuggestAircraftPerformanceInput, type AircraftPerformanceOutput } from '@/ai/flows/suggest-aircraft-performance-flow';
 import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
@@ -22,24 +22,9 @@ import {
   type AircraftPerformanceData
 } from '@/ai/flows/manage-aircraft-performance-flow';
 import type { SaveAircraftPerformanceInput } from '@/ai/schemas/aircraft-performance-schemas';
-import { Skeleton } from '@/components/ui/skeleton'; // Added Skeleton import
+import { AircraftPerformanceDataSchema } from '@/ai/schemas/aircraft-performance-schemas'; // Import Zod schema
+import { Skeleton } from '@/components/ui/skeleton';
 
-
-// Schema for form validation, aligned with AircraftPerformanceData
-const aircraftPerformanceFormValidationSchema = z.object({
-  takeoffSpeed: z.coerce.number().min(0).optional(),
-  landingSpeed: z.coerce.number().min(0).optional(),
-  climbSpeed: z.coerce.number().min(0).optional(),
-  climbRate: z.coerce.number().min(0).optional(),
-  cruiseSpeed: z.coerce.number().min(0).optional(),
-  cruiseAltitude: z.coerce.number().min(0).optional(),
-  descentSpeed: z.coerce.number().min(0).optional(),
-  descentRate: z.coerce.number().min(0).optional(),
-  fuelType: z.string().optional(),
-  fuelBurn: z.coerce.number().min(0).optional(),
-  maxRange: z.coerce.number().min(0).optional(),
-  maxAllowableTakeoffWeight: z.coerce.number().min(0).optional(),
-});
 
 // Type for form data matches AircraftPerformanceData
 type AircraftPerformanceFormData = AircraftPerformanceData;
@@ -63,8 +48,21 @@ export function AircraftPerformanceForm() {
   const [isLoadingAircraft, setIsLoadingAircraft] = useState(true);
 
   const form = useForm<AircraftPerformanceFormData>({
-    resolver: zodResolver(aircraftPerformanceFormValidationSchema),
-    defaultValues: {}, 
+    resolver: zodResolver(AircraftPerformanceDataSchema), // Use the imported Zod schema
+    defaultValues: { // Ensure all optional fields are potentially undefined or match schema defaults
+        takeoffSpeed: undefined,
+        landingSpeed: undefined,
+        climbSpeed: undefined,
+        climbRate: undefined,
+        cruiseSpeed: undefined,
+        cruiseAltitude: undefined,
+        descentSpeed: undefined,
+        descentRate: undefined,
+        fuelType: undefined,
+        fuelBurn: undefined,
+        maxRange: undefined,
+        maxAllowableTakeoffWeight: undefined,
+    }, 
   });
 
   useEffect(() => {
@@ -78,9 +76,6 @@ export function AircraftPerformanceForm() {
           model: ac.model 
         }));
         setFleetSelectOptions(options);
-        if (options.length > 0 && !selectedAircraftId) {
-          // Don't auto-select here, let user choose or load from URL param in future
-        }
       } catch (error) {
         console.error("Failed to fetch aircraft options:", error);
         toast({ title: "Error", description: "Could not load aircraft list.", variant: "destructive" });
@@ -93,14 +88,27 @@ export function AircraftPerformanceForm() {
 
   const loadPerformanceDataForAircraft = useCallback(async (aircraftId: string) => {
     startFetchingPerformanceTransition(async () => {
-      form.reset({}); // Clear form while loading
+      form.reset({}); 
       try {
         const data = await fetchAircraftPerformance({ aircraftId });
         if (data) {
-          form.reset(data);
+          // Ensure numeric fields are numbers
+          const numericData: Partial<AircraftPerformanceFormData> = {};
+          for (const key in data) {
+            const typedKey = key as keyof AircraftPerformanceData;
+            if (AircraftPerformanceDataSchema.shape[typedKey]) {
+              const fieldSchema = AircraftPerformanceDataSchema.shape[typedKey];
+              if ((fieldSchema instanceof z.ZodNumber || (fieldSchema instanceof z.ZodOptional && fieldSchema._def.innerType instanceof z.ZodNumber)) && data[typedKey] !== null && data[typedKey] !== undefined) {
+                (numericData as any)[typedKey] = Number(data[typedKey]);
+              } else {
+                (numericData as any)[typedKey] = data[typedKey];
+              }
+            }
+          }
+          form.reset(numericData);
           toast({ title: "Performance Data Loaded", description: `Showing data for ${fleetSelectOptions.find(ac => ac.id === aircraftId)?.label}.`, variant: "default" });
         } else {
-          form.reset({}); // Clear form if no data found, ready for AI or manual input
+          form.reset({});
           toast({ title: "No Saved Data", description: `No performance data found for this aircraft. You can enter new data or use AI suggestion.`, variant: "default" });
         }
       } catch (error) {
@@ -115,7 +123,7 @@ export function AircraftPerformanceForm() {
     if (selectedAircraftId) {
       loadPerformanceDataForAircraft(selectedAircraftId);
     } else {
-      form.reset({}); // Clear form if no aircraft selected
+      form.reset({}); 
     }
   }, [selectedAircraftId, loadPerformanceDataForAircraft, form]);
 
@@ -127,9 +135,24 @@ export function AircraftPerformanceForm() {
     }
     startSaveTransition(async () => {
       try {
+        // Coerce all numeric fields from string to number if necessary (though react-hook-form might handle some)
+        const dataToSave: AircraftPerformanceData = {};
+        for (const key in formData) {
+            const typedKey = key as keyof AircraftPerformanceFormData;
+            const value = formData[typedKey];
+            if (AircraftPerformanceDataSchema.shape[typedKey]) {
+              const fieldSchema = AircraftPerformanceDataSchema.shape[typedKey];
+               if ((fieldSchema instanceof z.ZodNumber || (fieldSchema instanceof z.ZodOptional && fieldSchema._def.innerType instanceof z.ZodNumber)) && value !== undefined && value !== null && value !== '') {
+                (dataToSave as any)[typedKey] = Number(value);
+              } else if (value !== undefined) {
+                (dataToSave as any)[typedKey] = value;
+              }
+            }
+        }
+
         const inputToSave: SaveAircraftPerformanceInput = {
           aircraftId: selectedAircraftId,
-          performanceData: formData, // formData already matches AircraftPerformanceData
+          performanceData: dataToSave,
         };
         await saveAircraftPerformance(inputToSave);
         const selectedAircraftLabel = fleetSelectOptions.find(ac => ac.id === selectedAircraftId)?.label || selectedAircraftId;
@@ -157,13 +180,12 @@ export function AircraftPerformanceForm() {
         const aiInput: SuggestAircraftPerformanceInput = { aircraftName: selectedAircraftObject.model };
         const suggestedData: AircraftPerformanceOutput = await suggestAircraftPerformance(aiInput);
         
-        // Prepare data for form reset, ensuring numbers are numbers
         const validatedData: Partial<AircraftPerformanceFormData> = {};
         for (const key in suggestedData) {
             const typedKey = key as keyof AircraftPerformanceOutput;
             if (suggestedData[typedKey] !== null && suggestedData[typedKey] !== undefined) {
-                if (aircraftPerformanceFormValidationSchema.shape[typedKey as keyof typeof aircraftPerformanceFormValidationSchema.shape]) {
-                    const fieldSchema = aircraftPerformanceFormValidationSchema.shape[typedKey as keyof typeof aircraftPerformanceFormValidationSchema.shape];
+                 if (AircraftPerformanceDataSchema.shape[typedKey as keyof typeof AircraftPerformanceDataSchema.shape]) {
+                    const fieldSchema = AircraftPerformanceDataSchema.shape[typedKey as keyof typeof AircraftPerformanceDataSchema.shape];
                     if (fieldSchema instanceof z.ZodNumber || (fieldSchema instanceof z.ZodOptional && fieldSchema._def.innerType instanceof z.ZodNumber)) {
                         (validatedData as any)[typedKey] = Number(suggestedData[typedKey]);
                     } else {
@@ -182,7 +204,6 @@ export function AircraftPerformanceForm() {
     });
   };
 
-
   const renderInputWithUnit = (name: keyof AircraftPerformanceFormData, label: string, unit: string, placeholder?: string, type: string = "number") => (
     <FormField
       control={form.control}
@@ -196,11 +217,14 @@ export function AircraftPerformanceForm() {
                 type={type} 
                 placeholder={placeholder || "0"} 
                 {...field} 
-                value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : String(field.value)}
+                value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined || field.value === null ? '' : String(field.value)}
                 onChange={e => {
                   const valStr = e.target.value;
                   if (valStr === '') field.onChange(undefined);
-                  else { const num = parseFloat(valStr); field.onChange(isNaN(num) ? undefined : num); }
+                  else { 
+                    const num = type === 'number' ? parseFloat(valStr) : valStr; 
+                    field.onChange(isNaN(num as number) && type === 'number' ? undefined : num); 
+                  }
                 }}
               />
             </FormControl>
@@ -246,15 +270,7 @@ export function AircraftPerformanceForm() {
                 ))}
               </SelectContent>
             </Select>
-            <div className="flex items-center space-x-2">
-              <Checkbox id="copy-type" disabled />
-              <label
-                htmlFor="copy-type"
-                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-              >
-                Copy to all aircraft of this type (placeholder)
-              </label>
-            </div>
+            {/* Removed copy to type checkbox as it's not implemented yet */}
           </CardContent>
         </Card>
 
@@ -266,10 +282,15 @@ export function AircraftPerformanceForm() {
                         Loading Performance Data...
                     </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                    <Skeleton className="h-8 w-full" />
-                    <Skeleton className="h-8 w-3/4" />
-                    <Skeleton className="h-8 w-full" />
+                <CardContent className="space-y-4 pt-6">
+                    <Skeleton className="h-10 w-full mb-2" />
+                    <Skeleton className="h-10 w-full mb-2" />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <Skeleton className="h-10 w-full" />
+                        <Skeleton className="h-10 w-full" />
+                        <Skeleton className="h-10 w-full" />
+                        <Skeleton className="h-10 w-full" />
+                    </div>
                 </CardContent>
              </Card>
         )}
@@ -283,7 +304,7 @@ export function AircraftPerformanceForm() {
               </div>
               <CardDescription>Adjust the performance parameters below. AI suggestions can provide a starting point.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
+            <CardContent className="space-y-6 pt-6">
               <div className="grid grid-cols-1 gap-x-6 gap-y-8 md:grid-cols-2">
                 {renderInputWithUnit("takeoffSpeed", "Takeoff Speed", "kts")}
                 {renderInputWithUnit("landingSpeed", "Landing Speed", "kts")}
@@ -300,13 +321,18 @@ export function AircraftPerformanceForm() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Fuel Type</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value || ""} name={field.name}>
+                      <Select 
+                        onValueChange={field.onChange} 
+                        value={field.value || ""} 
+                        name={field.name}
+                       >
                         <FormControl>
                           <SelectTrigger>
                             <SelectValue placeholder="Select fuel type" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
+                          <SelectItem value="" disabled>Select fuel type</SelectItem>
                           {fuelTypes.map(type => (
                             <SelectItem key={type} value={type}>{type}</SelectItem>
                           ))}
@@ -318,7 +344,7 @@ export function AircraftPerformanceForm() {
                 />
                 {renderInputWithUnit("fuelBurn", "Fuel Burn", "gls/hr")}
                 {renderInputWithUnit("maxRange", "Maximum Range", "nm")}
-                {renderInputWithUnit("maxAllowableTakeoffWeight", "Max Allowable T/O Weight", "lb")}
+                {renderInputWithUnit("maxAllowableTakeoffWeight", "Max Allowable T/O Weight", "lbs")}
               </div>
             </CardContent>
             <CardFooter>
@@ -334,7 +360,7 @@ export function AircraftPerformanceForm() {
                 Please select an aircraft to view or edit its performance settings.
             </div>
         )}
-        {isLoadingAircraft && (
+        {isLoadingAircraft && !selectedAircraftId && ( // Show only if no aircraft is yet selected and still loading fleet
             <div className="text-center py-10 text-muted-foreground flex items-center justify-center">
                 <Loader2 className="mr-2 h-5 w-5 animate-spin"/> Loading aircraft data...
             </div>
@@ -343,4 +369,3 @@ export function AircraftPerformanceForm() {
     </Form>
   );
 }
-
