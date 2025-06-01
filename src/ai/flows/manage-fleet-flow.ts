@@ -9,7 +9,7 @@
  */
 
 import {ai} from '@/ai/genkit';
-import {z} from 'genkit';
+import {z}from 'genkit';
 import { db } from '@/lib/firebase';
 import { collection, doc, getDocs, setDoc, deleteDoc, query, where, writeBatch } from 'firebase/firestore';
 
@@ -64,13 +64,25 @@ export async function fetchFleetAircraft(): Promise<FleetAircraft[]> {
 }
 
 export async function saveFleetAircraft(input: SaveFleetAircraftInput): Promise<FleetAircraft> {
-  console.log('[ManageFleetFlow Firestore] Attempting to save fleet aircraft:', input.id, 'Data:', JSON.stringify(input));
+  console.log('[ManageFleetFlow Firestore WRAPPER] Received input for save:', input.id, 'Data:', JSON.stringify(input));
+  
+  // Prepare the data for the flow, ensuring nulls for optional fields become undefined
   const aircraftToSave: FleetAircraft = {
-    ...input,
-    isMaintenanceTracked: input.isMaintenanceTracked ?? true, 
-    trackedComponentNames: input.trackedComponentNames && input.trackedComponentNames.length > 0 ? input.trackedComponentNames : ['Airframe', 'Engine 1'],
+    ...input, // Spread first to get all fields including id, tailNumber, model
+    serialNumber: input.serialNumber === null ? undefined : input.serialNumber,
+    aircraftYear: input.aircraftYear === null ? undefined : input.aircraftYear,
+    baseLocation: input.baseLocation === null ? undefined : input.baseLocation,
+    primaryContactName: input.primaryContactName === null ? undefined : input.primaryContactName,
+    primaryContactPhone: input.primaryContactPhone === null ? undefined : input.primaryContactPhone,
+    primaryContactEmail: input.primaryContactEmail === null ? undefined : input.primaryContactEmail,
+    internalNotes: input.internalNotes === null ? undefined : input.internalNotes,
+    
+    // Fields with existing default handling or different types
+    isMaintenanceTracked: input.isMaintenanceTracked ?? true,
+    trackedComponentNames: (input.trackedComponentNames && input.trackedComponentNames.length > 0) ? input.trackedComponentNames : ['Airframe', 'Engine 1'],
     engineDetails: input.engineDetails || [],
   };
+  console.log('[ManageFleetFlow Firestore WRAPPER] Data prepared for flow:', aircraftToSave.id, 'Data:', JSON.stringify(aircraftToSave));
   return saveFleetAircraftFlow(aircraftToSave);
 }
 
@@ -95,12 +107,12 @@ const fetchFleetAircraftFlow = ai.defineFlow(
         // Ensure defaults for fields that might be missing in older documents
         return {
           id: doc.id,
-          tailNumber: data.tailNumber || '', // Should always exist
-          model: data.model || '', // Should always exist
+          tailNumber: data.tailNumber || '', 
+          model: data.model || '', 
           serialNumber: data.serialNumber || undefined,
-          aircraftYear: data.aircraftYear || undefined,
+          aircraftYear: data.aircraftYear === null ? null : (data.aircraftYear || undefined), // Preserve null from DB if explicitly set, else undefined
           baseLocation: data.baseLocation || undefined,
-          engineDetails: data.engineDetails || [], // Ensure it's an array
+          engineDetails: data.engineDetails || [], 
           isMaintenanceTracked: data.isMaintenanceTracked === undefined ? true : data.isMaintenanceTracked,
           trackedComponentNames: data.trackedComponentNames || ['Airframe', 'Engine 1'],
           primaryContactName: data.primaryContactName || undefined,
@@ -121,32 +133,34 @@ const fetchFleetAircraftFlow = ai.defineFlow(
 const saveFleetAircraftFlow = ai.defineFlow(
   {
     name: 'saveFleetAircraftFlow',
-    inputSchema: SaveFleetAircraftInputSchema,
+    inputSchema: SaveFleetAircraftInputSchema, // This is FleetAircraftSchema
     outputSchema: SaveFleetAircraftOutputSchema,
   },
-  async (input) => {
-    console.log('Executing saveFleetAircraftFlow with input - Firestore:', JSON.stringify(input));
+  async (input) => { // input here has already been cleaned by the wrapper
+    console.log('Executing saveFleetAircraftFlow (FLOW INPUT) with input - Firestore:', JSON.stringify(input));
     try {
       const aircraftDocRef = doc(db, FLEET_COLLECTION, input.id);
-      // Ensure all fields are present, even if undefined, to handle updates correctly
+      // Data to set for Firestore can use null where appropriate if fields are undefined.
+      // Firestore handles undefined by not writing the field (good for merge:true)
+      // or explicitly set to null if that's desired.
       const dataToSet = {
         tailNumber: input.tailNumber,
         model: input.model,
-        serialNumber: input.serialNumber ?? null,
-        aircraftYear: input.aircraftYear ?? null,
-        baseLocation: input.baseLocation ?? null,
+        serialNumber: input.serialNumber === undefined ? null : input.serialNumber,
+        aircraftYear: input.aircraftYear === undefined ? null : input.aircraftYear,
+        baseLocation: input.baseLocation === undefined ? null : input.baseLocation,
         engineDetails: input.engineDetails ?? [],
         isMaintenanceTracked: input.isMaintenanceTracked ?? true,
         trackedComponentNames: input.trackedComponentNames ?? ['Airframe', 'Engine 1'],
-        primaryContactName: input.primaryContactName ?? null,
-        primaryContactPhone: input.primaryContactPhone ?? null,
-        primaryContactEmail: input.primaryContactEmail ?? null,
-        internalNotes: input.internalNotes ?? null,
+        primaryContactName: input.primaryContactName === undefined ? null : input.primaryContactName,
+        primaryContactPhone: input.primaryContactPhone === undefined ? null : input.primaryContactPhone,
+        primaryContactEmail: input.primaryContactEmail === undefined ? null : input.primaryContactEmail,
+        internalNotes: input.internalNotes === undefined ? null : input.internalNotes,
       };
-      await setDoc(aircraftDocRef, dataToSet, { merge: true }); // Use merge:true to handle updates
+      await setDoc(aircraftDocRef, dataToSet, { merge: true }); 
       console.log('Saved/Updated aircraft in Firestore:', input.id);
-      // Return the full input object merged with dataToSet to ensure all fields are present
-      return { ...input, ...dataToSet }; 
+      // Return the input which is already compliant with FleetAircraft schema
+      return input; 
     } catch (error) {
       console.error('Error saving aircraft to Firestore:', error);
       throw new Error(`Failed to save aircraft ${input.id}: ${error instanceof Error ? error.message : String(error)}`);
@@ -165,17 +179,12 @@ const deleteFleetAircraftFlow = ai.defineFlow(
     try {
       const batch = writeBatch(db);
 
-      // Delete the aircraft document
       const aircraftDocRef = doc(db, FLEET_COLLECTION, input.aircraftId);
       batch.delete(aircraftDocRef);
 
-      // Delete the associated aircraft rate document
       const aircraftRateDocRef = doc(db, AIRCRAFT_RATES_COLLECTION, input.aircraftId);
       batch.delete(aircraftRateDocRef);
       
-      // TODO: In a real app, also delete associated maintenance tasks, component times, performance data, etc.
-      // For now, we only handle aircraft and its rate.
-
       await batch.commit();
       console.log('Deleted fleet aircraft and associated rate from Firestore:', input.aircraftId);
       return { success: true, aircraftId: input.aircraftId };
@@ -185,4 +194,3 @@ const deleteFleetAircraftFlow = ai.defineFlow(
     }
   }
 );
-
