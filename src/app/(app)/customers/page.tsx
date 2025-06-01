@@ -34,13 +34,7 @@ interface Customer {
   isActive: boolean;
 }
 
-const mockCustomers: Customer[] = [
-  { id: 'CUS001', name: 'Acme Corp Charter', type: 'Charter', contactFirstName: 'John', contactLastName: 'Doe', email: 'john.doe@acme.com', phone: '555-123-4567', isActive: true },
-  { id: 'CUS002', name: 'Jane Smith (Aircraft Owner)', type: 'Owner', contactFirstName: 'Jane', contactLastName: 'Smith', email: 'jane.s@example.org', phone: '555-987-6543', isActive: true },
-  { id: 'CUS003', name: 'Internal Flight Department', type: 'Internal', contactFirstName: 'Ops', contactLastName: 'Team', email: 'flightops@internal.co', phone: '555-001-0002', isActive: true },
-  { id: 'CUS004', name: 'SkyHigh Brokers Inc.', type: 'Broker', contactFirstName: 'Mike', contactLastName: 'Ross', email: 'mike.ross@skyhigh.com', phone: '555-BRO-KER1', isActive: true },
-  { id: 'CUS005', name: 'Luxury Travel Co.', type: 'Retail', contactFirstName: 'Sarah', contactLastName: 'Connor', email: 's.connor@luxurytravel.com', phone: '555-738-2457', isActive: false },
-];
+// Mock data removed
 
 const getStatusBadgeVariant = (isActive: boolean): "default" | "destructive" => {
   return isActive ? 'default' : 'destructive';
@@ -48,18 +42,19 @@ const getStatusBadgeVariant = (isActive: boolean): "default" | "destructive" => 
 
 export default function CustomersPage() {
   const [searchTerm, setSearchTerm] = useState('');
+  const [customersList, setCustomersList] = useState<Customer[]>([]); // Start with an empty list
 
   const filteredCustomers = useMemo(() => {
-    if (!searchTerm) return mockCustomers;
+    if (!searchTerm) return customersList;
     const lowerSearchTerm = searchTerm.toLowerCase();
-    return mockCustomers.filter(customer =>
+    return customersList.filter(customer =>
       customer.name.toLowerCase().includes(lowerSearchTerm) ||
       (customer.contactFirstName && customer.contactFirstName.toLowerCase().includes(lowerSearchTerm)) ||
       (customer.contactLastName && customer.contactLastName.toLowerCase().includes(lowerSearchTerm)) ||
       (customer.email && customer.email.toLowerCase().includes(lowerSearchTerm)) ||
       customer.type.toLowerCase().includes(lowerSearchTerm)
     );
-  }, [searchTerm]);
+  }, [searchTerm, customersList]);
 
   return (
     <TooltipProvider>
@@ -68,7 +63,7 @@ export default function CustomersPage() {
         description="View, add, and manage customer information."
         icon={UsersRound}
         actions={
-          <Button>
+          <Button disabled> {/* Disabled until functionality is added */}
             <PlusCircle className="mr-2 h-4 w-4" /> Add New Customer
           </Button>
         }
@@ -84,6 +79,7 @@ export default function CustomersPage() {
               className="pl-8 w-full sm:w-1/2 lg:w-1/3" 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
+              disabled={customersList.length === 0} // Disable search if no customers
             />
           </div>
         </CardHeader>
@@ -104,7 +100,7 @@ export default function CustomersPage() {
               {filteredCustomers.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center text-muted-foreground py-10">
-                    No customers found{searchTerm ? " matching your search" : ""}.
+                    No customers found{customersList.length > 0 && searchTerm ? " matching your search" : ". Add a customer to get started."}
                   </TableCell>
                 </TableRow>
               ) : (
@@ -131,7 +127,7 @@ export default function CustomersPage() {
                     <TableCell className="text-right">
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <Button variant="ghost" size="icon" className="mr-1">
+                          <Button variant="ghost" size="icon" className="mr-1" disabled> {/* Disabled until functionality is added */}
                             <Edit3 className="h-4 w-4" />
                             <span className="sr-only">Edit Customer</span>
                           </Button>
@@ -140,7 +136,7 @@ export default function CustomersPage() {
                       </Tooltip>
                       <Tooltip>
                           <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
+                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" disabled> {/* Disabled until functionality is added */}
                               <Trash2 className="h-4 w-4" />
                               <span className="sr-only">Delete Customer</span>
                             </Button>
