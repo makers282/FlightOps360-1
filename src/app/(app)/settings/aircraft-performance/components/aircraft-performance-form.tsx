@@ -10,9 +10,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-// Removed Checkbox import as it's not used in the final form design
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { PlaneTakeoff as PerformanceIcon, Save, Wand2, Loader2, AlertTriangle } from 'lucide-react'; // Removed Copy icon
+import { PlaneTakeoff as PerformanceIcon, Save, Wand2, Loader2, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { suggestAircraftPerformance, type SuggestAircraftPerformanceInput, type AircraftPerformanceOutput } from '@/ai/flows/suggest-aircraft-performance-flow';
 import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
@@ -22,20 +21,19 @@ import {
   type AircraftPerformanceData
 } from '@/ai/flows/manage-aircraft-performance-flow';
 import type { SaveAircraftPerformanceInput } from '@/ai/schemas/aircraft-performance-schemas';
-import { AircraftPerformanceDataSchema } from '@/ai/schemas/aircraft-performance-schemas'; // Import Zod schema
+import { AircraftPerformanceDataSchema } from '@/ai/schemas/aircraft-performance-schemas';
 import { Skeleton } from '@/components/ui/skeleton';
 
 
-// Type for form data matches AircraftPerformanceData
 type AircraftPerformanceFormData = AircraftPerformanceData;
 
 interface FleetAircraftSelectOption {
-  id: string;    // aircraft.id from fleet
-  label: string; // tailNumber - model
-  model: string; // aircraft.model for AI
+  id: string;
+  label: string; 
+  model: string;
 }
 
-const fuelTypes = ["Jet Fuel", "Avgas", "Other"];
+const fuelTypes = ["Jet Fuel", "Avgas", "Other", "Unknown"];
 
 export function AircraftPerformanceForm() {
   const [selectedAircraftId, setSelectedAircraftId] = useState<string | undefined>(undefined);
@@ -48,8 +46,8 @@ export function AircraftPerformanceForm() {
   const [isLoadingAircraft, setIsLoadingAircraft] = useState(true);
 
   const form = useForm<AircraftPerformanceFormData>({
-    resolver: zodResolver(AircraftPerformanceDataSchema), // Use the imported Zod schema
-    defaultValues: { // Ensure all optional fields are potentially undefined or match schema defaults
+    resolver: zodResolver(AircraftPerformanceDataSchema),
+    defaultValues: { 
         takeoffSpeed: undefined,
         landingSpeed: undefined,
         climbSpeed: undefined,
@@ -92,7 +90,6 @@ export function AircraftPerformanceForm() {
       try {
         const data = await fetchAircraftPerformance({ aircraftId });
         if (data) {
-          // Ensure numeric fields are numbers
           const numericData: Partial<AircraftPerformanceFormData> = {};
           for (const key in data) {
             const typedKey = key as keyof AircraftPerformanceData;
@@ -135,7 +132,6 @@ export function AircraftPerformanceForm() {
     }
     startSaveTransition(async () => {
       try {
-        // Coerce all numeric fields from string to number if necessary (though react-hook-form might handle some)
         const dataToSave: AircraftPerformanceData = {};
         for (const key in formData) {
             const typedKey = key as keyof AircraftPerformanceFormData;
@@ -186,26 +182,16 @@ export function AircraftPerformanceForm() {
             const value = suggestedData[typedKey];
 
             if (value !== null && value !== undefined) {
-                // Check if the key exists in our target form schema (AircraftPerformanceDataSchema)
                 if (AircraftPerformanceDataSchema.shape[typedKey as keyof typeof AircraftPerformanceDataSchema.shape]) {
                     const fieldSchema = AircraftPerformanceDataSchema.shape[typedKey as keyof typeof AircraftPerformanceDataSchema.shape];
-                    
-                    // Check if it's a numeric field (or optional numeric)
                     if (fieldSchema instanceof z.ZodNumber || (fieldSchema instanceof z.ZodOptional && fieldSchema._def.innerType instanceof z.ZodNumber)) {
                         const numValue = Number(value);
-                        if (!isNaN(numValue)) {
-                            // Round all numeric values to the nearest integer
-                            (processedData as any)[typedKey] = Math.round(numValue);
-                        } else {
-                            (processedData as any)[typedKey] = undefined; // If conversion to number fails
-                        }
+                        (processedData as any)[typedKey] = isNaN(numValue) ? undefined : Math.round(numValue);
                     } else {
-                        // For non-numeric fields like fuelType, assign directly
                         (processedData as any)[typedKey] = value;
                     }
                 }
             } else {
-                // If AI explicitly returns null/undefined for a key, make it undefined in our form
                 (processedData as any)[typedKey] = undefined;
             }
         }
@@ -285,7 +271,6 @@ export function AircraftPerformanceForm() {
                 ))}
               </SelectContent>
             </Select>
-            {/* Removed copy to type checkbox as it's not implemented yet */}
           </CardContent>
         </Card>
 
@@ -317,7 +302,7 @@ export function AircraftPerformanceForm() {
                 <PerformanceIcon className="h-6 w-6 text-primary" />
                 <CardTitle>Performance Settings for {fleetSelectOptions.find(ac => ac.id === selectedAircraftId)?.label || selectedAircraftId}</CardTitle>
               </div>
-              <CardDescription>Adjust the performance parameters below. AI suggestions can provide a starting point.</CardDescription>
+              <CardDescription>Adjust the performance parameters below. AI suggestions can provide a starting point. Ensure all numeric values are integers.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6 pt-6">
               <div className="grid grid-cols-1 gap-x-6 gap-y-8 md:grid-cols-2">
@@ -374,7 +359,7 @@ export function AircraftPerformanceForm() {
                 Please select an aircraft to view or edit its performance settings.
             </div>
         )}
-        {isLoadingAircraft && !selectedAircraftId && ( // Show only if no aircraft is yet selected and still loading fleet
+        {isLoadingAircraft && !selectedAircraftId && ( 
             <div className="text-center py-10 text-muted-foreground flex items-center justify-center">
                 <Loader2 className="mr-2 h-5 w-5 animate-spin"/> Loading aircraft data...
             </div>
@@ -383,3 +368,4 @@ export function AircraftPerformanceForm() {
     </Form>
   );
 }
+
