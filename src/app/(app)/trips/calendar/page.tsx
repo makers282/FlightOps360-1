@@ -183,16 +183,15 @@ export default function TripCalendarPage() {
             onMonthChange={setCurrentMonth}
             className="w-full rounded-md bg-card"
             classNames={{
-                table: "w-full border-collapse", // Removed table-fixed
+                table: "w-full border-collapse table-fixed", // Added table-fixed
                 month: "w-full", 
-                day_disabled: "text-muted-foreground/30 opacity-50", // Should not be used with showOutsideDays=false for the outside days themselves
                 cell: cn(
                     "p-0 m-0 text-left align-top h-28 sm:h-32 md:h-36 lg:h-40 xl:h-[11rem]",
-                    "border-r border-b border-border/30" // Cell borders
+                    "border-r border-b border-border/30 w-[calc(100%/7)]" // Added explicit width
                 ),
                 head_row: "border-b border-border/50",
                 head_cell: cn(
-                    "text-muted-foreground align-middle text-center font-normal text-[0.65rem] sm:text-xs py-1.5 border-r border-b border-border/30 last:border-r-0" // Head cell borders
+                    "text-muted-foreground align-middle text-center font-normal text-[0.65rem] sm:text-xs py-1.5 border-r border-b border-border/30 last:border-r-0 w-[calc(100%/7)]" // Added explicit width
                 ),
                 caption: "flex justify-center items-center py-2.5 relative gap-x-1 px-2",
                 caption_label: "text-sm font-medium px-2",
@@ -201,7 +200,7 @@ export default function TripCalendarPage() {
             components={{
               Day: CustomDay,
             }}
-            showOutsideDays={false} // This is key for not showing other month's days
+            showOutsideDays={false} 
             numberOfMonths={1}
             captionLayout="buttons" 
             fromYear={new Date().getFullYear() - 5} 
