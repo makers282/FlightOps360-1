@@ -35,13 +35,14 @@ import {
   type CompanyProfile,
   type ServiceFeeRate,
 } from '@/ai/flows/manage-company-profile-flow';
+import { fetchAircraftPerformance, type AircraftPerformanceData } from '@/ai/flows/manage-aircraft-performance-flow'; // Import performance flow
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription as DialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from '@/components/ui/alert-dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { LegsSummaryTable } from './legs-summary-table';
 import { CostsSummaryDisplay, type LineItem } from './costs-summary-display';
 import { saveQuote, fetchQuoteById } from '@/ai/flows/manage-quotes-flow';
-import { sendQuoteEmail } from '@/ai/flows/send-quote-email-flow'; // Import the new email flow
+import { sendQuoteEmail } from '@/ai/flows/send-quote-email-flow'; 
 import type { Quote, SaveQuoteInput, QuoteLeg, QuoteLineItem, quoteStatuses as QuoteStatusType } from '@/ai/schemas/quote-schemas';
 import { quoteStatuses, legTypes } from '@/ai/schemas/quote-schemas';
 import { useRouter } from 'next/navigation';
@@ -91,7 +92,7 @@ export type FullQuoteFormData = z.infer<typeof formSchema>;
 
 type LegEstimate = EstimateFlightDetailsOutput & {
   error?: string;
-  estimatedForInputs?: { origin: string; destination: string; aircraftModel: string };
+  estimatedForInputs?: { origin: string; destination: string; aircraftModel: string; knownCruiseSpeedKts?: number };
   blockTimeHours?: number;
 };
 
@@ -125,7 +126,6 @@ interface CreateQuoteFormProps {
   quoteIdToEdit?: string;
 }
 
-// Helper to format currency - can be moved to a utils file if used elsewhere
 const formatCurrencyLocal = (amount: number | undefined) => {
   if (amount === undefined || isNaN(amount)) return 'N/A';
   return amount.toLocaleString(undefined, { style: "currency", currency: "USD" });
@@ -154,6 +154,9 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
   
   const [showPreviewAlert, setShowPreviewAlert] = useState(false);
   const [formattedPreviewContent, setFormattedPreviewContent] = useState<React.ReactNode | null>(null);
+  
+  const [selectedAircraftPerformance, setSelectedAircraftPerformance] = useState<AircraftPerformanceData | null>(null);
+  const [isLoadingSelectedAcPerf, setIsLoadingSelectedAcPerf] = useState(false);
 
 
   const form = useForm<FullQuoteFormData>({ 
@@ -195,7 +198,7 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
   const { control, setValue, getValues, trigger, formState: { errors }, reset } = form;
   
   const legsArray = useWatch({ control, name: "legs", defaultValue: [] });
-  const aircraftId = useWatch({ control, name: "aircraftId" });
+  const currentSelectedAircraftId = useWatch({ control, name: "aircraftId" }); // Renamed to avoid conflict
   const fuelSurchargeRequested = useWatch({ control, name: "fuelSurchargeRequested" });
   const sellPriceFuelSurchargePerHour = useWatch({ control, name: "sellPriceFuelSurchargePerHour" });
   const medicsRequested = useWatch({ control, name: "medicsRequested" });
@@ -215,6 +218,25 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
   const generateNewQuoteId = useCallback(() => {
     return `QT-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
   }, []);
+
+
+  useEffect(() => {
+    if (currentSelectedAircraftId) {
+      setIsLoadingSelectedAcPerf(true);
+      fetchAircraftPerformance({ aircraftId: currentSelectedAircraftId })
+        .then(perfData => {
+          setSelectedAircraftPerformance(perfData);
+        })
+        .catch(error => {
+          console.warn(`Could not fetch performance data for aircraft ${currentSelectedAircraftId}:`, error);
+          setSelectedAircraftPerformance(null); // Reset if error
+        })
+        .finally(() => setIsLoadingSelectedAcPerf(false));
+    } else {
+      setSelectedAircraftPerformance(null); // Clear performance data if no aircraft is selected
+    }
+  }, [currentSelectedAircraftId]);
+
 
   useEffect(() => {
     setIsClient(true);
@@ -288,6 +310,10 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
               notes: quoteData.options.notes || '',
             };
             reset(formDataToReset);
+            // Ensure aircraftId is set to trigger performance data fetch if editing
+            if (quoteData.aircraftId) {
+                // setSelectedAircraftId(quoteData.aircraftId); // This might cause issues with react-hook-form, aircraftId from useWatch is better.
+            }
             setCalculatedLineItems(quoteData.lineItems || []);
             setLegEstimates(new Array(quoteData.legs.length).fill(null));
             toast({ title: "Quote Loaded", description: `Editing quote ${quoteData.quoteId}.`, variant: "default"});
@@ -326,7 +352,7 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
 
   useEffect(() => {
     const newItems: QuoteLineItem[] = [];
-    if (isLoadingDynamicRates || !aircraftId) {
+    if (isLoadingDynamicRates || !currentSelectedAircraftId) {
         setCalculatedLineItems([]);
         return;
     }
@@ -336,7 +362,7 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
     let totalBlockHours = 0;
     let totalRevenueFlightHours = 0;
     
-    const selectedAircraftRateProfile = fetchedAircraftRates.find(r => r.id === aircraftId);
+    const selectedAircraftRateProfile = fetchedAircraftRates.find(r => r.id === currentSelectedAircraftId);
     const aircraftBuyRate = selectedAircraftRateProfile?.buy ?? DEFAULT_AIRCRAFT_RATE_FALLBACK.buy;
     const aircraftSellRate = selectedAircraftRateProfile?.sell ?? DEFAULT_AIRCRAFT_RATE_FALLBACK.sell;
 
@@ -357,7 +383,7 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
         }
     });
 
-    const selectedAircraftInfo = aircraftSelectOptions.find(ac => ac.value === aircraftId);
+    const selectedAircraftInfo = aircraftSelectOptions.find(ac => ac.value === currentSelectedAircraftId);
     const aircraftDisplayName = selectedAircraftInfo ? selectedAircraftInfo.label : "Selected Aircraft";
     
     const billableHoursForAircraft = totalRevenueFlightHours > 0 ? totalRevenueFlightHours : (totalBlockHours > 0 ? totalBlockHours : 0);
@@ -435,7 +461,7 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
     setCalculatedLineItems(newItems);
 
   }, [
-    legsArray, aircraftId, aircraftSelectOptions,
+    legsArray, currentSelectedAircraftId, aircraftSelectOptions,
     fetchedAircraftRates, fetchedCompanyProfile,
     fuelSurchargeRequested, sellPriceFuelSurchargePerHour,
     medicsRequested, sellPriceMedics,
@@ -453,21 +479,22 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
     }
 
     const legData = getValues(`legs.${legIndex}`);
-    const currentAircraftId = getValues('aircraftId');
-    const selectedAircraft = aircraftSelectOptions.find(ac => ac.value === currentAircraftId);
+    const selectedAircraft = aircraftSelectOptions.find(ac => ac.value === currentSelectedAircraftId);
 
-    if (!legData?.origin || legData.origin.length < 3 || !legData?.destination || legData.destination.length < 3 || !currentAircraftId || !selectedAircraft) {
+    if (!legData?.origin || legData.origin.length < 3 || !legData?.destination || legData.destination.length < 3 || !currentSelectedAircraftId || !selectedAircraft) {
       toast({ title: "Missing Information", description: "Please provide origin, destination (min 3 chars each), and select an aircraft type before estimating.", variant: "destructive"});
       return;
     }
     
     const aircraftModelForFlow = selectedAircraft.model;
+    const knownCruiseSpeedForFlow = selectedAircraftPerformance?.cruiseSpeed;
     const currentEstimate = legEstimates[legIndex];
 
     if (currentEstimate && !currentEstimate.error &&
         currentEstimate.estimatedForInputs?.origin === legData.origin.toUpperCase() &&
         currentEstimate.estimatedForInputs?.destination === legData.destination.toUpperCase() &&
-        currentEstimate.estimatedForInputs?.aircraftModel === aircraftModelForFlow) {
+        currentEstimate.estimatedForInputs?.aircraftModel === aircraftModelForFlow &&
+        currentEstimate.estimatedForInputs?.knownCruiseSpeedKts === knownCruiseSpeedForFlow) {
       toast({ title: "Estimate Exists", description: "Flight details already estimated for these inputs.", variant: "default" });
       if(currentEstimate.estimatedFlightTimeHours !== undefined) {
         setValue(`legs.${legIndex}.flightTimeHours`, currentEstimate.estimatedFlightTimeHours);
@@ -483,6 +510,7 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
         origin: legData.origin.toUpperCase(),
         destination: legData.destination.toUpperCase(),
         aircraftType: aircraftModelForFlow,
+        knownCruiseSpeedKts: knownCruiseSpeedForFlow,
       });
       
       setValue(`legs.${legIndex}.flightTimeHours`, result.estimatedFlightTimeHours);
@@ -500,7 +528,8 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
           estimatedForInputs: {
             origin: legData.origin.toUpperCase(),
             destination: legData.destination.toUpperCase(),
-            aircraftModel: aircraftModelForFlow
+            aircraftModel: aircraftModelForFlow,
+            knownCruiseSpeedKts: knownCruiseSpeedForFlow,
           }
         };
         return newEstimates;
@@ -518,7 +547,8 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
           estimatedForInputs: {
             origin: legData.origin.toUpperCase(),
             destination: legData.destination.toUpperCase(),
-            aircraftModel: aircraftModelForFlow
+            aircraftModel: aircraftModelForFlow,
+            knownCruiseSpeedKts: knownCruiseSpeedForFlow,
           }
         } as LegEstimate; 
         return newEstimates;
@@ -526,7 +556,7 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
     } finally {
       setEstimatingLegIndex(null);
     }
-  }, [getValues, legEstimates, toast, estimatingLegIndex, setValue, setLegEstimates, setEstimatingLegIndex, aircraftSelectOptions]);
+  }, [getValues, legEstimates, toast, estimatingLegIndex, setValue, setLegEstimates, setEstimatingLegIndex, aircraftSelectOptions, currentSelectedAircraftId, selectedAircraftPerformance]);
 
   const handleSave = async (intendedStatus: typeof QuoteStatusType[number]) => {
     const isValidForm = await trigger();
@@ -596,7 +626,6 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
                 clientEmail: savedQuote.clientEmail,
                 quoteId: savedQuote.quoteId,
                 totalAmount: savedQuote.totalSellPrice,
-                // In a real app, you'd generate a link to a customer-facing quote view page
                 quoteLink: `https://your-app.com/view-quote/${savedQuote.id}` 
             };
             await sendQuoteEmail(emailInput);
@@ -627,7 +656,7 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
           setLegEstimates([]);
           setCalculatedLineItems([]);
         } else {
-          // If editing, re-fetch the quote to ensure form reflects the saved status
+          // If editing, re-fetch the quote to ensure form reflects the saved status, including the potentially changed status
           const updatedQuoteData = await fetchQuoteById({ id: savedQuote.id });
           if (updatedQuoteData) {
             const formDataToReset: FullQuoteFormData = {
@@ -658,6 +687,8 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
               notes: updatedQuoteData.options.notes || '',
             };
             reset(formDataToReset);
+            // Also update calculatedLineItems to ensure consistency with the saved quote
+            setCalculatedLineItems(updatedQuoteData.lineItems || []);
           }
         }
       } catch (error) {
@@ -1045,9 +1076,11 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
                         <FormMessage /> </FormItem> )} />
                     </div>
 
-                    <Button type="button" variant="outline" size="sm" onClick={() => handleEstimateFlightDetails(index)} disabled={estimatingLegIndex === index || !aircraftId || isLoadingDynamicRates} className="w-full sm:w-auto"> {estimatingLegIndex === index ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />} Estimate Flight Details </Button>
-                    {(!aircraftId && !isLoadingDynamicRates) && <FormDescription className="text-xs text-destructive">Select an aircraft to enable estimation.</FormDescription>}
+                    <Button type="button" variant="outline" size="sm" onClick={() => handleEstimateFlightDetails(index)} disabled={estimatingLegIndex === index || !currentSelectedAircraftId || isLoadingDynamicRates || isLoadingSelectedAcPerf} className="w-full sm:w-auto"> {estimatingLegIndex === index || isLoadingSelectedAcPerf ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />} Estimate Flight Details </Button>
+                    {(!currentSelectedAircraftId && !isLoadingDynamicRates) && <FormDescription className="text-xs text-destructive">Select an aircraft to enable estimation.</FormDescription>}
                     {(isLoadingDynamicRates || isLoadingAircraftList) && <FormDescription className="text-xs">Loading aircraft & rate data...</FormDescription>}
+                    {isLoadingSelectedAcPerf && <FormDescription className="text-xs">Loading performance data for selected aircraft...</FormDescription>}
+
 
                     {legEstimates[index] && (() => {
                       const estimate = legEstimates[index]!;
@@ -1178,7 +1211,14 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
             </Button>
             <Button 
                 type="button" 
-                onClick={() => handleSave("Sent")} 
+                onClick={async () => {
+                    if (isEditMode) {
+                        const currentQuote = await fetchQuoteById({ id: quoteIdToEdit! });
+                        handleSave(currentQuote?.status || "Sent"); // If fetching status fails, default to "Sent"
+                    } else {
+                        handleSave("Sent");
+                    }
+                }} 
                 disabled={isSaving}
             > 
               {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
@@ -1190,7 +1230,7 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
 
     {showPreviewAlert && (
         <AlertDialog open={showPreviewAlert} onOpenChange={setShowPreviewAlert}>
-          <AlertDialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl"> {/* Increased width */}
+          <AlertDialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl"> 
             <AlertDialogHeader>
               <AlertDialogTitle className="flex items-center gap-2"><Eye className="h-5 w-5 text-primary" /> Quote Preview</AlertDialogTitle>
               <DialogDescription>This is a preview of the quote details. Review carefully before sending.</DialogDescription>
