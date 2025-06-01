@@ -23,8 +23,9 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { fetchQuotes } from '@/ai/flows/manage-quotes-flow'; // Import the flow
-import type { Quote, quoteStatuses } from '@/ai/schemas/quote-schemas'; // Import Quote type
+import { fetchQuotes } from '@/ai/flows/manage-quotes-flow'; 
+import type { Quote, QuoteLeg, quoteStatuses as QuoteStatusType } from '@/ai/schemas/quote-schemas';
+import { quoteStatuses } from '@/ai/schemas/quote-schemas';
 import { useToast } from '@/hooks/use-toast';
 import { format, parseISO } from 'date-fns';
 
@@ -34,7 +35,7 @@ const formatCurrency = (amount: number | undefined) => {
   return amount.toLocaleString(undefined, { style: "currency", currency: "USD" });
 };
 
-const getStatusBadgeVariant = (status?: typeof quoteStatuses[number]): "default" | "secondary" | "outline" | "destructive" => {
+const getStatusBadgeVariant = (status?: typeof QuoteStatusType[number]): "default" | "secondary" | "outline" | "destructive" => {
   switch (status?.toLowerCase()) {
     case 'accepted':
     case 'booked':
@@ -81,7 +82,7 @@ export default function AllQuotesPage() {
       `${quote.legs[0].origin} -> ${quote.legs[quote.legs.length - 1].destination}`.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
-  const getRouteDisplay = (legs: Quote['legs']) => {
+  const getRouteDisplay = (legs: QuoteLeg[]) => {
     if (!legs || legs.length === 0) return 'N/A';
     const origin = legs[0].origin || 'UNK';
     const destination = legs[legs.length - 1].destination || 'UNK';
@@ -160,12 +161,14 @@ export default function AllQuotesPage() {
                       <TableCell className="text-right space-x-1">
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" disabled>
-                              <Eye className="h-4 w-4" />
-                              <span className="sr-only">View Quote</span>
-                            </Button>
+                             <Button variant="ghost" size="icon" asChild>
+                                <Link href={`/quotes/${quote.id}`}>
+                                  <Eye className="h-4 w-4" />
+                                  <span className="sr-only">View Quote</span>
+                                </Link>
+                              </Button>
                           </TooltipTrigger>
-                          <TooltipContent><p>View Quote (Coming Soon)</p></TooltipContent>
+                          <TooltipContent><p>View Quote</p></TooltipContent>
                         </Tooltip>
                         <Tooltip>
                           <TooltipTrigger asChild>

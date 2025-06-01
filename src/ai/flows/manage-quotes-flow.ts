@@ -5,21 +5,21 @@
  *
  * - saveQuote - Saves (adds or updates) a quote.
  * - fetchQuotes - Fetches all quotes.
- * - fetchQuoteById - Fetches a single quote by its ID (future use).
+ * - fetchQuoteById - Fetches a single quote by its ID.
  * - deleteQuote - Deletes a quote (future use).
  */
 
 import { ai } from '@/ai/genkit';
 import { db } from '@/lib/firebase';
 import { collection, doc, setDoc, getDoc, getDocs, serverTimestamp, Timestamp, query, orderBy } from 'firebase/firestore';
-import { z } from 'zod';
+import { z } from 'zod'; // Ensure z is imported
 import type { Quote, SaveQuoteInput } from '@/ai/schemas/quote-schemas';
 import { 
     QuoteSchema, // Used for output type
     SaveQuoteInputSchema, 
     SaveQuoteOutputSchema,
-    FetchQuotesOutputSchema, // For future use
-    // FetchQuoteByIdInputSchema, // For future use
+    FetchQuotesOutputSchema,
+    FetchQuoteByIdInputSchema, // For fetching a single quote
     // DeleteQuoteInputSchema, // For future use
     // DeleteQuoteOutputSchema, // For future use
 } from '@/ai/schemas/quote-schemas';
@@ -136,7 +136,7 @@ const fetchQuotesFlow = ai.defineFlow(
       const quotesList = snapshot.docs.map(docSnapshot => {
         const data = docSnapshot.data();
         return {
-          id: docSnapshot.id,
+          id: docSnapshot.id, // This is the Firestore document ID
           ...data,
           createdAt: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
           updatedAt: (data.updatedAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
@@ -151,15 +151,48 @@ const fetchQuotesFlow = ai.defineFlow(
   }
 );
 
+// Fetch a single quote by its Firestore document ID
+export async function fetchQuoteById(input: { id: string }): Promise<Quote | null> {
+  console.log('[ManageQuotesFlow Firestore] Attempting to fetch quote by ID:', input.id);
+  return fetchQuoteByIdFlow(input);
+}
+
+const fetchQuoteByIdFlow = ai.defineFlow(
+  {
+    name: 'fetchQuoteByIdFlow',
+    inputSchema: FetchQuoteByIdInputSchema, // Expects { id: string }
+    outputSchema: QuoteSchema.nullable(),
+  },
+  async (input) => {
+    console.log('Executing fetchQuoteByIdFlow - Firestore for ID:', input.id);
+    try {
+      const quoteDocRef = doc(db, QUOTES_COLLECTION, input.id);
+      const docSnap = await getDoc(quoteDocRef);
+
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        const quote: Quote = {
+          id: docSnap.id,
+          ...data,
+          createdAt: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
+          updatedAt: (data.updatedAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
+        } as Quote; // Type assertion
+        console.log('Fetched quote by ID from Firestore:', quote);
+        return quote;
+      } else {
+        console.log('No quote found with ID:', input.id);
+        return null;
+      }
+    } catch (error) {
+      console.error('Error fetching quote by ID from Firestore:', error);
+      throw new Error(`Failed to fetch quote ${input.id}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+);
+
 
 // Future flows (stubs for now)
 /*
-export async function fetchQuoteById(input: { quoteId: string }): Promise<Quote | null> {
-  console.log('[ManageQuotesFlow Firestore] Attempting to fetch quote by ID:', input.quoteId);
-  // return fetchQuoteByIdFlow(input);
-  return null; // Placeholder
-}
-
 export async function deleteQuote(input: { quoteId: string }): Promise<{ success: boolean; quoteId: string }> {
     console.log('[ManageQuotesFlow Firestore] Attempting to delete quote ID:', input.quoteId);
     // return deleteQuoteFlow(input);
@@ -169,18 +202,6 @@ export async function deleteQuote(input: { quoteId: string }): Promise<{ success
 
 // Placeholder Genkit flow definitions for future use
 /*
-const fetchQuoteByIdFlow = ai.defineFlow(
-  {
-    name: 'fetchQuoteByIdFlow',
-    inputSchema: FetchQuoteByIdInputSchema,
-    outputSchema: QuoteSchema.nullable(),
-  },
-  async (input) => {
-    // Implementation to fetch a single quote
-    return null;
-  }
-);
-
 const deleteQuoteFlow = ai.defineFlow(
   {
     name: 'deleteQuoteFlow',
