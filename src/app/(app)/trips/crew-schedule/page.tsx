@@ -1,22 +1,11 @@
 
 import { PageHeader } from '@/components/page-header';
-import { CalendarCheck2, Clock } from 'lucide-react'; // Using Clock as an example for duty time
+import { CalendarCheck2, Filter } from 'lucide-react'; 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import Image from 'next/image';
 
 export default function CrewSchedulePage() {
-  // Mock data for selectors
-  const crewMembers = [
-    { id: 'CRW001', name: 'Robinson, Frank' },
-    { id: 'CRW002', name: 'Smith, Jane' },
-    { id: 'CRW003', name: 'Doe, John' },
-  ];
-  const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-  const currentYear = new Date().getFullYear();
-  const years = Array.from({ length: 10 }, (_, i) => currentYear - 5 + i);
-
   return (
     <>
       <PageHeader
@@ -30,41 +19,13 @@ export default function CrewSchedulePage() {
             <div>
               <CardTitle>Crew Activity Gantt Chart</CardTitle>
               <CardDescription>
-                Select a crew member, month, and year to view their detailed hourly schedule.
+                Overview of all crew activities. Use the filter to narrow down the view.
               </CardDescription>
             </div>
-            <div className="flex items-center gap-2">
-              <Select defaultValue={crewMembers[0].id}>
-                <SelectTrigger className="w-full sm:w-[180px] h-9">
-                  <SelectValue placeholder="Select Crew Member" />
-                </SelectTrigger>
-                <SelectContent>
-                  {crewMembers.map(crew => (
-                    <SelectItem key={crew.id} value={crew.id}>{crew.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select defaultValue={months[new Date().getMonth()]}>
-                <SelectTrigger className="w-full sm:w-[120px] h-9">
-                  <SelectValue placeholder="Select Month" />
-                </SelectTrigger>
-                <SelectContent>
-                  {months.map(month => (
-                    <SelectItem key={month} value={month}>{month}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select defaultValue={currentYear.toString()}>
-                <SelectTrigger className="w-full sm:w-[100px] h-9">
-                  <SelectValue placeholder="Select Year" />
-                </SelectTrigger>
-                <SelectContent>
-                  {years.map(year => (
-                    <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <Button variant="outline" size="icon" disabled> {/* Disabled for now */}
+              <Filter className="h-4 w-4" />
+              <span className="sr-only">Filter Crew Schedule</span>
+            </Button>
           </div>
            <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
             <span className="font-semibold">Legend:</span>
@@ -77,7 +38,7 @@ export default function CrewSchedulePage() {
         </CardHeader>
         <CardContent>
           <div className="text-center py-4 text-muted-foreground">
-            <p className="mb-2">Below is a static image representation of the desired Gantt chart for "Robinson, Frank - May 2025".</p>
+            <p className="mb-2">Below is a static image representation of the desired Gantt chart for an overview of crew activities.</p>
             <p className="mb-4">Actual interactive Gantt chart implementation is a complex task and will be addressed in a future update.</p>
             <div className="border rounded-md p-2 inline-block bg-gray-50">
                 <Image 
