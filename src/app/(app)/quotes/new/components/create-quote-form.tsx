@@ -41,6 +41,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { LegsSummaryTable } from './legs-summary-table';
 import { CostsSummaryDisplay, type LineItem } from './costs-summary-display';
 import { saveQuote, fetchQuoteById } from '@/ai/flows/manage-quotes-flow';
+import { sendQuoteEmail } from '@/ai/flows/send-quote-email-flow'; // Import the new email flow
 import type { Quote, SaveQuoteInput, QuoteLeg, QuoteLineItem, quoteStatuses as QuoteStatusType } from '@/ai/schemas/quote-schemas';
 import { quoteStatuses, legTypes } from '@/ai/schemas/quote-schemas';
 import { useRouter } from 'next/navigation';
@@ -527,7 +528,7 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
     }
   }, [getValues, legEstimates, toast, estimatingLegIndex, setValue, setLegEstimates, setEstimatingLegIndex, aircraftSelectOptions]);
 
-  const handleSave = async (status: typeof QuoteStatusType[number]) => {
+  const handleSave = async (intendedStatus: typeof QuoteStatusType[number]) => {
     const isValidForm = await trigger();
     if (!isValidForm) {
       toast({ title: "Validation Error", description: "Please check the form for errors.", variant: "destructive" });
@@ -581,20 +582,34 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
         totalSellPrice,
         marginAmount,
         marginPercentage,
-        status: status,
+        status: intendedStatus,
       };
       
       try {
         const savedQuote = await saveQuote(quoteToSave);
-        const successMessageTitle = isEditMode 
-            ? `Quote ${status === 'Draft' ? 'Updates Saved as Draft' : 'Updates Saved'}` 
-            : `Quote ${status === 'Draft' ? 'Saved as Draft' : 'Saved & Sent'}`;
+        let toastDescription = `Quote ${savedQuote.quoteId} (${intendedStatus}) has been ${isEditMode ? 'updated' : 'saved'} in Firestore.`;
         
-        const finalStatus = isEditMode ? (status === 'Draft' ? 'Draft' : getValues().status || savedQuote.status) : status;
-        
+        if (intendedStatus === "Sent") {
+          try {
+            const emailInput = {
+                clientName: savedQuote.clientName,
+                clientEmail: savedQuote.clientEmail,
+                quoteId: savedQuote.quoteId,
+                totalAmount: savedQuote.totalSellPrice,
+                // In a real app, you'd generate a link to a customer-facing quote view page
+                quoteLink: `https://your-app.com/view-quote/${savedQuote.id}` 
+            };
+            await sendQuoteEmail(emailInput);
+            toastDescription += " Email simulation logged to console.";
+          } catch (emailError) {
+             console.error("Failed to send quote email (simulation):", emailError);
+             toastDescription += " Email simulation failed (see console).";
+          }
+        }
+
         toast({
-          title: successMessageTitle,
-          description: `Quote ${savedQuote.quoteId} (${finalStatus}) has been ${isEditMode ? 'updated' : 'saved'} in Firestore.`,
+          title: isEditMode ? "Quote Updated" : "Quote Saved",
+          description: toastDescription,
           variant: "default",
         });
         
@@ -611,6 +626,39 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
           });
           setLegEstimates([]);
           setCalculatedLineItems([]);
+        } else {
+          // If editing, re-fetch the quote to ensure form reflects the saved status
+          const updatedQuoteData = await fetchQuoteById({ id: savedQuote.id });
+          if (updatedQuoteData) {
+            const formDataToReset: FullQuoteFormData = {
+              quoteId: updatedQuoteData.quoteId,
+              selectedCustomerId: updatedQuoteData.selectedCustomerId,
+              clientName: updatedQuoteData.clientName,
+              clientEmail: updatedQuoteData.clientEmail,
+              clientPhone: updatedQuoteData.clientPhone || '',
+              legs: updatedQuoteData.legs.map(leg => ({
+                ...leg,
+                departureDateTime: leg.departureDateTime ? parseISO(leg.departureDateTime) : undefined,
+                passengerCount: leg.passengerCount || 1,
+                originTaxiTimeMinutes: leg.originTaxiTimeMinutes === undefined ? 15 : leg.originTaxiTimeMinutes,
+                destinationTaxiTimeMinutes: leg.destinationTaxiTimeMinutes === undefined ? 15 : leg.destinationTaxiTimeMinutes,
+              })),
+              aircraftId: updatedQuoteData.aircraftId,
+              medicsRequested: updatedQuoteData.options.medicsRequested || false,
+              cateringRequested: updatedQuoteData.options.cateringRequested || false,
+              includeLandingFees: updatedQuoteData.options.includeLandingFees === undefined ? true : updatedQuoteData.options.includeLandingFees,
+              estimatedOvernights: updatedQuoteData.options.estimatedOvernights || 0,
+              fuelSurchargeRequested: updatedQuoteData.options.fuelSurchargeRequested === undefined ? true : updatedQuoteData.options.fuelSurchargeRequested,
+              sellPriceFuelSurchargePerHour: updatedQuoteData.options.sellPriceFuelSurchargePerHour,
+              sellPriceMedics: updatedQuoteData.options.sellPriceMedics,
+              sellPriceCatering: updatedQuoteData.options.sellPriceCatering,
+              sellPriceLandingFeePerLeg: updatedQuoteData.options.sellPriceLandingFeePerLeg,
+              sellPriceOvernight: updatedQuoteData.options.sellPriceOvernight,
+              cateringNotes: updatedQuoteData.options.cateringNotes || "",
+              notes: updatedQuoteData.options.notes || '',
+            };
+            reset(formDataToReset);
+          }
         }
       } catch (error) {
         console.error("Failed to save quote:", error);
@@ -1130,11 +1178,11 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
             </Button>
             <Button 
                 type="button" 
-                onClick={() => handleSave(isEditMode ? (getValues('status') as QuoteStatusType || 'Sent') : "Sent")} 
+                onClick={() => handleSave("Sent")} 
                 disabled={isSaving}
             > 
               {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
-              {isEditMode ? "Update Quote" : "Save & Send Quote"}
+              {isEditMode ? "Update & Send Quote" : "Save & Send Quote"}
             </Button>
           </CardFooter>
       </Form>

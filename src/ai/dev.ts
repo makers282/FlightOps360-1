@@ -14,6 +14,7 @@ import '@/ai/flows/manage-company-profile-flow.ts';
 import '@/ai/flows/manage-quotes-flow.ts';
 import '@/ai/flows/manage-customers-flow.ts'; 
 import '@/ai/flows/manage-aircraft-performance-flow.ts'; // Added new performance data flow
+import '@/ai/flows/send-quote-email-flow.ts'; // Added new email flow
 
 // Schemas are not Genkit plugins and should not be imported here for registration.
 // They are imported directly by flows or components that use them.
