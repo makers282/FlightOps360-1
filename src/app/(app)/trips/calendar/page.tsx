@@ -27,7 +27,7 @@ interface CalendarEvent {
   description?: string;
 }
 
-// Event times are now UTC
+// Event times are UTC
 const mockTripData: Omit<CalendarEvent, 'type' | 'color' | 'textColor' | 'description'>[] = [
   { id: 'TRP001', title: 'N520PW BD-100 Challenger 300', aircraft: 'N520PW', route: 'VNY > TXKF > VNY', start: parseISO('2024-10-02T08:00:00Z'), end: parseISO('2024-10-04T17:00:00Z') },
   { id: 'TRP002', title: 'N123MW G-7 Gulfstream-G500', aircraft: 'N123MW', route: 'SFO > LAS > TEB > SFO', start: parseISO('2024-10-02T10:00:00Z'), end: parseISO('2024-10-05T22:00:00Z') },
@@ -75,13 +75,11 @@ function CustomDay(props: DayProps) {
   const isCurrentMonth = date.getMonth() === displayMonth.getMonth();
 
   const eventsForDay = useMemo(() => {
-    const currentDayStart = startOfDay(date); // Local start of the day
-    const currentDayEnd = endOfDay(date);     // Local end of the day
+    const currentDayStart = startOfDay(date); 
+    const currentDayEnd = endOfDay(date);     
 
     return allEvents
       .filter(event => {
-        // Event times are UTC. We check if the UTC event interval overlaps with the local day interval.
-        // This comparison works because all are Date objects (absolute timestamps).
         return event.start < currentDayEnd && event.end > currentDayStart;
       })
       .sort((a, b) => a.start.getTime() - b.start.getTime());
@@ -90,11 +88,12 @@ function CustomDay(props: DayProps) {
   return (
     <div className={cn(
       "relative h-full w-full flex flex-col p-0.5 border-r border-b border-border/30",
-      !isCurrentMonth && "bg-muted/20 text-muted-foreground/50" 
+      !isCurrentMonth && "bg-muted/20 text-muted-foreground/50 opacity-50 pointer-events-none" 
     )}>
       <time dateTime={format(date, "yyyy-MM-dd")} className={cn(
         "text-xs self-end mb-0.5 mr-1 mt-0.5",
-        isToday(date) && isCurrentMonth && "text-primary font-bold rounded-full bg-primary/20 w-5 h-5 flex items-center justify-center"
+        isToday(date) && isCurrentMonth && "text-primary font-bold rounded-full bg-primary/20 w-5 h-5 flex items-center justify-center",
+        !isCurrentMonth && "invisible" // Make day number invisible for outside days
       )}>
         {format(date, "d")}
       </time>
@@ -137,8 +136,7 @@ export default function TripCalendarPage() {
   const [isClientReady, setIsClientReady] = useState(false);
 
   useEffect(() => {
-    // Initialize currentMonth only on the client side
-    setCurrentMonth(new Date(2024, 9, 1)); // October 2024, local midnight
+    setCurrentMonth(new Date(2024, 9, 1)); 
     setIsClientReady(true);
   }, []);
 
@@ -180,27 +178,35 @@ export default function TripCalendarPage() {
         <CardContent className="p-0">
           <ShadcnCalendar
             mode="single"
-            month={currentMonth} // Will be defined on client
+            month={currentMonth}
             onMonthChange={setCurrentMonth}
             className="w-full rounded-md bg-card"
             classNames={{
-                table: "w-full border-collapse", 
+                table: "w-full border-collapse table-fixed", 
                 month: "w-full", 
                 day_disabled: "text-muted-foreground/30 opacity-50",
-                cell: "p-0 m-0 text-left align-top h-28 sm:h-32 md:h-36 lg:h-40 xl:h-[11rem]", 
+                cell: cn(
+                    "p-0 m-0 text-left align-top h-28 sm:h-32 md:h-36 lg:h-40 xl:h-[11rem]",
+                    "w-[calc(100%/7)]" 
+                ),
                 day: "h-full w-full p-0 focus:relative focus:z-10",
                 head_row: "border-b border-border/50",
-                head_cell: "text-muted-foreground align-middle text-center w-[calc(100%/7)] font-normal text-[0.65rem] sm:text-xs py-1.5 border-r border-border/30 last:border-r-0",
+                head_cell: cn(
+                    "text-muted-foreground align-middle text-center font-normal text-[0.65rem] sm:text-xs py-1.5 border-r border-border/30 last:border-r-0",
+                    "w-[calc(100%/7)]" 
+                ),
                 caption: "flex justify-center items-center py-2.5 relative gap-x-1 px-2",
-                caption_label: "text-sm font-medium",
+                caption_label: "text-sm font-medium px-2", // Simplified caption label
                 nav_button: cn(buttonVariants({ variant: "outline" }), "h-7 w-7 bg-transparent p-0 opacity-80 hover:opacity-100"),
+                // nav_button_previous is auto-positioned by captionLayout="buttons"
+                // nav_button_next is auto-positioned by captionLayout="buttons"
             }}
             components={{
               Day: CustomDay,
             }}
             showOutsideDays={false}
             numberOfMonths={1}
-            captionLayout="buttons"
+            captionLayout="buttons" 
             fromYear={new Date().getFullYear() - 5} 
             toYear={new Date().getFullYear() + 5}
           />
