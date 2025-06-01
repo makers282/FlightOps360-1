@@ -1,7 +1,7 @@
 
-"use client"; // Added "use client" as we'll use hooks
+"use client"; 
 
-import React, { useState, useEffect } from 'react'; // Added useState, useEffect
+import React, { useState, useEffect } from 'react'; 
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -17,8 +17,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow'; // Import fleet flow
-import { useToast } from '@/hooks/use-toast'; // Import useToast
+import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow'; 
+import { useToast } from '@/hooks/use-toast'; 
 
 // Static data for sections not yet dynamic
 const tripData = [
@@ -46,6 +46,7 @@ const getStatusBadgeVariant = (status: string) => {
     case 'available':
     case 'completed':
     case 'off duty':
+    case 'active': // Added for aircraft status
       return 'default';
     case 'in flight':
     case 'en route':
@@ -55,6 +56,7 @@ const getStatusBadgeVariant = (status: string) => {
     case 'scheduled':
     case 'awaiting closeout':
     case 'standby':
+    case 'needs review': // Added for aircraft status
       return 'outline';
     default:
       return 'default';
@@ -89,24 +91,34 @@ export default function DashboardPage() {
   const { toast } = useToast();
 
   useEffect(() => {
+    let isMounted = true; 
     const loadAircraft = async () => {
-      setIsLoadingAircraft(true);
+      // No need to set isLoadingAircraft to true here, it's true by default.
       try {
         const fleet = await fetchFleetAircraft();
-        setAircraftList(fleet);
+        if (isMounted) {
+          setAircraftList(fleet);
+          setIsLoadingAircraft(false); 
+        }
       } catch (error) {
-        console.error("Failed to load aircraft for dashboard:", error);
-        toast({
-          title: "Error Loading Aircraft",
-          description: "Could not fetch aircraft status for the dashboard.",
-          variant: "destructive",
-        });
-      } finally {
-        setIsLoadingAircraft(false);
+        if (isMounted) {
+          console.error("Failed to load aircraft for dashboard:", error);
+          toast({
+            title: "Error Loading Aircraft",
+            description: "Could not fetch aircraft status for the dashboard.",
+            variant: "destructive",
+          });
+          setIsLoadingAircraft(false); 
+        }
       }
     };
+
     loadAircraft();
-  }, [toast]);
+
+    return () => {
+      isMounted = false; // Set to false when the component unmounts
+    };
+  }, []); // Empty dependency array to run once on mount
 
   return (
     <>
@@ -185,19 +197,18 @@ export default function DashboardPage() {
                 {aircraftList.map((aircraft) => (
                   <div key={aircraft.id} className="flex items-center gap-4 p-3 rounded-lg hover:bg-muted/50 transition-colors">
                     <Image 
-                      src={`https://placehold.co/80x53.png`} // Example placeholder, AI hint can be used for actual image search
+                      src={`https://placehold.co/80x53.png`} 
                       alt={aircraft.model} 
                       width={80} 
                       height={53} 
                       className="rounded-md aspect-video object-cover" 
-                      data-ai-hint={`${aircraft.model.split(' ')[0] || 'jet'} private`} // Simple AI hint
+                      data-ai-hint={`${aircraft.model.split(' ')[0] || 'jet'} private`}
                     />
                     <div className="flex-1">
                       <p className="font-semibold">{aircraft.tailNumber} <span className="text-sm text-muted-foreground font-normal">- {aircraft.model}</span></p>
                       <p className="text-sm text-muted-foreground">Base: {aircraft.baseLocation || 'N/A'}</p>
                     </div>
-                    {/* A true "Status" (e.g., Available, In Flight) would require more complex logic or another data source */}
-                    <Badge variant={getStatusBadgeVariant(aircraft.isMaintenanceTracked ? 'Available' : 'Check Status')}>
+                    <Badge variant={getStatusBadgeVariant(aircraft.isMaintenanceTracked ? 'Active' : 'Needs Review')}>
                       {aircraft.isMaintenanceTracked ? 'Active' : 'Needs Review'}
                     </Badge>
                   </div>
