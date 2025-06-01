@@ -1,7 +1,7 @@
 
-"use client"; // Make this a client component
+"use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useTransition } from 'react';
 import Link from 'next/link';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -23,13 +23,22 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { fetchQuotes } from '@/ai/flows/manage-quotes-flow'; 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { fetchQuotes, deleteQuote } from '@/ai/flows/manage-quotes-flow'; 
 import type { Quote, QuoteLeg, quoteStatuses as QuoteStatusType } from '@/ai/schemas/quote-schemas';
 import { quoteStatuses } from '@/ai/schemas/quote-schemas';
 import { useToast } from '@/hooks/use-toast';
 import { format, parseISO } from 'date-fns';
 
-// Helper function to format currency
 const formatCurrency = (amount: number | undefined) => {
   if (amount === undefined) return 'N/A';
   return amount.toLocaleString(undefined, { style: "currency", currency: "USD" });
@@ -56,22 +65,52 @@ export default function AllQuotesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const { toast } = useToast();
+  
+  const [isDeleting, startDeletingTransition] = useTransition();
+  const [quoteToDelete, setQuoteToDelete] = useState<Quote | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+
+  const loadQuotes = async () => {
+    setIsLoading(true);
+    try {
+      const fetchedQuotes = await fetchQuotes();
+      setQuotesList(fetchedQuotes);
+    } catch (error) {
+      console.error("Failed to load quotes:", error);
+      toast({ title: "Error Loading Quotes", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const loadQuotes = async () => {
-      setIsLoading(true);
-      try {
-        const fetchedQuotes = await fetchQuotes();
-        setQuotesList(fetchedQuotes);
-      } catch (error) {
-        console.error("Failed to load quotes:", error);
-        toast({ title: "Error Loading Quotes", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
-      } finally {
-        setIsLoading(false);
-      }
-    };
     loadQuotes();
-  }, [toast]);
+  }, []);
+
+  const handleDeleteClick = (quote: Quote) => {
+    setQuoteToDelete(quote);
+    setShowDeleteConfirm(true);
+  };
+
+  const executeDelete = async () => {
+    if (!quoteToDelete) return;
+    startDeletingTransition(async () => {
+      try {
+        await deleteQuote({ id: quoteToDelete.id });
+        toast({ title: "Success", description: `Quote "${quoteToDelete.quoteId}" deleted.` });
+        setShowDeleteConfirm(false);
+        setQuoteToDelete(null);
+        await loadQuotes(); 
+      } catch (error) {
+        console.error("Failed to delete quote:", error);
+        toast({ title: "Error Deleting Quote", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
+        setShowDeleteConfirm(false);
+        setQuoteToDelete(null);
+      }
+    });
+  };
+
 
   const filteredQuotes = quotesList.filter(quote =>
     (quote.quoteId && quote.quoteId.toLowerCase().includes(searchTerm.toLowerCase())) ||
@@ -181,12 +220,12 @@ export default function AllQuotesPage() {
                         </Tooltip>
                         <Tooltip>
                             <TooltipTrigger asChild>
-                              <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" disabled>
+                              <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDeleteClick(quote)} disabled={isDeleting}>
                                 <Trash2 className="h-4 w-4" />
                                 <span className="sr-only">Delete Quote</span>
                               </Button>
                             </TooltipTrigger>
-                            <TooltipContent><p>Delete Quote (Coming Soon)</p></TooltipContent>
+                            <TooltipContent><p>Delete Quote</p></TooltipContent>
                         </Tooltip>
                       </TableCell>
                     </TableRow>
@@ -197,7 +236,25 @@ export default function AllQuotesPage() {
           )}
         </CardContent>
       </Card>
+      {showDeleteConfirm && quoteToDelete && (
+        <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete quote "{quoteToDelete.quoteId}" for {quoteToDelete.clientName}? This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setShowDeleteConfirm(false)} disabled={isDeleting}>Cancel</AlertDialogCancel>
+              <Button variant="destructive" onClick={executeDelete} disabled={isDeleting}>
+                {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Delete
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </TooltipProvider>
   );
 }
-
