@@ -154,25 +154,22 @@ export default function TripCalendarPage() {
                 table: "w-full border-collapse", 
                 month: "w-full", 
                 day_disabled: "text-muted-foreground/30 opacity-50",
-                cell: "p-0 m-0 text-left align-top h-28 sm:h-32 md:h-36 lg:h-40 xl:h-[11rem]", // Adjusted height
+                cell: "p-0 m-0 text-left align-top h-28 sm:h-32 md:h-36 lg:h-40 xl:h-[11rem]", 
                 day: "h-full w-full p-0 focus:relative focus:z-10",
                 head_row: "border-b border-border/50",
                 head_cell: "text-muted-foreground align-middle text-center w-[calc(100%/7)] font-normal text-[0.65rem] sm:text-xs py-1.5 border-r border-border/30 last:border-r-0",
-                caption: "flex justify-center items-center py-2.5 relative gap-x-1 px-2", // Added gap for spacing, reduced padding
-                caption_label: "flex items-center text-xs text-muted-foreground/90", // Styles the div around each select
-                dropdown: "h-7 rounded-md border border-input bg-background px-1.5 py-0.5 text-xs ring-offset-background focus:outline-none focus:ring-1 focus:ring-ring appearance-none", // Smaller select
-                dropdown_month: "w-[90px]", // Specific width for month dropdown
-                dropdown_year: "w-[70px]",  // Specific width for year dropdown
-                nav_button: cn(buttonVariants({ variant: "outline" }), "h-7 w-7 bg-transparent p-0 opacity-70 hover:opacity-100"), // Adjusted size
-                nav_button_next: "", // Removed absolute positioning, rely on flex gap in caption
-                nav_button_previous: "", // Removed absolute positioning
+                caption: "flex justify-center items-center py-2 relative gap-x-2", // Simplified caption styling
+                caption_label: "text-sm font-medium", // For "Month Year" text
+                nav_button: cn(buttonVariants({ variant: "outline" }), "h-8 w-8 bg-transparent p-0 opacity-80 hover:opacity-100"),
+                nav_button_previous: "absolute left-2",
+                nav_button_next: "absolute right-2",
             }}
             components={{
               Day: CustomDay,
             }}
             showOutsideDays={false}
             numberOfMonths={1}
-            captionLayout="dropdown-buttons" 
+            captionLayout="buttons" // Changed from dropdown-buttons
             fromYear={new Date().getFullYear() - 5} 
             toYear={new Date().getFullYear() + 5}
           />
@@ -181,4 +178,3 @@ export default function TripCalendarPage() {
     </>
   );
 }
-
