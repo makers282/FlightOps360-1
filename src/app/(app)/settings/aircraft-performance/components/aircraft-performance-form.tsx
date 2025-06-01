@@ -332,7 +332,6 @@ export function AircraftPerformanceForm() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="" disabled>Select fuel type</SelectItem>
                           {fuelTypes.map(type => (
                             <SelectItem key={type} value={type}>{type}</SelectItem>
                           ))}
