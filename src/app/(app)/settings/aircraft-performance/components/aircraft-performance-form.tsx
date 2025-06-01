@@ -24,7 +24,6 @@ import type { SaveAircraftPerformanceInput } from '@/ai/schemas/aircraft-perform
 import { AircraftPerformanceDataSchema } from '@/ai/schemas/aircraft-performance-schemas';
 import { Skeleton } from '@/components/ui/skeleton';
 
-
 type AircraftPerformanceFormData = AircraftPerformanceData;
 
 interface FleetAircraftSelectOption {
@@ -95,17 +94,20 @@ export function AircraftPerformanceForm() {
         const data = await fetchAircraftPerformance({ aircraftId });
         if (data) {
           const numericData: Partial<AircraftPerformanceFormData> = {};
-          for (const key in data) {
-            const typedKey = key as keyof AircraftPerformanceData;
-            if (Object.prototype.hasOwnProperty.call(AircraftPerformanceDataSchema.shape, typedKey)) {
-              const fieldSchema = AircraftPerformanceDataSchema.shape[typedKey as keyof typeof AircraftPerformanceDataSchema.shape];
-              if ((fieldSchema instanceof z.ZodNumber || (fieldSchema instanceof z.ZodOptional && fieldSchema._def.innerType instanceof z.ZodNumber)) && data[typedKey] !== null && data[typedKey] !== undefined) {
-                (numericData as any)[typedKey] = Number(data[typedKey]);
-              } else if (data[typedKey] !== undefined) {
-                (numericData as any)[typedKey] = data[typedKey];
+          const schemaKeys = Object.keys(AircraftPerformanceDataSchema.shape) as Array<keyof AircraftPerformanceFormData>;
+          schemaKeys.forEach(key => {
+            const value = data[key as keyof typeof data];
+            if (value !== null && value !== undefined) {
+              const fieldSchema = AircraftPerformanceDataSchema.shape[key];
+              if (fieldSchema instanceof z.ZodNumber || (fieldSchema instanceof z.ZodOptional && fieldSchema._def.innerType instanceof z.ZodNumber)) {
+                (numericData as any)[key] = Number(value);
+              } else {
+                (numericData as any)[key] = value;
               }
+            } else {
+              (numericData as any)[key] = undefined;
             }
-          }
+          });
           form.reset(numericData);
           toast({ title: "Performance Data Loaded", description: `Showing data for ${fleetSelectOptions.find(ac => ac.id === aircraftId)?.label}.`, variant: "default" });
         } else {
@@ -138,7 +140,7 @@ export function AircraftPerformanceForm() {
     }
     startSaveTransition(async () => {
       try {
-        const dataToSave: AircraftPerformanceData = {};
+        const dataToSave: Partial<AircraftPerformanceData> = {};
         const schemaKeys = Object.keys(AircraftPerformanceDataSchema.shape) as Array<keyof AircraftPerformanceFormData>;
         schemaKeys.forEach(key => {
             const value = formData[key];
@@ -157,7 +159,7 @@ export function AircraftPerformanceForm() {
 
         const inputToSave: SaveAircraftPerformanceInput = {
           aircraftId: selectedAircraftId,
-          performanceData: dataToSave,
+          performanceData: dataToSave as AircraftPerformanceData,
         };
         await saveAircraftPerformance(inputToSave);
         const selectedAircraftLabel = fleetSelectOptions.find(ac => ac.id === selectedAircraftId)?.label || selectedAircraftId;
@@ -184,7 +186,7 @@ export function AircraftPerformanceForm() {
       try {
         const aiInput: SuggestAircraftPerformanceInput = { aircraftName: selectedAircraftObject.model };
         const suggestedData: AircraftPerformanceOutput = await suggestAircraftPerformance(aiInput);
-
+        
         const processedData: Partial<AircraftPerformanceFormData> = {};
         const schemaKeys = Object.keys(AircraftPerformanceDataSchema.shape) as Array<keyof AircraftPerformanceFormData>;
 
