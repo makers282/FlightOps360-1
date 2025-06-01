@@ -34,9 +34,9 @@ interface AggregatedMaintenanceDisplayItem {
   dueAtCycles?: number; 
   notes?: string;
   rawTask?: DisplayMaintenanceItem; 
+  _componentTimesMap?: AircraftComponentTimes | null; // Internal use for passing to calculateToGo
 }
 
-// MOCK_COMPONENT_VALUES_DATA is no longer used. Airframe times will come from Firestore.
 
 export const calculateToGo = (
   item: Pick<DisplayMaintenanceItem, 'dueAtDate' | 'dueAtHours' | 'dueAtCycles' | 'associatedComponent'>, 
@@ -79,26 +79,52 @@ export const calculateToGo = (
   return { text: 'N/A', numeric: Infinity, unit: 'N/A', isOverdue: false };
 };
 
-export const getReleaseStatus = (toGo: { numeric: number; unit: 'days' | 'hrs' | 'cycles' | 'N/A'; isOverdue: boolean; text: string }): { icon: JSX.Element; colorClass: string; label: string } => {
-   if (toGo.text.startsWith('N/A (No time for')) {
+export const getReleaseStatus = (
+  toGo: { numeric: number; unit: 'days' | 'hrs' | 'cycles' | 'N/A'; isOverdue: boolean; text: string },
+  task?: DisplayMaintenanceItem // Optional task for tolerance checking
+): { icon: JSX.Element; colorClass: string; label: string } => {
+  
+  if (toGo.text.startsWith('N/A (No time for') || toGo.text.startsWith('N/A (Comp. data missing')) {
     return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-orange-500', label: 'Missing Comp. Time' };
   }
+
   if (toGo.isOverdue) {
-    return { icon: <XCircleIcon className="h-5 w-5" />, colorClass: 'text-red-500', label: 'Overdue' };
+    if (task) { // Check for grace period if task details are available
+      let withinGrace = false;
+      const numericOverdueAmount = Math.abs(toGo.numeric);
+
+      if (toGo.unit === 'days' && typeof task.daysTolerance === 'number' && numericOverdueAmount <= task.daysTolerance) {
+        withinGrace = true;
+      } else if (toGo.unit === 'hrs' && typeof task.hoursTolerance === 'number' && numericOverdueAmount <= task.hoursTolerance) {
+        withinGrace = true;
+      } else if (toGo.unit === 'cycles' && typeof task.cyclesTolerance === 'number' && numericOverdueAmount <= task.cyclesTolerance) {
+        withinGrace = true;
+      }
+
+      if (withinGrace) {
+        return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-yellow-600 dark:text-yellow-500', label: 'Grace Period' };
+      }
+    }
+    // If not within grace or no task info for grace check, it's truly overdue
+    return { icon: <XCircleIcon className="h-5 w-5" />, colorClass: 'text-red-500 dark:text-red-400', label: 'Overdue' };
   }
+  
+  // Due Soon logic (remains the same)
   if (toGo.unit === 'days' && toGo.numeric < 30) {
-    return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-yellow-500', label: 'Due Soon' };
+    return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-yellow-500 dark:text-yellow-400', label: 'Due Soon' };
   }
    if (toGo.unit === 'hrs' && toGo.numeric < 25) {
-    return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-yellow-500', label: 'Due Soon' };
+    return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-yellow-500 dark:text-yellow-400', label: 'Due Soon' };
   }
   if (toGo.unit === 'cycles' && toGo.numeric < 50) { 
-    return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-yellow-500', label: 'Due Soon' };
+    return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-yellow-500 dark:text-yellow-400', label: 'Due Soon' };
   }
+
   if (toGo.text === 'N/A' || toGo.text === 'Invalid Date') {
-    return { icon: <CheckCircle2 className="h-5 w-5" />, colorClass: 'text-gray-400', label: 'N/A' };
+    return { icon: <CheckCircle2 className="h-5 w-5" />, colorClass: 'text-gray-400 dark:text-gray-500', label: 'N/A' };
   }
-  return { icon: <CheckCircle2 className="h-5 w-5" />, colorClass: 'text-green-500', label: 'OK' };
+  
+  return { icon: <CheckCircle2 className="h-5 w-5" />, colorClass: 'text-green-500 dark:text-green-400', label: 'OK' };
 };
 
 // This is the function from the detail page, adapted for overview.
@@ -139,6 +165,7 @@ const calculateDisplayFieldsForOverview = (task: FlowMaintenanceTask): DisplayMa
           if (task.isHoursDueEnabled && task.hoursDue) dueAtHours = Number(task.hoursDue);
         if (task.isCyclesDueEnabled && task.cyclesDue) dueAtCycles = Number(task.cyclesDue);
     }
+    // Tolerances from FlowMaintenanceTask are directly available on 'task'
     return { ...task, dueAtDate, dueAtHours, dueAtCycles };
 };
 
@@ -165,7 +192,6 @@ export default function AircraftCurrencyPage() {
             componentTimesMap = await fetchComponentTimesForAircraft({ aircraftId: fleetAc.id });
           } catch (compTimeError) {
             console.warn(`Failed to fetch component times for ${fleetAc.tailNumber}:`, compTimeError);
-            // Continue, will use defaults (0)
           }
           
           const currentAirframeTime = componentTimesMap?.['Airframe']?.time ?? 0;
@@ -174,7 +200,8 @@ export default function AircraftCurrencyPage() {
           let itemsForThisAircraft: DisplayMaintenanceItem[] = [];
           try {
             const tasksFromDb = await fetchMaintenanceTasksForAircraft({ aircraftId: fleetAc.id });
-            itemsForThisAircraft = tasksFromDb.map(calculateDisplayFieldsForOverview);
+            // Ensure calculateDisplayFieldsForOverview populates tolerances if they exist on FlowMaintenanceTask
+            itemsForThisAircraft = tasksFromDb.map(task => calculateDisplayFieldsForOverview(task));
           } catch (taskError) {
              console.error(`Failed to fetch tasks for ${fleetAc.tailNumber}:`, taskError);
           }
@@ -185,10 +212,10 @@ export default function AircraftCurrencyPage() {
               const toGoB = calculateToGo(b, componentTimesMap, fleetAc.trackedComponentNames?.[0] || "Airframe");
               if (toGoA.isOverdue && !toGoB.isOverdue) return -1;
               if (!toGoA.isOverdue && toGoB.isOverdue) return 1;
-              if (toGoA.isOverdue && toGoB.isOverdue) return toGoA.numeric - toGoB.numeric; // Sort by how overdue
-              return toGoA.numeric - toGoB.numeric; // Sort by numeric value (days/hrs/cycles remaining)
+              if (toGoA.isOverdue && toGoB.isOverdue) return toGoA.numeric - toGoB.numeric; 
+              return toGoA.numeric - toGoB.numeric;
             });
-            const mostUrgentItem = sortedItems[0];
+            const mostUrgentItem = sortedItems[0]; // This is a DisplayMaintenanceItem
             return {
               fleetAircraftId: fleetAc.id,
               tailNumber: fleetAc.tailNumber,
@@ -200,8 +227,7 @@ export default function AircraftCurrencyPage() {
               dueAtHours: mostUrgentItem.dueAtHours,
               dueAtCycles: mostUrgentItem.dueAtCycles,
               notes: mostUrgentItem.details,
-              rawTask: mostUrgentItem, 
-              // Store componentTimesMap with each aggregated item for use in calculateToGo later
+              rawTask: mostUrgentItem, // Pass the full task data including tolerances
               _componentTimesMap: componentTimesMap 
             };
           } else {
@@ -273,9 +299,8 @@ export default function AircraftCurrencyPage() {
                   </TableRow>
                 ) : (
                   aggregatedData.map((item) => {
-                    // Use the stored _componentTimesMap for the specific aircraft when calling calculateToGo
-                    const toGoData = calculateToGo(item, (item as any)._componentTimesMap, item.rawTask?.associatedComponent || "Airframe");
-                    const status = getReleaseStatus(toGoData);
+                    const toGoData = calculateToGo(item, item._componentTimesMap, item.rawTask?.associatedComponent || "Airframe");
+                    const status = getReleaseStatus(toGoData, item.rawTask); // Pass rawTask for tolerance checks
                     let dueAtDisplay = 'N/A';
                     
                     if (item.nextDueItemDescription === 'No items tracked') {
