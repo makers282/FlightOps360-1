@@ -42,11 +42,13 @@ const prompt = ai.definePrompt({
   name: 'suggestAircraftPerformancePrompt',
   input: {schema: SuggestAircraftPerformanceInputSchema},
   output: {schema: AircraftPerformanceOutputSchema},
-  system: "You are an expert aviation performance specialist. Your task is to provide a comprehensive set of typical aircraft performance parameters for the given aircraft model. Strive to fill as many fields as possible with realistic integer values for numeric fields.",
-  prompt: `
-Aircraft Model: {{{aircraftName}}}
+  config: { // Added config to set temperature
+    temperature: 0.2, 
+  },
+  prompt: `You are an expert aviation performance specialist. For the aircraft model "{{aircraftName}}", provide typical performance parameters.
+All numeric values should be integers. The fuelType for jet aircraft (e.g., Learjet, Citation, Gulfstream, Bombardier) MUST be "Jet Fuel".
 
-Please provide estimates for the following performance parameters. All numeric values should be integers.
+Provide estimates for:
 - takeoffSpeed (integer, kts)
 - landingSpeed (integer, kts)
 - climbSpeed (integer, kts)
@@ -55,13 +57,13 @@ Please provide estimates for the following performance parameters. All numeric v
 - cruiseAltitude (integer, ft)
 - descentSpeed (integer, kts)
 - descentRate (integer, ft/min)
-- fuelType (string, e.g., "Jet Fuel", "Avgas"). For jet aircraft like Learjet, Citation, Gulfstream, Bombardier, this MUST be "Jet Fuel".
-- fuelBurn (integer, common unit for the type like GPH or PPH)
+- fuelType (string, e.g., "Jet Fuel", "Avgas").
+- fuelBurn (integer, common unit like GPH or PPH)
 - maxRange (integer, nautical miles)
 - maxAllowableTakeoffWeight (integer, pounds)
 
-If a specific numeric value is not commonly known or varies too widely, you may omit it. For fuelType, please provide the most common type; if truly unknown for an obscure type, provide "Unknown".
-Return the data strictly in the specified JSON output format.
+If a specific numeric value is not commonly known or varies too widely, you may omit it.
+Return ONLY the JSON object in the specified output format.
 
 Example for "Learjet 35":
 {
@@ -95,9 +97,8 @@ Example for "Cessna Citation CJ3":
   "maxAllowableTakeoffWeight": 13870
 }
 
-Provide realistic estimates based on common knowledge for the aircraft type: {{{aircraftName}}}.
-Ensure all numeric values are integers.
-Output only the JSON.
+Aircraft: {{{aircraftName}}}
+Output JSON:
 `,
 });
 
@@ -112,7 +113,8 @@ const suggestAircraftPerformanceFlow = ai.defineFlow(
     if (!output) {
       throw new Error("The AI model did not return an output for aircraft performance suggestion.");
     }
-    // The client-side form will handle rounding and coercing now.
+    // Client-side form will handle rounding for display if needed,
+    // but prompt now requests integers.
     return output;
   }
 );
