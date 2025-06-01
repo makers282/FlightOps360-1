@@ -68,7 +68,7 @@ export async function saveFleetAircraft(input: SaveFleetAircraftInput): Promise<
   
   // Prepare the data for the flow, ensuring nulls for optional fields become undefined
   const aircraftToSave: FleetAircraft = {
-    ...input, // Spread first to get all fields including id, tailNumber, model
+    ...input, 
     serialNumber: input.serialNumber === null ? undefined : input.serialNumber,
     aircraftYear: input.aircraftYear === null ? undefined : input.aircraftYear,
     baseLocation: input.baseLocation === null ? undefined : input.baseLocation,
@@ -77,7 +77,6 @@ export async function saveFleetAircraft(input: SaveFleetAircraftInput): Promise<
     primaryContactEmail: input.primaryContactEmail === null ? undefined : input.primaryContactEmail,
     internalNotes: input.internalNotes === null ? undefined : input.internalNotes,
     
-    // Fields with existing default handling or different types
     isMaintenanceTracked: input.isMaintenanceTracked ?? true,
     trackedComponentNames: (input.trackedComponentNames && input.trackedComponentNames.length > 0) ? input.trackedComponentNames : ['Airframe', 'Engine 1'],
     engineDetails: input.engineDetails || [],
@@ -105,21 +104,22 @@ const fetchFleetAircraftFlow = ai.defineFlow(
       const aircraftList = snapshot.docs.map(doc => {
         const data = doc.data();
         // Ensure defaults for fields that might be missing in older documents
+        // and map nulls from Firestore to undefined for optional Zod fields
         return {
           id: doc.id,
           tailNumber: data.tailNumber || '', 
           model: data.model || '', 
-          serialNumber: data.serialNumber || undefined,
-          aircraftYear: data.aircraftYear === null ? null : (data.aircraftYear || undefined), // Preserve null from DB if explicitly set, else undefined
-          baseLocation: data.baseLocation || undefined,
+          serialNumber: data.serialNumber ?? undefined,
+          aircraftYear: data.aircraftYear ?? undefined, // This handles null from Firestore
+          baseLocation: data.baseLocation ?? undefined,
           engineDetails: data.engineDetails || [], 
-          isMaintenanceTracked: data.isMaintenanceTracked === undefined ? true : data.isMaintenanceTracked,
+          isMaintenanceTracked: data.isMaintenanceTracked ?? true,
           trackedComponentNames: data.trackedComponentNames || ['Airframe', 'Engine 1'],
-          primaryContactName: data.primaryContactName || undefined,
-          primaryContactPhone: data.primaryContactPhone || undefined,
-          primaryContactEmail: data.primaryContactEmail || undefined,
-          internalNotes: data.internalNotes || undefined,
-        } as FleetAircraft;
+          primaryContactName: data.primaryContactName ?? undefined,
+          primaryContactPhone: data.primaryContactPhone ?? undefined,
+          primaryContactEmail: data.primaryContactEmail ?? undefined,
+          internalNotes: data.internalNotes ?? undefined,
+        } as FleetAircraft; // Zod validation happens on the flow's output
       });
       console.log('Fetched fleet from Firestore:', aircraftList.length, 'aircraft.');
       return aircraftList;
@@ -140,9 +140,6 @@ const saveFleetAircraftFlow = ai.defineFlow(
     console.log('Executing saveFleetAircraftFlow (FLOW INPUT) with input - Firestore:', JSON.stringify(input));
     try {
       const aircraftDocRef = doc(db, FLEET_COLLECTION, input.id);
-      // Data to set for Firestore can use null where appropriate if fields are undefined.
-      // Firestore handles undefined by not writing the field (good for merge:true)
-      // or explicitly set to null if that's desired.
       const dataToSet = {
         tailNumber: input.tailNumber,
         model: input.model,
@@ -159,7 +156,6 @@ const saveFleetAircraftFlow = ai.defineFlow(
       };
       await setDoc(aircraftDocRef, dataToSet, { merge: true }); 
       console.log('Saved/Updated aircraft in Firestore:', input.id);
-      // Return the input which is already compliant with FleetAircraft schema
       return input; 
     } catch (error) {
       console.error('Error saving aircraft to Firestore:', error);
@@ -194,3 +190,4 @@ const deleteFleetAircraftFlow = ai.defineFlow(
     }
   }
 );
+
