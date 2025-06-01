@@ -211,12 +211,14 @@ export default function AllQuotesPage() {
                         </Tooltip>
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" disabled>
-                              <Edit3 className="h-4 w-4" />
-                              <span className="sr-only">Edit Quote</span>
+                            <Button variant="ghost" size="icon" asChild>
+                              <Link href={`/quotes/new?editMode=true&quoteId=${quote.id}`}>
+                                <Edit3 className="h-4 w-4" />
+                                <span className="sr-only">Edit Quote</span>
+                              </Link>
                             </Button>
                           </TooltipTrigger>
-                          <TooltipContent><p>Edit Quote (Coming Soon)</p></TooltipContent>
+                          <TooltipContent><p>Edit Quote</p></TooltipContent>
                         </Tooltip>
                         <Tooltip>
                             <TooltipTrigger asChild>

@@ -16,7 +16,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { CalendarIcon, Loader2, Users, Briefcase, Utensils, Landmark, BedDouble, PlaneTakeoff, PlaneLanding, PlusCircle, Trash2, GripVertical, Wand2, Info, Eye, Send, Building, UserSearch, DollarSign, Fuel, SaveIcon } from 'lucide-react';
 import { cn } from "@/lib/utils";
-import { format, isValid as isValidDate } from "date-fns";
+import { format, isValid as isValidDate, parseISO } from "date-fns";
 import { useToast } from '@/hooks/use-toast';
 import {
   Select,
@@ -38,7 +38,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { LegsSummaryTable } from './legs-summary-table';
 import { CostsSummaryDisplay, type LineItem } from './costs-summary-display';
-import { saveQuote } from '@/ai/flows/manage-quotes-flow';
+import { saveQuote, fetchQuoteById } from '@/ai/flows/manage-quotes-flow'; // Added fetchQuoteById
 import type { Quote, SaveQuoteInput, QuoteLeg, QuoteLineItem, quoteStatuses as QuoteStatusType } from '@/ai/schemas/quote-schemas';
 import { quoteStatuses, legTypes } from '@/ai/schemas/quote-schemas';
 import { useRouter } from 'next/navigation';
@@ -117,7 +117,12 @@ const DEFAULT_SERVICE_RATES: Record<string, ServiceFeeRate> = {
   [SERVICE_KEY_CATERING]: { displayDescription: "Catering", buy: 350, sell: 500, unitDescription: "Service" },
 };
 
-export function CreateQuoteForm() {
+interface CreateQuoteFormProps {
+  isEditMode?: boolean;
+  quoteIdToEdit?: string;
+}
+
+export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuoteFormProps) {
   const [isSaving, startSavingTransition] = useTransition();
   const [estimatingLegIndex, setEstimatingLegIndex] = useState<number | null>(null);
   const { toast } = useToast();
@@ -136,6 +141,7 @@ export function CreateQuoteForm() {
 
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [isLoadingCustomers, setIsLoadingCustomers] = useState(true);
+  const [isLoadingQuoteDataForEdit, setIsLoadingQuoteDataForEdit] = useState(false);
 
   const form = useForm<FullQuoteFormData>({ 
     resolver: zodResolver(formSchema),
@@ -173,7 +179,7 @@ export function CreateQuoteForm() {
     },
   });
 
-  const { control, setValue, getValues, trigger, formState: { errors } } = form;
+  const { control, setValue, getValues, trigger, formState: { errors }, reset } = form;
   
   const legsArray = useWatch({ control, name: "legs", defaultValue: [] });
   const aircraftId = useWatch({ control, name: "aircraftId" });
@@ -188,7 +194,7 @@ export function CreateQuoteForm() {
   const currentEstimatedOvernights = useWatch({ control, name: "estimatedOvernights" });
   const sellPriceOvernight = useWatch({ control, name: "sellPriceOvernight" });
 
-  const { fields, append, remove } = useFieldArray({
+  const { fields, append, remove, replace } = useFieldArray({
     control,
     name: "legs",
   });
@@ -199,9 +205,6 @@ export function CreateQuoteForm() {
 
   useEffect(() => {
     setIsClient(true);
-    if (!getValues('quoteId')) {
-      setValue('quoteId', generateNewQuoteId());
-    }
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     setMinLegDepartureDate(today);
@@ -211,22 +214,22 @@ export function CreateQuoteForm() {
       setIsLoadingDynamicRates(true);
       setIsLoadingCustomers(true);
       try {
-        const [fleet, rates, profile, fetchedCustomers] = await Promise.all([
+        const [fleetData, ratesData, profileData, customersData] = await Promise.all([
           fetchFleetAircraft(),
           fetchAircraftRates(),
           fetchCompanyProfile(),
           fetchCustomers()
         ]);
         
-        const options = fleet.map(ac => ({ 
+        const options = fleetData.map(ac => ({ 
           value: ac.id, 
           label: `${ac.tailNumber} - ${ac.model}`,
           model: ac.model
         }));
         setAircraftSelectOptions(options);
-        setFetchedAircraftRates(rates);
-        setFetchedCompanyProfile(profile);
-        setCustomers(fetchedCustomers);
+        setFetchedAircraftRates(ratesData);
+        setFetchedCompanyProfile(profileData);
+        setCustomers(customersData);
 
       } catch (error) {
         console.error("Failed to load initial data for quote form:", error);
@@ -238,7 +241,62 @@ export function CreateQuoteForm() {
       }
     };
     loadInitialData();
-  }, [setValue, getValues, toast, generateNewQuoteId]);
+
+    if (isEditMode && quoteIdToEdit) {
+      setIsLoadingQuoteDataForEdit(true);
+      fetchQuoteById({ id: quoteIdToEdit })
+        .then(quoteData => {
+          if (quoteData) {
+            const formDataToReset: FullQuoteFormData = {
+              quoteId: quoteData.quoteId,
+              selectedCustomerId: quoteData.selectedCustomerId,
+              clientName: quoteData.clientName,
+              clientEmail: quoteData.clientEmail,
+              clientPhone: quoteData.clientPhone || '',
+              legs: quoteData.legs.map(leg => ({
+                ...leg,
+                departureDateTime: leg.departureDateTime ? parseISO(leg.departureDateTime) : undefined,
+                passengerCount: leg.passengerCount || 1, // ensure default if undefined
+                originTaxiTimeMinutes: leg.originTaxiTimeMinutes === undefined ? 15 : leg.originTaxiTimeMinutes,
+                destinationTaxiTimeMinutes: leg.destinationTaxiTimeMinutes === undefined ? 15 : leg.destinationTaxiTimeMinutes,
+              })),
+              aircraftId: quoteData.aircraftId,
+              medicsRequested: quoteData.options.medicsRequested || false,
+              cateringRequested: quoteData.options.cateringRequested || false,
+              includeLandingFees: quoteData.options.includeLandingFees === undefined ? true : quoteData.options.includeLandingFees,
+              estimatedOvernights: quoteData.options.estimatedOvernights || 0,
+              fuelSurchargeRequested: quoteData.options.fuelSurchargeRequested === undefined ? true : quoteData.options.fuelSurchargeRequested,
+              sellPriceFuelSurchargePerHour: quoteData.options.sellPriceFuelSurchargePerHour,
+              sellPriceMedics: quoteData.options.sellPriceMedics,
+              sellPriceCatering: quoteData.options.sellPriceCatering,
+              sellPriceLandingFeePerLeg: quoteData.options.sellPriceLandingFeePerLeg,
+              sellPriceOvernight: quoteData.options.sellPriceOvernight,
+              cateringNotes: quoteData.options.cateringNotes || "",
+              notes: quoteData.options.notes || '',
+            };
+            reset(formDataToReset);
+            setCalculatedLineItems(quoteData.lineItems || []);
+            // For leg estimates, we might need to re-fetch or just clear them for now if complex
+            setLegEstimates(new Array(quoteData.legs.length).fill(null));
+            toast({ title: "Quote Loaded", description: `Editing quote ${quoteData.quoteId}.`, variant: "default"});
+          } else {
+            toast({ title: "Error", description: `Quote with ID ${quoteIdToEdit} not found.`, variant: "destructive"});
+            router.push('/quotes'); // Redirect if quote not found
+          }
+        })
+        .catch(error => {
+          console.error("Failed to fetch quote for editing:", error);
+          toast({ title: "Error Loading Quote", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive"});
+          router.push('/quotes');
+        })
+        .finally(() => setIsLoadingQuoteDataForEdit(false));
+    } else {
+      if (!getValues('quoteId')) {
+        setValue('quoteId', generateNewQuoteId());
+      }
+    }
+  }, [isEditMode, quoteIdToEdit, reset, toast, router, setValue, getValues, generateNewQuoteId]);
+
 
   useEffect(() => {
     if (legsArray && legEstimates.length !== legsArray.length) {
@@ -474,7 +532,7 @@ export function CreateQuoteForm() {
       const marginPercentage = totalBuyCost > 0 ? (marginAmount / totalBuyCost) * 100 : 0;
 
       const quoteToSave: SaveQuoteInput = {
-        quoteId: data.quoteId,
+        quoteId: data.quoteId, // This will be the existing ID in edit mode
         selectedCustomerId: data.selectedCustomerId,
         clientName: data.clientName,
         clientEmail: data.clientEmail,
@@ -517,24 +575,30 @@ export function CreateQuoteForm() {
       
       try {
         const savedQuote = await saveQuote(quoteToSave);
+        const successMessageTitle = isEditMode ? `Quote ${status === 'Draft' ? 'Updates Saved as Draft' : 'Updates Saved & Sent'}` : `Quote ${status === 'Draft' ? 'Saved as Draft' : 'Saved & Sent'}`;
         toast({
-          title: `Quote ${status === 'Draft' ? 'Saved as Draft' : 'Saved & Sent'}`,
-          description: `Quote ${savedQuote.quoteId} (${status}) has been saved to Firestore.`,
+          title: successMessageTitle,
+          description: `Quote ${savedQuote.quoteId} (${status}) has been ${isEditMode ? 'updated' : 'saved'} in Firestore.`,
           variant: "default",
         });
         
-        form.reset({
-          quoteId: generateNewQuoteId(),
-          selectedCustomerId: undefined,
-          clientName: '', clientEmail: '', clientPhone: '',
-          legs: [{ origin: '', destination: '', legType: 'Charter', departureDateTime: undefined, passengerCount: 1, originFbo: '', destinationFbo: '', originTaxiTimeMinutes: 15, destinationTaxiTimeMinutes: 15, flightTimeHours: undefined }],
-          aircraftId: undefined,
-          medicsRequested: false, cateringRequested: false, includeLandingFees: true, estimatedOvernights: 0, fuelSurchargeRequested: true,
-          cateringNotes: "", notes: '',
-          sellPriceFuelSurchargePerHour: undefined, sellPriceMedics: undefined, sellPriceCatering: undefined, sellPriceLandingFeePerLeg: undefined, sellPriceOvernight: undefined,
-        });
-        setLegEstimates([]);
-        setCalculatedLineItems([]);
+        if (!isEditMode) {
+          form.reset({
+            quoteId: generateNewQuoteId(),
+            selectedCustomerId: undefined,
+            clientName: '', clientEmail: '', clientPhone: '',
+            legs: [{ origin: '', destination: '', legType: 'Charter', departureDateTime: undefined, passengerCount: 1, originFbo: '', destinationFbo: '', originTaxiTimeMinutes: 15, destinationTaxiTimeMinutes: 15, flightTimeHours: undefined }],
+            aircraftId: undefined,
+            medicsRequested: false, cateringRequested: false, includeLandingFees: true, estimatedOvernights: 0, fuelSurchargeRequested: true,
+            cateringNotes: "", notes: '',
+            sellPriceFuelSurchargePerHour: undefined, sellPriceMedics: undefined, sellPriceCatering: undefined, sellPriceLandingFeePerLeg: undefined, sellPriceOvernight: undefined,
+          });
+          setLegEstimates([]);
+          setCalculatedLineItems([]);
+        } else {
+          // Optionally, could redirect or re-fetch data here for edit mode
+          // For now, just keeping the form populated.
+        }
 
       } catch (error) {
         console.error("Failed to save quote:", error);
@@ -685,15 +749,35 @@ export function CreateQuoteForm() {
     return label;
   };
 
+  if (isLoadingQuoteDataForEdit) {
+    return (
+      <Card className="shadow-lg max-w-4xl mx-auto">
+        <CardHeader>
+          <Skeleton className="h-8 w-1/2" />
+          <Skeleton className="h-4 w-3/4" />
+        </CardHeader>
+        <CardContent className="space-y-8">
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-20 w-full" />
+          <Skeleton className="h-40 w-full" />
+        </CardContent>
+        <CardFooter>
+          <Skeleton className="h-10 w-24" />
+        </CardFooter>
+      </Card>
+    );
+  }
+
+
   return (
     <Card className="shadow-lg max-w-4xl mx-auto">
       <CardHeader>
-        <CardTitle>New Quote Details</CardTitle>
-        <CardDescription>Fill in the client and trip information to generate a quote.</CardDescription>
+        <CardTitle>{isEditMode ? `Editing Quote: ${getValues('quoteId')}` : "New Quote Details"}</CardTitle>
+        <CardDescription>{isEditMode ? "Modify the details of this existing quote." : "Fill in the client and trip information to generate a quote."}</CardDescription>
       </CardHeader>
       <Form {...form}>
         <CardContent className="space-y-8">
-          <FormField control={control} name="quoteId" render={({ field }) => ( <FormItem className="mb-6"> <FormLabel>Quote ID</FormLabel> <FormControl><Input placeholder="e.g., QT-ABCDE" {...field} value={field.value || ''} readOnly className="bg-muted/50" /></FormControl> <FormMessage /> </FormItem> )} />
+          <FormField control={control} name="quoteId" render={({ field }) => ( <FormItem className="mb-6"> <FormLabel>Quote ID</FormLabel> <FormControl><Input placeholder="e.g., QT-ABCDE" {...field} value={field.value || ''} readOnly={isEditMode} className={isEditMode ? "bg-muted/50 cursor-not-allowed" : "bg-muted/50"} /></FormControl> <FormMessage /> </FormItem> )} />
             
             <section>
               <CardTitle className="text-xl border-b pb-2 mb-4">Client Information</CardTitle>
@@ -988,11 +1072,11 @@ export function CreateQuoteForm() {
             <Button type="button" variant="outline" onClick={handlePreviewQuote} disabled={isSaving}> <Eye className="mr-2 h-4 w-4" /> Preview Quote </Button>
             <Button type="button" variant="secondary" onClick={() => handleSave("Draft")} disabled={isSaving}> 
               {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <SaveIcon className="mr-2 h-4 w-4" />}
-              Save as Draft 
+              {isEditMode ? "Save Draft Updates" : "Save as Draft"}
             </Button>
-            <Button type="button" onClick={() => handleSave("Sent")} disabled={isSaving}> 
+            <Button type="button" onClick={() => handleSave(isEditMode ? getValues('status') as QuoteStatusType : "Sent")} disabled={isSaving}> 
               {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
-              Save & Send Quote
+              {isEditMode ? `Update Quote (${getValues('status') || 'Status Unset'})` : "Save & Send Quote"}
             </Button>
           </CardFooter>
       </Form>
