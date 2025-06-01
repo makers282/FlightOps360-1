@@ -90,7 +90,25 @@ const fetchFleetAircraftFlow = ai.defineFlow(
     try {
       const fleetCollectionRef = collection(db, FLEET_COLLECTION);
       const snapshot = await getDocs(fleetCollectionRef);
-      const aircraftList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FleetAircraft));
+      const aircraftList = snapshot.docs.map(doc => {
+        const data = doc.data();
+        // Ensure defaults for fields that might be missing in older documents
+        return {
+          id: doc.id,
+          tailNumber: data.tailNumber || '', // Should always exist
+          model: data.model || '', // Should always exist
+          serialNumber: data.serialNumber || undefined,
+          aircraftYear: data.aircraftYear || undefined,
+          baseLocation: data.baseLocation || undefined,
+          engineDetails: data.engineDetails || [], // Ensure it's an array
+          isMaintenanceTracked: data.isMaintenanceTracked === undefined ? true : data.isMaintenanceTracked,
+          trackedComponentNames: data.trackedComponentNames || ['Airframe', 'Engine 1'],
+          primaryContactName: data.primaryContactName || undefined,
+          primaryContactPhone: data.primaryContactPhone || undefined,
+          primaryContactEmail: data.primaryContactEmail || undefined,
+          internalNotes: data.internalNotes || undefined,
+        } as FleetAircraft;
+      });
       console.log('Fetched fleet from Firestore:', aircraftList.length, 'aircraft.');
       return aircraftList;
     } catch (error) {

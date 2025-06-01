@@ -317,8 +317,8 @@ export default function AircraftMaintenanceDetailPage() {
     startSavingAircraftInfoTransition(async () => {
       try {
         const updatedAircraftData: FleetAircraft = { 
-          ...currentAircraft, // Spread existing data first
-          model: data.model, // Then specific form fields
+          ...currentAircraft, 
+          model: data.model, 
           serialNumber: data.serialNumber || undefined,
           aircraftYear: data.aircraftYear,
           baseLocation: data.baseLocation || undefined,
@@ -326,10 +326,9 @@ export default function AircraftMaintenanceDetailPage() {
           primaryContactPhone: data.primaryContactPhone || undefined,
           primaryContactEmail: data.primaryContactEmail || undefined,
           internalNotes: data.internalNotes || undefined,
-          // isMaintenanceTracked and trackedComponentNames are not in this form, retain from currentAircraft
           isMaintenanceTracked: currentAircraft.isMaintenanceTracked,
           trackedComponentNames: currentAircraft.trackedComponentNames,
-          engineDetails: currentAircraft.engineDetails, // Keep existing engine details
+          engineDetails: currentAircraft.engineDetails, 
         };
         await saveFleetAircraft(updatedAircraftData);
         setCurrentAircraft(updatedAircraftData);
@@ -469,9 +468,9 @@ export default function AircraftMaintenanceDetailPage() {
         return { icon: <XCircleIcon className="h-5 w-5" />, colorClass: 'text-red-500 dark:text-red-400', label: 'Overdue' };
     }
     
-    const daysAlertThreshold = 30;
-    const hoursAlertThreshold = 25;
-    const cyclesAlertThreshold = 50;
+    const daysAlertThreshold = task.alertDaysPrior ?? 30;
+    const hoursAlertThreshold = task.alertHoursPrior ?? 25;
+    const cyclesAlertThreshold = task.alertCyclesPrior ?? 50;
 
     if (toGo.unit === 'days' && toGo.numeric < daysAlertThreshold) return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-yellow-500 dark:text-yellow-400', label: 'Due Soon' };
     if (toGo.unit === 'hrs' && toGo.numeric < hoursAlertThreshold) return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-yellow-500 dark:text-yellow-400', label: 'Due Soon' };
@@ -959,18 +958,22 @@ export default function AircraftMaintenanceDetailPage() {
                   <FormField control={aircraftInfoForm.control} name="primaryContactName" render={({ field }) => (<FormItem><FormLabel>Primary Contact Name</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
                   <FormField control={aircraftInfoForm.control} name="primaryContactPhone" render={({ field }) => (<FormItem><FormLabel>Contact Phone</FormLabel><FormControl><Input type="tel" {...field} /></FormControl><FormMessage /></FormItem>)} />
                   <FormField control={aircraftInfoForm.control} name="primaryContactEmail" render={({ field }) => (<FormItem><FormLabel>Contact Email</FormLabel><FormControl><Input type="email" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                  
+                  <div className="pt-2 text-sm">
+                    <h4 className="font-semibold text-muted-foreground mb-1">Engine Details (Read-only):</h4>
+                    {(currentAircraft.engineDetails && currentAircraft.engineDetails.length > 0) ? (
+                        currentAircraft.engineDetails.map((engine, idx) => (
+                          <div key={idx} className="p-2 border rounded-md bg-muted/30 mb-1">
+                             <p><strong className="text-muted-foreground">Engine {idx+1} Model:</strong> {engine.model || 'N/A'}</p>
+                             <p><strong className="text-muted-foreground">Engine {idx+1} S/N:</strong> {engine.serialNumber || 'N/A'}</p>
+                          </div>
+                        ))
+                    ) : (
+                         <p className="text-xs text-muted-foreground">N/A</p>
+                    )}
+                  </div>
+
                   <FormField control={aircraftInfoForm.control} name="internalNotes" render={({ field }) => (<FormItem><FormLabel>Internal Notes</FormLabel><FormControl><Textarea {...field} rows={3} /></FormControl><FormMessage /></FormItem>)} />
-                   {currentAircraft.engineDetails && currentAircraft.engineDetails.length > 0 && (
-                    <div className="pt-2 text-sm">
-                      <h4 className="font-semibold text-muted-foreground mb-1">Engine Details (Read-only):</h4>
-                      {currentAircraft.engineDetails.map((engine, idx) => (
-                        <div key={idx} className="p-2 border rounded-md bg-muted/30 mb-1">
-                           <p><strong className="text-muted-foreground">Engine {idx+1} Model:</strong> {engine.model || 'N/A'}</p>
-                           <p><strong className="text-muted-foreground">Engine {idx+1} S/N:</strong> {engine.serialNumber || 'N/A'}</p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </form>
               </Form>
             ) : (
@@ -983,23 +986,28 @@ export default function AircraftMaintenanceDetailPage() {
                 <p><strong className="text-muted-foreground w-28 inline-block">Phone:</strong> {currentAircraft.primaryContactPhone || 'N/A'}</p>
                 <p><strong className="text-muted-foreground w-28 inline-block">Email:</strong> {currentAircraft.primaryContactEmail || 'N/A'}</p>
                 
-                {currentAircraft.engineDetails && currentAircraft.engineDetails.length > 0 && (
-                  <div className="pt-2">
-                    <h4 className="font-semibold text-muted-foreground">Engine Details:</h4>
-                    {currentAircraft.engineDetails.map((engine: EngineDetail, idx: number) => (
+                <div className="pt-2">
+                  <h4 className="font-semibold text-muted-foreground">Engine Details:</h4>
+                  {currentAircraft.engineDetails && currentAircraft.engineDetails.length > 0 ? (
+                    currentAircraft.engineDetails.map((engine: EngineDetail, idx: number) => (
                         <div key={idx} className="pl-2 border-l ml-1 mt-1">
                             <p><strong className="text-muted-foreground w-24 inline-block">Eng {idx+1} Model:</strong> {engine.model || 'N/A'}</p>
                             <p><strong className="text-muted-foreground w-24 inline-block">Eng {idx+1} S/N:</strong> {engine.serialNumber || 'N/A'}</p>
                         </div>
-                    ))}
-                  </div>
-                )}
-                {currentAircraft.internalNotes && (
-                   <div className="pt-2">
-                    <h4 className="font-semibold text-muted-foreground">Internal Notes:</h4>
+                    ))
+                  ) : (
+                     <p className="text-xs text-muted-foreground pl-2">N/A</p>
+                  )}
+                </div>
+                
+                <div className="pt-2">
+                  <h4 className="font-semibold text-muted-foreground">Internal Notes:</h4>
+                  {currentAircraft.internalNotes ? (
                     <p className="whitespace-pre-wrap p-2 bg-muted/30 rounded-md text-xs">{currentAircraft.internalNotes}</p>
-                  </div>
-                )}
+                  ) : (
+                    <p className="text-xs text-muted-foreground pl-2">N/A</p>
+                  )}
+                </div>
               </div>
             )}
           </CardContent>
@@ -1140,7 +1148,7 @@ export default function AircraftMaintenanceDetailPage() {
                       <TableCell className="text-xs">{frequency}</TableCell>
                       <TableCell className="text-xs">{lastDoneDisplay}</TableCell>
                       <TableCell className="text-xs">{dueAtDisplay}</TableCell>
-                      <TableCell className={`font-semibold text-xs ${item.toGoData?.isOverdue ? (status.label === 'Grace Period' ? 'text-yellow-600' : 'text-red-600') : (item.toGoData?.unit === 'days' && item.toGoData?.numeric < 30) || (item.toGoData?.unit === 'hrs' && item.toGoData?.numeric < 25) || (item.toGoData?.unit === 'cycles' && item.toGoData?.numeric < 50) ? 'text-yellow-600' : 'text-green-600'}`}>{item.toGoData?.text}</TableCell>
+                      <TableCell className={`font-semibold text-xs ${item.toGoData?.isOverdue ? (status.label === 'Grace Period' ? 'text-yellow-600' : 'text-red-600') : (item.toGoData?.unit === 'days' && item.toGoData?.numeric < (item.alertDaysPrior ?? 30)) || (item.toGoData?.unit === 'hrs' && item.toGoData?.numeric < (item.alertHoursPrior ?? 25)) || (item.toGoData?.unit === 'cycles' && item.toGoData?.numeric < (item.alertCyclesPrior ?? 50)) ? 'text-yellow-600' : 'text-green-600'}`}>{item.toGoData?.text}</TableCell>
                       <TableCell className="text-center">
                         <div className={`flex flex-col items-center justify-center ${status.colorClass}`}>
                           {status.icon}
