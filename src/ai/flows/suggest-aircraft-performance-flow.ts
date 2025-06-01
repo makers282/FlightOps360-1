@@ -18,8 +18,6 @@ const SuggestAircraftPerformanceInputSchema = z.object({
 export type SuggestAircraftPerformanceInput = z.infer<typeof SuggestAircraftPerformanceInputSchema>;
 
 // Output schema - this should match the AircraftPerformanceFormData in the form
-// For consistency and to avoid import issues if form schema changes, we define it here.
-// Ensure this is kept in sync with AircraftPerformanceFormData in the frontend.
 const AircraftPerformanceOutputSchema = z.object({
   takeoffSpeed: z.coerce.number().min(0).optional().describe("Typical takeoff speed in knots (kts)."),
   landingSpeed: z.coerce.number().min(0).optional().describe("Typical landing speed in knots (kts)."),
@@ -44,27 +42,25 @@ const prompt = ai.definePrompt({
   name: 'suggestAircraftPerformancePrompt',
   input: {schema: SuggestAircraftPerformanceInputSchema},
   output: {schema: AircraftPerformanceOutputSchema},
-  prompt: `You are an expert aviation performance specialist.
-Your task is to provide a comprehensive set of typical aircraft performance parameters for the given aircraft model.
-Strive to fill as many fields as possible based on your general aviation knowledge and typical values for the aircraft class if specific data is not readily available. Ensure all numeric values are integers.
-
+  system: "You are an expert aviation performance specialist. Your task is to provide a comprehensive set of typical aircraft performance parameters for the given aircraft model. Strive to fill as many fields as possible with realistic integer values for numeric fields.",
+  prompt: `
 Aircraft Model: {{{aircraftName}}}
 
-Provide estimates for the following parameters. Numeric values should be integers.
-- takeoffSpeed (kts)
-- landingSpeed (kts)
-- climbSpeed (kts)
-- climbRate (ft/min)
-- cruiseSpeed (kts)
-- cruiseAltitude (ft)
-- descentSpeed (kts)
-- descentRate (ft/min)
-- fuelType (e.g., "Jet Fuel", "Avgas"). For most jet aircraft (like Learjet, Citation, Gulfstream, Bombardier), this MUST be "Jet Fuel". For piston aircraft, it is typically "Avgas". Provide this value. If truly unknown for a very obscure type, provide "Unknown".
-- fuelBurn (gallons per hour or pounds per hour - common unit for the type)
-- maxRange (nautical miles)
-- maxAllowableTakeoffWeight (pounds)
+Please provide estimates for the following performance parameters. All numeric values should be integers.
+- takeoffSpeed (integer, kts)
+- landingSpeed (integer, kts)
+- climbSpeed (integer, kts)
+- climbRate (integer, ft/min)
+- cruiseSpeed (integer, kts at typical cruise altitude)
+- cruiseAltitude (integer, ft)
+- descentSpeed (integer, kts)
+- descentRate (integer, ft/min)
+- fuelType (string, e.g., "Jet Fuel", "Avgas"). For jet aircraft like Learjet, Citation, Gulfstream, Bombardier, this MUST be "Jet Fuel".
+- fuelBurn (integer, common unit for the type like GPH or PPH)
+- maxRange (integer, nautical miles)
+- maxAllowableTakeoffWeight (integer, pounds)
 
-If a specific numeric value is not commonly known or varies too widely, you may omit it, but for fuelType, please provide the most common type.
+If a specific numeric value is not commonly known or varies too widely, you may omit it. For fuelType, please provide the most common type; if truly unknown for an obscure type, provide "Unknown".
 Return the data strictly in the specified JSON output format.
 
 Example for "Learjet 35":
@@ -99,8 +95,9 @@ Example for "Cessna Citation CJ3":
   "maxAllowableTakeoffWeight": 13870
 }
 
-Provide realistic estimates based on common knowledge for the aircraft type.
+Provide realistic estimates based on common knowledge for the aircraft type: {{{aircraftName}}}.
 Ensure all numeric values are integers.
+Output only the JSON.
 `,
 });
 
@@ -115,8 +112,7 @@ const suggestAircraftPerformanceFlow = ai.defineFlow(
     if (!output) {
       throw new Error("The AI model did not return an output for aircraft performance suggestion.");
     }
-    // The AI might return some fields as null/undefined if it can't find them.
-    // The Zod schema handles optional fields. Client-side will handle rounding.
+    // The client-side form will handle rounding and coercing now.
     return output;
   }
 );
