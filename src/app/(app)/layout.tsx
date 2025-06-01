@@ -10,7 +10,6 @@ import {
   Calculator,
   Calendar,
   CalendarCheck2,
-  CalendarClock,
   CalendarDays,
   CalendarPlus,
   FileSpreadsheet,
@@ -157,8 +156,7 @@ export default function AppLayout({ children }: PropsWithChildren) {
                 tooltip="Crew Management" 
                 isActive={
                   pathname.startsWith('/crew') || 
-                  pathname === '/trips/crew-schedule' || 
-                  pathname === '/trips/duty-time'
+                  pathname === '/trips/crew-schedule'
                 }
               >
                 <Users /> 
@@ -177,13 +175,9 @@ export default function AppLayout({ children }: PropsWithChildren) {
                   <GraduationCap />
                   Crew Training
                 </SidebarMenuSubButton>
-                <SidebarMenuSubButton href="/trips/crew-schedule" tooltip="Crew Schedule Calendar" isActive={pathname === '/trips/crew-schedule'}>
+                <SidebarMenuSubButton href="/trips/crew-schedule" tooltip="Crew Schedule & Duty Times" isActive={pathname === '/trips/crew-schedule'}>
                   <CalendarCheck2 />
                   Crew Schedule
-                </SidebarMenuSubButton>
-                <SidebarMenuSubButton href="/trips/duty-time" tooltip="Duty Time Calendar" isActive={pathname === '/trips/duty-time'}>
-                  <CalendarClock />
-                  Duty Times
                 </SidebarMenuSubButton>
               </SidebarMenuSub>
             </SidebarMenuItem>
