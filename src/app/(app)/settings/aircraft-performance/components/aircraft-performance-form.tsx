@@ -15,8 +15,8 @@ import { PlaneTakeoff as PerformanceIcon, Save, Wand2, Loader2, AlertTriangle } 
 import { useToast } from '@/hooks/use-toast';
 import { suggestAircraftPerformance, type SuggestAircraftPerformanceInput, type AircraftPerformanceOutput } from '@/ai/flows/suggest-aircraft-performance-flow';
 import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
-import { 
-  fetchAircraftPerformance, 
+import {
+  fetchAircraftPerformance,
   saveAircraftPerformance,
   type AircraftPerformanceData
 } from '@/ai/flows/manage-aircraft-performance-flow';
@@ -29,7 +29,7 @@ type AircraftPerformanceFormData = AircraftPerformanceData;
 
 interface FleetAircraftSelectOption {
   id: string;
-  label: string; 
+  label: string;
   model: string;
 }
 
@@ -47,7 +47,7 @@ export function AircraftPerformanceForm() {
 
   const form = useForm<AircraftPerformanceFormData>({
     resolver: zodResolver(AircraftPerformanceDataSchema),
-    defaultValues: { 
+    defaultValues: {
         takeoffSpeed: undefined,
         landingSpeed: undefined,
         climbSpeed: undefined,
@@ -60,7 +60,7 @@ export function AircraftPerformanceForm() {
         fuelBurn: undefined,
         maxRange: undefined,
         maxAllowableTakeoffWeight: undefined,
-    }, 
+    },
   });
 
   useEffect(() => {
@@ -68,10 +68,10 @@ export function AircraftPerformanceForm() {
       setIsLoadingAircraft(true);
       try {
         const fleet = await fetchFleetAircraft();
-        const options = fleet.map(ac => ({ 
-          id: ac.id, 
+        const options = fleet.map(ac => ({
+          id: ac.id,
           label: `${ac.tailNumber} - ${ac.model}`,
-          model: ac.model 
+          model: ac.model
         }));
         setFleetSelectOptions(options);
       } catch (error) {
@@ -82,22 +82,26 @@ export function AircraftPerformanceForm() {
       }
     };
     loadFleet();
-  }, [toast]); 
+  }, [toast]);
 
   const loadPerformanceDataForAircraft = useCallback(async (aircraftId: string) => {
     startFetchingPerformanceTransition(async () => {
-      form.reset({}); 
+      form.reset({
+        takeoffSpeed: undefined, landingSpeed: undefined, climbSpeed: undefined, climbRate: undefined,
+        cruiseSpeed: undefined, cruiseAltitude: undefined, descentSpeed: undefined, descentRate: undefined,
+        fuelType: undefined, fuelBurn: undefined, maxRange: undefined, maxAllowableTakeoffWeight: undefined,
+      });
       try {
         const data = await fetchAircraftPerformance({ aircraftId });
         if (data) {
           const numericData: Partial<AircraftPerformanceFormData> = {};
           for (const key in data) {
             const typedKey = key as keyof AircraftPerformanceData;
-            if (AircraftPerformanceDataSchema.shape[typedKey]) {
-              const fieldSchema = AircraftPerformanceDataSchema.shape[typedKey];
+            if (Object.prototype.hasOwnProperty.call(AircraftPerformanceDataSchema.shape, typedKey)) {
+              const fieldSchema = AircraftPerformanceDataSchema.shape[typedKey as keyof typeof AircraftPerformanceDataSchema.shape];
               if ((fieldSchema instanceof z.ZodNumber || (fieldSchema instanceof z.ZodOptional && fieldSchema._def.innerType instanceof z.ZodNumber)) && data[typedKey] !== null && data[typedKey] !== undefined) {
                 (numericData as any)[typedKey] = Number(data[typedKey]);
-              } else {
+              } else if (data[typedKey] !== undefined) {
                 (numericData as any)[typedKey] = data[typedKey];
               }
             }
@@ -105,13 +109,11 @@ export function AircraftPerformanceForm() {
           form.reset(numericData);
           toast({ title: "Performance Data Loaded", description: `Showing data for ${fleetSelectOptions.find(ac => ac.id === aircraftId)?.label}.`, variant: "default" });
         } else {
-          form.reset({});
           toast({ title: "No Saved Data", description: `No performance data found for this aircraft. You can enter new data or use AI suggestion.`, variant: "default" });
         }
       } catch (error) {
         console.error("Failed to fetch performance data:", error);
         toast({ title: "Error Loading Data", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
-        form.reset({});
       }
     });
   }, [form, toast, fleetSelectOptions, startFetchingPerformanceTransition]);
@@ -120,7 +122,11 @@ export function AircraftPerformanceForm() {
     if (selectedAircraftId) {
       loadPerformanceDataForAircraft(selectedAircraftId);
     } else {
-      form.reset({}); 
+      form.reset({
+        takeoffSpeed: undefined, landingSpeed: undefined, climbSpeed: undefined, climbRate: undefined,
+        cruiseSpeed: undefined, cruiseAltitude: undefined, descentSpeed: undefined, descentRate: undefined,
+        fuelType: undefined, fuelBurn: undefined, maxRange: undefined, maxAllowableTakeoffWeight: undefined,
+      });
     }
   }, [selectedAircraftId, loadPerformanceDataForAircraft, form]);
 
@@ -133,18 +139,21 @@ export function AircraftPerformanceForm() {
     startSaveTransition(async () => {
       try {
         const dataToSave: AircraftPerformanceData = {};
-        for (const key in formData) {
-            const typedKey = key as keyof AircraftPerformanceFormData;
-            const value = formData[typedKey];
-            if (AircraftPerformanceDataSchema.shape[typedKey]) {
-              const fieldSchema = AircraftPerformanceDataSchema.shape[typedKey];
-               if ((fieldSchema instanceof z.ZodNumber || (fieldSchema instanceof z.ZodOptional && fieldSchema._def.innerType instanceof z.ZodNumber)) && value !== undefined && value !== null && value !== '') {
-                (dataToSave as any)[typedKey] = Number(value);
-              } else if (value !== undefined) {
-                (dataToSave as any)[typedKey] = value;
-              }
+        const schemaKeys = Object.keys(AircraftPerformanceDataSchema.shape) as Array<keyof AircraftPerformanceFormData>;
+        schemaKeys.forEach(key => {
+            const value = formData[key];
+            if (value !== undefined && value !== null && String(value).trim() !== '') {
+                const fieldSchema = AircraftPerformanceDataSchema.shape[key];
+                if (fieldSchema instanceof z.ZodNumber || (fieldSchema instanceof z.ZodOptional && fieldSchema._def.innerType instanceof z.ZodNumber)) {
+                    const numValue = Number(value);
+                    if (!isNaN(numValue)) {
+                       (dataToSave as any)[key] = numValue;
+                    }
+                } else {
+                   (dataToSave as any)[key] = value;
+                }
             }
-        }
+        });
 
         const inputToSave: SaveAircraftPerformanceInput = {
           aircraftId: selectedAircraftId,
@@ -160,7 +169,7 @@ export function AircraftPerformanceForm() {
     });
   };
 
-  const handleSetupWithAi = async () => {
+  const handleSetupWithAi = useCallback(async () => {
     if (!selectedAircraftId) {
       toast({ title: "No Aircraft Selected", description: "Please select an aircraft first.", variant: "destructive" });
       return;
@@ -175,67 +184,78 @@ export function AircraftPerformanceForm() {
       try {
         const aiInput: SuggestAircraftPerformanceInput = { aircraftName: selectedAircraftObject.model };
         const suggestedData: AircraftPerformanceOutput = await suggestAircraftPerformance(aiInput);
-        
-        const processedData: Partial<AircraftPerformanceFormData> = {};
-        for (const key in suggestedData) {
-            const typedKey = key as keyof AircraftPerformanceOutput;
-            const value = suggestedData[typedKey];
 
-            if (value !== null && value !== undefined) {
-                if (AircraftPerformanceDataSchema.shape[typedKey as keyof typeof AircraftPerformanceDataSchema.shape]) {
-                    const fieldSchema = AircraftPerformanceDataSchema.shape[typedKey as keyof typeof AircraftPerformanceDataSchema.shape];
-                    if (fieldSchema instanceof z.ZodNumber || (fieldSchema instanceof z.ZodOptional && fieldSchema._def.innerType instanceof z.ZodNumber)) {
-                        const numValue = Number(value);
-                        (processedData as any)[typedKey] = isNaN(numValue) ? undefined : Math.round(numValue);
-                    } else {
-                        (processedData as any)[typedKey] = value;
-                    }
+        const processedData: Partial<AircraftPerformanceFormData> = {};
+        const schemaKeys = Object.keys(AircraftPerformanceDataSchema.shape) as Array<keyof AircraftPerformanceFormData>;
+
+        schemaKeys.forEach(key => {
+            const aiValue = (suggestedData as any)[key];
+            const fieldSchema = AircraftPerformanceDataSchema.shape[key];
+
+            if (aiValue === null || aiValue === undefined || String(aiValue).trim() === '') {
+                (processedData as any)[key] = undefined;
+            } else if (fieldSchema instanceof z.ZodNumber || (fieldSchema instanceof z.ZodOptional && fieldSchema._def.innerType instanceof z.ZodNumber)) {
+                const numValue = Number(aiValue);
+                if (isNaN(numValue)) {
+                    (processedData as any)[key] = undefined;
+                } else {
+                    (processedData as any)[key] = Math.round(numValue);
                 }
+            } else if (fieldSchema instanceof z.ZodString || (fieldSchema instanceof z.ZodOptional && fieldSchema._def.innerType instanceof z.ZodString)) {
+                const strValue = String(aiValue).trim();
+                (processedData as any)[key] = strValue === '' ? undefined : strValue;
             } else {
-                (processedData as any)[typedKey] = undefined;
+                 (processedData as any)[key] = aiValue;
             }
-        }
-        form.reset(processedData); 
-        toast({ title: "AI Suggestions Applied", description: "Review and save the suggested performance parameters. Some fields may be empty if AI had no data.", variant: "default", action: <Wand2 className="text-green-500"/> });
+        });
+        form.reset(processedData);
+        toast({ title: "AI Suggestions Applied", description: "Review and save the suggested performance parameters.", variant: "default", action: <Wand2 className="text-green-500"/> });
       } catch (e) {
         console.error("Error suggesting aircraft performance:", e);
         const errorMessage = e instanceof Error ? e.message : "AI failed to suggest performance data.";
         toast({ title: "AI Suggestion Error", description: errorMessage, variant: "destructive", action: <AlertTriangle className="text-white"/> });
       }
     });
-  };
+  }, [selectedAircraftId, fleetSelectOptions, startAiSuggestionTransition, form, toast]);
 
-  const renderInputWithUnit = (name: keyof AircraftPerformanceFormData, label: string, unit: string, placeholder?: string, type: string = "number") => (
-    <FormField
-      control={form.control}
-      name={name}
-      render={({ field }) => (
-        <FormItem>
-          <FormLabel>{label}</FormLabel>
-          <div className="flex items-center gap-2">
-            <FormControl>
-              <Input 
-                type={type} 
-                placeholder={placeholder || "0"} 
-                {...field} 
-                value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined || field.value === null ? '' : String(field.value)}
-                onChange={e => {
-                  const valStr = e.target.value;
-                  if (valStr === '') field.onChange(undefined);
-                  else { 
-                    const num = type === 'number' ? parseFloat(valStr) : valStr; 
-                    field.onChange(isNaN(num as number) && type === 'number' ? undefined : num); 
-                  }
-                }}
-              />
-            </FormControl>
-            <span className="text-sm text-muted-foreground whitespace-nowrap">{unit}</span>
-          </div>
-          <FormMessage />
-        </FormItem>
-      )}
-    />
-  );
+  const renderInputWithUnit = useCallback((name: keyof AircraftPerformanceFormData, label: string, unit: string, placeholder?: string, type: string = "number") => {
+    return (
+      <FormField
+        control={form.control}
+        name={name}
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>{label}</FormLabel>
+            <div className="flex items-center gap-2">
+              <FormControl>
+                <Input
+                  type={type}
+                  placeholder={placeholder || "e.g., 120"}
+                  {...field}
+                  value={field.value === undefined || field.value === null || (typeof field.value === 'number' && isNaN(field.value)) ? '' : String(field.value)}
+                  onChange={e => {
+                    const valStr = e.target.value;
+                    if (valStr === '') {
+                       field.onChange(undefined);
+                    } else {
+                      if (type === 'number') {
+                          const num = parseFloat(valStr);
+                          field.onChange(isNaN(num) ? undefined : num);
+                      } else {
+                           field.onChange(valStr);
+                      }
+                    }
+                  }}
+                />
+              </FormControl>
+              <span className="text-sm text-muted-foreground whitespace-nowrap">{unit}</span>
+            </div>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+    );
+  }, [form.control]);
 
   return (
     <Form {...form}>
@@ -254,9 +274,9 @@ export function AircraftPerformanceForm() {
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Select 
-              onValueChange={setSelectedAircraftId} 
-              value={selectedAircraftId || ""} 
+            <Select
+              onValueChange={setSelectedAircraftId}
+              value={selectedAircraftId || ""}
               disabled={isLoadingAircraft || isFetchingPerformance}
             >
               <SelectTrigger className="w-full sm:w-[350px]">
@@ -281,7 +301,7 @@ export function AircraftPerformanceForm() {
                         <Loader2 className="h-6 w-6 animate-spin text-primary" />
                         Loading Performance Data...
                     </CardTitle>
-                </CardHeader>
+                </Header>
                 <CardContent className="space-y-4 pt-6">
                     <Skeleton className="h-10 w-full mb-2" />
                     <Skeleton className="h-10 w-full mb-2" />
@@ -302,28 +322,28 @@ export function AircraftPerformanceForm() {
                 <PerformanceIcon className="h-6 w-6 text-primary" />
                 <CardTitle>Performance Settings for {fleetSelectOptions.find(ac => ac.id === selectedAircraftId)?.label || selectedAircraftId}</CardTitle>
               </div>
-              <CardDescription>Adjust the performance parameters below. AI suggestions can provide a starting point. Ensure all numeric values are integers.</CardDescription>
+              <CardDescription>Adjust the performance parameters below. AI suggestions can provide a starting point.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6 pt-6">
               <div className="grid grid-cols-1 gap-x-6 gap-y-8 md:grid-cols-2">
-                {renderInputWithUnit("takeoffSpeed", "Takeoff Speed", "kts")}
-                {renderInputWithUnit("landingSpeed", "Landing Speed", "kts")}
-                {renderInputWithUnit("climbSpeed", "Climb Speed", "kts")}
-                {renderInputWithUnit("climbRate", "Climb Rate", "ft/min")}
-                {renderInputWithUnit("cruiseSpeed", "Cruise Speed", "kts")}
-                {renderInputWithUnit("cruiseAltitude", "Cruise Altitude", "ft")}
-                {renderInputWithUnit("descentSpeed", "Descent Speed", "kts")}
-                {renderInputWithUnit("descentRate", "Descent Rate", "ft/min")}
-                
+                {renderInputWithUnit("takeoffSpeed", "Takeoff Speed", "kts", "e.g., 120")}
+                {renderInputWithUnit("landingSpeed", "Landing Speed", "kts", "e.g., 110")}
+                {renderInputWithUnit("climbSpeed", "Climb Speed", "kts", "e.g., 250")}
+                {renderInputWithUnit("climbRate", "Climb Rate", "ft/min", "e.g., 3000")}
+                {renderInputWithUnit("cruiseSpeed", "Cruise Speed", "kts", "e.g., 450")}
+                {renderInputWithUnit("cruiseAltitude", "Cruise Altitude", "ft", "e.g., 41000")}
+                {renderInputWithUnit("descentSpeed", "Descent Speed", "kts", "e.g., 280")}
+                {renderInputWithUnit("descentRate", "Descent Rate", "ft/min", "e.g., 2000")}
+
                 <FormField
                   control={form.control}
                   name="fuelType"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Fuel Type</FormLabel>
-                      <Select 
-                        onValueChange={field.onChange} 
-                        value={field.value || ""} 
+                      <Select
+                        onValueChange={(value) => field.onChange(value === "" ? undefined : value)}
+                        value={field.value || ""}
                         name={field.name}
                        >
                         <FormControl>
@@ -341,9 +361,9 @@ export function AircraftPerformanceForm() {
                     </FormItem>
                   )}
                 />
-                {renderInputWithUnit("fuelBurn", "Fuel Burn", "gls/hr")}
-                {renderInputWithUnit("maxRange", "Maximum Range", "nm")}
-                {renderInputWithUnit("maxAllowableTakeoffWeight", "Max Allowable T/O Weight", "lbs")}
+                {renderInputWithUnit("fuelBurn", "Fuel Burn", "gls/hr", "e.g., 300")}
+                {renderInputWithUnit("maxRange", "Maximum Range", "nm", "e.g., 2000")}
+                {renderInputWithUnit("maxAllowableTakeoffWeight", "Max Allowable T/O Weight", "lbs", "e.g., 18000")}
               </div>
             </CardContent>
             <CardFooter>
@@ -359,7 +379,7 @@ export function AircraftPerformanceForm() {
                 Please select an aircraft to view or edit its performance settings.
             </div>
         )}
-        {isLoadingAircraft && !selectedAircraftId && ( 
+        {isLoadingAircraft && !selectedAircraftId && (
             <div className="text-center py-10 text-muted-foreground flex items-center justify-center">
                 <Loader2 className="mr-2 h-5 w-5 animate-spin"/> Loading aircraft data...
             </div>
@@ -368,4 +388,3 @@ export function AircraftPerformanceForm() {
     </Form>
   );
 }
-
