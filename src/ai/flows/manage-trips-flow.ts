@@ -27,13 +27,18 @@ import {
 const TRIPS_COLLECTION = 'trips';
 
 // Exported async function that clients will call
-export async function saveTrip(input: SaveTripInput): Promise<Trip> {
-  const firestoreDocId = input.tripId && (await getDoc(doc(db, TRIPS_COLLECTION, input.tripId))).exists() 
-    ? input.tripId 
-    : doc(collection(db, TRIPS_COLLECTION)).id; 
+// Input is now the full Trip object which might include 'id' for updates
+export async function saveTrip(input: Trip): Promise<Trip> {
+  // Use input.id if provided (for updates), otherwise generate a new Firestore document ID
+  const firestoreDocId = input.id || doc(collection(db, TRIPS_COLLECTION)).id;
+  
+  // Prepare data for the flow: exclude 'id', 'createdAt', 'updatedAt' from the data payload
+  // as these are handled by Firestore or are part of the document key.
+  const { id, createdAt, updatedAt, ...tripDataForFlow } = input;
 
   console.log('[ManageTripsFlow Firestore] Attempting to save trip with Firestore ID:', firestoreDocId, 'User-facing TripID:', input.tripId);
-  return saveTripFlow({ firestoreDocId, tripData: input });
+  // Pass the determined firestoreDocId and the cleaned tripData to the internal flow
+  return saveTripFlow({ firestoreDocId, tripData: tripDataForFlow as SaveTripInput });
 }
 
 const InternalSaveTripInputSchema = z.object({
@@ -57,21 +62,25 @@ const saveTripFlow = ai.defineFlow(
       let finalDataToSave;
 
       if (docSnap.exists()) {
+        // Document exists, prepare for update
         finalDataToSave = {
-          ...tripData, 
-          id: firestoreDocId, 
-          updatedAt: serverTimestamp(),
-          createdAt: docSnap.data().createdAt || serverTimestamp(), 
+          ...tripData, // User-provided data
+          id: firestoreDocId, // Ensure this matches the document ID for consistency in returned object
+          updatedAt: serverTimestamp(), // Always update 'updatedAt'
+          createdAt: docSnap.data().createdAt || serverTimestamp(), // Preserve original 'createdAt'
         };
       } else {
+        // New document, set both timestamps
         finalDataToSave = {
-          ...tripData, 
-          id: firestoreDocId, 
+          ...tripData,
+          id: firestoreDocId, // Ensure this matches the document ID for consistency in returned object
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         };
       }
       
+      // Use setDoc with merge:true for updates to avoid overwriting fields not in tripData (if any were handled differently)
+      // Or simply setDoc if tripData is always the complete set of fields (excluding id, createdAt, updatedAt from the payload)
       await setDoc(tripDocRef, finalDataToSave, { merge: true });
       console.log('Saved trip in Firestore:', firestoreDocId);
 
@@ -82,12 +91,14 @@ const saveTripFlow = ai.defineFlow(
         throw new Error("Failed to retrieve saved trip data from Firestore.");
       }
       
+      // Construct the full Trip object to return, ensuring timestamps are ISO strings
       const outputTrip: Trip = {
-        ...savedData,
-        id: firestoreDocId, 
+        ...savedData, // This will include all fields from Firestore
+        id: firestoreDocId, // Ensure the 'id' field in the returned object is the Firestore doc ID
+        // Convert Timestamps to ISO strings for client consumption
         createdAt: (savedData.createdAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
         updatedAt: (savedData.updatedAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
-      } as Trip; 
+      } as Trip; // Cast as Trip to satisfy the output schema
       return outputTrip;
 
     } catch (error) {
@@ -151,8 +162,9 @@ const fetchTripByIdFlow = ai.defineFlow(
       if (docSnap.exists()) {
         const data = docSnap.data();
         const trip: Trip = {
-          id: docSnap.id,
-          ...data,
+          // id: docSnap.id, // This line becomes redundant if 'id' is already stored IN the document by saveTripFlow
+          ...data, // Assuming 'id' (Firestore doc id) is now part of the document data saved by saveTripFlow
+          id: docSnap.id, // Explicitly set the Firestore document ID here for safety
           createdAt: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
           updatedAt: (data.updatedAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
         } as Trip; 
@@ -188,7 +200,9 @@ const deleteTripFlow = ai.defineFlow(
 
       if (!docSnap.exists()) {
           console.warn(`Trip with ID ${input.id} not found for deletion.`);
-          return { success: false, tripId: input.id };
+          // Depending on desired behavior, could return success: false or throw error
+          // For robustness, let's say it's not a failure if it's already gone.
+          return { success: true, tripId: input.id }; // Or success:false if strictness is needed
       }
       
       await deleteDoc(tripDocRef);

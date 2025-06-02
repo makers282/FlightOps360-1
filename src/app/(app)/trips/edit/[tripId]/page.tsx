@@ -7,8 +7,8 @@ import { PageHeader } from '@/components/page-header';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Loader2, Edit3, ArrowLeft, InfoIcon } from 'lucide-react';
-import { fetchTripById, saveTrip, type SaveTripInput } from '@/ai/flows/manage-trips-flow';
-import type { Trip } from '@/ai/schemas/trip-schemas';
+import { fetchTripById, saveTrip } from '@/ai/flows/manage-trips-flow'; // SaveTripInput type is not directly needed here
+import type { Trip, SaveTripInput } from '@/ai/schemas/trip-schemas'; // Import SaveTripInput for type casting
 import { useToast } from '@/hooks/use-toast';
 import { TripForm, type FullTripFormData } from './components/trip-form';
 
@@ -57,8 +57,11 @@ function EditTripPageContent() {
       return;
     }
     startSavingTransition(async () => {
-      const tripToSave: SaveTripInput = {
-        tripId: tripData.tripId, // Use existing tripId
+      // Construct the object to save, ensuring we pass the original Firestore document ID
+      const tripToSave: Trip = {
+        ...tripData, // Spread existing trip data to preserve fields like createdAt, status, etc.
+        id: tripData.id, // CRITICAL: Pass the original Firestore document ID for update
+        tripId: formData.tripId, // User-facing Trip ID from form
         selectedCustomerId: formData.selectedCustomerId,
         clientName: formData.clientName,
         clientEmail: formData.clientEmail,
@@ -77,20 +80,16 @@ function EditTripPageContent() {
           };
         }),
         notes: formData.notes,
-        status: tripData.status, // Preserve existing status, status change is handled elsewhere
+        // status: tripData.status, // Preserve existing status if not changed by form, or update if status is part of FullTripFormData
       };
 
       try {
-        // The saveTrip flow needs the Firestore document ID (tripData.id) to know which document to update.
-        // And the data itself should contain the user-facing tripId.
-        const updatedTrip = await saveTrip({ ...tripToSave, id: tripData.id });
-        setTripData(updatedTrip); // Update local state with the response from saveTrip
+        const savedTrip = await saveTrip(tripToSave); // saveTrip now expects the full Trip object
+        setTripData(savedTrip); // Update local state with the response from saveTrip
         toast({
           title: "Trip Updated",
-          description: `Trip ${updatedTrip.tripId} has been successfully updated.`,
+          description: `Trip ${savedTrip.tripId} has been successfully updated.`,
         });
-        // Optionally, redirect or indicate success
-        // router.push(`/trips/details/${updatedTrip.id}`);
       } catch (error) {
         console.error("Failed to save trip:", error);
         toast({
