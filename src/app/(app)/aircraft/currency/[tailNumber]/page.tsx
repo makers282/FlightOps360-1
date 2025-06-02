@@ -25,6 +25,7 @@ import { AddMaintenanceTaskModal, type MaintenanceTaskFormData, defaultMaintenan
 // import { ManageEngineDetailsModal } from './components/manage-engine-details-modal';
 // import { ManagePropellerDetailsModal } from './components/manage-propeller-details-modal';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'; // Added this import
 
 import { Wrench, PlusCircle, ArrowLeft, PlaneIcon, Edit, Loader2, InfoIcon, Phone, UserCircle, MapPin, Save, XCircle, Edit2, Edit3, AlertTriangle, CheckCircle2, XCircle as XCircleIcon, Search, ArrowUpDown, ArrowDown, ArrowUp, Printer, Filter, Mail, BookText, Hash, Tag, Settings2 } from 'lucide-react';
 import { format, parse, addDays, isValid, addMonths, addYears, endOfMonth, parseISO, differenceInCalendarDays } from 'date-fns';
@@ -35,6 +36,7 @@ import { fetchMaintenanceTasksForAircraft, saveMaintenanceTask, deleteMaintenanc
 import { fetchComponentTimesForAircraft, saveComponentTimesForAircraft, type AircraftComponentTimes } from '@/ai/flows/manage-component-times-flow';
 import { fetchCompanyProfile, type CompanyProfile } from '@/ai/flows/manage-company-profile-flow';
 import { PageHeader } from '@/components/page-header';
+import { Checkbox } from '@/components/ui/checkbox';
 
 
 export interface DisplayMaintenanceItem extends FlowMaintenanceTask {
@@ -1194,5 +1196,7 @@ export default function AircraftMaintenanceDetailPage() {
     </div>
   );
 }
+
+    
 
     
