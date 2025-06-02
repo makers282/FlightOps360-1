@@ -71,29 +71,27 @@ const SidebarProvider = React.forwardRef<
     },
     ref
   ) => {
-    const isMobileHookValue = useIsMobile();
-    const [isClientMounted, setIsClientMounted] = React.useState(false);
+    const { isMobile: isMobileHookValue, isClientMounted } = useIsMobile();
     const [internalOpen, setInternalOpen] = React.useState(defaultOpen);
     const [openMobile, setOpenMobile] = React.useState(false);
     
     const open = openProp !== undefined ? openProp : internalOpen;
-    const isMobile = isClientMounted ? isMobileHookValue : false;
+    const isMobile = isMobileHookValue; // Directly use from useIsMobile hook
 
     React.useEffect(() => {
-      setIsClientMounted(true);
-      if (openProp === undefined && typeof document !== 'undefined') {
+      if (isClientMounted && openProp === undefined) { // Only run cookie logic if client mounted & uncontrolled
         const cookieValue = document.cookie
           .split("; ")
           .find((row) => row.startsWith(`${SIDEBAR_COOKIE_NAME}=`))
           ?.split("=")[1];
         if (cookieValue !== undefined) {
           const cookieOpenState = cookieValue === "true";
-          if (cookieOpenState !== open) { // Check against current 'open' state
+          if (cookieOpenState !== open) {
             setInternalOpen(cookieOpenState);
           }
         }
       }
-    }, [openProp, open, defaultOpen]); // Ensure 'open' and 'defaultOpen' are in deps
+    }, [isClientMounted, openProp, open, defaultOpen]);
 
     const setOpen = React.useCallback(
       (value: boolean | ((currentOpen: boolean) => boolean)) => {
@@ -103,7 +101,7 @@ const SidebarProvider = React.forwardRef<
         } else {
           setInternalOpen(newOpenState);
         }
-        if (isClientMounted && typeof document !== 'undefined') {
+        if (isClientMounted) { // Only write cookie if client mounted
           document.cookie = `${SIDEBAR_COOKIE_NAME}=${newOpenState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`;
         }
       },
@@ -180,7 +178,7 @@ const DesktopSidebarStructure = React.forwardRef<
     side?: "left" | "right";
     variant?: "sidebar" | "floating" | "inset";
     collapsible?: "offcanvas" | "icon" | "none";
-    sidebarState: "expanded" | "collapsed"; // Explicitly pass state
+    sidebarState: "expanded" | "collapsed"; 
   }
 >(
   (
@@ -188,7 +186,7 @@ const DesktopSidebarStructure = React.forwardRef<
       side = "left",
       variant = "sidebar",
       collapsible = "offcanvas",
-      sidebarState, // Use passed state
+      sidebarState, 
       className,
       children,
       ...props
@@ -199,13 +197,13 @@ const DesktopSidebarStructure = React.forwardRef<
       <div
         ref={ref}
         className={cn("group peer hidden md:block text-sidebar-foreground", className)}
-        data-state={sidebarState} // Use from prop
+        data-state={sidebarState} 
         data-collapsible={sidebarState === "collapsed" ? collapsible : ""}
         data-variant={variant}
         data-side={side}
         {...props}
       >
-        <div // Spacing div
+        <div 
           className={cn(
             "duration-200 relative h-svh w-[--sidebar-width] bg-transparent transition-[width] ease-linear",
             "group-data-[collapsible=icon]:w-0",
@@ -215,7 +213,7 @@ const DesktopSidebarStructure = React.forwardRef<
               : "group-data-[collapsible=icon]:w-[--sidebar-width-icon]"
           )}
         />
-        <div // Fixed container div
+        <div 
           className={cn(
             "duration-200 fixed inset-y-0 z-10 hidden h-svh w-[--sidebar-width] transition-[left,right,width] ease-linear md:flex",
             side === "left"
@@ -227,7 +225,7 @@ const DesktopSidebarStructure = React.forwardRef<
           )}
         >
           <div
-            data-sidebar="sidebar" // Line 275 in error log
+            data-sidebar="sidebar" 
             className="flex h-full w-full flex-col bg-sidebar group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:border group-data-[variant=floating]:border-sidebar-border group-data-[variant=floating]:shadow"
           >
             {children}
@@ -277,16 +275,13 @@ const Sidebar = React.forwardRef<
     }
     
     if (!isClientMounted) {
-      // Server-Side Rendering and Initial Client Render
-      // Always render the desktop structure based on the initial 'state' from context
-      // (which is derived from defaultOpen). isMobile is false here.
       return (
         <DesktopSidebarStructure
           ref={ref}
           side={side}
           variant={variant}
           collapsible={collapsible}
-          sidebarState={state} // Use initial state from context
+          sidebarState={state} 
           className={className}
           {...props}
         >
@@ -295,14 +290,13 @@ const Sidebar = React.forwardRef<
       );
     }
 
-    // Client-Side Rendering after mount
     if (isMobile) {
       return (
-        <Sheet open={openMobile} onOpenChange={setOpenMobile} > {/* Removed props here */}
+        <Sheet open={openMobile} onOpenChange={setOpenMobile} > 
           <SheetContent
             data-sidebar="sidebar"
             data-mobile="true"
-            className={cn("w-[--sidebar-width] bg-sidebar p-0 text-sidebar-foreground [&>button]:hidden", className)} // Apply className to SheetContent
+            className={cn("w-[--sidebar-width] bg-sidebar p-0 text-sidebar-foreground [&>button]:hidden", className)} 
             style={
               {
                 "--sidebar-width": SIDEBAR_WIDTH_MOBILE,
@@ -316,14 +310,13 @@ const Sidebar = React.forwardRef<
       )
     }
     
-    // Desktop view (client-mounted, not mobile)
     return (
        <DesktopSidebarStructure
           ref={ref}
           side={side}
           variant={variant}
           collapsible={collapsible}
-          sidebarState={state} // Use current state from context
+          sidebarState={state} 
           className={className}
           {...props}
         >
