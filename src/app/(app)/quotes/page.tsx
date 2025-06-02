@@ -311,7 +311,7 @@ export default function AllQuotesPage() {
                               onValueChange={(newStatus) => handleStatusChange(quote, newStatus as typeof QuoteStatusType[number])}
                               disabled={isBookingOrUpdating && quoteToProcess?.id === quote.id}
                             >
-                            <SelectTrigger className="h-8 w-[120px] text-xs">
+                            <SelectTrigger className="h-9 w-[120px] text-xs px-2"> {/* Consistent height h-9, adjust padding */}
                               <SelectValue placeholder="Change Status" />
                             </SelectTrigger>
                             <SelectContent>
@@ -328,10 +328,10 @@ export default function AllQuotesPage() {
                               <TooltipTrigger asChild>
                                 <Button 
                                   variant="outline" 
-                                  size="icon" 
+                                  size="sm" // Use "sm" for h-9
                                   onClick={() => handleStatusChange(quote, "Booked")}
                                   disabled={isBookingOrUpdating}
-                                  className="text-green-600 border-green-600 hover:bg-green-50 hover:text-green-700 h-8 w-8"
+                                  className="text-green-600 border-green-600 hover:bg-green-50 hover:text-green-700 p-2 w-9" // Make it square
                                 >
                                   <CalendarPlus className="h-4 w-4" /> 
                                   <span className="sr-only">Book Trip</span>
@@ -342,7 +342,7 @@ export default function AllQuotesPage() {
                           )}
                           <Tooltip>
                             <TooltipTrigger asChild>
-                               <Button variant="ghost" size="icon" asChild className="h-8 w-8">
+                               <Button variant="ghost" size="sm" asChild className="p-2 w-9"> {/* size="sm", p-2 w-9 */}
                                   <Link href={`/quotes/${quote.id}`}>
                                     <Eye className="h-4 w-4" />
                                     <span className="sr-only">View Quote</span>
@@ -353,7 +353,7 @@ export default function AllQuotesPage() {
                           </Tooltip>
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <Button variant="ghost" size="icon" asChild className="h-8 w-8">
+                              <Button variant="ghost" size="sm" asChild className="p-2 w-9"> {/* size="sm", p-2 w-9 */}
                                 <Link href={`/quotes/new?editMode=true&quoteId=${quote.id}`}>
                                   <Edit3 className="h-4 w-4" />
                                   <span className="sr-only">Edit Quote</span>
@@ -366,8 +366,8 @@ export default function AllQuotesPage() {
                               <TooltipTrigger asChild>
                                 <Button 
                                   variant="ghost" 
-                                  size="icon" 
-                                  className="text-destructive hover:text-destructive h-8 w-8" 
+                                  size="sm" // size="sm"
+                                  className="text-destructive hover:text-destructive p-2 w-9" // p-2 w-9
                                   onClick={() => handleDeleteClick(quote)} 
                                   disabled={isDeleting || quote.status === 'Booked'}
                                 >
