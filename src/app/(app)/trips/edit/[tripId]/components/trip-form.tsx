@@ -302,7 +302,7 @@ export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
             </section>
 
             <Separator />
-             <section>
+            <section>
                 <CardTitle className="text-lg border-b pb-2 mb-4">Notes</CardTitle>
                 <FormField control={control} name="notes" render={({ field }) => (
                     <FormItem>
@@ -314,7 +314,6 @@ export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
             </section>
             
             <Separator />
-            {/* Placeholder Sections */}
             <Card className="bg-muted/30 border-dashed">
               <CardHeader><CardTitle className="text-base text-muted-foreground flex items-center gap-2"><Users className="h-5 w-5"/>Crew Assignment</CardTitle></CardHeader>
               <CardContent><p className="text-sm text-muted-foreground italic">Placeholder: Crew assignment UI will be implemented here.</p></CardContent>
@@ -350,5 +349,3 @@ export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
     </Card>
   );
 }
-
-    
