@@ -10,7 +10,7 @@ import { Button, buttonVariants } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Textarea } from '@/components/ui/textarea'; // Import Textarea
+import { Textarea } from '@/components/ui/textarea'; 
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,9 +21,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Loader2, ArrowLeft, Plane, User, CalendarDays, DollarSign, InfoIcon, Edit3, Trash2, Send, Users as CrewIcon, FileText as FileIcon, Package as LoadManifestIcon, Save } from 'lucide-react'; // Added Save
-import { fetchTripById, deleteTrip, saveTrip } from '@/ai/flows/manage-trips-flow'; // Import saveTrip
-import type { Trip, TripLeg, TripStatus, SaveTripInput } from '@/ai/schemas/trip-schemas'; // Import SaveTripInput
+import { Loader2, ArrowLeft, Plane, User, CalendarDays, DollarSign, InfoIcon, Edit3, Trash2, Send, Users as CrewIcon, FileText as FileIcon, Package as LoadManifestIcon, Save } from 'lucide-react'; 
+import { fetchTripById, deleteTrip, saveTrip } from '@/ai/flows/manage-trips-flow'; 
+import type { Trip, TripLeg, TripStatus, SaveTripInput } from '@/ai/schemas/trip-schemas'; 
 import { useToast } from '@/hooks/use-toast';
 import { format, parseISO, isValid } from 'date-fns';
 
@@ -149,14 +149,13 @@ export default function ViewTripDetailsPage() {
     if (!trip) return;
     startSavingNotesTransition(async () => {
       const tripDataToSave: SaveTripInput = {
-        ...trip, // Spread all existing trip data
-        notes: editableNotes.trim(), // Update only the notes
-        id: undefined, // Remove id as saveTrip expects it as part of the internal schema
-        createdAt: undefined, // Remove as these are handled by serverTimestamp or preserved
+        ...trip, 
+        notes: editableNotes.trim(), 
+        id: undefined, 
+        createdAt: undefined, 
         updatedAt: undefined,
       };
-      // Ensure essential fields from TripSchema are present in tripDataToSave for SaveTripInput
-      // This might require casting if SaveTripInput is stricter than Trip minus timestamps/id
+      
       const { id: tripDocId, createdAt, updatedAt, ...restOfTripData } = trip;
 
       const finalDataToSave: SaveTripInput = {
@@ -165,14 +164,14 @@ export default function ViewTripDetailsPage() {
         aircraftId: restOfTripData.aircraftId,
         legs: restOfTripData.legs,
         status: restOfTripData.status,
-        ...restOfTripData, // include any other fields like quoteId, customerId, aircraftLabel
+        ...restOfTripData, 
         notes: editableNotes.trim(),
       };
 
 
       try {
         const savedTrip = await saveTrip(finalDataToSave);
-        setTrip(savedTrip); // Update local state with the full saved trip object
+        setTrip(savedTrip); 
         setEditableNotes(savedTrip.notes || '');
         setIsEditingNotes(false);
         toast({ title: "Notes Saved", description: "Trip notes have been updated." });
@@ -217,7 +216,11 @@ export default function ViewTripDetailsPage() {
         icon={Plane}
         actions={
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" disabled><Edit3 className="mr-2 h-4 w-4" /> Edit Trip</Button>
+            <Button variant="outline" asChild>
+                <Link href={`/trips/edit/${trip.id}`}>
+                    <Edit3 className="mr-2 h-4 w-4" /> Edit Trip
+                </Link>
+            </Button>
             <Button variant="outline" disabled><Send className="mr-2 h-4 w-4" /> Send Itinerary</Button>
             <Button variant="destructive" onClick={() => setShowDeleteConfirm1(true)} disabled={isDeleting}>
                 {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Trash2 className="mr-2 h-4 w-4" />}
@@ -362,3 +365,5 @@ export default function ViewTripDetailsPage() {
   );
 }
 
+
+    
