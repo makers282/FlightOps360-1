@@ -12,28 +12,38 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useToast } from '@/hooks/use-toast';
-import { fetchCustomers, type Customer } from '@/ai/schemas/customer-schemas'; // Path to your customer flow
+import { fetchCustomers, type Customer } from '@/ai/schemas/customer-schemas';
+import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
 
-// Schema for the client details section
+// Schema for the client details and aircraft selection
 const TripFormSchemaBase = z.object({
   tripId: z.string().min(1, "Trip ID is required."),
   selectedCustomerId: z.string().optional(),
   clientName: z.string().min(2, "Client name is required."),
-  clientEmail: z.string().email("Invalid email address."),
+  clientEmail: z.string().email("Invalid email address.").optional().or(z.literal('')),
   clientPhone: z.string().min(7, "Phone number seems too short.").optional().or(z.literal('')),
+  aircraftId: z.string().min(1, "Aircraft selection is required.").optional(),
 });
 
 type TripFormDataBase = z.infer<typeof TripFormSchemaBase>;
 
 interface TripFormProps {
-  initialTripData?: any | null; // Will be properly typed later
+  initialTripData?: any | null;
   isEditMode: boolean;
+}
+
+interface AircraftSelectOption {
+  value: string;
+  label: string;
+  model: string;
 }
 
 export function TripForm({ isEditMode, initialTripData }: TripFormProps) {
   const { toast } = useToast();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [isLoadingCustomers, setIsLoadingCustomers] = useState(false);
+  const [aircraftSelectOptions, setAircraftSelectOptions] = useState<AircraftSelectOption[]>([]);
+  const [isLoadingAircraftList, setIsLoadingAircraftList] = useState(false);
 
   const form = useForm<TripFormDataBase>({
     resolver: zodResolver(TripFormSchemaBase),
@@ -43,24 +53,37 @@ export function TripForm({ isEditMode, initialTripData }: TripFormProps) {
       clientName: initialTripData?.clientName || '',
       clientEmail: initialTripData?.clientEmail || '',
       clientPhone: initialTripData?.clientPhone || '',
+      aircraftId: initialTripData?.aircraftId || undefined,
     },
   });
 
-  const { setValue, getValues, control } = form;
+  const { setValue, control } = form;
 
   useEffect(() => {
-    const loadCustomers = async () => {
+    const loadInitialData = async () => {
       setIsLoadingCustomers(true);
+      setIsLoadingAircraftList(true);
       try {
-        const fetched = await fetchCustomers();
-        setCustomers(fetched);
+        const [fetchedCustomers, fetchedFleet] = await Promise.all([
+          fetchCustomers(),
+          fetchFleetAircraft()
+        ]);
+        setCustomers(fetchedCustomers);
+        const options = fetchedFleet.map(ac => ({
+          value: ac.id,
+          label: `${ac.tailNumber} - ${ac.model}`,
+          model: ac.model
+        }));
+        setAircraftSelectOptions(options);
+
       } catch (error) {
-        toast({ title: "Error", description: "Could not load customers.", variant: "destructive" });
+        toast({ title: "Error loading initial data", description: "Could not load customers or aircraft.", variant: "destructive" });
       } finally {
         setIsLoadingCustomers(false);
+        setIsLoadingAircraftList(false);
       }
     };
-    loadCustomers();
+    loadInitialData();
   }, [toast]);
 
   useEffect(() => {
@@ -71,6 +94,7 @@ export function TripForm({ isEditMode, initialTripData }: TripFormProps) {
         clientName: initialTripData.clientName || '',
         clientEmail: initialTripData.clientEmail || '',
         clientPhone: initialTripData.clientPhone || '',
+        aircraftId: initialTripData.aircraftId || undefined,
       });
     }
   }, [initialTripData, form]);
@@ -78,10 +102,6 @@ export function TripForm({ isEditMode, initialTripData }: TripFormProps) {
   const handleCustomerSelect = (customerId: string | undefined) => {
     setValue('selectedCustomerId', customerId);
     if (!customerId) {
-      // Optionally clear client fields if "None" is selected or if desired
-      // setValue('clientName', '');
-      // setValue('clientEmail', '');
-      // setValue('clientPhone', '');
       return;
     }
     const selectedCustomer = customers.find(c => c.id === customerId);
@@ -93,8 +113,8 @@ export function TripForm({ isEditMode, initialTripData }: TripFormProps) {
   };
 
   const onSubmit = (data: TripFormDataBase) => {
-    console.log("Form submitted (client details section):", data);
-    toast({ title: "Form Submitted (Placeholder)", description: "Client details section submitted." });
+    console.log("Form submitted (client & aircraft details section):", data);
+    toast({ title: "Form Submitted (Placeholder)", description: "Client & Aircraft details section submitted." });
   };
 
   return (
@@ -182,8 +202,38 @@ export function TripForm({ isEditMode, initialTripData }: TripFormProps) {
                 </FormItem>
               )}
             />
-            {/* Placeholder for more form fields */}
-            <p className="text-sm text-muted-foreground">More sections (Aircraft, Legs, Notes) will be added next.</p>
+
+            <FormField
+              control={control}
+              name="aircraftId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="flex items-center gap-1"><Plane className="h-4 w-4" /> Aircraft</FormLabel>
+                  <Select
+                    onValueChange={field.onChange}
+                    value={field.value || ""}
+                    disabled={isLoadingAircraftList}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder={isLoadingAircraftList ? "Loading aircraft..." : "Select an aircraft"} />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {!isLoadingAircraftList && aircraftSelectOptions.length === 0 && <SelectItem value="NO_AIRCRAFT_PLACEHOLDER" disabled>No aircraft in fleet</SelectItem>}
+                      {aircraftSelectOptions.map(option => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <p className="text-sm text-muted-foreground">More sections (Legs, Notes) will be added next.</p>
           </CardContent>
           <CardFooter>
             <Button type="submit" disabled>
@@ -195,4 +245,3 @@ export function TripForm({ isEditMode, initialTripData }: TripFormProps) {
     </Card>
   );
 }
-    
