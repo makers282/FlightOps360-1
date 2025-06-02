@@ -1,36 +1,24 @@
 
 'use client';
 
-// React and Next.js imports
 import * as React from 'react';
 import { useState, useEffect, useTransition, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-
-// Third-party library imports
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm, type SubmitHandler, useFieldArray } from 'react-hook-form';
 import { z } from 'zod';
 import { format, parseISO, isValid as isValidDate } from "date-fns";
 
-// Lucide Icons
 import {
-  Loader2, Save, XCircle, PlusCircle, Trash2, Plane, Users, CalendarIcon, Info, Edit3,
-  FileText as FileTextIcon, 
-  Package as PackageIcon, 
+  Loader2, Save, XCircle, PlusCircle, Trash2, Plane, Users, CalendarIcon as CalendarIconLucide, Info, Edit3,
+  FileText as FileTextIcon,
+  Package as PackageIcon,
   UserPlus, FileUp, Building
 } from 'lucide-react';
 
-// ShadCN UI component imports
 import { Button } from '@/components/ui/button';
 import { Calendar } from "@/components/ui/calendar";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle
-} from '@/components/ui/card';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -39,21 +27,17 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 
-// Hook imports
 import { useToast } from '@/hooks/use-toast';
 import { cn } from "@/lib/utils";
 
-// Flow and Schema imports
 import { saveTrip } from '@/ai/flows/manage-trips-flow';
-// Using aliased imports for DB schemas to avoid naming conflicts with form-specific types
 import type { Trip, SaveTripInput, TripLeg as TripLegTypeFromDb, TripStatus } from '@/ai/schemas/trip-schemas';
 import { TripLegSchema as TripLegSchemaDb, TripSchema as FullTripSchemaDb, tripStatuses, legTypes } from '@/ai/schemas/trip-schemas';
 import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
 
-// Schema definition for the form, extending the DB leg schema for Date objects
 const FormLegSchema = TripLegSchemaDb.extend({
   departureDateTime: z.date().optional(),
-  arrivalDateTime: z.date().optional(), // Form uses Date objects for date pickers
+  arrivalDateTime: z.date().optional(),
 });
 
 const TripFormSchema = FullTripSchemaDb.omit({ id: true, createdAt: true, updatedAt: true }).extend({
@@ -171,10 +155,10 @@ export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
       const tripDataToSave: SaveTripInput = {
         tripId: data.tripId,
         clientName: data.clientName,
-        aircraftId: data.aircraftId!, 
+        aircraftId: data.aircraftId!,
         aircraftLabel: selectedAircraft?.label || data.aircraftId,
         legs: processedLegs,
-        status: data.status as TripStatus, 
+        status: data.status as TripStatus,
         notes: data.notes,
         quoteId: data.quoteId,
         customerId: data.customerId,
@@ -199,6 +183,25 @@ export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
         });
       }
     });
+  };
+
+  const handleAddLeg = () => {
+    append({
+      origin: '',
+      destination: '',
+      departureDateTime: undefined,
+      arrivalDateTime: undefined,
+      legType: 'Charter',
+      passengerCount: 1,
+      originFbo: '',
+      destinationFbo: '',
+      flightTimeHours: undefined,
+      blockTimeHours: undefined,
+    });
+  };
+
+  const handleRemoveLeg = (index: number) => {
+    remove(index);
   };
 
   const titleText = isEditMode ? `Edit Trip: ${initialTripData?.tripId || 'N/A'}` : "Create New Trip";
@@ -272,7 +275,7 @@ export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
                   <CardHeader className="p-0 pb-4">
                     <div className="flex justify-between items-center">
                       <CardTitle className="text-base">Leg {index + 1}</CardTitle>
-                      {fields.length > 1 && (<Button type="button" variant="ghost" size="icon" onClick={() => remove(index)} className="text-destructive hover:text-destructive"><Trash2 className="h-4 w-4" /><span className="sr-only">Remove Leg</span></Button>)}
+                      {fields.length > 1 && (<Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveLeg(index)} className="text-destructive hover:text-destructive"><Trash2 className="h-4 w-4" /><span className="sr-only">Remove Leg</span></Button>)}
                     </div>
                   </CardHeader>
                   <CardContent className="p-0 space-y-4">
@@ -287,7 +290,7 @@ export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
                           <Popover>
                             <PopoverTrigger asChild>
                               <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !field.value && "text-muted-foreground")}>
-                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                <CalendarIconLucide className="mr-2 h-4 w-4" />
                                 {field.value ? format(field.value, "PPP HH:mm") : <span>Pick a date and time</span>}
                               </Button>
                             </PopoverTrigger>
@@ -337,7 +340,7 @@ export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
                   </CardContent>
                 </Card>
               ))}
-              <Button type="button" variant="outline" onClick={() => append({ origin: '', destination: '', legType: 'Charter', passengerCount: 1, departureDateTime: undefined, arrivalDateTime: undefined, originFbo: '', destinationFbo: '', flightTimeHours: undefined, blockTimeHours: undefined })} className="mt-2">
+              <Button type="button" variant="outline" onClick={handleAddLeg} className="mt-2">
                 <PlusCircle className="mr-2 h-4 w-4" /> Add Leg
               </Button>
             </section>
