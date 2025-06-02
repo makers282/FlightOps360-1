@@ -13,7 +13,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
 import { Plane, Edit3, UserSearch, Loader2, CalendarIcon, PlusCircle, Trash2, GripVertical, Wand2, PlaneTakeoff, PlaneLanding, Building, Users as PaxIcon } from 'lucide-react';
-import { useForm, useFieldArray } from 'react-hook-form';
+import { useForm, useFieldArray, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useToast } from '@/hooks/use-toast';
@@ -23,7 +23,8 @@ import { format, isValid as isValidDate, parseISO } from "date-fns";
 import type { Customer } from '@/ai/schemas/customer-schemas';
 import { fetchCustomers } from '@/ai/flows/manage-customers-flow';
 import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
-import { legTypes, type TripLeg as DbTripLeg } from '@/ai/schemas/trip-schemas';
+import { legTypes } from '@/ai/schemas/quote-schemas'; // Corrected import for legTypes
+import { type TripLeg as DbTripLeg } from '@/ai/schemas/trip-schemas'; // DbTripLeg type from trip-schemas
 import { estimateFlightDetails, type EstimateFlightDetailsOutput } from '@/ai/flows/estimate-flight-details-flow';
 import { fetchAircraftPerformance, type AircraftPerformanceData } from '@/ai/flows/manage-aircraft-performance-flow';
 
@@ -55,7 +56,7 @@ const TripFormSchema = z.object({
   notes: z.string().optional(),
 });
 
-type FullTripFormData = z.infer<typeof TripFormSchema>;
+export type FullTripFormData = z.infer<typeof TripFormSchema>;
 
 interface TripFormProps {
   initialTripData?: any | null; // Using 'any' for now, will be typed as full Trip from DB
@@ -163,6 +164,7 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving }: Trip
           passengerCount: leg.passengerCount || 1,
           originTaxiTimeMinutes: leg.originTaxiTimeMinutes === undefined ? 15 : leg.originTaxiTimeMinutes,
           destinationTaxiTimeMinutes: leg.destinationTaxiTimeMinutes === undefined ? 15 : leg.destinationTaxiTimeMinutes,
+          flightTimeHours: leg.flightTimeHours,
         })),
         notes: initialTripData.notes || '',
       });
@@ -327,5 +329,3 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving }: Trip
     </Card>
   );
 }
-
-    
