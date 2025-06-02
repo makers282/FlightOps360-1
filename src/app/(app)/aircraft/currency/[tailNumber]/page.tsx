@@ -54,7 +54,7 @@ const aircraftInfoEditSchema = z.object({
   primaryContactPhone: z.string().optional(),
   primaryContactEmail: z.string().email("Invalid email format.").optional().or(z.literal('')),
   internalNotes: z.string().optional(),
-  engineDetails: z.array(EngineDetailSchema).optional().default([]),
+  // engineDetails field is removed from this specific form schema, managed separately if needed
 });
 type AircraftInfoEditFormData = z.infer<typeof aircraftInfoEditSchema>;
 
@@ -99,7 +99,8 @@ export default function AircraftMaintenanceDetailPage() {
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
   const [isGeneratingReport, startReportGenerationTransition] = useTransition();
   
-  const [isEngineModalOpen, setIsEngineModalOpen] = useState(false);
+  // State for ManageEngineDetailsModal removed from here as its trigger is removed from this page's direct UI
+  // const [isEngineModalOpen, setIsEngineModalOpen] = useState(false);
 
 
   const aircraftInfoForm = useForm<AircraftInfoEditFormData>({ 
@@ -113,11 +114,11 @@ export default function AircraftMaintenanceDetailPage() {
         primaryContactPhone: '',
         primaryContactEmail: '',
         internalNotes: '',
-        engineDetails: [],
+        // engineDetails not part of this form anymore
     }
   });
   
-  const currentEngineDetailsForForm = aircraftInfoForm.watch('engineDetails');
+  // currentEngineDetailsForForm watch removed
 
 
   const calculateToGo = useCallback((item: DisplayMaintenanceItem, currentComponentTimes: Array<{ componentName: string; currentTime: number; currentCycles: number }>): { text: string; numeric: number; unit: 'days' | 'hrs' | 'cycles' | 'N/A'; isOverdue: boolean } => {
@@ -275,7 +276,7 @@ export default function AircraftMaintenanceDetailPage() {
             primaryContactPhone: foundAircraft.primaryContactPhone || '',
             primaryContactEmail: foundAircraft.primaryContactEmail || '',
             internalNotes: foundAircraft.internalNotes || '',
-            engineDetails: foundAircraft.engineDetails || [],
+            // engineDetails not managed by this form directly
           });
           await loadAndInitializeComponentTimes(foundAircraft); 
           await loadMaintenanceTasks(foundAircraft.id);
@@ -335,14 +336,7 @@ export default function AircraftMaintenanceDetailPage() {
     setIsEditingComponentTimes(false);
   };
 
-  const handleSaveEngineDetailsInModal = (updatedEngines: EngineDetail[]) => {
-    aircraftInfoForm.setValue('engineDetails', updatedEngines);
-    if (currentAircraft) {
-        setCurrentAircraft(prev => prev ? { ...prev, engineDetails: updatedEngines } : null);
-    }
-    setIsEngineModalOpen(false);
-    toast({ title: "Engine Details Updated", description: "Changes staged. Save aircraft info to persist." });
-  };
+  // handleSaveEngineDetailsInModal function removed as modal trigger is removed
 
 
   const onSubmitAircraftInfo: SubmitHandler<AircraftInfoEditFormData> = (data) => {
@@ -353,13 +347,13 @@ export default function AircraftMaintenanceDetailPage() {
           ...currentAircraft, 
           model: data.model, 
           serialNumber: data.serialNumber === '' ? undefined : data.serialNumber,
-          aircraftYear: data.aircraftYear === null ? undefined : data.aircraftYear, // Handle null for year
+          aircraftYear: data.aircraftYear === null ? undefined : data.aircraftYear,
           baseLocation: data.baseLocation === '' ? undefined : data.baseLocation,
           primaryContactName: data.primaryContactName === '' ? undefined : data.primaryContactName,
           primaryContactPhone: data.primaryContactPhone === '' ? undefined : data.primaryContactPhone,
           primaryContactEmail: data.primaryContactEmail === '' ? undefined : data.primaryContactEmail,
           internalNotes: data.internalNotes === '' ? undefined : data.internalNotes,
-          engineDetails: data.engineDetails || [], 
+          engineDetails: currentAircraft.engineDetails || [], // Preserve existing engine details
           isMaintenanceTracked: currentAircraft.isMaintenanceTracked, 
           trackedComponentNames: currentAircraft.trackedComponentNames,
         };
@@ -969,7 +963,7 @@ export default function AircraftMaintenanceDetailPage() {
                 </Button>
               ) : (
                 <div className="flex gap-2">
-                  <Button variant="ghost" size="icon" onClick={() => { setIsEditingAircraftInfo(false); aircraftInfoForm.reset({ model: currentAircraft.model, serialNumber: currentAircraft.serialNumber || '', aircraftYear: currentAircraft.aircraftYear ?? undefined, baseLocation: currentAircraft.baseLocation || '', primaryContactName: currentAircraft.primaryContactName || '', primaryContactPhone: currentAircraft.primaryContactPhone || '', primaryContactEmail: currentAircraft.primaryContactEmail || '', internalNotes: currentAircraft.internalNotes || '', engineDetails: currentAircraft.engineDetails || [] }); }} disabled={isSavingAircraftInfo}>
+                  <Button variant="ghost" size="icon" onClick={() => { setIsEditingAircraftInfo(false); aircraftInfoForm.reset({ model: currentAircraft.model, serialNumber: currentAircraft.serialNumber || '', aircraftYear: currentAircraft.aircraftYear ?? undefined, baseLocation: currentAircraft.baseLocation || '', primaryContactName: currentAircraft.primaryContactName || '', primaryContactPhone: currentAircraft.primaryContactPhone || '', primaryContactEmail: currentAircraft.primaryContactEmail || '', internalNotes: currentAircraft.internalNotes || '' }); }} disabled={isSavingAircraftInfo}>
                     <XCircle className="h-4 w-4" /><span className="sr-only">Cancel</span>
                   </Button>
                   <Button size="icon" onClick={aircraftInfoForm.handleSubmit(onSubmitAircraftInfo)} disabled={isSavingAircraftInfo}>
@@ -1011,22 +1005,6 @@ export default function AircraftMaintenanceDetailPage() {
                   <FormField control={aircraftInfoForm.control} name="primaryContactPhone" render={({ field }) => (<FormItem><FormLabel>Contact Phone</FormLabel><FormControl><Input type="tel" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)} />
                   <FormField control={aircraftInfoForm.control} name="primaryContactEmail" render={({ field }) => (<FormItem><FormLabel>Contact Email</FormLabel><FormControl><Input type="email" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)} />
                   
-                  <div className="pt-2 text-sm">
-                    <div className="flex justify-between items-center mb-1">
-                        <h4 className="font-semibold text-muted-foreground">Engine Details:</h4>
-                        <Button type="button" variant="outline" size="xs" onClick={() => setIsEngineModalOpen(true)}>
-                            <Settings2 className="mr-1 h-3 w-3" /> Manage Engines
-                        </Button>
-                    </div>
-                     {(currentEngineDetailsForForm && currentEngineDetailsForForm.length > 0) ? (
-                        <p className="text-xs text-muted-foreground p-2 border rounded-md bg-muted/30">
-                            {currentEngineDetailsForForm.length} engine(s) configured. Click "Manage Engines" to view/edit.
-                        </p>
-                    ) : (
-                         <p className="text-xs text-muted-foreground p-2 border rounded-md bg-muted/30">No engine details entered. Click "Manage Engines" to add.</p>
-                    )}
-                  </div>
-
                   <FormField control={aircraftInfoForm.control} name="internalNotes" render={({ field }) => (<FormItem><FormLabel>Internal Notes</FormLabel><FormControl><Textarea {...field} value={field.value ?? ''} rows={3} /></FormControl><FormMessage /></FormItem>)} />
                 </form>
               </Form>
@@ -1039,23 +1017,7 @@ export default function AircraftMaintenanceDetailPage() {
                 <p><strong className="text-muted-foreground w-28 inline-block">Contact:</strong> {currentAircraft.primaryContactName || 'N/A'}</p>
                 <p><strong className="text-muted-foreground w-28 inline-block">Phone:</strong> {currentAircraft.primaryContactPhone || 'N/A'}</p>
                 <p><strong className="text-muted-foreground w-28 inline-block">Email:</strong> {currentAircraft.primaryContactEmail || 'N/A'}</p>
-                
-                <div className="pt-2">
-                    <div className="flex justify-between items-center">
-                        <h4 className="font-semibold text-muted-foreground">Engine Details:</h4>
-                         <Button type="button" variant="link" size="xs" onClick={() => setIsEngineModalOpen(true)} className="p-0 h-auto text-xs">
-                            Manage
-                        </Button>
-                    </div>
-                  {(currentAircraft.engineDetails && currentAircraft.engineDetails.length > 0) ? (
-                     <p className="text-xs text-muted-foreground pl-2">
-                        {currentAircraft.engineDetails.length} engine(s) configured.
-                    </p>
-                  ) : (
-                     <p className="text-xs text-muted-foreground pl-2">No engine details recorded.</p>
-                  )}
-                </div>
-                
+                                
                 <div className="pt-2">
                   <h4 className="font-semibold text-muted-foreground">Internal Notes:</h4>
                   {currentAircraft.internalNotes ? (
@@ -1224,15 +1186,9 @@ export default function AircraftMaintenanceDetailPage() {
           )}
         </CardContent>
       </Card>
-      {currentAircraft && (
-        <ManageEngineDetailsModal
-            isOpen={isEngineModalOpen}
-            setIsOpen={setIsEngineModalOpen}
-            initialEngineDetails={aircraftInfoForm.getValues('engineDetails') || []}
-            onSave={handleSaveEngineDetailsInModal}
-        />
-      )}
+      {/* ManageEngineDetailsModal instance removed from here */}
     </div>
   );
 }
 
+    
