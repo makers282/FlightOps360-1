@@ -6,10 +6,11 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button, buttonVariants } from '@/components/ui/button'; // Import buttonVariants
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Textarea } from '@/components/ui/textarea'; // Import Textarea
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,9 +21,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Loader2, ArrowLeft, Plane, User, CalendarDays, DollarSign, InfoIcon, Edit3, Trash2, Send, Users as CrewIcon, FileText as FileIcon, Package as LoadManifestIcon } from 'lucide-react';
-import { fetchTripById, deleteTrip } from '@/ai/flows/manage-trips-flow';
-import type { Trip, TripLeg, TripStatus } from '@/ai/schemas/trip-schemas';
+import { Loader2, ArrowLeft, Plane, User, CalendarDays, DollarSign, InfoIcon, Edit3, Trash2, Send, Users as CrewIcon, FileText as FileIcon, Package as LoadManifestIcon, Save } from 'lucide-react'; // Added Save
+import { fetchTripById, deleteTrip, saveTrip } from '@/ai/flows/manage-trips-flow'; // Import saveTrip
+import type { Trip, TripLeg, TripStatus, SaveTripInput } from '@/ai/schemas/trip-schemas'; // Import SaveTripInput
 import { useToast } from '@/hooks/use-toast';
 import { format, parseISO, isValid } from 'date-fns';
 
@@ -93,6 +94,10 @@ export default function ViewTripDetailsPage() {
   const [showDeleteConfirm1, setShowDeleteConfirm1] = useState(false);
   const [showDeleteConfirm2, setShowDeleteConfirm2] = useState(false);
 
+  const [isEditingNotes, setIsEditingNotes] = useState(false);
+  const [editableNotes, setEditableNotes] = useState('');
+  const [isSavingNotes, startSavingNotesTransition] = useTransition();
+
   useEffect(() => {
     if (id) {
       setIsLoading(true);
@@ -101,6 +106,7 @@ export default function ViewTripDetailsPage() {
         .then(data => {
           if (data) {
             setTrip(data);
+            setEditableNotes(data.notes || '');
           } else {
             setError("Trip not found.");
             toast({ title: "Error", description: `Trip with ID ${id} not found.`, variant: "destructive" });
@@ -136,6 +142,44 @@ export default function ViewTripDetailsPage() {
         } finally {
             setShowDeleteConfirm2(false);
         }
+    });
+  };
+
+  const handleSaveNotes = () => {
+    if (!trip) return;
+    startSavingNotesTransition(async () => {
+      const tripDataToSave: SaveTripInput = {
+        ...trip, // Spread all existing trip data
+        notes: editableNotes.trim(), // Update only the notes
+        id: undefined, // Remove id as saveTrip expects it as part of the internal schema
+        createdAt: undefined, // Remove as these are handled by serverTimestamp or preserved
+        updatedAt: undefined,
+      };
+      // Ensure essential fields from TripSchema are present in tripDataToSave for SaveTripInput
+      // This might require casting if SaveTripInput is stricter than Trip minus timestamps/id
+      const { id: tripDocId, createdAt, updatedAt, ...restOfTripData } = trip;
+
+      const finalDataToSave: SaveTripInput = {
+        tripId: restOfTripData.tripId,
+        clientName: restOfTripData.clientName,
+        aircraftId: restOfTripData.aircraftId,
+        legs: restOfTripData.legs,
+        status: restOfTripData.status,
+        ...restOfTripData, // include any other fields like quoteId, customerId, aircraftLabel
+        notes: editableNotes.trim(),
+      };
+
+
+      try {
+        const savedTrip = await saveTrip(finalDataToSave);
+        setTrip(savedTrip); // Update local state with the full saved trip object
+        setEditableNotes(savedTrip.notes || '');
+        setIsEditingNotes(false);
+        toast({ title: "Notes Saved", description: "Trip notes have been updated." });
+      } catch (err) {
+        console.error("Failed to save notes:", err);
+        toast({ title: "Error Saving Notes", description: (err instanceof Error ? err.message : "Unknown error"), variant: "destructive" });
+      }
     });
   };
 
@@ -224,20 +268,46 @@ export default function ViewTripDetailsPage() {
         </Card>
 
         <Card className="shadow-sm">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2"><FileIcon className="h-5 w-5 text-primary"/>Trip Notes</CardTitle>
+          <CardHeader className="flex justify-between items-start">
+            <div>
+                <CardTitle className="flex items-center gap-2"><FileIcon className="h-5 w-5 text-primary"/>Trip Notes</CardTitle>
+                <CardDescription className="text-sm text-muted-foreground mt-1">Internal notes specific to this trip.</CardDescription>
+            </div>
+            {!isEditingNotes && (
+              <Button variant="outline" size="icon" onClick={() => { setIsEditingNotes(true); setEditableNotes(trip.notes || ''); }}>
+                <Edit3 className="h-4 w-4" />
+              </Button>
+            )}
           </CardHeader>
           <CardContent>
-             <p className="text-muted-foreground text-sm mb-2">Internal notes specific to this trip:</p>
-            {trip.notes ? (
+            {isEditingNotes ? (
+              <div className="space-y-3">
+                <Textarea
+                  value={editableNotes}
+                  onChange={(e) => setEditableNotes(e.target.value)}
+                  placeholder="Enter notes for this trip..."
+                  rows={5}
+                  className="text-sm"
+                />
+                <div className="flex gap-2">
+                  <Button onClick={handleSaveNotes} disabled={isSavingNotes} size="sm">
+                    {isSavingNotes ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                    Save Notes
+                  </Button>
+                  <Button variant="ghost" onClick={() => { setIsEditingNotes(false); setEditableNotes(trip.notes || ''); }} disabled={isSavingNotes} size="sm">
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              trip.notes ? (
                  <div className="p-3 bg-muted/50 rounded-md border text-sm whitespace-pre-wrap">
                     {trip.notes}
                 </div>
-            ) : (
+              ) : (
                 <p className="text-muted-foreground text-sm">No general notes for this trip yet.</p>
+              )
             )}
-            {/* Placeholder for editing notes */}
-            <Button variant="outline" size="sm" className="mt-3" disabled>Add/Edit Notes</Button>
           </CardContent>
         </Card>
 
@@ -291,3 +361,4 @@ export default function ViewTripDetailsPage() {
     </>
   );
 }
+
