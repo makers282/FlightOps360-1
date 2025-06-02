@@ -23,12 +23,14 @@ import { format, isValid as isValidDate, parseISO } from "date-fns";
 import type { Customer } from '@/ai/schemas/customer-schemas';
 import { fetchCustomers } from '@/ai/flows/manage-customers-flow';
 import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
-import { legTypes } from '@/ai/schemas/quote-schemas'; 
+import { legTypes } from '@/ai/schemas/quote-schemas';
 import { type TripLeg as DbTripLeg, tripStatuses, type TripStatus } from '@/ai/schemas/trip-schemas';
 import { estimateFlightDetails, type EstimateFlightDetailsOutput } from '@/ai/flows/estimate-flight-details-flow';
 import { fetchAircraftPerformance, type AircraftPerformanceData } from '@/ai/flows/manage-aircraft-performance-flow';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LegsSummaryTable } from '@/app/(app)/quotes/new/components/legs-summary-table';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+
 
 // Schema for individual legs in the form
 const FormLegSchema = z.object({
@@ -57,15 +59,16 @@ const TripFormSchema = z.object({
   status: z.enum(tripStatuses).default("Scheduled"),
   legs: z.array(FormLegSchema).min(1, "At least one flight leg is required."),
   notes: z.string().optional(),
+  initialQuoteId: z.string().optional(), // Added for displaying linked quote ID
 });
 
 export type FullTripFormData = z.infer<typeof TripFormSchema>;
 
 interface TripFormProps {
-  initialTripData?: any | null; 
+  initialTripData?: any | null;
   isEditMode: boolean;
-  onSave: (data: FullTripFormData) => Promise<void>; 
-  isSaving: boolean; 
+  onSave: (data: FullTripFormData) => Promise<void>;
+  isSaving: boolean;
   initialQuoteId?: string | null;
 }
 
@@ -110,6 +113,7 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
         originTaxiTimeMinutes: 15, destinationTaxiTimeMinutes: 15, flightTimeHours: undefined,
       }],
       notes: '',
+      initialQuoteId: undefined,
     },
   });
 
@@ -121,7 +125,11 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
   });
   
   const currentSelectedAircraftId = watch("aircraftId");
-  const legsArray = watch("legs"); 
+  const legsArray = watch("legs");
+
+  const generateNewTripIdIfApplicable = useCallback(() => {
+    return `TRP-${Date.now().toString().slice(-6)}`;
+  }, []);
 
   useEffect(() => {
     setIsClient(true);
@@ -159,6 +167,9 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
     if (isEditMode && initialTripData) {
       const currentAircraftIdFromData = initialTripData.aircraftId || undefined;
       const aircraftModelForEstimates = aircraftSelectOptions.find(ac => ac.value === currentAircraftIdFromData)?.model || 'Unknown Model';
+      const knownCruiseSpeedForEstimates = currentAircraftIdFromData === selectedAircraftPerformance?.aircraftId // Check if perf data matches current ac
+        ? selectedAircraftPerformance?.cruiseSpeed 
+        : undefined;
 
       reset({ 
         tripId: initialTripData.tripId || '',
@@ -177,6 +188,7 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
           flightTimeHours: leg.flightTimeHours,
         })),
         notes: initialTripData.notes || '',
+        initialQuoteId: initialQuoteId || initialTripData.quoteId || undefined,
       });
 
       const newLegEstimates = (initialTripData.legs || []).map((leg: DbTripLeg) => {
@@ -191,7 +203,7 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
               origin: leg.origin.toUpperCase(),
               destination: leg.destination.toUpperCase(),
               aircraftModel: aircraftModelForEstimates,
-              knownCruiseSpeedKts: selectedAircraftPerformance?.cruiseSpeed, 
+              knownCruiseSpeedKts: knownCruiseSpeedForEstimates, 
             }
           } as LegEstimate;
         }
@@ -200,15 +212,14 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
       setLegEstimates(newLegEstimates);
 
     } else if (!isEditMode && !getValues('tripId')) {
-      setValue('tripId', `TRP-${Date.now().toString().slice(-6)}`);
+      setValue('tripId', generateNewTripIdIfApplicable());
       setValue('status', "Scheduled");
       setLegEstimates(new Array(getValues('legs').length).fill(null));
     }
-  }, [isEditMode, initialTripData, reset, getValues, setValue, aircraftSelectOptions, selectedAircraftPerformance]); // Added aircraftSelectOptions & selectedAircraftPerformance
+  }, [isEditMode, initialTripData, reset, getValues, setValue, aircraftSelectOptions, selectedAircraftPerformance, initialQuoteId, generateNewTripIdIfApplicable]);
 
 
   useEffect(() => {
-     // Ensure legEstimates array matches legsArray length, preserving existing estimates
     if (legsArray && legEstimates.length !== legsArray.length) {
         setLegEstimates(currentEstimates => {
             const newEstimates = new Array(legsArray.length).fill(null);
@@ -227,7 +238,13 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
     if (currentSelectedAircraftId) {
       setIsLoadingSelectedAcPerf(true);
       fetchAircraftPerformance({ aircraftId: currentSelectedAircraftId })
-        .then(perfData => setSelectedAircraftPerformance(perfData))
+        .then(perfData => {
+          if (perfData) { // Check if perfData is not null
+             setSelectedAircraftPerformance({...perfData, aircraftId: currentSelectedAircraftId}); // Store aircraftId with perf data
+          } else {
+             setSelectedAircraftPerformance(null);
+          }
+        })
         .catch(error => {
           console.warn(`Could not fetch performance data for aircraft ${currentSelectedAircraftId}:`, error);
           setSelectedAircraftPerformance(null);
@@ -288,9 +305,8 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
     const knownCruiseSpeedForFlow = selectedAircraftPerformance?.cruiseSpeed;
     const currentEstimate = legEstimates[legIndex];
 
-    // Check if inputs for estimation have changed OR if there's no existing valid estimate
     const inputsChanged = !currentEstimate || 
-                          currentEstimate.error || // Re-estimate if previous had error
+                          currentEstimate.error || 
                           currentEstimate.estimatedForInputs?.origin !== legData.origin.toUpperCase() ||
                           currentEstimate.estimatedForInputs?.destination !== legData.destination.toUpperCase() ||
                           currentEstimate.estimatedForInputs?.aircraftModel !== aircraftModelForFlow ||
@@ -314,7 +330,7 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : "AI failed to estimate details.";
       toast({ title: "Estimation Error", description: errorMessage, variant: "destructive" });
-      setValue(`legs.${legIndex}.flightTimeHours`, undefined); // Clear potentially incorrect value
+      setValue(`legs.${legIndex}.flightTimeHours`, undefined);
       setLegEstimates(prev => { const newEstimates = [...prev]; newEstimates[legIndex] = { error: errorMessage, estimatedForInputs: {origin: legData.origin.toUpperCase(), destination: legData.destination.toUpperCase(), aircraftModel: aircraftModelForFlow, knownCruiseSpeedKts: knownCruiseSpeedForFlow} } as LegEstimate; return newEstimates; });
     } finally {
       setEstimatingLegIndex(null);
@@ -347,10 +363,10 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
           <CardContent className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField control={control} name="tripId" render={({ field }) => ( <FormItem> <FormLabel>Trip ID</FormLabel> <FormControl><Input {...field} readOnly className="bg-muted/50 cursor-not-allowed" /></FormControl> <FormMessage /> </FormItem> )} />
-                {isEditMode && initialQuoteId && (
+                {isEditMode && getValues('initialQuoteId') && (
                      <FormItem>
                         <FormLabel>Sourced From Quote</FormLabel>
-                        <Input value={initialQuoteId} readOnly className="bg-muted/50 cursor-not-allowed" />
+                        <Input value={getValues('initialQuoteId')} readOnly className="bg-muted/50 cursor-not-allowed" />
                     </FormItem>
                 )}
             </div>
@@ -449,7 +465,24 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
                       <FormField control={control} name={`legs.${index}.destinationTaxiTimeMinutes`} render={({ field }) => ( <FormItem> <FormLabel>Dest. Taxi (min)</FormLabel> <FormControl><Input type="number" placeholder="15" {...field} onChange={e => field.onChange(parseInt(e.target.value,10))} min="0" /></FormControl> </FormItem> )} />
                     </div>
                     <Button type="button" variant="outline" size="sm" onClick={() => handleEstimateFlightDetails(index)} disabled={estimatingLegIndex === index || !currentSelectedAircraftId || isLoadingAircraftList || isLoadingSelectedAcPerf} className="w-full sm:w-auto text-xs"> {estimatingLegIndex === index || isLoadingSelectedAcPerf ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <Wand2 className="mr-2 h-3 w-3" />} Estimate Flight Details </Button>
-                    {legEstimates[index] && ( <div className="text-xs p-2 mt-2 border rounded bg-muted/50 flex items-start gap-2"> <InfoIcon className="h-4 w-4 mt-0.5 shrink-0 text-blue-500"/> <div> <p className="font-medium">{legEstimates[index]?.error ? 'Error:' : `AI Est: ${legEstimates[index]?.estimatedMileageNM || 'N/A'} NM, ${legEstimates[index]?.estimatedFlightTimeHours || 'N/A'} hrs. Speed: ${legEstimates[index]?.assumedCruiseSpeedKts || 'N/A'} kts.`}</p> <p className="text-muted-foreground">{legEstimates[index]?.briefExplanation || legEstimates[index]?.error}</p> </div> </div> )}
+                    {legEstimates[index] && (
+                        <Alert variant={legEstimates[index]!.error ? "destructive" : "default"} className="mt-2 text-xs">
+                            <InfoIcon className={`h-4 w-4 ${legEstimates[index]!.error ? '' : 'text-primary'}`} />
+                            <AlertTitle className="text-sm">
+                                {legEstimates[index]!.error ? `Error Estimating Leg ${index + 1}` : `Leg ${index + 1} AI Estimate Reference`}
+                            </AlertTitle>
+                            <AlertDescription>
+                                {legEstimates[index]!.error ? ( <p>{legEstimates[index]!.error}</p> ) : (
+                                <>
+                                    <p><strong>AI Est. Distance:</strong> {legEstimates[index]!.estimatedMileageNM?.toLocaleString()} NM</p>
+                                    <p><strong>AI Est. Flight Time:</strong> {legEstimates[index]!.estimatedFlightTimeHours?.toFixed(1)} hours</p>
+                                    <p><strong>Assumed Speed (AI):</strong> {legEstimates[index]!.assumedCruiseSpeedKts?.toLocaleString()} kts</p>
+                                    <p className="mt-1"><em>AI Explanation: {legEstimates[index]!.briefExplanation}</em></p>
+                                </>
+                                )}
+                            </AlertDescription>
+                        </Alert>
+                    )}
                   </CardContent>
                 </Card>
               ))}
@@ -477,3 +510,4 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
   );
 }
 
+    
