@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardDescription } from '@/components/ui/
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import Link from 'next/link';
 import { cn } from "@/lib/utils";
-import { format, isSameDay, parseISO, startOfDay, endOfDay, isToday, addHours } from 'date-fns';
+import { format, isSameDay, parseISO, startOfDay, endOfDay, isToday, addHours, isValid } from 'date-fns'; // Added isValid here
 import { buttonVariants } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { fetchTrips, type Trip, type TripStatus } from '@/ai/flows/manage-trips-flow';
