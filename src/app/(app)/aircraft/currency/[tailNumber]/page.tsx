@@ -23,14 +23,15 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { z } from 'zod';
 import { AddMaintenanceTaskModal, type MaintenanceTaskFormData, defaultMaintenanceTaskFormValues } from './components/add-maintenance-task-modal';
-// import { ManageEngineDetailsModal } from './components/manage-engine-details-modal'; // No longer directly used in THIS file's template
+// import { ManageEngineDetailsModal } from './components/manage-engine-details-modal'; // Placeholder for future modal integration
+// import { ManagePropellerDetailsModal } from './components/manage-propeller-details-modal'; // Placeholder
 import { Badge } from '@/components/ui/badge';
 
 import { Wrench, PlusCircle, ArrowLeft, PlaneIcon, Edit, Loader2, InfoIcon, Phone, UserCircle, MapPin, Save, XCircle, Edit2, Edit3, AlertTriangle, CheckCircle2, XCircle as XCircleIcon, Search, ArrowUpDown, ArrowDown, ArrowUp, Printer, Filter, Mail, BookText, Hash, Tag, Settings2 } from 'lucide-react';
 import { format, parse, addDays, isValid, addMonths, addYears, endOfMonth, parseISO, differenceInCalendarDays } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { fetchFleetAircraft, saveFleetAircraft } from '@/ai/flows/manage-fleet-flow';
-import type { FleetAircraft, EngineDetail, PropellerDetail, SaveFleetAircraftInput } from '@/ai/schemas/fleet-aircraft-schemas'; // Added PropellerDetail
+import type { FleetAircraft, EngineDetail, PropellerDetail, SaveFleetAircraftInput } from '@/ai/schemas/fleet-aircraft-schemas';
 import { fetchMaintenanceTasksForAircraft, saveMaintenanceTask, deleteMaintenanceTask, type MaintenanceTask as FlowMaintenanceTask } from '@/ai/flows/manage-maintenance-tasks-flow';
 import { fetchComponentTimesForAircraft, saveComponentTimesForAircraft, type AircraftComponentTimes } from '@/ai/flows/manage-component-times-flow';
 import { fetchCompanyProfile, type CompanyProfile } from '@/ai/flows/manage-company-profile-flow';
@@ -342,10 +343,11 @@ export default function AircraftMaintenanceDetailPage() {
           primaryContactPhone: data.primaryContactPhone === '' ? undefined : data.primaryContactPhone,
           primaryContactEmail: data.primaryContactEmail === '' ? undefined : data.primaryContactEmail,
           internalNotes: data.internalNotes === '' ? undefined : data.internalNotes,
+          // Engine and Propeller details are managed via modals and will be part of currentAircraft state
           engineDetails: currentAircraft.engineDetails || [], 
           propellerDetails: currentAircraft.propellerDetails || [],
-          isMaintenanceTracked: currentAircraft.isMaintenanceTracked, 
-          trackedComponentNames: currentAircraft.trackedComponentNames,
+          isMaintenanceTracked: currentAircraft.isMaintenanceTracked, // Not editable here
+          trackedComponentNames: currentAircraft.trackedComponentNames, // Not editable here
         };
         await saveFleetAircraft(updatedAircraftData);
         setCurrentAircraft(updatedAircraftData); 
@@ -1209,7 +1211,3 @@ export default function AircraftMaintenanceDetailPage() {
     </div>
   );
 }
-
-    
-
-    
