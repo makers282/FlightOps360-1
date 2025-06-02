@@ -11,26 +11,29 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm, type SubmitHandler, useFieldArray } from 'react-hook-form';
 import { z } from 'zod';
 import { format, parseISO, isValid as isValidDate } from "date-fns";
-import { Loader2, Save, XCircle, PlusCircle, Trash2, Plane, Users, CalendarIcon, Info, Edit3, FileText as FileTextIcon, Package as PackageIcon, UserPlus, FileUp } from 'lucide-react';
+
+// Lucide Icons
+import {
+  Loader2, Save, XCircle, PlusCircle, Trash2, Plane, Users, CalendarIcon, Info, Edit3,
+  FileText as FileTextIcon,
+  Package as PackageIcon,
+  UserPlus, FileUp
+} from 'lucide-react';
 
 // ShadCN UI component imports
 import { Button } from '@/components/ui/button';
+import { Calendar } from "@/components/ui/calendar";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
+  Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle
 } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
-import { Skeleton } from '@/components/ui/skeleton';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Textarea } from '@/components/ui/textarea';
+
 // Hook imports
 import { useToast } from '@/hooks/use-toast';
 import { cn } from "@/lib/utils";
@@ -38,14 +41,14 @@ import { cn } from "@/lib/utils";
 // Flow and Schema imports
 import { saveTrip } from '@/ai/flows/manage-trips-flow';
 import type { Trip, SaveTripInput, TripLeg as TripLegType, TripStatus } from '@/ai/schemas/trip-schemas';
-import { TripLegSchema, TripSchema as FullTripSchema, tripStatuses, legTypes } from '@/ai/schemas/trip-schemas';
+import { TripLegSchema, TripSchema as FullTripSchemaFromImport, tripStatuses, legTypes } from '@/ai/schemas/trip-schemas';
 import { fetchFleetAircraft } from '@/ai/flows/manage-fleet-flow';
 
 // Schema definition for the form
-const TripFormSchema = FullTripSchema.omit({ id: true, createdAt: true, updatedAt: true }).extend({
+const TripFormSchema = FullTripSchemaFromImport.omit({ id: true, createdAt: true, updatedAt: true }).extend({
   legs: z.array(TripLegSchema.extend({
     departureDateTime: z.date().optional(),
-    arrivalDateTime: z.date().optional(), // This field might not be directly on the form but could be calculated
+    arrivalDateTime: z.date().optional(),
   })).min(1, "At least one flight leg is required.")
 });
 
@@ -57,7 +60,6 @@ interface TripFormProps {
 }
 
 export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
-  // State and Hooks
   const [isSaving, startSavingTransition] = useTransition();
   const router = useRouter();
   const { toast } = useToast();
@@ -66,7 +68,6 @@ export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
   const [aircraftOptions, setAircraftOptions] = useState<{ value: string, label: string }[]>([]);
   const [isLoadingAircraft, setIsLoadingAircraft] = useState(true);
 
-  // Form setup
   const form = useForm<TripFormData>({
     resolver: zodResolver(TripFormSchema),
     defaultValues: {
@@ -91,12 +92,10 @@ export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
     name: "legs",
   });
 
-  // Helper function
   const generateNewUserFacingTripId = useCallback(() => {
     return `TRP-${Date.now().toString().slice(-6)}`;
   }, []);
 
-  // Effects
   useEffect(() => {
     setIsClient(true);
     const today = new Date();
@@ -142,7 +141,6 @@ export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
     }
   }, [isEditMode, initialTripData, reset, generateNewUserFacingTripId]);
 
-  // Form submission handler
   const onSubmit: SubmitHandler<TripFormData> = (data) => {
     startSavingTransition(async () => {
       const selectedAircraft = aircraftOptions.find(opt => opt.value === data.aircraftId);
@@ -155,9 +153,8 @@ export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
         legs: data.legs.map(leg => ({
           ...leg,
           departureDateTime: leg.departureDateTime ? leg.departureDateTime.toISOString() : undefined,
-          arrivalDateTime: undefined, 
         })),
-        status: data.status as TripStatus,
+        status: data.status as TripStatus, 
         notes: data.notes,
         quoteId: data.quoteId,
         customerId: data.customerId,
@@ -184,7 +181,6 @@ export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
     });
   };
 
-  // UI variables
   const titleText = isEditMode ? `Edit Trip: ${initialTripData?.tripId || 'N/A'}` : "Create New Trip";
   const descriptionText = isEditMode ? "Modify the details of this existing trip." : "Enter the details for the new trip.";
 
@@ -286,8 +282,8 @@ export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
                                     if (isValidDate(newDate)) {
                                       newDate.setHours(hours, minutesValue);
                                       field.onChange(newDate);
-                                    } else { 
-                                      const tempDate = new Date();
+                                    } else {
+                                      const tempDate = new Date(); 
                                       tempDate.setHours(hours, minutesValue, 0, 0);
                                       field.onChange(tempDate);
                                     }
@@ -337,24 +333,24 @@ export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
                     </FormItem>
                 )} />
             </section>
-            
+
             <Separator />
             <Card className="bg-muted/30 border-dashed">
               <CardHeader><CardTitle className="text-base text-muted-foreground flex items-center gap-2"><Users className="h-5 w-5"/>Crew Assignment</CardTitle></CardHeader>
               <CardContent><p className="text-sm text-muted-foreground italic">Placeholder: Crew assignment UI will be implemented here.</p></CardContent>
             </Card>
-            
-            <Card className="bg-muted/30 border-dashed">
+
+            <Card className="bg-muted/30 border-dashed mt-6">
               <CardHeader><CardTitle className="text-base text-muted-foreground flex items-center gap-2"><UserPlus className="h-5 w-5"/>Passenger Manifest</CardTitle></CardHeader>
               <CardContent><p className="text-sm text-muted-foreground italic">Placeholder: Passenger details and manifest management UI will be here.</p></CardContent>
             </Card>
-            
-            <Card className="bg-muted/30 border-dashed">
+
+            <Card className="bg-muted/30 border-dashed mt-6">
               <CardHeader><CardTitle className="text-base text-muted-foreground flex items-center gap-2"><PackageIcon className="h-5 w-5"/>Cargo & Load</CardTitle></CardHeader>
               <CardContent><p className="text-sm text-muted-foreground italic">Placeholder: Cargo details, load manifest, and Hazmat declaration UI will be here.</p></CardContent>
             </Card>
-            
-            <Card className="bg-muted/30 border-dashed">
+
+            <Card className="bg-muted/30 border-dashed mt-6">
               <CardHeader><CardTitle className="text-base text-muted-foreground flex items-center gap-2"><FileUp className="h-5 w-5"/>Files & Documents</CardTitle></CardHeader>
               <CardContent><p className="text-sm text-muted-foreground italic">Placeholder: File attachment UI for this trip will be implemented here.</p></CardContent>
             </Card>
