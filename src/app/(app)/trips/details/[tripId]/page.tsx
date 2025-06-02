@@ -240,7 +240,7 @@ export default function ViewTripDetailsPage() {
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
             <p><strong>Trip ID:</strong> {trip.tripId}</p>
-            <p><strong>Status:</strong> <Badge variant={getStatusBadgeVariant(trip.status as TripStatus)}>{trip.status}</Badge></p>
+            <div><strong>Status:</strong> <Badge variant={getStatusBadgeVariant(trip.status as TripStatus)}>{trip.status}</Badge></div>
             <p><strong>Client:</strong> {trip.clientName}</p>
             {trip.quoteId && <p><strong>Source Quote ID:</strong> <Link href={`/quotes/${trip.quoteId}`} className="text-primary hover:underline">{trip.quoteId}</Link></p>}
             <p><strong>Aircraft:</strong> {trip.aircraftLabel || trip.aircraftId}</p>
@@ -364,6 +364,3 @@ export default function ViewTripDetailsPage() {
     </>
   );
 }
-
-
-    
