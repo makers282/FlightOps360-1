@@ -94,7 +94,7 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
 
   const [legEstimates, setLegEstimates] = useState<Array<LegEstimate | null>>([]);
   const [estimatingLegIndex, setEstimatingLegIndex] = useState<number | null>(null);
-  const [selectedAircraftPerformance, setSelectedAircraftPerformance] = useState<AircraftPerformanceData | null>(null);
+  const [selectedAircraftPerformance, setSelectedAircraftPerformance] = useState<(AircraftPerformanceData & { aircraftId: string }) | null>(null);
   const [isLoadingSelectedAcPerf, setIsLoadingSelectedAcPerf] = useState(false);
 
   const form = useForm<FullTripFormData>({
@@ -164,10 +164,10 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
   }, [toast]);
   
   useEffect(() => {
-    if (isEditMode && initialTripData) {
+    if (isEditMode && initialTripData && aircraftSelectOptions.length > 0) { // Ensure aircraft options are loaded for model lookup
       const currentAircraftIdFromData = initialTripData.aircraftId || undefined;
       const aircraftModelForEstimates = aircraftSelectOptions.find(ac => ac.value === currentAircraftIdFromData)?.model || 'Unknown Model';
-      const knownCruiseSpeedForEstimates = currentAircraftIdFromData === selectedAircraftPerformance?.aircraftId // Check if perf data matches current ac
+      const knownCruiseSpeedForEstimates = currentAircraftIdFromData === selectedAircraftPerformance?.aircraftId
         ? selectedAircraftPerformance?.cruiseSpeed 
         : undefined;
 
@@ -239,8 +239,8 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
       setIsLoadingSelectedAcPerf(true);
       fetchAircraftPerformance({ aircraftId: currentSelectedAircraftId })
         .then(perfData => {
-          if (perfData) { // Check if perfData is not null
-             setSelectedAircraftPerformance({...perfData, aircraftId: currentSelectedAircraftId}); // Store aircraftId with perf data
+          if (perfData) {
+             setSelectedAircraftPerformance({...perfData, aircraftId: currentSelectedAircraftId});
           } else {
              setSelectedAircraftPerformance(null);
           }
@@ -390,7 +390,23 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
               <FormField control={control} name="clientEmail" render={({ field }) => ( <FormItem> <FormLabel>Client Email</FormLabel> <FormControl><Input type="email" placeholder="contact@example.com" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
             </div>
             <FormField control={control} name="clientPhone" render={({ field }) => ( <FormItem> <FormLabel>Client Phone (Optional)</FormLabel> <FormControl><Input type="tel" placeholder="(555) 123-4567" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
-            <FormField control={control} name="aircraftId" render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><Plane className="h-4 w-4" /> Aircraft</FormLabel> <Select onValueChange={field.onChange} value={field.value || ""} disabled={isLoadingAircraftList}> <FormControl><SelectTrigger><SelectValue placeholder={isLoadingAircraftList ? "Loading aircraft..." : "Select an aircraft"} /></SelectTrigger></FormControl> <SelectContent> {!isLoadingAircraftList && aircraftSelectOptions.length === 0 && <SelectItem value="NO_AIRCRAFT" disabled>No aircraft in fleet</SelectItem>} {aircraftSelectOptions.map(opt => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))} </SelectContent> </Select> <FormMessage /> </FormItem> )} />
+            
+            <FormItem>
+                <FormLabel className="flex items-center gap-1">
+                    <Plane className="h-4 w-4" /> Aircraft
+                    {isLoadingSelectedAcPerf && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground ml-2" />}
+                </FormLabel>
+                <FormField control={control} name="aircraftId" render={({ field }) => ( 
+                    <Select onValueChange={field.onChange} value={field.value || ""} disabled={isLoadingAircraftList}> 
+                        <FormControl><SelectTrigger><SelectValue placeholder={isLoadingAircraftList ? "Loading aircraft..." : "Select an aircraft"} /></SelectTrigger></FormControl> 
+                        <SelectContent> 
+                            {!isLoadingAircraftList && aircraftSelectOptions.length === 0 && <SelectItem value="NO_AIRCRAFT" disabled>No aircraft in fleet</SelectItem>} 
+                            {aircraftSelectOptions.map(opt => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))} 
+                        </SelectContent> 
+                    </Select> 
+                )} />
+                <FormMessage>{form.formState.errors.aircraftId?.message}</FormMessage>
+            </FormItem>
             
             <Separator />
             <section>
