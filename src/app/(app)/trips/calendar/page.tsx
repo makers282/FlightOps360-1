@@ -23,9 +23,9 @@ interface CalendarEvent {
   end: Date;
   type: 'trip' | 'maintenance';
   aircraft?: string;
-  route?: string; 
-  color: string; 
-  textColor: string; 
+  route?: string;
+  color: string;
+  textColor: string;
   description?: string;
   status?: TripStatus;
 }
@@ -57,22 +57,22 @@ function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
   }, [eventsForDay]);
 
   const dayNumberSectionClasses = cn(
-    "flex justify-end p-0.5" 
+    "flex justify-end p-0.5 h-6 items-start", // Fixed height for day number area
   );
 
   const eventsForDayContainerClasses = cn(
-    "flex-1 flex flex-col gap-px overflow-hidden" // Removed p-px
+    "flex-1 flex flex-col gap-px overflow-hidden", // Fills remaining space, manages overflow
   );
 
   return (
-    <div className="h-full w-full flex flex-col">
-      <div className={dayNumberSectionClasses}>
+    <div className="h-full w-full flex flex-col"> {/* CustomDay root fills the cell */}
+      <div className={dayNumberSectionClasses}> {/* Fixed height area for the day number */}
         <time
           dateTime={format(date, "yyyy-MM-dd")}
           className={cn(
             "text-xs",
-            isToday(date) 
-              ? "text-primary font-bold rounded-full bg-primary/10 size-5 flex items-center justify-center"
+            isToday(date)
+              ? "text-primary font-bold rounded-full bg-primary/10 size-5 flex items-center justify-center" // size-5 should fit in h-6
               : "px-1"
           )}
         >
@@ -81,44 +81,42 @@ function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
       </div>
 
       {dayEvents.length > 0 && (
-        <div className={eventsForDayContainerClasses}> 
+        <div className={eventsForDayContainerClasses}>
           {dayEvents.map(event => {
             const mapKey = `${event.id}-${format(date, "yyyy-MM-dd")}`;
-            
-            const currentCellStart = startOfDay(date);
-            const currentCellEnd = endOfDay(date);
+            const currentCellDayStart = startOfDay(date);
+            const currentCellDayEnd = endOfDay(date);
 
             const eventIsActuallyStartingInCell = isSameDay(event.start, date);
             const eventIsActuallyEndingInCell = isSameDay(event.end, date);
-            
-            const eventStartedBeforeCell = isBefore(event.start, currentCellStart);
-            const eventEndsAfterCell = isAfter(event.end, currentCellEnd);
-            const eventSpansMultipleDays = differenceInCalendarDays(event.end, event.start) > 0;
+            const eventStartedBeforeThisCell = isBefore(event.start, currentCellDayStart);
+            const eventContinuesPastThisCell = isAfter(event.end, currentCellDayEnd);
 
-            let borderRadiusClasses = "rounded-sm"; 
+            let borderRadiusClasses = "rounded-sm"; // Default: full rounding
             let marginClasses = "";
+            let zIndexClass = "";
 
-            if (eventSpansMultipleDays) {
-                if (eventIsActuallyStartingInCell && !eventIsActuallyEndingInCell) { // Starts in this cell, continues
-                    borderRadiusClasses = "rounded-l-sm rounded-r-none";
-                    marginClasses = "mr-[-1px]";
-                } else if (eventStartedBeforeCell && eventIsActuallyEndingInCell) { // Started before, ends in this cell
-                    borderRadiusClasses = "rounded-r-sm rounded-l-none";
-                    marginClasses = "ml-[-1px]";
-                } else if (eventStartedBeforeCell && eventEndsAfterCell) { // Middle segment
-                    borderRadiusClasses = "rounded-none";
-                    marginClasses = "mx-[-1px]";
-                } else if (eventIsActuallyStartingInCell && eventIsActuallyEndingInCell) { // Starts and ends in this cell (multi-day event that is very short or error)
-                     borderRadiusClasses = "rounded-sm"; // Treat as single day for rendering
-                }
-            } else { // Single day event (or appears as such within this cell)
-                borderRadiusClasses = "rounded-sm";
+            if (eventStartedBeforeThisCell && eventContinuesPastThisCell) { // Middle segment
+              borderRadiusClasses = "rounded-none";
+              marginClasses = "mx-[-1px]";
+              zIndexClass = "relative z-10";
+            } else if (eventIsActuallyStartingInCell && eventContinuesPastThisCell) { // Starts in this cell, continues
+              borderRadiusClasses = "rounded-l-sm rounded-r-none";
+              marginClasses = "mr-[-1px]";
+              zIndexClass = "relative z-10";
+            } else if (eventStartedBeforeThisCell && eventIsActuallyEndingInCell) { // Started before, ends in this cell
+              borderRadiusClasses = "rounded-r-sm rounded-l-none";
+              marginClasses = "ml-[-1px]";
+              zIndexClass = "relative z-10";
             }
-            
-            const displayTitle = eventIsActuallyStartingInCell;
-            const showPaddingForText = displayTitle; // Only pad text if title is shown
-            const zIndexClass = marginClasses ? "relative z-10" : "";
+            // else: starts and ends in this cell, keep default full rounding and no margins.
 
+            const displayTitle = eventIsActuallyStartingInCell;
+            const showPaddingForText = displayTitle;
+
+            const eventBarWrapperClasses = cn(
+              "block w-full h-5 sm:h-6 focus:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+            );
 
             const eventBarDivClasses = cn(
               "h-full w-full text-[0.55rem] sm:text-[0.6rem] flex items-center hover:opacity-90",
@@ -132,12 +130,12 @@ function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
             return (
               <TooltipProvider key={mapKey} delayDuration={100}>
                 <Tooltip>
-                  <TooltipTrigger asChild className="block w-full h-5 sm:h-6 focus:outline-none focus-visible:ring-1 focus-visible:ring-ring">
+                  <TooltipTrigger asChild className={eventBarWrapperClasses}>
                     <Link href={`/trips/details/${event.id}`} className="block h-full w-full">
                       <div className={eventBarDivClasses}>
                         <span className={cn(
                             "w-full overflow-hidden whitespace-nowrap truncate",
-                            showPaddingForText ? "px-0.5 sm:px-1" : "" 
+                            showPaddingForText ? "px-0.5 sm:px-1" : ""
                         )}>
                           {displayTitle ? event.title : <>&nbsp;</>}
                         </span>
@@ -179,7 +177,7 @@ export default function TripCalendarPage() {
           let startDate: Date | null = null;
           let endDate: Date | null = null;
           let route = "N/A";
-          
+
           if (trip.legs && trip.legs.length > 0) {
             const firstLeg = trip.legs[0];
             const lastLeg = trip.legs[trip.legs.length - 1];
@@ -188,7 +186,7 @@ export default function TripCalendarPage() {
             if (firstLeg.departureDateTime && isValidISO(firstLeg.departureDateTime)) {
               startDate = parseISO(firstLeg.departureDateTime);
             }
-            
+
             let lastLegDeparture: Date | null = null;
             if (lastLeg.departureDateTime && isValidISO(lastLeg.departureDateTime)) {
                 lastLegDeparture = parseISO(lastLeg.departureDateTime);
@@ -198,27 +196,29 @@ export default function TripCalendarPage() {
               endDate = parseISO(lastLeg.arrivalDateTime);
             } else if (lastLegDeparture && lastLeg.blockTimeHours && lastLeg.blockTimeHours > 0) {
               endDate = addHours(lastLegDeparture, lastLeg.blockTimeHours);
-            } else if (startDate && lastLeg.blockTimeHours && lastLeg.blockTimeHours > 0) { 
-              // If last leg has no departure but first leg does and last leg has block time
-              endDate = addHours(startDate, lastLeg.blockTimeHours); 
-            } else if (startDate) { 
-              // Fallback: estimate based on total block time from start if only first leg start is known
+            } else if (startDate && lastLeg.blockTimeHours && lastLeg.blockTimeHours > 0) {
+              endDate = addHours(startDate, lastLeg.blockTimeHours);
+            } else if (startDate) {
               let totalBlockTimeForEndDate = 0;
               trip.legs.forEach(leg => {
-                totalBlockTimeForEndDate += (leg.blockTimeHours || (leg.flightTimeHours ? leg.flightTimeHours + 0.5 : 1)); 
+                totalBlockTimeForEndDate += (leg.blockTimeHours || (leg.flightTimeHours ? leg.flightTimeHours + 0.5 : 1));
               });
               endDate = addHours(startDate, totalBlockTimeForEndDate > 0 ? totalBlockTimeForEndDate : 2);
             }
           }
-          
+
           if (!startDate) {
-            startDate = new Date(); 
+            startDate = new Date();
             console.warn(`Trip ${trip.id} missing valid start date, defaulting to now.`);
           }
-          
-          if (!endDate || endDate <= startDate) { 
-            endDate = addHours(startDate, 2); // Min 2 hour duration if end date is invalid or before start
+
+          if (!endDate || isBefore(endDate, startDate) || !isValid(endDate)) {
+            endDate = addHours(startDate, 2); 
           }
+          if (isSameDay(startDate, endDate) && differenceInCalendarDays(endDate, startDate) === 0 && isBefore(endDate, startDate)) {
+             endDate = addHours(startDate, Math.max(2, differenceInCalendarDays(addDays(endDate,1), startDate) * 24 ) ); // Make it at least 2 hours or span to next day if it somehow became before start
+          }
+
 
           const { color, textColor } = getTripEventColor(trip.status);
 
@@ -235,7 +235,7 @@ export default function TripCalendarPage() {
             description: `Trip for ${trip.clientName} on ${trip.aircraftLabel || trip.aircraftId}. Status: ${trip.status}.`,
             status: trip.status
           };
-        }).filter(event => event.start && event.end && isValid(event.start) && isValid(event.end)); 
+        }).filter(event => event.start && event.end && isValid(event.start) && isValid(event.end));
         setAllEvents(calendarEvents);
       } catch (error) {
         console.error("Failed to load trips for calendar:", error);
@@ -251,7 +251,7 @@ export default function TripCalendarPage() {
     if (!dateString) return false;
     return isValid(parseISO(dateString));
   };
-  
+
   const eventsByDay = useMemo(() => {
     const map = new Map<string, CalendarEvent[]>();
     allEvents.forEach(event => {
@@ -259,17 +259,16 @@ export default function TripCalendarPage() {
         return;
       }
       let currentDayIter = startOfDay(event.start);
-      const eventEndBoundary = endOfDay(event.end); 
+      const eventEndBoundary = endOfDay(event.end);
 
-      while (currentDayIter <= eventEndBoundary) { 
+      while (currentDayIter <= eventEndBoundary) {
         const dayKey = format(currentDayIter, "yyyy-MM-dd");
         if (!map.has(dayKey)) {
           map.set(dayKey, []);
         }
-        
+
         const dayEvents = map.get(dayKey)!;
-        // Add event only if it's not already present for that day (prevents duplicates from short events within the same day)
-        if (!dayEvents.find(e => e.id === event.id)) { 
+        if (!dayEvents.find(e => e.id === event.id)) {
             dayEvents.push(event);
         }
         currentDayIter = addDays(currentDayIter, 1);
@@ -323,25 +322,25 @@ export default function TripCalendarPage() {
             className="w-full rounded-md bg-card"
             classNames={{
                 table: "w-full border-collapse table-fixed",
-                month: "w-full", 
+                month: "w-full",
                 head_row: "border-b border-border/50 flex",
                 head_cell: cn(
                     "text-muted-foreground align-middle text-center font-normal text-[0.65rem] sm:text-xs py-1.5",
-                    "border-r border-b border-border/30 last:border-r-0", 
-                    "w-[calc(100%/7)]" 
+                    "border-r border-b border-border/30 last:border-r-0",
+                    "w-[calc(100%/7)]"
                 ),
-                row: "flex w-full", 
+                row: "flex w-full",
                 cell: cn(
-                    "p-0 m-0 text-left align-top relative", 
-                    "h-24 min-h-[6rem] sm:h-28 sm:min-h-[7rem] md:h-32 md:min-h-[8rem] lg:h-36 lg:min-h-[9rem] xl:h-40 xl:min-h-[10rem]", 
-                    "border-r border-b border-border/30", 
-                    "w-[calc(100%/7)]" 
+                    "p-0 m-0 text-left align-top relative",
+                    "h-24 min-h-[6rem] sm:h-28 sm:min-h-[7rem] md:h-32 md:min-h-[8rem] lg:h-36 lg:min-h-[9rem] xl:h-40 xl:min-h-[10rem]",
+                    "border-r border-b border-border/30",
+                    "w-[calc(100%/7)]"
                 ),
                 day_disabled: "opacity-50 pointer-events-none",
                 caption: "flex justify-center items-center py-2.5 relative gap-x-1 px-2",
-                caption_label: "text-sm font-medium px-2", 
+                caption_label: "text-sm font-medium px-2",
                 nav_button: cn(buttonVariants({ variant: "outline" }), "h-7 w-7 bg-transparent p-0 opacity-80 hover:opacity-100"),
-                nav_button_previous: "absolute left-1", 
+                nav_button_previous: "absolute left-1",
                 nav_button_next: "absolute right-1",
             }}
             components={{
@@ -353,7 +352,7 @@ export default function TripCalendarPage() {
             showOutsideDays={false}
             numberOfMonths={1}
             captionLayout="buttons"
-            fromYear={new Date().getFullYear() - 5} 
+            fromYear={new Date().getFullYear() - 5}
             toYear={new Date().getFullYear() + 5}
           />
         </CardContent>
@@ -361,4 +360,3 @@ export default function TripCalendarPage() {
     </>
   );
 }
-
