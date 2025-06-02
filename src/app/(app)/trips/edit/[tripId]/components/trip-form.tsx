@@ -12,7 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
-import { Plane, Edit3, UserSearch, Loader2, CalendarIcon, PlusCircle, Trash2, GripVertical, Wand2, PlaneTakeoff, PlaneLanding, Building, Users as PaxIcon, Save, InfoIcon } from 'lucide-react';
+import { Plane, Edit3, UserSearch, Loader2, CalendarIcon, PlusCircle, Trash2, GripVertical, Wand2, PlaneTakeoff, PlaneLanding, Building, Users as PaxIcon, Save, InfoIcon, UserCircle2 } from 'lucide-react';
 import { useForm, useFieldArray, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -30,6 +30,7 @@ import { fetchAircraftPerformance, type AircraftPerformanceData } from '@/ai/flo
 import { Skeleton } from '@/components/ui/skeleton';
 import { LegsSummaryTable } from '@/app/(app)/quotes/new/components/legs-summary-table';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { fetchCrewMembers, type CrewMember } from '@/ai/flows/manage-crew-flow';
 
 
 // Schema for individual legs in the form
@@ -59,7 +60,10 @@ const TripFormSchema = z.object({
   status: z.enum(tripStatuses).default("Scheduled"),
   legs: z.array(FormLegSchema).min(1, "At least one flight leg is required."),
   notes: z.string().optional(),
-  initialQuoteId: z.string().optional(), // Added for displaying linked quote ID
+  initialQuoteId: z.string().optional(),
+  assignedPilotId: z.string().optional(),
+  assignedCoPilotId: z.string().optional(),
+  // assignedFlightAttendantIds: z.array(z.string()).optional(), // For later
 });
 
 export type FullTripFormData = z.infer<typeof TripFormSchema>;
@@ -97,6 +101,9 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
   const [selectedAircraftPerformance, setSelectedAircraftPerformance] = useState<(AircraftPerformanceData & { aircraftId: string }) | null>(null);
   const [isLoadingSelectedAcPerf, setIsLoadingSelectedAcPerf] = useState(false);
 
+  const [crewRoster, setCrewRoster] = useState<CrewMember[]>([]);
+  const [isLoadingCrewRoster, setIsLoadingCrewRoster] = useState(false);
+
   const form = useForm<FullTripFormData>({
     resolver: zodResolver(TripFormSchema),
     defaultValues: {
@@ -114,6 +121,8 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
       }],
       notes: '',
       initialQuoteId: undefined,
+      assignedPilotId: undefined,
+      assignedCoPilotId: undefined,
     },
   });
 
@@ -140,10 +149,12 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
     const loadInitialDropdownData = async () => {
       setIsLoadingCustomers(true);
       setIsLoadingAircraftList(true);
+      setIsLoadingCrewRoster(true);
       try {
-        const [fetchedCustomersData, fetchedFleetData] = await Promise.all([
+        const [fetchedCustomersData, fetchedFleetData, fetchedCrewData] = await Promise.all([
           fetchCustomers(),
-          fetchFleetAircraft()
+          fetchFleetAircraft(),
+          fetchCrewMembers()
         ]);
         setCustomers(fetchedCustomersData);
         const options = fetchedFleetData.map(ac => ({
@@ -152,19 +163,21 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
           model: ac.model
         }));
         setAircraftSelectOptions(options);
+        setCrewRoster(fetchedCrewData);
       } catch (error) {
         console.error("Failed to load initial data for trip form:", error);
-        toast({ title: "Error loading initial data", description: "Could not load customers or aircraft.", variant: "destructive" });
+        toast({ title: "Error loading initial data", description: "Could not load customers, aircraft, or crew.", variant: "destructive" });
       } finally {
         setIsLoadingCustomers(false);
         setIsLoadingAircraftList(false);
+        setIsLoadingCrewRoster(false);
       }
     };
     loadInitialDropdownData();
   }, [toast]);
   
   useEffect(() => {
-    if (isEditMode && initialTripData && aircraftSelectOptions.length > 0) { // Ensure aircraft options are loaded for model lookup
+    if (isEditMode && initialTripData && aircraftSelectOptions.length > 0) { 
       const currentAircraftIdFromData = initialTripData.aircraftId || undefined;
       const aircraftModelForEstimates = aircraftSelectOptions.find(ac => ac.value === currentAircraftIdFromData)?.model || 'Unknown Model';
       const knownCruiseSpeedForEstimates = currentAircraftIdFromData === selectedAircraftPerformance?.aircraftId
@@ -189,6 +202,8 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
         })),
         notes: initialTripData.notes || '',
         initialQuoteId: initialQuoteId || initialTripData.quoteId || undefined,
+        assignedPilotId: initialTripData.assignedPilotId || undefined,
+        assignedCoPilotId: initialTripData.assignedCoPilotId || undefined,
       });
 
       const newLegEstimates = (initialTripData.legs || []).map((leg: DbTripLeg) => {
@@ -407,6 +422,39 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
                 )} />
                 <FormMessage>{form.formState.errors.aircraftId?.message}</FormMessage>
             </FormItem>
+
+            <Separator />
+            <CardTitle className="text-lg border-b pb-2 mb-4">Crew Assignment</CardTitle>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField control={control} name="assignedPilotId" render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="flex items-center gap-1"><UserCircle2 className="h-4 w-4" />Assigned Pilot (PIC)</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value || ""} disabled={isLoadingCrewRoster}>
+                    <FormControl><SelectTrigger><SelectValue placeholder={isLoadingCrewRoster ? "Loading crew..." : "Select Pilot"} /></SelectTrigger></FormControl>
+                    <SelectContent>
+                      <SelectItem value="">Unassigned</SelectItem>
+                      {crewRoster.filter(c => c.role === "Captain" || c.role === "First Officer").map(c => (<SelectItem key={c.id} value={c.id}>{c.firstName} {c.lastName} ({c.role})</SelectItem>))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={control} name="assignedCoPilotId" render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="flex items-center gap-1"><UserCircle2 className="h-4 w-4" />Assigned Co-Pilot (SIC)</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value || ""} disabled={isLoadingCrewRoster}>
+                    <FormControl><SelectTrigger><SelectValue placeholder={isLoadingCrewRoster ? "Loading crew..." : "Select Co-Pilot"} /></SelectTrigger></FormControl>
+                    <SelectContent>
+                      <SelectItem value="">Unassigned</SelectItem>
+                       {crewRoster.filter(c => c.role === "First Officer" || c.role === "Captain").map(c => (<SelectItem key={c.id} value={c.id}>{c.firstName} {c.lastName} ({c.role})</SelectItem>))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )} />
+            </div>
+            {/* Placeholder for Flight Attendants - to be implemented with multi-select */}
+            {/* <FormDescription className="text-xs">Flight Attendant assignment will be added later.</FormDescription> */}
             
             <Separator />
             <section>

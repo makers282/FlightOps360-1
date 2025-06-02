@@ -26,6 +26,7 @@ import { fetchTripById, deleteTrip, saveTrip } from '@/ai/flows/manage-trips-flo
 import type { Trip, TripLeg, TripStatus, SaveTripInput } from '@/ai/schemas/trip-schemas';
 import { useToast } from '@/hooks/use-toast';
 import { format, parseISO, isValid } from 'date-fns';
+import { fetchCrewMembers, type CrewMember } from '@/ai/flows/manage-crew-flow'; // Import crew functionalities
 
 // Helper to get badge variant for status
 const getStatusBadgeVariant = (status?: TripStatus): "default" | "secondary" | "outline" | "destructive" => {
@@ -98,30 +99,58 @@ export default function ViewTripDetailsPage() {
   const [editableNotes, setEditableNotes] = useState('');
   const [isSavingNotes, startSavingNotesTransition] = useTransition();
 
+  const [crewRosterDetails, setCrewRosterDetails] = useState<CrewMember[]>([]);
+  const [isLoadingCrewRosterDetails, setIsLoadingCrewRosterDetails] = useState(true);
+
   useEffect(() => {
-    if (id) {
+    let isMounted = true;
+    const loadTripAndCrew = async () => {
+      if (!id) {
+        setError("No trip ID provided in URL.");
+        setIsLoading(false);
+        return;
+      }
+
       setIsLoading(true);
       setError(null);
-      fetchTripById({ id })
-        .then(data => {
-          if (data) {
-            setTrip(data);
-            setEditableNotes(data.notes || '');
-          } else {
-            setError("Trip not found.");
-            toast({ title: "Error", description: `Trip with ID ${id} not found.`, variant: "destructive" });
+
+      try {
+        const tripData = await fetchTripById({ id });
+        if (!isMounted) return;
+
+        if (tripData) {
+          setTrip(tripData);
+          setEditableNotes(tripData.notes || '');
+
+          setIsLoadingCrewRosterDetails(true);
+          try {
+            const roster = await fetchCrewMembers();
+            if (isMounted) setCrewRosterDetails(roster);
+          } catch (crewError) {
+            if (isMounted) {
+              console.error("Failed to fetch crew roster:", crewError);
+              toast({ title: "Error Fetching Crew", description: "Could not load crew roster for display.", variant: "destructive" });
+            }
+          } finally {
+            if (isMounted) setIsLoadingCrewRosterDetails(false);
           }
-        })
-        .catch(err => {
+        } else {
+          setError("Trip not found.");
+          toast({ title: "Error", description: `Trip with ID ${id} not found.`, variant: "destructive" });
+        }
+      } catch (err) {
+        if (isMounted) {
           console.error("Failed to fetch trip:", err);
           setError(err instanceof Error ? err.message : "An unknown error occurred.");
           toast({ title: "Error Fetching Trip", description: (err instanceof Error ? err.message : "Unknown error"), variant: "destructive" });
-        })
-        .finally(() => setIsLoading(false));
-    } else {
-      setError("No trip ID provided in URL.");
-      setIsLoading(false);
-    }
+        }
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    };
+
+    loadTripAndCrew();
+    return () => { isMounted = false; };
   }, [id, toast]);
 
   const handleDeleteInitialConfirm = () => {
@@ -148,14 +177,12 @@ export default function ViewTripDetailsPage() {
   const handleSaveNotes = () => {
     if (!trip) return;
     startSavingNotesTransition(async () => {
-      // Construct the full trip object with updated notes to pass to saveTrip
       const tripDataToSave: Trip = {
         ...trip,
         notes: editableNotes.trim(),
       };
       
       try {
-        // saveTrip expects the full Trip object, it will handle Firestore ID internally
         const savedTrip = await saveTrip(tripDataToSave);
         setTrip(savedTrip);
         setEditableNotes(savedTrip.notes || '');
@@ -166,6 +193,13 @@ export default function ViewTripDetailsPage() {
         toast({ title: "Error Saving Notes", description: (err instanceof Error ? err.message : "Unknown error"), variant: "destructive" });
       }
     });
+  };
+
+  const getCrewMemberDisplay = (crewId?: string) => {
+    if (!crewId) return "N/A";
+    if (isLoadingCrewRosterDetails) return <Loader2 className="h-4 w-4 animate-spin" />;
+    const crewMember = crewRosterDetails.find(c => c.id === crewId);
+    return crewMember ? `${crewMember.firstName} ${crewMember.lastName} (${crewMember.role})` : `Unknown (ID: ${crewId})`;
   };
 
 
@@ -251,10 +285,15 @@ export default function ViewTripDetailsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><CrewIcon className="h-5 w-5 text-primary"/>Crew Assignment</CardTitle>
           </CardHeader>
-          <CardContent>
-            <p className="text-muted-foreground text-sm mb-4">Functionality to assign and view crew (PIC, SIC, FA) for this trip will be available here.</p>
-            <Button variant="outline" disabled className="w-full">
-                <CrewIcon className="mr-2 h-4 w-4" /> Manage Crew Assignment
+          <CardContent className="space-y-2 text-sm">
+            <p><strong>Pilot (PIC):</strong> {getCrewMemberDisplay(trip.assignedPilotId)}</p>
+            <p><strong>Co-Pilot (SIC):</strong> {getCrewMemberDisplay(trip.assignedCoPilotId)}</p>
+            {/* Placeholder for Flight Attendants display */}
+            <p className="text-xs text-muted-foreground mt-1">Flight Attendant assignment display coming soon.</p>
+            <Button variant="outline" className="w-full mt-2" asChild>
+                <Link href={`/trips/edit/${trip.id}`}>
+                    <Edit3 className="mr-2 h-4 w-4" /> Manage Crew Assignment
+                </Link>
             </Button>
           </CardContent>
         </Card>
