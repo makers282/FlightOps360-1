@@ -67,44 +67,32 @@ function CustomDay({ date, displayMonth, eventsForDay }: DayProps & { eventsForD
         <div className="mt-0.5 flex-grow overflow-hidden">
           <div className="flex flex-col gap-px">
             {dayEvents.map(event => {
-              const cellDayStart = startOfDay(date);
-              const cellDayEnd = endOfDay(date);
+              const cellStartTime = startOfDay(date);
+              const cellEndTime = endOfDay(date);
 
-              // Determine if the event segment in this cell is the start, middle, or end
-              const isEventStartSegment = event.start >= cellDayStart && event.start < cellDayEnd;
-              const isEventEndSegment = event.end > cellDayStart && event.end <= cellDayEnd;
+              const eventIsStartingInCell = event.start >= cellStartTime && event.start <= cellEndTime;
+              // Ensure event.end is strictly greater than cellStartTime to be considered ending *in* this cell
+              // and event.end is less than or equal to cellEndTime.
+              const eventIsEndingInCell = event.end > cellStartTime && event.end <= cellEndTime; 
               
-              // More precise checks for spanning
-              const eventActuallyStartsToday = isSameDay(event.start, date);
-              const eventActuallyEndsToday = isSameDay(event.end, date); // Could be problematic if end is 00:00 of next day
+              const eventStartedBeforeCell = event.start < cellStartTime;
+              const eventEndsAfterCell = event.end > cellEndTime;
 
               let borderRadiusClasses = "";
-              if (eventActuallyStartsToday && eventActuallyEndsToday) {
-                borderRadiusClasses = "rounded"; // Starts and ends on this day
-              } else if (eventActuallyStartsToday && !eventActuallyEndsToday) {
-                borderRadiusClasses = "rounded-l rounded-r-none"; // Starts today, continues
-              } else if (!eventActuallyStartsToday && eventActuallyEndsToday) {
-                borderRadiusClasses = "rounded-r rounded-l-none"; // Started before, ends today
-              } else if (!eventActuallyStartsToday && !eventActuallyEndsToday) {
-                borderRadiusClasses = "rounded-none"; // Middle segment
+              if (eventIsStartingInCell && eventIsEndingInCell) {
+                  borderRadiusClasses = "rounded-sm"; // Starts and finishes within this cell
+              } else if (eventIsStartingInCell && eventEndsAfterCell) {
+                  borderRadiusClasses = "rounded-tl-sm rounded-bl-sm"; // Starts in this cell, continues to next day (round left)
+              } else if (eventStartedBeforeCell && eventIsEndingInCell) {
+                  borderRadiusClasses = "rounded-tr-sm rounded-br-sm"; // Started before this cell, ends in this cell (round right)
+              } else if (eventStartedBeforeCell && eventEndsAfterCell) {
+                  borderRadiusClasses = "rounded-none"; // Middle segment - started before, continues after (no rounding)
               } else {
-                // Fallback for events that might be exactly 24h or edge cases, treat as single day if not spanning
-                // This handles cases where event.end might be exactly on cellDayEnd, making eventActuallyEndsToday true
-                // but it also continues from previous.
-                if (event.start < cellDayStart && event.end > cellDayEnd) { // Clearly a middle segment
-                    borderRadiusClasses = "rounded-none";
-                } else if (event.start < cellDayStart) { // Started before, must be ending today or is a middle segment incorrectly caught
-                     borderRadiusClasses = "rounded-r rounded-l-none";
-                } else if (event.end > cellDayEnd) { // Starts today, must be continuing
-                    borderRadiusClasses = "rounded-l rounded-r-none";
-                } else {
-                    borderRadiusClasses = "rounded"; // Default if it's fully within the day
-                }
+                  // Fallback case, usually implies event is treated as contained within the cell for rendering if it doesn't fit specific span conditions
+                  borderRadiusClasses = "rounded-sm"; 
               }
               
-              const displayTitle = isSameDay(event.start, date); // Show title only on the absolute first day of the event
-              const showPaddingForText = eventActuallyStartsToday || eventActuallyEndsToday;
-
+              const displayTitle = eventIsStartingInCell || (eventStartedBeforeCell && !isSameDay(date, addDays(event.start,0))); // Show title on first day it appears or if it started before today
 
               const mapKey = `${event.id}-${format(date, "yyyy-MM-dd")}`;
 
@@ -122,7 +110,7 @@ function CustomDay({ date, displayMonth, eventsForDay }: DayProps & { eventsForD
                         )}>
                           <span className={cn(
                               "w-full overflow-hidden whitespace-nowrap",
-                              showPaddingForText ? "px-0.5 sm:px-1" : ""
+                              displayTitle ? "px-0.5 sm:px-1" : "" // Only add padding if title is shown
                           )}>
                             {displayTitle ? event.title : <>&nbsp;</>}
                           </span>
@@ -165,6 +153,8 @@ export default function TripCalendarPage() {
           let startDate: Date | null = null;
           let endDate: Date | null = null;
           let route = "N/A";
+          let firstLegDepartureForEndDateCalc: Date | null = null;
+
 
           if (trip.legs && trip.legs.length > 0) {
             const firstLeg = trip.legs[0];
@@ -173,25 +163,41 @@ export default function TripCalendarPage() {
 
             if (firstLeg.departureDateTime && isValidISO(firstLeg.departureDateTime)) {
               startDate = parseISO(firstLeg.departureDateTime);
+              firstLegDepartureForEndDateCalc = startDate;
             }
             
             if (lastLeg.arrivalDateTime && isValidISO(lastLeg.arrivalDateTime)) {
               endDate = parseISO(lastLeg.arrivalDateTime);
             } else if (lastLeg.departureDateTime && isValidISO(lastLeg.departureDateTime) && lastLeg.blockTimeHours && lastLeg.blockTimeHours > 0) {
               endDate = addHours(parseISO(lastLeg.departureDateTime), lastLeg.blockTimeHours);
-            } else if (startDate && firstLeg.blockTimeHours && firstLeg.blockTimeHours > 0) { // Use first leg if only one leg
-                endDate = addHours(startDate, firstLeg.blockTimeHours);
-            } else if (startDate) { // Fallback for multi-leg trips with no good end date info
-                const totalBlockTime = trip.legs.reduce((sum, leg) => sum + (leg.blockTimeHours || 2), 0); // Default 2h block if not specified
-                endDate = addHours(startDate, totalBlockTime);
+            } else if (firstLegDepartureForEndDateCalc && firstLeg.blockTimeHours && firstLeg.blockTimeHours > 0 && trip.legs.length === 1) {
+                endDate = addHours(firstLegDepartureForEndDateCalc, firstLeg.blockTimeHours);
+            } else if (firstLegDepartureForEndDateCalc) { 
+                let totalBlockTimeForEndDate = 0;
+                if (trip.legs.length > 1) {
+                     // For multi-leg trips without a clear end, sum block times from first leg departure.
+                    // This is a simplification; a real scheduler would calculate this precisely leg by leg.
+                    totalBlockTimeForEndDate = trip.legs.reduce((sum, leg) => sum + (leg.blockTimeHours || 2), 0);
+                } else { 
+                    totalBlockTimeForEndDate = firstLeg.blockTimeHours || 2; 
+                }
+                endDate = addHours(firstLegDepartureForEndDateCalc, totalBlockTimeForEndDate);
             }
           }
           
-          if (!startDate) startDate = new Date(); 
-          if (!endDate) endDate = addHours(startDate, 2);
+          if (!startDate) {
+            startDate = new Date(); 
+            console.warn(`Trip ${trip.id} missing valid start date, defaulting to now.`);
+          }
+          if (!endDate) {
+            endDate = addHours(startDate, 2); // Default duration if all else fails
+             console.warn(`Trip ${trip.id} missing valid end date calculation, defaulting to 2 hours after start.`);
+          }
 
+          // Ensure end is always after start, with a minimum duration for visibility
           if (endDate <= startDate) {
-            endDate = addHours(startDate, 1); // Ensure end is at least 1 hour after start
+            endDate = addHours(startDate, 1); 
+            console.warn(`Trip ${trip.id} had end date before or at start date. Adjusted to 1 hour duration.`);
           }
 
           const { color, textColor } = getTripEventColor(trip.status);
@@ -230,14 +236,14 @@ export default function TripCalendarPage() {
     const map = new Map<string, CalendarEvent[]>();
     allEvents.forEach(event => {
       let currentDayIter = startOfDay(event.start);
-      const eventEnd = event.end;
+      const eventEndBoundary = event.end; 
 
-      while (currentDayIter < eventEnd) {
+      while (currentDayIter < eventEndBoundary) { 
         const dayKey = format(currentDayIter, "yyyy-MM-dd");
         if (!map.has(dayKey)) {
           map.set(dayKey, []);
         }
-        // Only add if not already added for this day (safeguard, though loop structure should handle)
+        
         if (!map.get(dayKey)!.find(e => e.id === event.id)) {
             map.get(dayKey)!.push(event);
         }
