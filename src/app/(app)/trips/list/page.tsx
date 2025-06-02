@@ -154,7 +154,7 @@ export default function TripListPage() {
                       </TableCell>
                       <TableCell>{isMounted ? formatDate(trip.legs?.[0]?.departureDateTime) : "Loading..."}</TableCell>
                       <TableCell className="text-right">
-                        <Button variant="ghost" size="sm" asChild disabled> {/* Link to trip details page later */}
+                        <Button variant="ghost" size="sm" disabled> {/* Link to trip details page later */}
                           <span className="cursor-not-allowed"><Eye className="mr-2 h-4 w-4" /> View</span>
                           {/* <Link href={`/trips/details/${trip.id}`}> 
                             <Eye className="mr-2 h-4 w-4" /> View
