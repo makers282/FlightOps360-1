@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useEffect, useTransition } from 'react';
-import Link from 'next/link'; // Added Link import
+import Link from 'next/link';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -11,17 +11,16 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Building2, Plane, PlusCircle, Trash2, Save, XCircle, Loader2, Edit, CheckSquare, Square, Info, Mail, Settings2 } from 'lucide-react';
+import { Building2, Plane, PlusCircle, Trash2, Save, XCircle, Loader2, Edit, CheckSquare, Square, Info, Mail, Settings2, Cog } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { fetchFleetAircraft, saveFleetAircraft, deleteFleetAircraft, type FleetAircraft, type SaveFleetAircraftInput } from '@/ai/flows/manage-fleet-flow';
+import { fetchFleetAircraft, saveFleetAircraft, deleteFleetAircraft, type FleetAircraft, type SaveFleetAircraftInput, type EngineDetail } from '@/ai/flows/manage-fleet-flow';
 import { fetchCompanyProfile, saveCompanyProfile, type CompanyProfile } from '@/ai/flows/manage-company-profile-flow'; 
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton'; 
+import { ManageEngineDetailsModal } from '@/app/(app)/aircraft/currency/[tailNumber]/components/manage-engine-details-modal';
 
-// Define local type including fields not directly editable via simple form inputs
-// but that might be part of the FleetAircraft type from the flow
 interface CompanyPageFleetAircraft extends FleetAircraft {
-  // engineDetails might be complex and not directly editable in this basic form
+  // No custom fields needed here anymore as engineDetails is directly from FleetAircraft
 }
 
 export default function CompanySettingsPage() {
@@ -44,12 +43,10 @@ export default function CompanySettingsPage() {
   const [newPrimaryContactName, setNewPrimaryContactName] = useState('');
   const [newPrimaryContactPhone, setNewPrimaryContactPhone] = useState('');
   const [newPrimaryContactEmail, setNewPrimaryContactEmail] = useState(''); 
-
-  // State for engine details
-  const [engine1Model, setEngine1Model] = useState('');
-  const [engine1SN, setEngine1SN] = useState('');
-  const [engine2Model, setEngine2Model] = useState('');
-  const [engine2SN, setEngine2SN] = useState('');
+  
+  // State for engine details, managed by the modal
+  const [currentEngineDetailsForForm, setCurrentEngineDetailsForForm] = useState<EngineDetail[]>([]);
+  const [isEngineModalOpen, setIsEngineModalOpen] = useState(false);
 
 
   // State for company information
@@ -85,7 +82,6 @@ export default function CompanySettingsPage() {
         setCompanyPhone(profile.companyPhone || '');
         setCurrentCompanyProfile(profile);
       } else {
-        // Set default or example values if no profile exists
         setCompanyName("FlightOps360 LLC (Example)");
         setCompanyAddress("123 Aviation Way, Hangar B, Anytown, USA 12345");
         setCompanyEmail("ops@flightops360.example.com");
@@ -123,10 +119,7 @@ export default function CompanySettingsPage() {
     setNewPrimaryContactName('');
     setNewPrimaryContactPhone('');
     setNewPrimaryContactEmail(''); 
-    setEngine1Model('');
-    setEngine1SN('');
-    setEngine2Model('');
-    setEngine2SN('');
+    setCurrentEngineDetailsForForm([]); // Reset engine details
   };
 
   const handleEditAircraftClick = (aircraft: CompanyPageFleetAircraft) => {
@@ -140,10 +133,7 @@ export default function CompanySettingsPage() {
     setNewPrimaryContactName(aircraft.primaryContactName || '');
     setNewPrimaryContactPhone(aircraft.primaryContactPhone || '');
     setNewPrimaryContactEmail(aircraft.primaryContactEmail || ''); 
-    setEngine1Model(aircraft.engineDetails?.[0]?.model || '');
-    setEngine1SN(aircraft.engineDetails?.[0]?.serialNumber || '');
-    setEngine2Model(aircraft.engineDetails?.[1]?.model || '');
-    setEngine2SN(aircraft.engineDetails?.[1]?.serialNumber || '');
+    setCurrentEngineDetailsForForm(aircraft.engineDetails || []); // Set engine details for the modal
     setShowAddAircraftForm(true);
   };
   
@@ -162,14 +152,6 @@ export default function CompanySettingsPage() {
       .map(name => name.trim())
       .filter(name => name.length > 0);
     
-    const engineDetails = [];
-    if (engine1Model.trim() || engine1SN.trim()) {
-      engineDetails.push({ model: engine1Model.trim() || undefined, serialNumber: engine1SN.trim() || undefined });
-    }
-    if (engine2Model.trim() || engine2SN.trim()) {
-      engineDetails.push({ model: engine2Model.trim() || undefined, serialNumber: engine2SN.trim() || undefined });
-    }
-
     const aircraftData: SaveFleetAircraftInput = {
       id: editingAircraftId || newTailNumber.toUpperCase().replace(/\s+/g, ''), 
       tailNumber: newTailNumber.toUpperCase().trim(),
@@ -182,7 +164,7 @@ export default function CompanySettingsPage() {
       primaryContactName: newPrimaryContactName.trim() || undefined,
       primaryContactPhone: newPrimaryContactPhone.trim() || undefined,
       primaryContactEmail: newPrimaryContactEmail.trim() || undefined, 
-      engineDetails: engineDetails.length > 0 ? engineDetails : [], 
+      engineDetails: currentEngineDetailsForForm, // Use engine details from modal state
       internalNotes: editingAircraftId ? fleet.find(ac => ac.id === editingAircraftId)?.internalNotes : undefined, 
     };
 
@@ -242,6 +224,10 @@ export default function CompanySettingsPage() {
     });
   };
 
+  const handleEngineDetailsSave = (updatedEngines: EngineDetail[]) => {
+    setCurrentEngineDetailsForForm(updatedEngines);
+    // No need to directly save here, it will be saved with the main aircraft form.
+  };
 
   return (
     <>
@@ -306,7 +292,7 @@ export default function CompanySettingsPage() {
                 <CardDescription>Add, edit, or remove aircraft. (Connected to Firestore)</CardDescription>
               </div>
               {!showAddAircraftForm && (
-                <Button variant="outline" size="sm" onClick={() => { setEditingAircraftId(null); resetAircraftFormFields(); setShowAddAircraftForm(true); setNewTrackedComponentNamesStr('Airframe, Engine 1, Engine 2');}}>
+                <Button variant="outline" size="sm" onClick={() => { setEditingAircraftId(null); resetAircraftFormFields(); setCurrentEngineDetailsForForm([]); setShowAddAircraftForm(true); setNewTrackedComponentNamesStr('Airframe, Engine 1');}}>
                   <PlusCircle className="mr-2 h-4 w-4" /> Add Aircraft
                 </Button>
               )}
@@ -356,29 +342,23 @@ export default function CompanySettingsPage() {
                     </div>
                   </div>
 
-                  {/* Engine Details Inputs */}
-                  <div className="pt-2 space-y-3">
-                    <Label className="font-medium text-sm">Engine Details</Label>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-3 gap-y-2 p-3 border rounded-md bg-background/70">
-                        <div>
-                            <Label htmlFor="engine1Model" className="text-xs">Engine 1 Model</Label>
-                            <Input id="engine1Model" value={engine1Model} onChange={(e) => setEngine1Model(e.target.value)} placeholder="e.g., PT6A-67D" />
-                        </div>
-                        <div>
-                            <Label htmlFor="engine1SN" className="text-xs">Engine 1 S/N</Label>
-                            <Input id="engine1SN" value={engine1SN} onChange={(e) => setEngine1SN(e.target.value)} placeholder="e.g., PCE12345" />
-                        </div>
-                        <div>
-                            <Label htmlFor="engine2Model" className="text-xs">Engine 2 Model (Optional)</Label>
-                            <Input id="engine2Model" value={engine2Model} onChange={(e) => setEngine2Model(e.target.value)} placeholder="e.g., PT6A-67D" />
-                        </div>
-                        <div>
-                            <Label htmlFor="engine2SN" className="text-xs">Engine 2 S/N (Optional)</Label>
-                            <Input id="engine2SN" value={engine2SN} onChange={(e) => setEngine2SN(e.target.value)} placeholder="e.g., PCE67890" />
-                        </div>
-                    </div>
+                  <div className="pt-2 space-y-2">
+                    <Label className="font-medium text-sm">Engine Configuration</Label>
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      onClick={() => setIsEngineModalOpen(true)}
+                      className="w-full sm:w-auto"
+                    >
+                      <Cog className="mr-2 h-4 w-4" /> Manage Engine Details ({currentEngineDetailsForForm.length} configured)
+                    </Button>
+                     <ManageEngineDetailsModal
+                        isOpen={isEngineModalOpen}
+                        setIsOpen={setIsEngineModalOpen}
+                        initialEngineDetails={currentEngineDetailsForForm}
+                        onSave={handleEngineDetailsSave}
+                    />
                   </div>
-
 
                   <div className="flex items-center space-x-2 pt-2">
                     <Checkbox 
