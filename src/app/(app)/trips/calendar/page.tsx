@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardDescription } from '@/components/ui/
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import Link from 'next/link';
 import { cn } from "@/lib/utils";
-import { format, isSameDay, parseISO, startOfDay, endOfDay, isToday, addHours, isValid } from 'date-fns'; // Added isValid here
+import { format, isSameDay, parseISO, startOfDay, endOfDay, isToday, addHours, isValid } from 'date-fns';
 import { buttonVariants } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { fetchTrips, type Trip, type TripStatus } from '@/ai/flows/manage-trips-flow';
@@ -51,7 +51,6 @@ function CustomDay({ date, displayMonth, eventsForDay }: DayProps & { eventsForD
     return <div className="h-full w-full" />;
   }
 
-  // Events are pre-filtered and passed in
   const dayEvents = useMemo(() => {
     return eventsForDay.sort((a, b) => a.start.getTime() - b.start.getTime());
   }, [eventsForDay]);
@@ -66,31 +65,60 @@ function CustomDay({ date, displayMonth, eventsForDay }: DayProps & { eventsForD
       </time>
       {dayEvents.length > 0 && (
         <div className="space-y-px mt-0.5 overflow-y-auto flex-grow max-h-[calc(100%-1rem)] sm:max-h-[calc(100%-1.25rem)] pr-0.5">
-          {dayEvents.map(event => (
-            <TooltipProvider key={event.id} delayDuration={100}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Link href={`/trips/details/${event.id}`} className="block focus:outline-none focus:ring-1 focus:ring-ring rounded-xs">
-                    <div className={cn(
-                      "h-3.5 sm:h-4 text-[0.55rem] sm:text-[0.6rem] px-0.5 sm:px-1 flex items-center rounded-xs truncate hover:opacity-90",
-                      event.color,
-                      event.textColor
-                    )}>
-                      {event.title}
-                    </div>
-                  </Link>
-                </TooltipTrigger>
-                <TooltipContent side="top" align="center" className="max-w-xs p-2 bg-popover text-popover-foreground border shadow-md rounded-md text-xs">
-                  <p className="font-semibold">{event.title} {event.status && <span className="text-muted-foreground">({event.status})</span>}</p>
-                  {event.route && <p>Route: {event.route}</p>}
-                  <p className="text-muted-foreground">
-                    {format(event.start, 'MMM d, H:mm zz')} - {format(event.end, 'MMM d, H:mm zz')}
-                  </p>
-                  {event.description && <p className="mt-1">{event.description}</p>}
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          ))}
+          {dayEvents.map(event => {
+            const eventActualStart = event.start;
+            const eventActualEnd = event.end;
+            const dayStart = startOfDay(date);
+            const dayEnd = endOfDay(date);
+
+            const continuesFromPreviousDay = eventActualStart < dayStart;
+            const continuesToNextDay = eventActualEnd > dayEnd;
+            const isSingleDayEventOnThisCell = isSameDay(eventActualStart, eventActualEnd) && isSameDay(date, eventActualStart);
+
+            let borderRadiusClasses = "rounded-xs"; // Default for single day event on this cell
+            if (isSingleDayEventOnThisCell) {
+              borderRadiusClasses = "rounded-xs";
+            } else if (continuesFromPreviousDay && !continuesToNextDay) { // Ends today, started before
+                borderRadiusClasses = "rounded-r-xs rounded-l-none";
+            } else if (!continuesFromPreviousDay && continuesToNextDay) { // Starts today, continues after
+                borderRadiusClasses = "rounded-l-xs rounded-r-none";
+            } else if (continuesFromPreviousDay && continuesToNextDay) { // Middle of a multi-day event
+                borderRadiusClasses = "rounded-none";
+            }
+            // else: default is rounded-xs (e.g. event that starts and ends today, not crossing midnight, or an event that starts on this day and ends on this day but might have crossed midnight from a previous day end)
+
+
+            const mapKey = `${event.id}-${format(date, "yyyy-MM-dd")}`;
+
+            return (
+              <TooltipProvider key={mapKey} delayDuration={100}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Link href={`/trips/details/${event.id}`} className="block focus:outline-none focus-visible:ring-1 focus-visible:ring-ring">
+                      <div className={cn(
+                        "h-3.5 sm:h-4 text-[0.55rem] sm:text-[0.6rem] flex items-center hover:opacity-90",
+                        event.color,
+                        event.textColor,
+                        borderRadiusClasses,
+                        "px-0.5 sm:px-1", 
+                        "truncate" 
+                      )}>
+                        {isSameDay(event.start, date) || !continuesFromPreviousDay ? event.title : <>&nbsp;</>}
+                      </div>
+                    </Link>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" align="center" className="max-w-xs p-2 bg-popover text-popover-foreground border shadow-md rounded-md text-xs">
+                    <p className="font-semibold">{event.title} {event.status && <span className="text-muted-foreground">({event.status})</span>}</p>
+                    {event.route && <p>Route: {event.route}</p>}
+                    <p className="text-muted-foreground">
+                      {format(event.start, 'MMM d, H:mm zz')} - {format(event.end, 'MMM d, H:mm zz')}
+                    </p>
+                    {event.description && <p className="mt-1">{event.description}</p>}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            );
+          })}
         </div>
       )}
     </div>
@@ -124,20 +152,27 @@ export default function TripCalendarPage() {
               startDate = parseISO(firstLeg.departureDateTime);
             }
             
+            // Determine end date
             if (lastLeg.arrivalDateTime && isValidISO(lastLeg.arrivalDateTime)) {
               endDate = parseISO(lastLeg.arrivalDateTime);
-            } else if (startDate && lastLeg.blockTimeHours && lastLeg.blockTimeHours > 0) {
-              const lastLegStart = (lastLeg.departureDateTime && isValidISO(lastLeg.departureDateTime)) ? parseISO(lastLeg.departureDateTime) : startDate; // Best guess for last leg start
-              endDate = addHours(lastLegStart, lastLeg.blockTimeHours);
+            } else if (lastLeg.departureDateTime && isValidISO(lastLeg.departureDateTime) && lastLeg.blockTimeHours && lastLeg.blockTimeHours > 0) {
+              // If last leg has departure and block time, but no arrival time
+              endDate = addHours(parseISO(lastLeg.departureDateTime), lastLeg.blockTimeHours);
             } else if (startDate) {
-              endDate = addHours(startDate, trip.legs.reduce((sum, leg) => sum + (leg.blockTimeHours || 2), 0) ); // Default to 2hr per leg if block time missing
+                // Fallback: If only first leg departure is known, estimate trip duration
+                // Sum block times of all legs if available, or default to 2 hours per leg
+                const totalBlockTime = trip.legs.reduce((sum, leg) => sum + (leg.blockTimeHours || 2), 0);
+                endDate = addHours(startDate, totalBlockTime);
             }
           }
           
-          // Fallback if dates couldn't be determined
-          if (!startDate) startDate = new Date(); // Should not happen if trips have legs
-          if (!endDate) endDate = addHours(startDate, 2);
+          if (!startDate) startDate = new Date(); 
+          if (!endDate) endDate = addHours(startDate, 2); // Default duration if no leg data
 
+          // Ensure end date is after start date
+          if (endDate <= startDate) {
+            endDate = addHours(startDate, 2); 
+          }
 
           const { color, textColor } = getTripEventColor(trip.status);
 
@@ -174,27 +209,26 @@ export default function TripCalendarPage() {
   const eventsByDay = useMemo(() => {
     const map = new Map<string, CalendarEvent[]>();
     allEvents.forEach(event => {
-      const dayKey = format(startOfDay(event.start), "yyyy-MM-dd");
-      if (!map.has(dayKey)) {
-        map.set(dayKey, []);
-      }
-      map.get(dayKey)!.push(event);
+      let currentDayMarker = startOfDay(event.start);
+      const eventEndMarker = event.end; // Use actual end time
 
-      // For multi-day events, add to subsequent days as well (simplified)
-      let current = startOfDay(addHours(event.start, 24)); // Check next day
-      const endOfEvent = endOfDay(event.end);
-      while(current <= endOfEvent) {
-        const multiDayKey = format(current, "yyyy-MM-dd");
-        if(!isSameDay(event.start, current)){ // Don't add to start day again
-             if (!map.has(multiDayKey)) {
-                map.set(multiDayKey, []);
-            }
-            // Only add if not already added via its own start date
-            if (!map.get(multiDayKey)!.find(e => e.id === event.id)) {
-                map.get(multiDayKey)!.push(event);
-            }
-        }
-        current = startOfDay(addHours(current, 24));
+      // Add to the first day
+      const startDayKey = format(currentDayMarker, "yyyy-MM-dd");
+      if (!map.has(startDayKey)) map.set(startDayKey, []);
+      map.get(startDayKey)!.push(event);
+      
+      // Iterate through subsequent days if the event spans
+      currentDayMarker = startOfDay(addHours(currentDayMarker, 24)); // Move to start of next day
+
+      while (currentDayMarker < eventEndMarker) { // Check if current day's start is before event's actual end
+          const dayKey = format(currentDayMarker, "yyyy-MM-dd");
+          if (!map.has(dayKey)) map.set(dayKey, []);
+          
+          // Ensure we don't add the same event object multiple times if already processed (though this loop structure avoids it for *this* event)
+          if (!map.get(dayKey)!.find(e => e.id === event.id)) {
+              map.get(dayKey)!.push(event);
+          }
+          currentDayMarker = startOfDay(addHours(currentDayMarker, 24));
       }
     });
     return map;
