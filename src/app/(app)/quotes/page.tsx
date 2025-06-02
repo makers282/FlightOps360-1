@@ -64,7 +64,7 @@ const getStatusBadgeVariant = (status?: typeof QuoteStatusType[number]): "defaul
       return 'outline'; 
     case 'expired':
     case 'rejected': 
-    case 'cancelled': // Added cancelled here for badge variant consistency
+    case 'cancelled': 
       return 'destructive'; 
     default: return 'outline';
   }
@@ -282,7 +282,7 @@ export default function AllQuotesPage() {
                   <TableHead>Status</TableHead>
                   <TableHead>Quote Date</TableHead>
                   <TableHead>Amount</TableHead>
-                  <TableHead className="text-right pr-12">Actions</TableHead>
+                  <TableHead className="text-right min-w-[320px]">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -305,17 +305,17 @@ export default function AllQuotesPage() {
                       <TableCell>{quote.createdAt ? format(parseISO(quote.createdAt), 'MMM d, yyyy') : 'N/A'}</TableCell>
                       <TableCell>{formatCurrency(quote.totalSellPrice)}</TableCell>
                       <TableCell className="text-right">
-                        <div className="flex items-center justify-end space-x-1">
+                        <div className="flex items-center justify-end space-x-1 flex-nowrap">
                           <Select
                               value={quote.status}
                               onValueChange={(newStatus) => handleStatusChange(quote, newStatus as typeof QuoteStatusType[number])}
                               disabled={isBookingOrUpdating && quoteToProcess?.id === quote.id}
                             >
-                            <SelectTrigger className="h-8 w-[130px] text-xs">
+                            <SelectTrigger className="h-8 w-[120px] text-xs">
                               <SelectValue placeholder="Change Status" />
                             </SelectTrigger>
                             <SelectContent>
-                              {quoteStatuses.map(stat => ( // Ensure quoteStatuses is used here
+                              {quoteStatuses.map(stat => (
                                 <SelectItem key={stat} value={stat} className="text-xs">
                                   {stat}
                                 </SelectItem>

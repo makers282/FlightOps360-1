@@ -39,7 +39,7 @@ export const QuoteLegSchema = z.object({
 });
 export type QuoteLeg = z.infer<typeof QuoteLegSchema>;
 
-export const quoteStatuses = ["Draft", "Sent", "Accepted", "Rejected", "Expired", "Booked"] as const;
+export const quoteStatuses = ["Draft", "Sent", "Accepted", "Rejected", "Expired", "Booked", "Cancelled"] as const;
 
 // Main schema for a quote document
 export const QuoteSchema = z.object({
