@@ -2,6 +2,7 @@
 // src/lib/firebase.ts
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
+import { getAuth } from 'firebase/auth'; // Added Firebase Auth
 
 // Your web app's Firebase configuration
 // IMPORTANT: These should be set in your .env file (or .env.local)
@@ -40,5 +41,6 @@ if (!getApps().length) {
 }
 
 const db = getFirestore(app);
+const auth = getAuth(app); // Initialize Firebase Auth
 
-export { db, app };
+export { db, app, auth }; // Export auth
