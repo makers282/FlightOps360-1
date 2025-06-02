@@ -252,7 +252,10 @@ export default function ViewTripDetailsPage() {
             <CardTitle className="flex items-center gap-2"><CrewIcon className="h-5 w-5 text-primary"/>Crew Assignment</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-muted-foreground text-sm">Crew assignment functionality will be available here. (e.g., PIC, SIC, FA selection and assignment)</p>
+            <p className="text-muted-foreground text-sm mb-4">Functionality to assign and view crew (PIC, SIC, FA) for this trip will be available here.</p>
+            <Button variant="outline" disabled className="w-full">
+                <CrewIcon className="mr-2 h-4 w-4" /> Manage Crew Assignment
+            </Button>
           </CardContent>
         </Card>
 
@@ -305,7 +308,10 @@ export default function ViewTripDetailsPage() {
             <CardTitle className="flex items-center gap-2"><LoadManifestIcon className="h-5 w-5 text-primary"/>Files & Load Manifest</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-muted-foreground text-sm">Functionality to attach documents and manage load manifests will be available here.</p>
+            <p className="text-muted-foreground text-sm mb-4">Functionality to attach trip-related documents (e.g., signed quotes, permits) and manage the load manifest (pax/cargo details) will be here.</p>
+            <Button variant="outline" disabled className="w-full">
+                 <LoadManifestIcon className="mr-2 h-4 w-4" /> Manage Manifest & Files
+            </Button>
           </CardContent>
         </Card>
       </div>
@@ -351,3 +357,4 @@ export default function ViewTripDetailsPage() {
   );
 }
 
+    
