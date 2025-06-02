@@ -27,23 +27,10 @@ interface CalendarEvent {
   description?: string;
 }
 
-const mockTripData: Omit<CalendarEvent, 'type' | 'color' | 'textColor' | 'description'>[] = [
-  { id: 'TRP001', title: 'N520PW Challenger 300', aircraft: 'N520PW', route: 'VNY > TXKF > VNY', start: parseISO('2024-10-02T08:00:00Z'), end: parseISO('2024-10-04T17:00:00Z') },
-  { id: 'TRP002', title: 'N123MW Gulfstream-G500', aircraft: 'N123MW', route: 'SFO > LAS > TEB > SFO', start: parseISO('2024-10-02T10:00:00Z'), end: parseISO('2024-10-05T22:00:00Z') },
-  { id: 'TRP003', title: 'N555VP Gulfstream-G650', aircraft: 'N555VP', route: 'LFPB > LKPR > FLL', start: parseISO('2024-10-08T11:00:00Z'), end: parseISO('2024-10-09T18:00:00Z') },
-  { id: 'TRP004', title: 'N123MW Gulfstream-G500', aircraft: 'N123MW', route: 'SFO > OMA > MMTJ', start: parseISO('2024-10-08T09:00:00Z'), end: parseISO('2024-10-09T17:00:00Z') },
-  { id: 'TRP005', title: 'N345AG Gulfstream-4', aircraft: 'N345AG', route: 'DAL > OPF > DAL', start: parseISO('2024-10-09T10:00:00Z'), end: parseISO('2024-10-11T15:00:00Z') },
-  { id: 'TRP006', title: 'N170SCC Global-7000', aircraft: 'N170SCC', route: 'ZBAA > WSSL > VVNB', start: parseISO('2024-10-15T06:00:00Z'), end: parseISO('2024-10-16T12:00:00Z') },
-  { id: 'TRP007', title: 'N345AG Gulfstream-4', aircraft: 'N345AG', route: 'DAL > LAS > PBI > DAL', start: parseISO('2024-10-16T08:00:00Z'), end: parseISO('2024-10-18T20:00:00Z') },
-  { id: 'TRP008', title: 'N520PW Challenger 300', aircraft: 'N520PW', route: 'VNY > MMTO > SBGL > SBGR > VNY', start: parseISO('2024-10-22T07:00:00Z'), end: parseISO('2024-10-26T23:00:00Z') },
-  { id: 'TRP009', title: 'N555VP Gulfstream-G650', aircraft: 'N555VP', route: 'FLL > EGSS > FLL', start: parseISO('2024-10-28T10:00:00Z'), end: parseISO('2024-10-30T16:00:00Z') },
-];
+// Mock data removed
+const mockTripData: Omit<CalendarEvent, 'type' | 'color' | 'textColor' | 'description'>[] = [];
 
-const mockMaintenanceData: Omit<CalendarEvent, 'type' | 'color' | 'textColor' | 'description' | 'route'>[] = [
-  { id: 'MX001', title: 'N123AB - A Check', aircraft: 'N123AB', start: parseISO('2024-10-10T08:00:00Z'), end: parseISO('2024-10-11T17:00:00Z') },
-  { id: 'MX002', title: 'N789EF - Engine Swap', aircraft: 'N789EF', start: parseISO('2024-10-20T07:00:00Z'), end: parseISO('2024-10-24T18:00:00Z') },
-  { id: 'MX003', title: 'Annual Inspection', aircraft: 'N456CD', start: parseISO('2024-10-01T09:00:00Z'), end: parseISO('2024-10-01T17:00:00Z') },
-];
+const mockMaintenanceData: Omit<CalendarEvent, 'type' | 'color' | 'textColor' | 'description' | 'route'>[] = [];
 
 const allEvents: CalendarEvent[] = [
   ...mockTripData.map(trip => ({ 
@@ -73,8 +60,6 @@ function CustomDay(props: DayProps) {
   const isCurrentMonth = date.getMonth() === displayMonth.getMonth();
 
   if (!isCurrentMonth) {
-    // This ensures that cells for days outside the current month
-    // are rendered as blank but correctly sized due to parent TD styling.
     return <div className="h-full w-full" />;
   }
 
@@ -90,15 +75,14 @@ function CustomDay(props: DayProps) {
   }, [date]);
 
   return (
-    <div className={cn("relative h-full w-full flex flex-col p-1")}> {/* Added small padding to the cell content area */}
+    <div className={cn("relative h-full w-full flex flex-col p-1")}>
       <time dateTime={format(date, "yyyy-MM-dd")} className={cn(
-        "text-[0.6rem] sm:text-xs self-end", // Adjusted day number size
+        "text-[0.6rem] sm:text-xs self-end",
         isToday(date) && "text-primary font-bold rounded-full bg-primary/10 w-4 h-4 sm:w-5 sm:h-5 flex items-center justify-center"
       )}>
         {format(date, "d")}
       </time>
       {eventsForDay.length > 0 && (
-        // Adjusted max-h to give more space for day number
         <div className="space-y-px mt-0.5 overflow-y-auto flex-grow max-h-[calc(100%-1rem)] sm:max-h-[calc(100%-1.25rem)] pr-0.5">
           {eventsForDay.map(event => (
             <TooltipProvider key={event.id} delayDuration={100}>
@@ -106,7 +90,7 @@ function CustomDay(props: DayProps) {
                 <TooltipTrigger asChild>
                   <Link href={`/trips/details/${event.id}`} className="block focus:outline-none focus:ring-1 focus:ring-ring rounded-xs">
                     <div className={cn(
-                      "h-3.5 sm:h-4 text-[0.55rem] sm:text-[0.6rem] px-0.5 sm:px-1 flex items-center rounded-xs truncate hover:opacity-90", // Smaller event bars
+                      "h-3.5 sm:h-4 text-[0.55rem] sm:text-[0.6rem] px-0.5 sm:px-1 flex items-center rounded-xs truncate hover:opacity-90",
                       event.color,
                       event.textColor
                     )}>
@@ -136,7 +120,7 @@ export default function TripCalendarPage() {
   const [isClientReady, setIsClientReady] = useState(false);
 
   useEffect(() => {
-    setCurrentMonth(new Date(2024, 9, 1)); // Default to October 2024
+    setCurrentMonth(new Date()); // Default to current month
     setIsClientReady(true);
   }, []);
 
@@ -172,36 +156,35 @@ export default function TripCalendarPage() {
       <Card className="shadow-xl border-border/50">
         <CardHeader className="border-b py-3 px-4">
           <CardDescription>
-            Colors indicate different aircraft or event types. Hover for details, click to view (placeholder link).
+            Calendar is ready. Event data will be loaded from Firestore in a future update.
           </CardDescription>
         </CardHeader>
-        <CardContent className="p-0"> {/* Removed padding from CardContent */}
+        <CardContent className="p-0">
           <ShadcnCalendar
             mode="single"
             month={currentMonth}
             onMonthChange={setCurrentMonth}
-            className="w-full rounded-md bg-card" // Applied to the main calendar container
+            className="w-full rounded-md bg-card"
             classNames={{
-                table: "w-full border-collapse table-fixed", // table-fixed is key for uniform columns
+                table: "w-full border-collapse table-fixed",
                 month: "w-full", 
-                head_row: "border-b border-border/50 flex", // Ensures header row uses flex
+                head_row: "border-b border-border/50 flex",
                 head_cell: cn(
                     "text-muted-foreground align-middle text-center font-normal text-[0.65rem] sm:text-xs py-1.5",
-                    "border-r border-b border-border/30 last:border-r-0", // Grid lines
-                    "w-[calc(100%/7)]" // Explicit width for header cells
+                    "border-r border-b border-border/30 last:border-r-0", 
+                    "w-[calc(100%/7)]" 
                 ),
-                row: "flex w-full", // Ensures week rows use flex
+                row: "flex w-full", 
 
-                cell: cn( // Styles the <td> element
-                    "p-0 m-0 text-left align-top relative", // Base styling for cell
-                    "h-24 min-h-[6rem] sm:h-28 sm:min-h-[7rem] md:h-32 md:min-h-[8rem] lg:h-36 lg:min-h-[9rem] xl:h-40 xl:min-h-[10rem]", // Consistent tall height
-                    "border-r border-b border-border/30", // Grid lines applied to all cells
-                    "w-[calc(100%/7)]" // Explicit width for all cells
+                cell: cn(
+                    "p-0 m-0 text-left align-top relative", 
+                    "h-24 min-h-[6rem] sm:h-28 sm:min-h-[7rem] md:h-32 md:min-h-[8rem] lg:h-36 lg:min-h-[9rem] xl:h-40 xl:min-h-[10rem]", 
+                    "border-r border-b border-border/30", 
+                    "w-[calc(100%/7)]" 
                 ),
                 
-                day_disabled: "opacity-50 pointer-events-none", // For days disabled by props (e.g. before/after)
+                day_disabled: "opacity-50 pointer-events-none",
                 
-                // Caption and Nav buttons styling
                 caption: "flex justify-center items-center py-2.5 relative gap-x-1 px-2",
                 caption_label: "text-sm font-medium px-2", 
                 nav_button: cn(buttonVariants({ variant: "outline" }), "h-7 w-7 bg-transparent p-0 opacity-80 hover:opacity-100"),
@@ -211,9 +194,9 @@ export default function TripCalendarPage() {
             components={{
               Day: CustomDay,
             }}
-            showOutsideDays={false} // This is important. CustomDay handles making sure empty cells are rendered correctly.
+            showOutsideDays={false}
             numberOfMonths={1}
-            captionLayout="buttons" // Shows month/year as text, not dropdowns
+            captionLayout="buttons"
             fromYear={new Date().getFullYear() - 5} 
             toYear={new Date().getFullYear() + 5}
           />
