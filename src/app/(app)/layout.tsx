@@ -30,7 +30,11 @@ import {
   PlaneTakeoff,
   Building2,
   Wrench, 
-  ClipboardCheck, 
+  ClipboardCheck,
+  BarChartBig, // New icon for Reports
+  DollarSign, // New icon for Financial Reports
+  Package, // New icon for Load Manifests
+  TrendingUp, // New icon for Operational Analytics
 } from 'lucide-react';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -144,19 +148,12 @@ export default function AppLayout({ children }: PropsWithChildren) {
             </SidebarMenuItem>
 
             <SidebarMenuItem>
-              <SidebarMenuButton href="/documents" tooltip="Document Hub" isActive={pathname === '/documents'}>
-                <FileText />
-                Document Hub
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-
-            <SidebarMenuItem>
               <SidebarMenuButton 
                 isSubmenuTrigger 
                 tooltip="Crew Management" 
                 isActive={
                   pathname.startsWith('/crew') || 
-                  pathname === '/trips/crew-schedule'
+                  pathname === '/trips/crew-schedule' // Crew Schedule is under Trips for now
                 }
               >
                 <Users /> 
@@ -183,6 +180,42 @@ export default function AppLayout({ children }: PropsWithChildren) {
             </SidebarMenuItem>
 
             <SidebarMenuItem>
+              <SidebarMenuButton isSubmenuTrigger tooltip="Reports" isActive={pathname.startsWith('/reports')}>
+                <BarChartBig />
+                Reports
+              </SidebarMenuButton>
+              <SidebarMenuSub>
+                <SidebarMenuSubButton href="/reports/financial" tooltip="Financial Reports" isActive={pathname === '/reports/financial'}>
+                  <DollarSign />
+                  Financial Reports
+                </SidebarMenuSubButton>
+                <SidebarMenuSubButton href="/reports/crew" tooltip="Crew Activity" isActive={pathname === '/reports/crew'}>
+                  <Users />
+                  Crew Activity
+                </SidebarMenuSubButton>
+                <SidebarMenuSubButton href="/reports/flight-logs" tooltip="Flight Logs" isActive={pathname === '/reports/flight-logs'}>
+                  <PlaneTakeoff />
+                  Flight Logs
+                </SidebarMenuSubButton>
+                 <SidebarMenuSubButton href="/reports/load-manifest" tooltip="Load Manifests" isActive={pathname === '/reports/load-manifest'}>
+                  <Package />
+                  Load Manifests
+                </SidebarMenuSubButton>
+                <SidebarMenuSubButton href="/reports/analytics" tooltip="Operational Analytics" isActive={pathname === '/reports/analytics'}>
+                  <TrendingUp />
+                  Operational Analytics
+                </SidebarMenuSubButton>
+              </SidebarMenuSub>
+            </SidebarMenuItem>
+
+            <SidebarMenuItem>
+              <SidebarMenuButton href="/documents" tooltip="Document Hub" isActive={pathname === '/documents'}>
+                <FileText />
+                Document Hub
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+
+            <SidebarMenuItem>
               <SidebarMenuButton href="/frat" tooltip="FRAT Integration" isActive={pathname === '/frat'}>
                 <ShieldAlert />
                 FRAT Integration
@@ -204,6 +237,9 @@ export default function AppLayout({ children }: PropsWithChildren) {
                 <SidebarMenuSubButton href="/settings/company" isActive={pathname === '/settings/company'}>
                   <Building2 /> Company Settings
                 </SidebarMenuSubButton>
+                 <SidebarMenuSubButton href="/settings/users" isActive={pathname === '/settings/users'}>
+                   <Users /> Manage Users
+                 </SidebarMenuSubButton>
                 <SidebarMenuSubButton href="/settings/roles" isActive={pathname === '/settings/roles'}>
                   <Users /> User Roles
                 </SidebarMenuSubButton>
