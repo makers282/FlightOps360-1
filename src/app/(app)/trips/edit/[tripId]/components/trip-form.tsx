@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useTransition, useCallback } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useForm, type SubmitHandler, useFieldArray, Controller } from 'react-hook-form';
+import { useForm, type SubmitHandler, useFieldArray } from 'react-hook-form'; // Removed Controller as it's used via FormField
 import { z } from 'zod';
 import { useRouter } from 'next/navigation';
 
@@ -24,20 +24,19 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { Loader2, Save, XCircle, PlusCircle, Trash2, Plane, Users, CalendarIcon, Info, Edit3 } from 'lucide-react';
 import { cn } from "@/lib/utils";
-import { format, parseISO, isValid as isValidDate, setHours, setMinutes } from "date-fns";
+import { format, parseISO, isValid as isValidDate } from "date-fns";
 import { useToast } from '@/hooks/use-toast';
 import { saveTrip } from '@/ai/flows/manage-trips-flow';
 import type { Trip, SaveTripInput, TripLeg as TripLegType, TripStatus } from '@/ai/schemas/trip-schemas';
-import { TripLegSchema, TripSchema as FullTripSchema, tripStatuses, legTypes } from '@/ai/schemas/trip-schemas'; // Use FullTripSchema for form
+import { TripLegSchema, TripSchema as FullTripSchema, tripStatuses, legTypes } from '@/ai/schemas/trip-schemas';
 import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
 
-// Form schema should align with SaveTripInput but handle dates as Date objects for picker
 const TripFormSchema = FullTripSchema.omit({ id: true, createdAt: true, updatedAt: true }).extend({
   legs: z.array(TripLegSchema.extend({
-    departureDateTime: z.date().optional(), // Override to use Date object in form
-    arrivalDateTime: z.date().optional(), // Override to use Date object in form
+    departureDateTime: z.date().optional(), 
+    arrivalDateTime: z.date().optional(), 
   })).min(1, "At least one flight leg is required.")
 });
 
@@ -76,7 +75,7 @@ export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
     },
   });
 
-  const { control, handleSubmit, reset, watch, setValue, formState: { errors } } = form;
+  const { control, handleSubmit, reset, setValue, formState: { errors } } = form; // Removed watch as it's not directly used
   const { fields, append, remove } = useFieldArray({
     control,
     name: "legs",
@@ -117,7 +116,7 @@ export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
         })),
       });
     } else if (!isEditMode) {
-      reset({ // Default for new trip
+      reset({ 
         tripId: generateNewUserFacingTripId(),
         clientName: '',
         aircraftId: undefined,
@@ -137,7 +136,7 @@ export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
 
       const tripDataToSave: SaveTripInput = {
         ...data,
-        aircraftLabel: selectedAircraft?.label || data.aircraftId, // Store label or ID if label not found
+        aircraftLabel: selectedAircraft?.label || data.aircraftId,
         legs: data.legs.map(leg => ({
           ...leg,
           departureDateTime: leg.departureDateTime ? leg.departureDateTime.toISOString() : undefined,
@@ -154,7 +153,7 @@ export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
         if (isEditMode) {
           router.push(`/trips/details/${savedTrip.id}`);
         } else {
-          router.push(`/trips/list`); 
+          router.push(`/trips/list`);
           reset({ 
              tripId: generateNewUserFacingTripId(), clientName: '', aircraftId: undefined,
              legs: [{ origin: '', destination: '', departureDateTime: undefined, arrivalDateTime: undefined, legType: 'Charter', passengerCount: 1, originFbo: '', destinationFbo: '', flightTimeHours: undefined, blockTimeHours: undefined }],
@@ -171,17 +170,17 @@ export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
     });
   };
 
-  const title = isEditMode ? `Edit Trip: ${initialTripData?.tripId || 'N/A'}` : "Create New Trip";
-  const description = isEditMode ? "Modify the details of this existing trip." : "Enter the details for the new trip.";
+  const titleText = isEditMode ? `Edit Trip: ${initialTripData?.tripId || 'N/A'}` : "Create New Trip";
+  const descriptionText = isEditMode ? "Modify the details of this existing trip." : "Enter the details for the new trip.";
 
   return (
     <Card className="shadow-lg max-w-4xl mx-auto">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           {isEditMode ? <Edit3 className="h-6 w-6 text-primary" /> : <Plane className="h-6 w-6 text-primary" />}
-          {title}
+          {titleText}
         </CardTitle>
-        <CardDescription>{description}</CardDescription>
+        <CardDescription>{descriptionText}</CardDescription>
       </CardHeader>
       <Form {...form}>
         <form onSubmit={handleSubmit(onSubmit)}>
@@ -267,9 +266,9 @@ export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
                                 <Input type="time" defaultValue={field.value ? format(field.value, "HH:mm") : ""}
                                   onChange={(e) => {
                                     const time = e.target.value;
-                                    const [hours, minutes] = time.split(':').map(Number);
+                                    const [hours, minutesValue] = time.split(':').map(Number);
                                     const newDate = field.value ? new Date(field.value) : new Date();
-                                    newDate.setHours(hours, minutes);
+                                    newDate.setHours(hours, minutesValue); 
                                     field.onChange(newDate);
                                   }}
                                 />
