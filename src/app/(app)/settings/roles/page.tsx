@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useEffect, useTransition } from 'react';
+import React, { useState, useEffect, useTransition, useMemo } from 'react';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Users, ShieldCheck, PlusCircle, Edit3, Trash2, Search, Loader2 } from 'lucide-react';
@@ -35,7 +35,7 @@ import {
 
 import { fetchRoles, saveRole, deleteRole } from '@/ai/flows/manage-roles-flow';
 import type { Role, SaveRoleInput, Permission } from '@/ai/schemas/role-schemas';
-import { availablePermissions } from '@/ai/schemas/role-schemas'; // Import availablePermissions for predefining
+import { availablePermissions } from '@/ai/schemas/role-schemas';
 import { AddEditRoleModal } from './components/add-edit-role-modal';
 import { useToast } from '@/hooks/use-toast';
 
@@ -43,44 +43,47 @@ const formatPermissionName = (permission: Permission | string) => {
   return permission.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 };
 
-const predefinedRoles: Omit<SaveRoleInput, 'id'>[] = [
+const predefinedRoles: SaveRoleInput[] = [
   {
     name: "Administrator",
     description: "Full access to all system features and settings.",
-    permissions: [...availablePermissions], // All defined permissions
+    permissions: [...availablePermissions] as Permission[],
     isSystemRole: true,
   },
   {
     name: "Flight Crew",
     description: "Access to flight schedules, aircraft status, and FRAT submission.",
-    permissions: ["VIEW_TRIPS", "ACCESS_FRAT_PAGE", "ACCESS_DOCUMENTS_PAGE", "VIEW_DASHBOARD"],
+    permissions: ["VIEW_TRIPS", "ACCESS_FRAT_PAGE", "ACCESS_DOCUMENTS_PAGE", "VIEW_DASHBOARD"] as Permission[],
     isSystemRole: true,
   },
   {
     name: "Dispatch",
     description: "Manages trip scheduling, flight releases, and optimal routing.",
-    permissions: ["MANAGE_TRIPS", "VIEW_TRIPS", "ACCESS_OPTIMAL_ROUTE_PAGE", "VIEW_DASHBOARD"],
+    permissions: ["MANAGE_TRIPS", "VIEW_TRIPS", "ACCESS_OPTIMAL_ROUTE_PAGE", "VIEW_DASHBOARD"] as Permission[],
     isSystemRole: true,
   },
   {
     name: "Maintenance",
     description: "Tracks aircraft compliance and maintenance schedules.",
-    permissions: ["MANAGE_AIRCRAFT_MAINTENANCE_DATA", "VIEW_DASHBOARD"],
+    permissions: ["MANAGE_AIRCRAFT_MAINTENANCE_DATA", "VIEW_DASHBOARD"] as Permission[],
     isSystemRole: true,
   },
   {
     name: "Sales",
     description: "Manages quotes and customer communication.",
-    permissions: ["CREATE_QUOTES", "VIEW_ALL_QUOTES", "MANAGE_CUSTOMERS", "VIEW_DASHBOARD"],
+    permissions: ["CREATE_QUOTES", "VIEW_ALL_QUOTES", "MANAGE_CUSTOMERS", "VIEW_DASHBOARD"] as Permission[],
     isSystemRole: true,
   },
   {
     name: "FAA Inspector",
     description: "Read-only access to compliance and operational data.",
-    permissions: ["ACCESS_DOCUMENTS_PAGE", "VIEW_TRIPS", "VIEW_DASHBOARD"],
+    permissions: ["ACCESS_DOCUMENTS_PAGE", "VIEW_TRIPS", "VIEW_DASHBOARD"] as Permission[],
     isSystemRole: true,
   }
-];
+].sort((a, b) => { // Ensure predefinedRoles itself respects the initial desired order for seeding
+    const order = ["Administrator", "Flight Crew", "Dispatch", "Maintenance", "Sales", "FAA Inspector"];
+    return order.indexOf(a.name!) - order.indexOf(b.name!);
+});
 
 
 export default function UserRolesPage() {
@@ -107,17 +110,18 @@ export default function UserRolesPage() {
       toast({ title: "Initializing System Roles", description: `Creating ${rolesToCreate.length} predefined roles...` });
       try {
         for (const roleData of rolesToCreate) {
-          await saveRole(roleData);
+          // Pass permissions as Permission[] for type safety with saveRole
+          await saveRole({ ...roleData, permissions: roleData.permissions as Permission[] });
         }
         toast({ title: "System Roles Initialized", description: "Predefined roles have been added to Firestore.", variant: "default" });
-        return true; // Indicate that roles were seeded
+        return true; 
       } catch (error) {
         console.error("Failed to seed predefined roles:", error);
         toast({ title: "Error Seeding Roles", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
         return false;
       }
     }
-    return false; // No roles needed to be seeded
+    return false; 
   };
 
   const loadRoles = async () => {
@@ -126,7 +130,7 @@ export default function UserRolesPage() {
       let fetchedRoles = await fetchRoles();
       const wasSeeded = await seedPredefinedRoles(fetchedRoles);
       if (wasSeeded) {
-        fetchedRoles = await fetchRoles(); // Re-fetch after seeding
+        fetchedRoles = await fetchRoles(); 
       }
       setRolesList(fetchedRoles);
     } catch (error) {
@@ -156,7 +160,6 @@ export default function UserRolesPage() {
   const handleSaveRole = async (data: SaveRoleInput) => {
     startSavingRoleTransition(async () => {
       try {
-        // For new roles, ensure isSystemRole is false unless specifically set by predefined logic (which it isn't here)
         const dataToSave = isEditingModal ? data : { ...data, isSystemRole: data.isSystemRole || false };
         const savedData = await saveRole(dataToSave);
         toast({
@@ -187,7 +190,7 @@ export default function UserRolesPage() {
 
   const executeDeleteRole = async () => {
     if (!roleToDelete) return;
-    if (roleToDelete.isSystemRole) { // Double check here, though button should be disabled
+    if (roleToDelete.isSystemRole) { 
         toast({ title: "Action Not Allowed", description: "System roles cannot be deleted.", variant: "destructive" });
         setShowDeleteConfirm(false);
         return;
@@ -208,10 +211,27 @@ export default function UserRolesPage() {
     });
   };
 
-  const filteredRoles = rolesList.filter(role =>
-    role.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (role.description && role.description.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const sortedAndFilteredRoles = useMemo(() => {
+    const sortedList = [...rolesList].sort((a, b) => {
+      // Rule 1: Administrator (system role) always comes first
+      if (a.name === "Administrator" && a.isSystemRole) return -1;
+      if (b.name === "Administrator" && b.isSystemRole) return 1;
+
+      // Rule 2: Other system roles come before non-system roles
+      if (a.isSystemRole && !b.isSystemRole) return -1;
+      if (!a.isSystemRole && b.isSystemRole) return 1;
+
+      // Rule 3: Within system roles (excluding Admin already handled) or within non-system roles, sort alphabetically
+      return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+    });
+
+    if (!searchTerm) return sortedList;
+    const lowerSearchTerm = searchTerm.toLowerCase();
+    return sortedList.filter(role =>
+      role.name.toLowerCase().includes(lowerSearchTerm) ||
+      (role.description && role.description.toLowerCase().includes(lowerSearchTerm))
+    );
+  }, [rolesList, searchTerm]);
 
   return (
     <TooltipProvider>
@@ -257,14 +277,14 @@ export default function UserRolesPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredRoles.length === 0 ? (
+                {sortedAndFilteredRoles.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={4} className="text-center text-muted-foreground py-10">
                       No roles found{rolesList.length > 0 && searchTerm ? " matching your search" : ". Add a role to get started."}
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredRoles.map((role) => (
+                  sortedAndFilteredRoles.map((role) => (
                     <TableRow key={role.id}>
                       <TableCell className="font-medium flex items-center gap-2">
                         <ShieldCheck className={`h-5 w-5 ${role.isSystemRole ? 'text-blue-500' : 'text-primary'}`} /> 
@@ -347,4 +367,3 @@ export default function UserRolesPage() {
     </TooltipProvider>
   );
 }
-
