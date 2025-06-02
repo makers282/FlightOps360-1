@@ -299,6 +299,7 @@ export default function QuoteConfigPage() {
     return aircraft ? `${aircraft.tailNumber} - ${aircraft.model}` : aircraftId;
   };
 
+  // Only show aircraft that don't already have a rate for the "Add New" dropdown
   const availableFleetForNewRate = fleet.filter(ac => !aircraftRates.find(r => r.id === ac.id));
 
   return (
