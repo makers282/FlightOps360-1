@@ -30,8 +30,8 @@ import { Wrench, PlusCircle, ArrowLeft, PlaneIcon, Edit, Loader2, InfoIcon, Phon
 import { format, parse, addDays, isValid, addMonths, addYears, endOfMonth, parseISO, differenceInCalendarDays } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { fetchFleetAircraft, saveFleetAircraft } from '@/ai/flows/manage-fleet-flow';
-import type { FleetAircraft, EngineDetail, SaveFleetAircraftInput } from '@/ai/schemas/fleet-aircraft-schemas'; // Updated import path
-import { EngineDetailSchema } from '@/ai/schemas/fleet-aircraft-schemas'; // Updated import path
+import type { FleetAircraft, EngineDetail, SaveFleetAircraftInput } from '@/ai/schemas/fleet-aircraft-schemas';
+import { EngineDetailSchema } from '@/ai/schemas/fleet-aircraft-schemas';
 import { fetchMaintenanceTasksForAircraft, saveMaintenanceTask, deleteMaintenanceTask, type MaintenanceTask as FlowMaintenanceTask } from '@/ai/flows/manage-maintenance-tasks-flow';
 import { fetchComponentTimesForAircraft, saveComponentTimesForAircraft, type AircraftComponentTimes } from '@/ai/flows/manage-component-times-flow';
 import { fetchCompanyProfile, type CompanyProfile } from '@/ai/flows/manage-company-profile-flow';
@@ -48,7 +48,7 @@ export interface DisplayMaintenanceItem extends FlowMaintenanceTask {
 const aircraftInfoEditSchema = z.object({
   model: z.string().min(1, "Model is required."),
   serialNumber: z.string().optional(),
-  aircraftYear: z.coerce.number().int().min(1900, "Year seems too old.").max(new Date().getFullYear() + 5, "Year seems too far in future.").optional(),
+  aircraftYear: z.coerce.number().int().min(1900, "Year seems too old.").max(new Date().getFullYear() + 10, "Year seems too far in future.").optional(),
   baseLocation: z.string().optional(),
   primaryContactName: z.string().optional(),
   primaryContactPhone: z.string().optional(),
@@ -337,7 +337,6 @@ export default function AircraftMaintenanceDetailPage() {
 
   const handleSaveEngineDetailsInModal = (updatedEngines: EngineDetail[]) => {
     aircraftInfoForm.setValue('engineDetails', updatedEngines);
-    // Optionally, if currentAircraft is also used for display outside the form, update it too:
     if (currentAircraft) {
         setCurrentAircraft(prev => prev ? { ...prev, engineDetails: updatedEngines } : null);
     }
@@ -353,13 +352,13 @@ export default function AircraftMaintenanceDetailPage() {
         const updatedAircraftData: SaveFleetAircraftInput = { 
           ...currentAircraft, 
           model: data.model, 
-          serialNumber: data.serialNumber || undefined,
-          aircraftYear: data.aircraftYear,
-          baseLocation: data.baseLocation || undefined,
-          primaryContactName: data.primaryContactName || undefined,
-          primaryContactPhone: data.primaryContactPhone || undefined,
-          primaryContactEmail: data.primaryContactEmail || undefined,
-          internalNotes: data.internalNotes || undefined,
+          serialNumber: data.serialNumber === '' ? undefined : data.serialNumber,
+          aircraftYear: data.aircraftYear === null ? undefined : data.aircraftYear, // Handle null for year
+          baseLocation: data.baseLocation === '' ? undefined : data.baseLocation,
+          primaryContactName: data.primaryContactName === '' ? undefined : data.primaryContactName,
+          primaryContactPhone: data.primaryContactPhone === '' ? undefined : data.primaryContactPhone,
+          primaryContactEmail: data.primaryContactEmail === '' ? undefined : data.primaryContactEmail,
+          internalNotes: data.internalNotes === '' ? undefined : data.internalNotes,
           engineDetails: data.engineDetails || [], 
           isMaintenanceTracked: currentAircraft.isMaintenanceTracked, 
           trackedComponentNames: currentAircraft.trackedComponentNames,
@@ -1020,12 +1019,9 @@ export default function AircraftMaintenanceDetailPage() {
                         </Button>
                     </div>
                      {(currentEngineDetailsForForm && currentEngineDetailsForForm.length > 0) ? (
-                        currentEngineDetailsForForm.map((engine, idx) => (
-                          <div key={idx} className="p-2 border rounded-md bg-muted/30 mb-1 text-xs">
-                             <p><strong className="text-muted-foreground">Engine {idx+1} Model:</strong> {engine.model || 'N/A'}</p>
-                             <p><strong className="text-muted-foreground">Engine {idx+1} S/N:</strong> {engine.serialNumber || 'N/A'}</p>
-                          </div>
-                        ))
+                        <p className="text-xs text-muted-foreground p-2 border rounded-md bg-muted/30">
+                            {currentEngineDetailsForForm.length} engine(s) configured. Click "Manage Engines" to view/edit.
+                        </p>
                     ) : (
                          <p className="text-xs text-muted-foreground p-2 border rounded-md bg-muted/30">No engine details entered. Click "Manage Engines" to add.</p>
                     )}
@@ -1045,16 +1041,18 @@ export default function AircraftMaintenanceDetailPage() {
                 <p><strong className="text-muted-foreground w-28 inline-block">Email:</strong> {currentAircraft.primaryContactEmail || 'N/A'}</p>
                 
                 <div className="pt-2">
-                  <h4 className="font-semibold text-muted-foreground">Engine Details:</h4>
+                    <div className="flex justify-between items-center">
+                        <h4 className="font-semibold text-muted-foreground">Engine Details:</h4>
+                         <Button type="button" variant="link" size="xs" onClick={() => setIsEngineModalOpen(true)} className="p-0 h-auto text-xs">
+                            Manage
+                        </Button>
+                    </div>
                   {(currentAircraft.engineDetails && currentAircraft.engineDetails.length > 0) ? (
-                    currentAircraft.engineDetails.map((engine: EngineDetail, idx: number) => (
-                        <div key={idx} className="pl-2 border-l ml-1 mt-1">
-                            <p><strong className="text-muted-foreground w-24 inline-block">Eng {idx+1} Model:</strong> {engine.model || 'N/A'}</p>
-                            <p><strong className="text-muted-foreground w-24 inline-block">Eng {idx+1} S/N:</strong> {engine.serialNumber || 'N/A'}</p>
-                        </div>
-                    ))
+                     <p className="text-xs text-muted-foreground pl-2">
+                        {currentAircraft.engineDetails.length} engine(s) configured.
+                    </p>
                   ) : (
-                     <p className="text-xs text-muted-foreground pl-2">N/A</p>
+                     <p className="text-xs text-muted-foreground pl-2">No engine details recorded.</p>
                   )}
                 </div>
                 
@@ -1237,3 +1235,4 @@ export default function AircraftMaintenanceDetailPage() {
     </div>
   );
 }
+
