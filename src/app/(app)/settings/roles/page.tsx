@@ -80,7 +80,7 @@ const predefinedRoles: SaveRoleInput[] = [
     permissions: ["ACCESS_DOCUMENTS_PAGE", "VIEW_TRIPS", "VIEW_DASHBOARD"] as Permission[],
     isSystemRole: true,
   }
-].sort((a, b) => { // Ensure predefinedRoles itself respects the initial desired order for seeding
+].sort((a, b) => { 
     const order = ["Administrator", "Flight Crew", "Dispatch", "Maintenance", "Sales", "FAA Inspector"];
     return order.indexOf(a.name!) - order.indexOf(b.name!);
 });
@@ -110,7 +110,6 @@ export default function UserRolesPage() {
       toast({ title: "Initializing System Roles", description: `Creating ${rolesToCreate.length} predefined roles...` });
       try {
         for (const roleData of rolesToCreate) {
-          // Pass permissions as Permission[] for type safety with saveRole
           await saveRole({ ...roleData, permissions: roleData.permissions as Permission[] });
         }
         toast({ title: "System Roles Initialized", description: "Predefined roles have been added to Firestore.", variant: "default" });
@@ -212,16 +211,11 @@ export default function UserRolesPage() {
   };
 
   const sortedAndFilteredRoles = useMemo(() => {
-    const sortedList = [...rolesList].sort((a, b) => {
-      // Rule 1: Administrator (system role) always comes first
+    let sortedList = [...rolesList].sort((a, b) => {
       if (a.name === "Administrator" && a.isSystemRole) return -1;
       if (b.name === "Administrator" && b.isSystemRole) return 1;
-
-      // Rule 2: Other system roles come before non-system roles
       if (a.isSystemRole && !b.isSystemRole) return -1;
       if (!a.isSystemRole && b.isSystemRole) return 1;
-
-      // Rule 3: Within system roles (excluding Admin already handled) or within non-system roles, sort alphabetically
       return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
     });
 
@@ -248,7 +242,9 @@ export default function UserRolesPage() {
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle>Manage Roles</CardTitle>
-          <CardDescription>Assign permissions to roles to control access to SkyBase features.</CardDescription>
+          <CardDescription>
+            Assign permissions to roles to control access to SkyBase features. User counts are illustrative pending full user management.
+          </CardDescription>
            <div className="mt-2 relative">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input 
@@ -273,13 +269,14 @@ export default function UserRolesPage() {
                   <TableHead>Role Name</TableHead>
                   <TableHead>Description</TableHead>
                   <TableHead>Key Permissions</TableHead>
+                  <TableHead className="text-center">Users</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {sortedAndFilteredRoles.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center text-muted-foreground py-10">
+                    <TableCell colSpan={5} className="text-center text-muted-foreground py-10">
                       No roles found{rolesList.length > 0 && searchTerm ? " matching your search" : ". Add a role to get started."}
                     </TableCell>
                   </TableRow>
@@ -300,6 +297,10 @@ export default function UserRolesPage() {
                           {(role.permissions || []).length > 3 && <Badge variant="outline" className="text-xs">+{ (role.permissions || []).length - 3} more</Badge>}
                           {(role.permissions || []).length === 0 && <span className="text-xs text-muted-foreground">-</span>}
                         </div>
+                      </TableCell>
+                      <TableCell className="text-center text-sm text-muted-foreground">
+                        {/* Placeholder for user count */}
+                        {role.name === "Administrator" ? 1 : (role.name === "Flight Crew" ? 5 : (role.name === "Dispatch" ? 2 : 0))}
                       </TableCell>
                       <TableCell className="text-right">
                         <Tooltip>
