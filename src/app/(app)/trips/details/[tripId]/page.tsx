@@ -26,7 +26,7 @@ import { fetchTripById, deleteTrip, saveTrip } from '@/ai/flows/manage-trips-flo
 import type { Trip, TripLeg, TripStatus, SaveTripInput } from '@/ai/schemas/trip-schemas';
 import { useToast } from '@/hooks/use-toast';
 import { format, parseISO, isValid } from 'date-fns';
-import { fetchCrewMembers, type CrewMember } from '@/ai/flows/manage-crew-flow'; // Import crew functionalities
+import { fetchCrewMembers, type CrewMember } from '@/ai/flows/manage-crew-flow'; 
 
 // Helper to get badge variant for status
 const getStatusBadgeVariant = (status?: TripStatus): "default" | "secondary" | "outline" | "destructive" => {
@@ -183,7 +183,14 @@ export default function ViewTripDetailsPage() {
       };
       
       try {
-        const savedTrip = await saveTrip(tripDataToSave);
+        // Correctly call saveTrip with the modified Trip object
+        // The saveTrip flow expects an object that conforms to SaveTripInput or Trip
+        // If `tripDataToSave` has an `id`, it needs to be handled by the saveTripFlow appropriately
+        // Our current saveTripFlow has an internal schema that separates id and data.
+        // Let's assume the wrapper saveTrip function can handle the full Trip object.
+        const { id: tripDocId, createdAt, updatedAt, ...tripSaveData } = tripDataToSave;
+        const savedTrip = await saveTrip({ ...tripSaveData, id: tripDocId });
+        
         setTrip(savedTrip);
         setEditableNotes(savedTrip.notes || '');
         setIsEditingNotes(false);
@@ -197,7 +204,7 @@ export default function ViewTripDetailsPage() {
 
   const getCrewMemberDisplay = (crewId?: string) => {
     if (!crewId) return "N/A";
-    if (isLoadingCrewRosterDetails) return <Loader2 className="h-4 w-4 animate-spin" />;
+    if (isLoadingCrewRosterDetails) return <Loader2 className="h-4 w-4 animate-spin inline-block" />;
     const crewMember = crewRosterDetails.find(c => c.id === crewId);
     return crewMember ? `${crewMember.firstName} ${crewMember.lastName} (${crewMember.role})` : `Unknown (ID: ${crewId})`;
   };
@@ -288,8 +295,13 @@ export default function ViewTripDetailsPage() {
           <CardContent className="space-y-2 text-sm">
             <p><strong>Pilot (PIC):</strong> {getCrewMemberDisplay(trip.assignedPilotId)}</p>
             <p><strong>Co-Pilot (SIC):</strong> {getCrewMemberDisplay(trip.assignedCoPilotId)}</p>
-            {/* Placeholder for Flight Attendants display */}
-            <p className="text-xs text-muted-foreground mt-1">Flight Attendant assignment display coming soon.</p>
+            {(trip.assignedFlightAttendantIds && trip.assignedFlightAttendantIds.length > 0) ? (
+                trip.assignedFlightAttendantIds.map((faId, index) => (
+                    <p key={faId}><strong>Flight Attendant {index + 1}:</strong> {getCrewMemberDisplay(faId)}</p>
+                ))
+            ) : (
+                <p><strong>Flight Attendants:</strong> N/A</p>
+            )}
             <Button variant="outline" className="w-full mt-2" asChild>
                 <Link href={`/trips/edit/${trip.id}`}>
                     <Edit3 className="mr-2 h-4 w-4" /> Manage Crew Assignment
@@ -395,5 +407,7 @@ export default function ViewTripDetailsPage() {
     </>
   );
 }
+
+    
 
     

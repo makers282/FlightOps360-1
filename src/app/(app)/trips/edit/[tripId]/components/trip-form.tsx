@@ -63,7 +63,8 @@ const TripFormSchema = z.object({
   initialQuoteId: z.string().optional(),
   assignedPilotId: z.string().optional(),
   assignedCoPilotId: z.string().optional(),
-  // assignedFlightAttendantIds: z.array(z.string()).optional(), // For later
+  assignedFlightAttendantId1: z.string().optional(),
+  assignedFlightAttendantId2: z.string().optional(),
 });
 
 export type FullTripFormData = z.infer<typeof TripFormSchema>;
@@ -125,6 +126,8 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
       initialQuoteId: undefined,
       assignedPilotId: undefined,
       assignedCoPilotId: undefined,
+      assignedFlightAttendantId1: undefined,
+      assignedFlightAttendantId2: undefined,
     },
   });
 
@@ -206,6 +209,8 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
         initialQuoteId: initialQuoteId || initialTripData.quoteId || undefined,
         assignedPilotId: initialTripData.assignedPilotId || undefined,
         assignedCoPilotId: initialTripData.assignedCoPilotId || undefined,
+        assignedFlightAttendantId1: initialTripData.assignedFlightAttendantIds?.[0] || undefined,
+        assignedFlightAttendantId2: initialTripData.assignedFlightAttendantIds?.[1] || undefined,
       });
 
       const newLegEstimates = (initialTripData.legs || []).map((leg: DbTripLeg) => {
@@ -364,6 +369,9 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
     onSave(data);
   };
 
+  const flightAttendants = crewRoster.filter(c => c.role === 'Flight Attendant' && c.isActive);
+
+
   return (
     <Card className="shadow-lg max-w-4xl mx-auto">
       <Form {...form}>
@@ -433,13 +441,13 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
                   <FormLabel className="flex items-center gap-1"><UserCircle2 className="h-4 w-4" />Assigned Pilot (PIC)</FormLabel>
                   <Select 
                     onValueChange={value => field.onChange(value === UNASSIGNED_CREW_VALUE ? undefined : value)} 
-                    value={field.value || ""} 
+                    value={field.value || UNASSIGNED_CREW_VALUE} 
                     disabled={isLoadingCrewRoster}
                   >
                     <FormControl><SelectTrigger><SelectValue placeholder={isLoadingCrewRoster ? "Loading crew..." : "Select Pilot"} /></SelectTrigger></FormControl>
                     <SelectContent>
                       <SelectItem value={UNASSIGNED_CREW_VALUE}>Unassigned</SelectItem>
-                      {crewRoster.filter(c => c.role === "Captain" || c.role === "First Officer").map(c => (<SelectItem key={c.id} value={c.id}>{c.firstName} {c.lastName} ({c.role})</SelectItem>))}
+                      {crewRoster.filter(c => c.isActive && (c.role === "Captain" || c.role === "First Officer")).map(c => (<SelectItem key={c.id} value={c.id}>{c.firstName} {c.lastName} ({c.role})</SelectItem>))}
                     </SelectContent>
                   </Select>
                   <FormMessage />
@@ -450,18 +458,54 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
                   <FormLabel className="flex items-center gap-1"><UserCircle2 className="h-4 w-4" />Assigned Co-Pilot (SIC)</FormLabel>
                   <Select 
                     onValueChange={value => field.onChange(value === UNASSIGNED_CREW_VALUE ? undefined : value)} 
-                    value={field.value || ""} 
+                    value={field.value || UNASSIGNED_CREW_VALUE} 
                     disabled={isLoadingCrewRoster}
                   >
                     <FormControl><SelectTrigger><SelectValue placeholder={isLoadingCrewRoster ? "Loading crew..." : "Select Co-Pilot"} /></SelectTrigger></FormControl>
                     <SelectContent>
                       <SelectItem value={UNASSIGNED_CREW_VALUE}>Unassigned</SelectItem>
-                       {crewRoster.filter(c => c.role === "First Officer" || c.role === "Captain").map(c => (<SelectItem key={c.id} value={c.id}>{c.firstName} {c.lastName} ({c.role})</SelectItem>))}
+                       {crewRoster.filter(c => c.isActive && (c.role === "First Officer" || c.role === "Captain")).map(c => (<SelectItem key={c.id} value={c.id}>{c.firstName} {c.lastName} ({c.role})</SelectItem>))}
                     </SelectContent>
                   </Select>
                   <FormMessage />
                 </FormItem>
               )} />
+            </div>
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                <FormField control={control} name="assignedFlightAttendantId1" render={({ field }) => (
+                    <FormItem>
+                        <FormLabel className="flex items-center gap-1"><UserCircle2 className="h-4 w-4" />Flight Attendant 1</FormLabel>
+                        <Select 
+                            onValueChange={value => field.onChange(value === UNASSIGNED_CREW_VALUE ? undefined : value)} 
+                            value={field.value || UNASSIGNED_CREW_VALUE} 
+                            disabled={isLoadingCrewRoster}
+                        >
+                            <FormControl><SelectTrigger><SelectValue placeholder={isLoadingCrewRoster ? "Loading..." : "Select Flight Attendant"} /></SelectTrigger></FormControl>
+                            <SelectContent>
+                                <SelectItem value={UNASSIGNED_CREW_VALUE}>Unassigned</SelectItem>
+                                {flightAttendants.map(c => (<SelectItem key={c.id} value={c.id}>{c.firstName} {c.lastName}</SelectItem>))}
+                            </SelectContent>
+                        </Select>
+                        <FormMessage />
+                    </FormItem>
+                )} />
+                <FormField control={control} name="assignedFlightAttendantId2" render={({ field }) => (
+                    <FormItem>
+                        <FormLabel className="flex items-center gap-1"><UserCircle2 className="h-4 w-4" />Flight Attendant 2</FormLabel>
+                        <Select 
+                            onValueChange={value => field.onChange(value === UNASSIGNED_CREW_VALUE ? undefined : value)} 
+                            value={field.value || UNASSIGNED_CREW_VALUE} 
+                            disabled={isLoadingCrewRoster}
+                        >
+                            <FormControl><SelectTrigger><SelectValue placeholder={isLoadingCrewRoster ? "Loading..." : "Select Flight Attendant"} /></SelectTrigger></FormControl>
+                            <SelectContent>
+                                <SelectItem value={UNASSIGNED_CREW_VALUE}>Unassigned</SelectItem>
+                                {flightAttendants.map(c => (<SelectItem key={c.id} value={c.id}>{c.firstName} {c.lastName}</SelectItem>))}
+                            </SelectContent>
+                        </Select>
+                        <FormMessage />
+                    </FormItem>
+                )} />
             </div>
             
             <Separator />
@@ -581,3 +625,6 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
     </Card>
   );
 }
+
+
+    

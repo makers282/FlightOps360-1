@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, Suspense, useTransition } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import Link from 'next/link'; // Added Link import
+import Link from 'next/link'; 
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button, buttonVariants } from '@/components/ui/button';
@@ -61,6 +61,8 @@ function EditTripPageContent() {
     startSavingTransition(async () => {
       const aircraftSelectOptions = await fetchFleetAircraft().then(fleet => fleet.map(ac => ({ value: ac.id, label: `${ac.tailNumber} - ${ac.model}`, model: ac.model })));
       
+      const flightAttendantIds = [formData.assignedFlightAttendantId1, formData.assignedFlightAttendantId2].filter(id => id && id !== "--UNASSIGNED--") as string[];
+
       const tripToSave: Trip = {
         ...tripData, 
         id: tripData.id, 
@@ -87,6 +89,7 @@ function EditTripPageContent() {
         ...(formData.selectedCustomerId && { customerId: formData.selectedCustomerId }),
         assignedPilotId: formData.assignedPilotId,
         assignedCoPilotId: formData.assignedCoPilotId,
+        assignedFlightAttendantIds: flightAttendantIds,
       };
       
       try {
@@ -158,9 +161,9 @@ function EditTripPageContent() {
             <Button onClick={handleSendItinerary} variant="outline" disabled={isSaving}>
                 <Send className="mr-2 h-4 w-4" /> Send Updated Itinerary
             </Button>
-            <Button variant="outline" disabled>
-                <CrewIcon className="mr-2 h-4 w-4" /> Assign Crew
-            </Button>
+            {/* <Button variant="outline" disabled>
+                <CrewIcon className="mr-2 h-4 w-4" /> Assign Crew  // This functionality is now within the form
+            </Button> */}
              <Button variant="outline" disabled>
                 <LoadManifestIcon className="mr-2 h-4 w-4" /> View Load Manifest
             </Button>
@@ -194,3 +197,5 @@ export default function EditTripPage() {
     </Suspense>
   );
 }
+
+    
