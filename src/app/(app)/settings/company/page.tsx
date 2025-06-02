@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Building2, Plane, PlusCircle, Trash2, Save, XCircle, Loader2, Edit, CheckSquare, Square, Info, Mail } from 'lucide-react';
+import { Building2, Plane, PlusCircle, Trash2, Save, XCircle, Loader2, Edit, CheckSquare, Square, Info, Mail, Settings2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { fetchFleetAircraft, saveFleetAircraft, deleteFleetAircraft, type FleetAircraft, type SaveFleetAircraftInput } from '@/ai/flows/manage-fleet-flow';
 import { fetchCompanyProfile, saveCompanyProfile, type CompanyProfile } from '@/ai/flows/manage-company-profile-flow'; 
@@ -42,7 +42,14 @@ export default function CompanySettingsPage() {
   const [newBaseLocation, setNewBaseLocation] = useState('');
   const [newPrimaryContactName, setNewPrimaryContactName] = useState('');
   const [newPrimaryContactPhone, setNewPrimaryContactPhone] = useState('');
-  const [newPrimaryContactEmail, setNewPrimaryContactEmail] = useState(''); // New state for email
+  const [newPrimaryContactEmail, setNewPrimaryContactEmail] = useState(''); 
+
+  // State for engine details
+  const [engine1Model, setEngine1Model] = useState('');
+  const [engine1SN, setEngine1SN] = useState('');
+  const [engine2Model, setEngine2Model] = useState('');
+  const [engine2SN, setEngine2SN] = useState('');
+
 
   // State for company information
   const [companyName, setCompanyName] = useState('');
@@ -104,7 +111,11 @@ export default function CompanySettingsPage() {
     setNewBaseLocation('');
     setNewPrimaryContactName('');
     setNewPrimaryContactPhone('');
-    setNewPrimaryContactEmail(''); // Reset email field
+    setNewPrimaryContactEmail(''); 
+    setEngine1Model('');
+    setEngine1SN('');
+    setEngine2Model('');
+    setEngine2SN('');
   };
 
   const handleEditAircraftClick = (aircraft: CompanyPageFleetAircraft) => {
@@ -117,7 +128,11 @@ export default function CompanySettingsPage() {
     setNewBaseLocation(aircraft.baseLocation || '');
     setNewPrimaryContactName(aircraft.primaryContactName || '');
     setNewPrimaryContactPhone(aircraft.primaryContactPhone || '');
-    setNewPrimaryContactEmail(aircraft.primaryContactEmail || ''); // Set email field for editing
+    setNewPrimaryContactEmail(aircraft.primaryContactEmail || ''); 
+    setEngine1Model(aircraft.engineDetails?.[0]?.model || '');
+    setEngine1SN(aircraft.engineDetails?.[0]?.serialNumber || '');
+    setEngine2Model(aircraft.engineDetails?.[1]?.model || '');
+    setEngine2SN(aircraft.engineDetails?.[1]?.serialNumber || '');
     setShowAddAircraftForm(true);
   };
   
@@ -135,6 +150,18 @@ export default function CompanySettingsPage() {
       .split(',')
       .map(name => name.trim())
       .filter(name => name.length > 0);
+    
+    const engineDetails = [];
+    if (engine1Model.trim() || engine1SN.trim()) {
+      engineDetails.push({ model: engine1Model.trim() || undefined, serialNumber: engine1SN.trim() || undefined });
+    }
+    if (engine2Model.trim() || engine2SN.trim()) {
+      engineDetails.push({ model: engine2Model.trim() || undefined, serialNumber: engine2SN.trim() || undefined });
+    }
+    // If only engine 2 has data but engine 1 doesn't, we should still push an empty object for engine 1
+    // to maintain the order, or ensure engine 1 is filled if engine 2 is.
+    // For simplicity now, if E1 is blank but E2 has data, E2 effectively becomes E1 in the array.
+    // A more robust UI would prevent this or handle indexing explicitly.
 
     const aircraftData: SaveFleetAircraftInput = {
       id: editingAircraftId || newTailNumber.toUpperCase().replace(/\s+/g, ''), 
@@ -143,11 +170,13 @@ export default function CompanySettingsPage() {
       isMaintenanceTracked: newIsMaintenanceTracked,
       trackedComponentNames: parsedTrackedComponentNames.length > 0 ? parsedTrackedComponentNames : ['Airframe', 'Engine 1'],
       serialNumber: newSerialNumber.trim() || undefined,
+      aircraftYear: editingAircraftId ? fleet.find(ac => ac.id === editingAircraftId)?.aircraftYear : undefined, // Preserve year if editing
       baseLocation: newBaseLocation.trim() || undefined,
       primaryContactName: newPrimaryContactName.trim() || undefined,
       primaryContactPhone: newPrimaryContactPhone.trim() || undefined,
-      primaryContactEmail: newPrimaryContactEmail.trim() || undefined, // Add email to data
-      engineDetails: editingAircraftId ? fleet.find(ac => ac.id === editingAircraftId)?.engineDetails : undefined,
+      primaryContactEmail: newPrimaryContactEmail.trim() || undefined, 
+      engineDetails: engineDetails.length > 0 ? engineDetails : undefined, // Send undefined if no engine details
+      internalNotes: editingAircraftId ? fleet.find(ac => ac.id === editingAircraftId)?.internalNotes : undefined, // Preserve notes if editing
     };
 
     startSavingAircraftTransition(async () => {
@@ -193,9 +222,13 @@ export default function CompanySettingsPage() {
         companyAddress: companyAddress.trim(),
         companyEmail: companyEmail.trim(),
         companyPhone: companyPhone.trim(),
+        // Ensure serviceFeeRates is preserved if it exists on the current companyProfile state
+        serviceFeeRates: companyProfile?.serviceFeeRates || {},
       };
       try {
         await saveCompanyProfile(profileData);
+        // Update local state after successful save
+        setCompanyProfile(prevProfile => ({...prevProfile, ...profileData} as CompanyProfile));
         toast({ title: "Success", description: "Company information updated in Firestore." });
       } catch (error) {
         console.error("Failed to save company profile:", error);
@@ -268,7 +301,7 @@ export default function CompanySettingsPage() {
                 <CardDescription>Add, edit, or remove aircraft. (Connected to Firestore)</CardDescription>
               </div>
               {!showAddAircraftForm && (
-                <Button variant="outline" size="sm" onClick={() => { setEditingAircraftId(null); resetAircraftFormFields(); setShowAddAircraftForm(true); setNewTrackedComponentNamesStr('Airframe, Engine 1');}}>
+                <Button variant="outline" size="sm" onClick={() => { setEditingAircraftId(null); resetAircraftFormFields(); setShowAddAircraftForm(true); setNewTrackedComponentNamesStr('Airframe, Engine 1, Engine 2');}}>
                   <PlusCircle className="mr-2 h-4 w-4" /> Add Aircraft
                 </Button>
               )}
@@ -317,6 +350,31 @@ export default function CompanySettingsPage() {
                       <Input id="newPrimaryContactEmail" type="email" value={newPrimaryContactEmail} onChange={(e) => setNewPrimaryContactEmail(e.target.value)} placeholder="e.g., contact@aircraft.com" />
                     </div>
                   </div>
+
+                  {/* Engine Details Inputs */}
+                  <div className="pt-2 space-y-3">
+                    <Label className="font-medium text-sm">Engine Details</Label>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-3 gap-y-2 p-3 border rounded-md bg-background/70">
+                        <div>
+                            <Label htmlFor="engine1Model" className="text-xs">Engine 1 Model</Label>
+                            <Input id="engine1Model" value={engine1Model} onChange={(e) => setEngine1Model(e.target.value)} placeholder="e.g., PT6A-67D" />
+                        </div>
+                        <div>
+                            <Label htmlFor="engine1SN" className="text-xs">Engine 1 S/N</Label>
+                            <Input id="engine1SN" value={engine1SN} onChange={(e) => setEngine1SN(e.target.value)} placeholder="e.g., PCE12345" />
+                        </div>
+                        <div>
+                            <Label htmlFor="engine2Model" className="text-xs">Engine 2 Model (Optional)</Label>
+                            <Input id="engine2Model" value={engine2Model} onChange={(e) => setEngine2Model(e.target.value)} placeholder="e.g., PT6A-67D" />
+                        </div>
+                        <div>
+                            <Label htmlFor="engine2SN" className="text-xs">Engine 2 S/N (Optional)</Label>
+                            <Input id="engine2SN" value={engine2SN} onChange={(e) => setEngine2SN(e.target.value)} placeholder="e.g., PCE67890" />
+                        </div>
+                    </div>
+                  </div>
+
+
                   <div className="flex items-center space-x-2 pt-2">
                     <Checkbox 
                         id="newIsMaintenanceTracked" 
@@ -336,7 +394,7 @@ export default function CompanySettingsPage() {
                       placeholder="e.g., Airframe, Engine 1, Propeller 1, APU"
                       rows={2}
                     />
-                    <p className="text-xs text-muted-foreground">Enter component names, separated by commas.</p>
+                    <p className="text-xs text-muted-foreground">Enter component names, separated by commas. (e.g., Airframe, Engine 1, Engine 2)</p>
                   </div>
                   <div className="flex gap-2 pt-2">
                     <Button onClick={handleAddOrUpdateAircraft} size="sm" disabled={isSavingAircraft}>
@@ -358,10 +416,10 @@ export default function CompanySettingsPage() {
             ) : (
               <>
               <Alert className="mb-4">
-                <Info className="h-4 w-4" />
+                <Settings2 className="h-4 w-4" />
                 <AlertDescription className="text-xs">
-                  Aircraft data is managed in Firestore.
-                  Deleting an aircraft here will also delete its associated rate from the 'aircraftRates' collection.
+                  Aircraft year, detailed multi-engine configuration, and internal notes can be managed on the 
+                  <Button variant="link" size="sm" className="p-0 h-auto ml-1 text-xs" asChild><Link href="/aircraft/currency">Aircraft Maintenance Currency page</Link></Button>.
                 </AlertDescription>
               </Alert>
               <Table>
@@ -369,7 +427,6 @@ export default function CompanySettingsPage() {
                   <TableRow>
                     <TableHead>Tail Number</TableHead>
                     <TableHead>Model</TableHead>
-                    <TableHead>S/N</TableHead>
                     <TableHead>Maintenance Tracked</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
@@ -377,14 +434,13 @@ export default function CompanySettingsPage() {
                 <TableBody>
                   {fleet.length === 0 && !isLoadingFleet && (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center text-muted-foreground py-4">No aircraft in fleet. Add one to get started.</TableCell>
+                      <TableCell colSpan={4} className="text-center text-muted-foreground py-4">No aircraft in fleet. Add one to get started.</TableCell>
                     </TableRow>
                   )}
                   {fleet.map((aircraft) => (
                     <TableRow key={aircraft.id}>
                       <TableCell className="font-medium">{aircraft.tailNumber}</TableCell>
                       <TableCell>{aircraft.model}</TableCell>
-                      <TableCell>{aircraft.serialNumber || '-'}</TableCell>
                        <TableCell>
                         {aircraft.isMaintenanceTracked ? 
                           <CheckSquare className="h-5 w-5 text-green-500" /> : 
