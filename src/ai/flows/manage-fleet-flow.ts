@@ -9,50 +9,25 @@
  */
 
 import {ai} from '@/ai/genkit';
-import {z}from 'genkit';
+// import {z}from 'genkit'; // z is now imported via the schema file
 import { db } from '@/lib/firebase';
-import { collection, doc, getDocs, setDoc, deleteDoc, query, where, writeBatch } from 'firebase/firestore';
+import { collection, doc, getDocs, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
+import type { 
+  FleetAircraft, 
+  EngineDetail, // Ensure EngineDetail type is imported if used explicitly
+  SaveFleetAircraftInput, 
+  DeleteFleetAircraftInput 
+} from '@/ai/schemas/fleet-aircraft-schemas';
+import { 
+  FleetAircraftSchema,
+  // EngineDetailSchema is not directly used for flow input/output here
+  SaveFleetAircraftInputSchema,
+  DeleteFleetAircraftInputSchema,
+  FetchFleetAircraftOutputSchema,
+  SaveFleetAircraftOutputSchema,
+  DeleteFleetAircraftOutputSchema
+} from '@/ai/schemas/fleet-aircraft-schemas';
 
-// Define the structure for an engine detail
-const EngineDetailSchema = z.object({
-  model: z.string().optional().describe("Engine model."),
-  serialNumber: z.string().optional().describe("Engine serial number."),
-});
-export type EngineDetail = z.infer<typeof EngineDetailSchema>;
-
-// Define the structure for a fleet aircraft
-const FleetAircraftSchema = z.object({
-  id: z.string().describe("The unique identifier for the aircraft, typically the tail number if unique, or an auto-generated ID."),
-  tailNumber: z.string().min(1, "Tail number is required.").describe("The aircraft's tail number (e.g., N123AB)."),
-  model: z.string().min(1, "Aircraft model is required.").describe("The aircraft model (e.g., Cessna Citation CJ3)."),
-  serialNumber: z.string().optional().describe("Aircraft serial number."),
-  aircraftYear: z.number().int().min(1900).max(new Date().getFullYear() + 10).optional().describe("Year of manufacture."),
-  baseLocation: z.string().optional().describe("Primary base location of the aircraft (e.g., KTEB)."),
-  engineDetails: z.array(EngineDetailSchema).optional().default([]).describe("Details for each engine."),
-  isMaintenanceTracked: z.boolean().optional().default(true).describe("Whether maintenance tracking is enabled for this aircraft."),
-  trackedComponentNames: z.array(z.string()).optional().default(['Airframe', 'Engine 1']).describe("List of component names to track hours/cycles for (e.g., Airframe, Engine 1, Propeller 1)."),
-  primaryContactName: z.string().optional().describe("Primary contact person for the aircraft."),
-  primaryContactPhone: z.string().optional().describe("Primary contact phone for the aircraft."),
-  primaryContactEmail: z.string().email("Invalid email format.").optional().describe("Primary contact email for the aircraft."),
-  internalNotes: z.string().optional().describe("Internal operational notes like hangar location, access codes, etc."),
-});
-export type FleetAircraft = z.infer<typeof FleetAircraftSchema>;
-
-// Schemas for flow inputs and outputs
-const SaveFleetAircraftInputSchema = FleetAircraftSchema;
-export type SaveFleetAircraftInput = z.infer<typeof SaveFleetAircraftInputSchema>;
-
-const DeleteFleetAircraftInputSchema = z.object({
-  aircraftId: z.string().describe("The ID of the aircraft to delete from the fleet."),
-});
-export type DeleteFleetAircraftInput = z.infer<typeof DeleteFleetAircraftInputSchema>;
-
-const FetchFleetAircraftOutputSchema = z.array(FleetAircraftSchema);
-const SaveFleetAircraftOutputSchema = FleetAircraftSchema;
-const DeleteFleetAircraftOutputSchema = z.object({
-  success: z.boolean(),
-  aircraftId: z.string(),
-});
 
 const FLEET_COLLECTION = 'fleet';
 const AIRCRAFT_RATES_COLLECTION = 'aircraftRates'; // For cascading delete
@@ -70,7 +45,7 @@ export async function saveFleetAircraft(input: SaveFleetAircraftInput): Promise<
   const aircraftToSave: FleetAircraft = {
     ...input, 
     serialNumber: input.serialNumber === null ? undefined : input.serialNumber,
-    aircraftYear: input.aircraftYear === null ? undefined : input.aircraftYear,
+    aircraftYear: input.aircraftYear === null ? undefined : (input.aircraftYear === undefined ? undefined : Number(input.aircraftYear)),
     baseLocation: input.baseLocation === null ? undefined : input.baseLocation,
     primaryContactName: input.primaryContactName === null ? undefined : input.primaryContactName,
     primaryContactPhone: input.primaryContactPhone === null ? undefined : input.primaryContactPhone,
@@ -94,7 +69,7 @@ export async function deleteFleetAircraft(input: DeleteFleetAircraftInput): Prom
 const fetchFleetAircraftFlow = ai.defineFlow(
   {
     name: 'fetchFleetAircraftFlow',
-    outputSchema: FetchFleetAircraftOutputSchema,
+    outputSchema: FetchFleetAircraftOutputSchema, // This is z.array(FleetAircraftSchema)
   },
   async () => {
     console.log('Executing fetchFleetAircraftFlow - Firestore');
@@ -110,7 +85,7 @@ const fetchFleetAircraftFlow = ai.defineFlow(
           tailNumber: data.tailNumber || '', 
           model: data.model || '', 
           serialNumber: data.serialNumber ?? undefined,
-          aircraftYear: data.aircraftYear ?? undefined, // This handles null from Firestore
+          aircraftYear: data.aircraftYear ?? undefined, 
           baseLocation: data.baseLocation ?? undefined,
           engineDetails: data.engineDetails || [], 
           isMaintenanceTracked: data.isMaintenanceTracked ?? true,
@@ -134,12 +109,13 @@ const saveFleetAircraftFlow = ai.defineFlow(
   {
     name: 'saveFleetAircraftFlow',
     inputSchema: SaveFleetAircraftInputSchema, // This is FleetAircraftSchema
-    outputSchema: SaveFleetAircraftOutputSchema,
+    outputSchema: SaveFleetAircraftOutputSchema, // This is FleetAircraftSchema
   },
   async (input) => { // input here has already been cleaned by the wrapper
     console.log('Executing saveFleetAircraftFlow (FLOW INPUT) with input - Firestore:', JSON.stringify(input));
     try {
       const aircraftDocRef = doc(db, FLEET_COLLECTION, input.id);
+      // Prepare data for Firestore, converting undefined back to null for storage where appropriate
       const dataToSet = {
         tailNumber: input.tailNumber,
         model: input.model,
@@ -156,7 +132,7 @@ const saveFleetAircraftFlow = ai.defineFlow(
       };
       await setDoc(aircraftDocRef, dataToSet, { merge: true }); 
       console.log('Saved/Updated aircraft in Firestore:', input.id);
-      return input; 
+      return input; // Return the input as validated by the schema
     } catch (error) {
       console.error('Error saving aircraft to Firestore:', error);
       throw new Error(`Failed to save aircraft ${input.id}: ${error instanceof Error ? error.message : String(error)}`);
@@ -181,6 +157,10 @@ const deleteFleetAircraftFlow = ai.defineFlow(
       const aircraftRateDocRef = doc(db, AIRCRAFT_RATES_COLLECTION, input.aircraftId);
       batch.delete(aircraftRateDocRef);
       
+      // Note: Deleting Maintenance Tasks and Component Times associated with this aircraft
+      // would require querying those collections for aircraftId and adding deletions to the batch.
+      // This is not implemented here for brevity but should be considered for full data integrity.
+
       await batch.commit();
       console.log('Deleted fleet aircraft and associated rate from Firestore:', input.aircraftId);
       return { success: true, aircraftId: input.aircraftId };
@@ -190,4 +170,3 @@ const deleteFleetAircraftFlow = ai.defineFlow(
     }
   }
 );
-
