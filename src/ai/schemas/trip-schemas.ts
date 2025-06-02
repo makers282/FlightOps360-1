@@ -64,12 +64,18 @@ export const SaveTripOutputSchema = TripSchema;
 // For fetching multiple trips
 export const FetchTripsOutputSchema = z.array(TripSchema);
 
-// For deleting a trip
-export const DeleteTripInputSchema = z.object({
-  tripId: z.string(), // Firestore document ID
-});
-export const DeleteTripOutputSchema = z.object({
-  success: z.boolean(),
-  tripId: z.string(),
+// For fetching a single trip by ID (input schema)
+export const FetchTripByIdInputSchema = z.object({
+  id: z.string(), // Using the Firestore document ID here
 });
 
+// For deleting a trip
+export const DeleteTripInputSchema = z.object({
+  id: z.string(), // Using the Firestore document ID here
+});
+export type DeleteTripInput = z.infer<typeof DeleteTripInputSchema>;
+
+export const DeleteTripOutputSchema = z.object({
+  success: z.boolean(),
+  tripId: z.string(), // Return the Firestore document ID for confirmation
+});

@@ -18,21 +18,21 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { ListChecks, Search, Eye, Loader2 } from 'lucide-react';
 import { format, parseISO, isValid } from 'date-fns';
-import { fetchTrips, type Trip } from '@/ai/flows/manage-trips-flow'; // Import fetchTrips and Trip type
-import { useToast } from '@/hooks/use-toast'; // Import useToast
+import { fetchTrips, type Trip } from '@/ai/flows/manage-trips-flow'; 
+import { useToast } from '@/hooks/use-toast'; 
 
 const getStatusBadgeVariant = (status?: Trip['status']): "default" | "secondary" | "outline" | "destructive" => {
   switch (status?.toLowerCase()) {
     case 'completed':
-    case 'confirmed': // Assuming 'Confirmed' is a positive status
+    case 'confirmed': 
       return 'default';
     case 'en route':
       return 'secondary';
     case 'scheduled':
-    case 'awaiting closeout': // (If this is a status for trips)
+    case 'awaiting closeout': 
       return 'outline';
     case 'cancelled':
-    case 'diverted': // Assuming 'Diverted' is a problematic status
+    case 'diverted': 
       return 'destructive';
     default:
       return 'default';
@@ -154,11 +154,10 @@ export default function TripListPage() {
                       </TableCell>
                       <TableCell>{isMounted ? formatDate(trip.legs?.[0]?.departureDateTime) : "Loading..."}</TableCell>
                       <TableCell className="text-right">
-                        <Button variant="ghost" size="sm" disabled> {/* Link to trip details page later */}
-                          <span className="cursor-not-allowed"><Eye className="mr-2 h-4 w-4" /> View</span>
-                          {/* <Link href={`/trips/details/${trip.id}`}> 
+                        <Button variant="ghost" size="sm" asChild>
+                          <Link href={`/trips/details/${trip.id}`}> 
                             <Eye className="mr-2 h-4 w-4" /> View
-                          </Link> */}
+                          </Link>
                         </Button>
                       </TableCell>
                     </TableRow>

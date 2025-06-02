@@ -13,11 +13,11 @@ import '@/ai/flows/manage-component-times-flow.ts';
 import '@/ai/flows/manage-company-profile-flow.ts';
 import '@/ai/flows/manage-quotes-flow.ts';
 import '@/ai/flows/manage-customers-flow.ts'; 
-import '@/ai/flows/manage-aircraft-performance-flow.ts'; // Added new performance data flow
-import '@/ai/flows/send-quote-email-flow.ts'; // Added new email flow
-import '@/ai/flows/manage-roles-flow.ts'; // Added new roles management flow
-import '@/ai/flows/manage-users-flow.ts'; // Added user management flow
-import '@/ai/flows/manage-trips-flow.ts'; // Added trip management flow
+import '@/ai/flows/manage-aircraft-performance-flow.ts'; 
+import '@/ai/flows/send-quote-email-flow.ts'; 
+import '@/ai/flows/manage-roles-flow.ts'; 
+import '@/ai/flows/manage-users-flow.ts'; 
+import '@/ai/flows/manage-trips-flow.ts'; 
 
 // Schemas are not Genkit plugins and should not be imported here for registration.
 // They are imported directly by flows or components that use them.
