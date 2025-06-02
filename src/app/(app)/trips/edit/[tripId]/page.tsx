@@ -3,10 +3,11 @@
 
 import React, { useState, useEffect, Suspense, useTransition } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link'; // Added Link import
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Loader2, Edit3, ArrowLeft, InfoIcon, Send, Users as CrewIcon, FileText as FileIcon, Package as LoadManifestIcon } from 'lucide-react'; // Added Send, CrewIcon, FileIcon, LoadManifestIcon
+import { Button, buttonVariants } from '@/components/ui/button';
+import { Loader2, Edit3, ArrowLeft, InfoIcon, Send, Users as CrewIcon, FileText as FileIcon, Package as LoadManifestIcon } from 'lucide-react'; 
 import { fetchTripById, saveTrip } from '@/ai/flows/manage-trips-flow'; 
 import type { Trip, SaveTripInput, TripStatus } from '@/ai/schemas/trip-schemas'; 
 import { useToast } from '@/hooks/use-toast';
@@ -84,6 +85,8 @@ function EditTripPageContent() {
         notes: formData.notes,
         status: formData.status as TripStatus,
         ...(formData.selectedCustomerId && { customerId: formData.selectedCustomerId }),
+        assignedPilotId: formData.assignedPilotId,
+        assignedCoPilotId: formData.assignedCoPilotId,
       };
       
       try {
@@ -110,8 +113,6 @@ function EditTripPageContent() {
       title: "Send Itinerary (Simulation)",
       description: `Simulating sending itinerary for Trip ID: ${tripData.tripId} to ${tripData.clientName}.`,
     });
-    // Future: Call a Genkit flow here
-    // await sendTripItineraryEmailFlow({ tripId: tripData.id, ... });
   };
 
 
@@ -166,8 +167,10 @@ function EditTripPageContent() {
             <Button variant="outline" disabled>
                 <FileIcon className="mr-2 h-4 w-4" /> Generate Flight Log
             </Button>
-            <Button onClick={() => router.push('/trips/list')} variant="outline">
-              <ArrowLeft className="mr-2 h-4 w-4" /> Back to Trip List
+            <Button variant="outline" asChild disabled={!id}>
+              <Link href={id ? `/trips/details/${id}` : '/trips/list'}>
+                <ArrowLeft className="mr-2 h-4 w-4" /> Back to Trip Details
+              </Link>
             </Button>
           </div>
         }
