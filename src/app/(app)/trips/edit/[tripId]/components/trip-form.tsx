@@ -1,13 +1,19 @@
 
 "use client";
 
+// React and Next.js imports
 import * as React from 'react'; // Explicit React import
 import { useState, useEffect, useTransition, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+
+// Third-party library imports
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm, type SubmitHandler, useFieldArray } from 'react-hook-form';
 import { z } from 'zod';
-import { useRouter } from 'next/navigation';
+import { format, parseISO, isValid as isValidDate } from "date-fns";
+import { Loader2, Save, XCircle, PlusCircle, Trash2, Plane, Users, CalendarIcon, Info, Edit3, FileText as FileTextIcon, Package as PackageIcon, UserPlus, FileUp } from 'lucide-react';
 
+// ShadCN UI component imports
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -16,24 +22,27 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
-} from '@/components/ui/card';
+} from '@/components/ui/card'; // Card and related components are imported here
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { Loader2, Save, XCircle, PlusCircle, Trash2, Plane, Users, CalendarIcon, Info, Edit3, FileText as FileTextIcon, Package as PackageIcon, UserPlus, FileUp } from 'lucide-react';
-import { cn } from "@/lib/utils";
-import { format, parseISO, isValid as isValidDate } from "date-fns";
-import { useToast } from '@/hooks/use-toast';
-import { saveTrip } from '@/ai/flows/manage-trips-flow';
-import type { Trip, SaveTripInput, TripLeg as TripLegType, TripStatus } from '@/ai/schemas/trip-schemas';
-import { TripLegSchema, TripSchema as FullTripSchema, tripStatuses, legTypes } from '@/ai/schemas/trip-schemas';
-import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
 
+// Hook imports
+import { useToast } from '@/hooks/use-toast';
+import { cn } from "@/lib/utils";
+
+// Flow and Schema imports
+import { saveTrip } from '@/ai/flows/manage-trips-flow';
+import type { Trip, SaveTripInput, TripLeg as TripLegType, TripStatus } from '@/ai/schemas/trip-schemas';
+import { TripLegSchema, TripSchema as FullTripSchema, tripStatuses, legTypes } from '@/ai/schemas/trip-schemas';
+import { fetchFleetAircraft } from '@/ai/flows/manage-fleet-flow';
+
+// Schema definition for the form
 const TripFormSchema = FullTripSchema.omit({ id: true, createdAt: true, updatedAt: true }).extend({
   legs: z.array(TripLegSchema.extend({
     departureDateTime: z.date().optional(),
@@ -49,15 +58,16 @@ interface TripFormProps {
 }
 
 export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
+  // State and Hooks
   const [isSaving, startSavingTransition] = useTransition();
   const router = useRouter();
   const { toast } = useToast();
   const [minLegDepartureDate, setMinLegDepartureDate] = useState<Date | null>(null);
   const [isClient, setIsClient] = useState(false);
-
   const [aircraftOptions, setAircraftOptions] = useState<{ value: string, label: string }[]>([]);
   const [isLoadingAircraft, setIsLoadingAircraft] = useState(true);
 
+  // Form setup
   const form = useForm<TripFormData>({
     resolver: zodResolver(TripFormSchema),
     defaultValues: {
@@ -82,10 +92,12 @@ export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
     name: "legs",
   });
 
+  // Helper function
   const generateNewUserFacingTripId = useCallback(() => {
     return `TRP-${Date.now().toString().slice(-6)}`;
   }, []);
 
+  // Effects
   useEffect(() => {
     setIsClient(true);
     const today = new Date();
@@ -131,18 +143,25 @@ export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
     }
   }, [isEditMode, initialTripData, reset, generateNewUserFacingTripId]);
 
+  // Form submission handler
   const onSubmit: SubmitHandler<TripFormData> = (data) => {
     startSavingTransition(async () => {
       const selectedAircraft = aircraftOptions.find(opt => opt.value === data.aircraftId);
 
       const tripDataToSave: SaveTripInput = {
-        ...data,
+        tripId: data.tripId,
+        clientName: data.clientName,
+        aircraftId: data.aircraftId!,
         aircraftLabel: selectedAircraft?.label || data.aircraftId,
         legs: data.legs.map(leg => ({
           ...leg,
           departureDateTime: leg.departureDateTime ? leg.departureDateTime.toISOString() : undefined,
           arrivalDateTime: leg.arrivalDateTime ? leg.arrivalDateTime.toISOString() : undefined,
         })),
+        status: data.status as TripStatus,
+        notes: data.notes,
+        quoteId: data.quoteId,
+        customerId: data.customerId,
       };
 
       try {
@@ -166,9 +185,11 @@ export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
     });
   };
 
+  // UI variables
   const titleText = isEditMode ? `Edit Trip: ${initialTripData?.tripId || 'N/A'}` : "Create New Trip";
   const descriptionText = isEditMode ? "Modify the details of this existing trip." : "Enter the details for the new trip.";
 
+  // Component Return
   return (
     <Card className="shadow-lg max-w-4xl mx-auto">
       <CardHeader>
@@ -188,7 +209,7 @@ export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
                 <FormField control={control} name="tripId" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Trip ID</FormLabel>
-                    <FormControl><Input placeholder="e.g., TRP-12345" {...field} readOnly={isEditMode || !isEditMode} className={isEditMode || !isEditMode ? "bg-muted/50 cursor-not-allowed" : ""} /></FormControl>
+                    <FormControl><Input placeholder="e.g., TRP-12345" {...field} readOnly={isEditMode || !isEditMode} className={(isEditMode || !isEditMode) ? "bg-muted/50 cursor-not-allowed" : ""} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
@@ -217,7 +238,7 @@ export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
                 <FormField control={control} name="status" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Status</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value || "Scheduled"}>
+                    <Select onValueChange={(value) => field.onChange(value as TripStatus)} value={field.value || "Scheduled"}>
                       <FormControl><SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger></FormControl>
                       <SelectContent>
                         {tripStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
@@ -264,8 +285,14 @@ export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
                                     const time = e.target.value;
                                     const [hours, minutesValue] = time.split(':').map(Number);
                                     const newDate = field.value ? new Date(field.value) : new Date();
-                                    newDate.setHours(hours, minutesValue);
-                                    field.onChange(newDate);
+                                    if (isValidDate(newDate)) {
+                                      newDate.setHours(hours, minutesValue);
+                                      field.onChange(newDate);
+                                    } else {
+                                      const tempDate = new Date();
+                                      tempDate.setHours(hours, minutesValue, 0, 0);
+                                      field.onChange(tempDate);
+                                    }
                                   }}
                                 />
                               </div>
@@ -278,7 +305,7 @@ export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                        <FormField control={control} name={`legs.${index}.legType`} render={({ field }) => (
                         <FormItem><FormLabel>Leg Type</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value || "Charter"}>
+                          <Select onValueChange={(value) => field.onChange(value as typeof legTypes[number])} value={field.value || "Charter"}>
                             <FormControl><SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger></FormControl>
                             <SelectContent>{legTypes.map(lt => <SelectItem key={lt} value={lt}>{lt}</SelectItem>)}</SelectContent>
                           </Select><FormMessage />
@@ -314,6 +341,7 @@ export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
             </section>
             
             <Separator />
+            {/* Placeholder Sections */}
             <Card className="bg-muted/30 border-dashed">
               <CardHeader><CardTitle className="text-base text-muted-foreground flex items-center gap-2"><Users className="h-5 w-5"/>Crew Assignment</CardTitle></CardHeader>
               <CardContent><p className="text-sm text-muted-foreground italic">Placeholder: Crew assignment UI will be implemented here.</p></CardContent>
