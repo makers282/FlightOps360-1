@@ -13,12 +13,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Building2, Plane, PlusCircle, Trash2, Save, XCircle, Loader2, Edit, CheckSquare, Square, Info, Settings2, Cog, Wind } from 'lucide-react'; // Added Wind for propeller
 import { useToast } from '@/hooks/use-toast';
-import { fetchFleetAircraft, saveFleetAircraft, deleteFleetAircraft, type FleetAircraft, type SaveFleetAircraftInput, type EngineDetail, type PropellerDetail } from '@/ai/schemas/fleet-aircraft-schemas'; // Import PropellerDetail
+import { fetchFleetAircraft, saveFleetAircraft, deleteFleetAircraft } from '@/ai/flows/manage-fleet-flow'; // Corrected import for functions
+import type { FleetAircraft, SaveFleetAircraftInput, EngineDetail, PropellerDetail } from '@/ai/schemas/fleet-aircraft-schemas'; // Corrected import for types
 import { fetchCompanyProfile, saveCompanyProfile, type CompanyProfile } from '@/ai/flows/manage-company-profile-flow'; 
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton'; 
 import { ManageEngineDetailsModal } from '@/app/(app)/aircraft/currency/[tailNumber]/components/manage-engine-details-modal';
-import { ManagePropellerDetailsModal } from '@/app/(app)/aircraft/currency/[tailNumber]/components/manage-propeller-details-modal'; // Import Propeller Modal
+import { ManagePropellerDetailsModal } from '@/app/(app)/aircraft/currency/[tailNumber]/components/manage-propeller-details-modal';
 
 interface CompanyPageFleetAircraft extends FleetAircraft {
   // No custom fields needed here anymore as engineDetails and propellerDetails are directly from FleetAircraft
@@ -48,8 +49,8 @@ export default function CompanySettingsPage() {
   const [currentEngineDetailsForForm, setCurrentEngineDetailsForForm] = useState<EngineDetail[]>([]);
   const [isEngineModalOpen, setIsEngineModalOpen] = useState(false);
 
-  const [currentPropellerDetailsForForm, setCurrentPropellerDetailsForForm] = useState<PropellerDetail[]>([]); // State for propeller details
-  const [isPropellerModalOpen, setIsPropellerModalOpen] = useState(false); // State for propeller modal visibility
+  const [currentPropellerDetailsForForm, setCurrentPropellerDetailsForForm] = useState<PropellerDetail[]>([]);
+  const [isPropellerModalOpen, setIsPropellerModalOpen] = useState(false);
 
 
   // State for company information
@@ -123,7 +124,7 @@ export default function CompanySettingsPage() {
     setNewPrimaryContactPhone('');
     setNewPrimaryContactEmail(''); 
     setCurrentEngineDetailsForForm([]); 
-    setCurrentPropellerDetailsForForm([]); // Reset propeller details
+    setCurrentPropellerDetailsForForm([]);
   };
 
   const handleEditAircraftClick = (aircraft: CompanyPageFleetAircraft) => {
@@ -138,7 +139,7 @@ export default function CompanySettingsPage() {
     setNewPrimaryContactPhone(aircraft.primaryContactPhone || '');
     setNewPrimaryContactEmail(aircraft.primaryContactEmail || ''); 
     setCurrentEngineDetailsForForm(aircraft.engineDetails || []); 
-    setCurrentPropellerDetailsForForm(aircraft.propellerDetails || []); // Set propeller details
+    setCurrentPropellerDetailsForForm(aircraft.propellerDetails || []);
     setShowAddAircraftForm(true);
   };
   
@@ -170,7 +171,7 @@ export default function CompanySettingsPage() {
       primaryContactPhone: newPrimaryContactPhone.trim() || undefined,
       primaryContactEmail: newPrimaryContactEmail.trim() || undefined, 
       engineDetails: currentEngineDetailsForForm, 
-      propellerDetails: currentPropellerDetailsForForm, // Include propeller details
+      propellerDetails: currentPropellerDetailsForForm,
       internalNotes: editingAircraftId ? fleet.find(ac => ac.id === editingAircraftId)?.internalNotes : undefined, 
     };
 
