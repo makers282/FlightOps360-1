@@ -15,12 +15,13 @@ import {
 } from "@/components/ui/table";
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-// Textarea and Form related imports are no longer needed for aircraft info here
-// import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-// import { zodResolver } from '@hookform/resolvers/zod';
-// import { useForm, type SubmitHandler } from 'react-hook-form';
-// import { z } from 'zod';
+import { Textarea } from '@/components/ui/textarea';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useForm, type SubmitHandler } from 'react-hook-form';
+import { z } from 'zod';
 import { AddMaintenanceTaskModal, type MaintenanceTaskFormData, defaultMaintenanceTaskFormValues } from './components/add-maintenance-task-modal';
+// Modals for engine/propeller might be added here later if direct access is needed
 // import { ManageEngineDetailsModal } from './components/manage-engine-details-modal';
 // import { ManagePropellerDetailsModal } from './components/manage-propeller-details-modal';
 import { Badge } from '@/components/ui/badge';
@@ -28,13 +29,12 @@ import { Badge } from '@/components/ui/badge';
 import { Wrench, PlusCircle, ArrowLeft, PlaneIcon, Edit, Loader2, InfoIcon, Phone, UserCircle, MapPin, Save, XCircle, Edit2, Edit3, AlertTriangle, CheckCircle2, XCircle as XCircleIcon, Search, ArrowUpDown, ArrowDown, ArrowUp, Printer, Filter, Mail, BookText, Hash, Tag, Settings2 } from 'lucide-react';
 import { format, parse, addDays, isValid, addMonths, addYears, endOfMonth, parseISO, differenceInCalendarDays } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
-import { fetchFleetAircraft, saveFleetAircraft } from '@/ai/flows/manage-fleet-flow'; // saveFleetAircraft might not be needed here anymore if all edits are elsewhere
+import { fetchFleetAircraft, saveFleetAircraft } from '@/ai/flows/manage-fleet-flow';
 import type { FleetAircraft, SaveFleetAircraftInput } from '@/ai/schemas/fleet-aircraft-schemas';
 import { fetchMaintenanceTasksForAircraft, saveMaintenanceTask, deleteMaintenanceTask, type MaintenanceTask as FlowMaintenanceTask } from '@/ai/flows/manage-maintenance-tasks-flow';
 import { fetchComponentTimesForAircraft, saveComponentTimesForAircraft, type AircraftComponentTimes } from '@/ai/flows/manage-component-times-flow';
 import { fetchCompanyProfile, type CompanyProfile } from '@/ai/flows/manage-company-profile-flow';
 import { PageHeader } from '@/components/page-header';
-import { Textarea } from '@/components/ui/textarea'; // Keep if used for notes in component times section.
 
 
 export interface DisplayMaintenanceItem extends FlowMaintenanceTask {
@@ -44,7 +44,19 @@ export interface DisplayMaintenanceItem extends FlowMaintenanceTask {
   toGoData?: { text: string; numeric: number; unit: 'days' | 'hrs' | 'cycles' | 'N/A'; isOverdue: boolean };
 }
 
-// Removed aircraftInfoEditSchema and AircraftInfoEditFormData as direct editing is removed from this page
+// Schema for editing aircraft info on this page
+// Serial Number is NOT editable here. Tail Number is from URL.
+const aircraftInfoEditSchema = z.object({
+  model: z.string().min(1, "Aircraft model is required."),
+  aircraftYear: z.coerce.number().int().min(1900).max(new Date().getFullYear() + 10).optional(),
+  baseLocation: z.string().optional(),
+  primaryContactName: z.string().optional(),
+  primaryContactPhone: z.string().optional(),
+  primaryContactEmail: z.string().email("Invalid email format.").optional().or(z.literal('')),
+  internalNotes: z.string().optional(),
+});
+type AircraftInfoEditFormData = z.infer<typeof aircraftInfoEditSchema>;
+
 
 type SortKey = 'itemTitle' | 'toGoNumeric' | 'referenceNumber';
 type SortDirection = 'ascending' | 'descending';
@@ -70,9 +82,8 @@ export default function AircraftMaintenanceDetailPage() {
   const [isLoadingTasks, setIsLoadingTasks] = useState(true);
   const [isLoadingComponentTimes, setIsLoadingComponentTimes] = useState(true);
   
-  // Removed state related to direct aircraft info editing
-  // const [isSavingAircraftInfo, startSavingAircraftInfoTransition] = useTransition();
-  // const [isEditingAircraftInfo, setIsEditingAircraftInfo] = useState(false);
+  const [isSavingAircraftInfo, startSavingAircraftInfoTransition] = useTransition();
+  const [isEditingAircraftInfo, setIsEditingAircraftInfo] = useState(false);
   const [isEditingComponentTimes, setIsEditingComponentTimes] = useState(false);
   const [isSavingComponentTimes, startSavingComponentTimesTransition] = useTransition();
 
@@ -88,7 +99,39 @@ export default function AircraftMaintenanceDetailPage() {
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
   const [isGeneratingReport, startReportGenerationTransition] = useTransition();
   
-  // Removed aircraftInfoForm as direct editing is removed
+  const aircraftInfoForm = useForm<AircraftInfoEditFormData>({
+    resolver: zodResolver(aircraftInfoEditSchema),
+    defaultValues: {
+      model: '',
+      aircraftYear: undefined,
+      baseLocation: '',
+      primaryContactName: '',
+      primaryContactPhone: '',
+      primaryContactEmail: '',
+      internalNotes: '',
+    },
+  });
+
+  const resetAircraftInfoForm = useCallback((aircraft: FleetAircraft | null) => {
+    if (aircraft) {
+      aircraftInfoForm.reset({
+        model: aircraft.model || '',
+        aircraftYear: aircraft.aircraftYear || undefined,
+        baseLocation: aircraft.baseLocation || '',
+        primaryContactName: aircraft.primaryContactName || '',
+        primaryContactPhone: aircraft.primaryContactPhone || '',
+        primaryContactEmail: aircraft.primaryContactEmail || '',
+        internalNotes: aircraft.internalNotes || '',
+      });
+    } else {
+      aircraftInfoForm.reset({
+        model: '', aircraftYear: undefined, baseLocation: '',
+        primaryContactName: '', primaryContactPhone: '', primaryContactEmail: '',
+        internalNotes: '',
+      });
+    }
+  }, [aircraftInfoForm]);
+
 
   const calculateToGo = useCallback((item: DisplayMaintenanceItem, currentComponentTimes: Array<{ componentName: string; currentTime: number; currentCycles: number }>): { text: string; numeric: number; unit: 'days' | 'hrs' | 'cycles' | 'N/A'; isOverdue: boolean } => {
     const now = new Date();
@@ -236,7 +279,7 @@ export default function AircraftMaintenanceDetailPage() {
         const foundAircraft = fleet.find(ac => ac.tailNumber === tailNumber);
         if (foundAircraft) {
           setCurrentAircraft(foundAircraft);
-          // Removed form reset as direct editing is removed
+          resetAircraftInfoForm(foundAircraft);
           await loadAndInitializeComponentTimes(foundAircraft); 
           await loadMaintenanceTasks(foundAircraft.id);
         } else {
@@ -253,7 +296,7 @@ export default function AircraftMaintenanceDetailPage() {
       }
     };
     loadAircraftDetails();
-  }, [tailNumber, toast, loadAndInitializeComponentTimes, loadMaintenanceTasks]);
+  }, [tailNumber, toast, loadAndInitializeComponentTimes, loadMaintenanceTasks, resetAircraftInfoForm]);
 
   const handleComponentTimeChange = (componentName: string, field: 'currentTime' | 'currentCycles', value: string) => {
     const numericValue = parseFloat(value);
@@ -295,7 +338,30 @@ export default function AircraftMaintenanceDetailPage() {
     setIsEditingComponentTimes(false);
   };
 
-  // Removed onSubmitAircraftInfo as direct editing is removed
+  const onSubmitAircraftInfo: SubmitHandler<AircraftInfoEditFormData> = (data) => {
+    if (!currentAircraft) return;
+    startSavingAircraftInfoTransition(async () => {
+      const aircraftToSave: SaveFleetAircraftInput = {
+        ...currentAircraft, // Preserve existing non-form fields like ID, S/N, engine/prop details etc.
+        model: data.model,
+        aircraftYear: data.aircraftYear,
+        baseLocation: data.baseLocation,
+        primaryContactName: data.primaryContactName,
+        primaryContactPhone: data.primaryContactPhone,
+        primaryContactEmail: data.primaryContactEmail,
+        internalNotes: data.internalNotes,
+      };
+      try {
+        const savedData = await saveFleetAircraft(aircraftToSave);
+        setCurrentAircraft(savedData); // Update local state with potentially server-modified data
+        setIsEditingAircraftInfo(false);
+        toast({ title: "Aircraft Info Saved", description: `Details for ${savedData.tailNumber} updated.` });
+      } catch (error) {
+        console.error("Failed to save aircraft info:", error);
+        toast({ title: "Error Saving Aircraft Info", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
+      }
+    });
+  };
 
   const handleOpenAddTaskModal = () => {
     setEditingTaskOriginalId(null);
@@ -916,11 +982,39 @@ export default function AircraftMaintenanceDetailPage() {
           <CardHeader>
             <div className="flex justify-between items-start">
               <CardTitle className="flex items-center gap-2"><InfoIcon className="h-6 w-6 text-primary" />Aircraft Information</CardTitle>
-              {/* Edit button removed as per user request */}
+              {!isEditingAircraftInfo ? (
+                <Button variant="outline" size="icon" onClick={() => setIsEditingAircraftInfo(true)} disabled={isSavingAircraftInfo}>
+                    <Edit className="h-4 w-4" /> <span className="sr-only">Edit Aircraft Information</span>
+                </Button>
+              ) : (
+                <div className="flex gap-2">
+                    <Button variant="ghost" size="icon" onClick={() => { setIsEditingAircraftInfo(false); resetAircraftInfoForm(currentAircraft);}} disabled={isSavingAircraftInfo}>
+                        <XCircle className="h-4 w-4" /><span className="sr-only">Cancel</span>
+                    </Button>
+                    <Button variant="default" size="icon" onClick={aircraftInfoForm.handleSubmit(onSubmitAircraftInfo)} disabled={isSavingAircraftInfo}>
+                        {isSavingAircraftInfo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                        <span className="sr-only">Save Aircraft Information</span>
+                    </Button>
+                </div>
+              )}
             </div>
           </CardHeader>
           <CardContent>
-             {/* Aircraft Information is now display-only */}
+            {isEditingAircraftInfo ? (
+              <Form {...aircraftInfoForm}>
+                <form onSubmit={aircraftInfoForm.handleSubmit(onSubmitAircraftInfo)} className="space-y-3">
+                  <p className="text-sm"><strong>Tail Number:</strong> {currentAircraft.tailNumber}</p>
+                  <p className="text-sm"><strong>Serial #:</strong> {currentAircraft.serialNumber || 'N/A'} <span className="text-xs text-muted-foreground">(Managed in Company Settings)</span></p>
+                  <FormField control={aircraftInfoForm.control} name="model" render={({ field }) => ( <FormItem> <FormLabel>Model</FormLabel> <FormControl><Input {...field} /></FormControl> <FormMessage /> </FormItem> )} />
+                  <FormField control={aircraftInfoForm.control} name="aircraftYear" render={({ field }) => ( <FormItem> <FormLabel>Year</FormLabel> <FormControl><Input type="number" {...field} onChange={e => field.onChange(parseInt(e.target.value, 10))} /></FormControl> <FormMessage /> </FormItem> )} />
+                  <FormField control={aircraftInfoForm.control} name="baseLocation" render={({ field }) => ( <FormItem> <FormLabel>Base Location</FormLabel> <FormControl><Input {...field} /></FormControl> <FormMessage /> </FormItem> )} />
+                  <FormField control={aircraftInfoForm.control} name="primaryContactName" render={({ field }) => ( <FormItem> <FormLabel>Primary Contact Name</FormLabel> <FormControl><Input {...field} /></FormControl> <FormMessage /> </FormItem> )} />
+                  <FormField control={aircraftInfoForm.control} name="primaryContactPhone" render={({ field }) => ( <FormItem> <FormLabel>Primary Contact Phone</FormLabel> <FormControl><Input type="tel" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
+                  <FormField control={aircraftInfoForm.control} name="primaryContactEmail" render={({ field }) => ( <FormItem> <FormLabel>Primary Contact Email</FormLabel> <FormControl><Input type="email" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
+                  <FormField control={aircraftInfoForm.control} name="internalNotes" render={({ field }) => ( <FormItem> <FormLabel>Internal Notes</FormLabel> <FormControl><Textarea {...field} rows={3} /></FormControl> <FormMessage /> </FormItem> )} />
+                </form>
+              </Form>
+            ) : (
               <div className="space-y-1.5 text-sm">
                 <p><strong className="text-muted-foreground w-28 inline-block">Model:</strong> {currentAircraft.model}</p>
                 <p><strong className="text-muted-foreground w-28 inline-block">Serial #:</strong> {currentAircraft.serialNumber || 'N/A'}</p>
@@ -929,7 +1023,6 @@ export default function AircraftMaintenanceDetailPage() {
                 <p><strong className="text-muted-foreground w-28 inline-block">Contact:</strong> {currentAircraft.primaryContactName || 'N/A'}</p>
                 <p><strong className="text-muted-foreground w-28 inline-block">Phone:</strong> {currentAircraft.primaryContactPhone || 'N/A'}</p>
                 <p><strong className="text-muted-foreground w-28 inline-block">Email:</strong> {currentAircraft.primaryContactEmail || 'N/A'}</p>
-                
                 <div className="pt-2">
                   <h4 className="font-semibold text-muted-foreground">Internal Notes:</h4>
                   {currentAircraft.internalNotes ? (
@@ -939,6 +1032,7 @@ export default function AircraftMaintenanceDetailPage() {
                   )}
                 </div>
               </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -1101,3 +1195,4 @@ export default function AircraftMaintenanceDetailPage() {
   );
 }
 
+    
