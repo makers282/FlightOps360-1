@@ -1,7 +1,8 @@
 
-"use client";
+'use client';
 
-import * as React from 'react';
+// React and Next.js imports
+import * as React from 'react'; // Ensure React is in scope for JSX
 import { useState, useEffect, useTransition, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 
@@ -14,8 +15,8 @@ import { format, parseISO, isValid as isValidDate } from "date-fns";
 // Lucide Icons
 import {
   Loader2, Save, XCircle, PlusCircle, Trash2, Plane, Users, CalendarIcon, Info, Edit3,
-  FileText as FileTextIcon,
-  Package as PackageIcon,
+  FileText as FileTextIcon, 
+  Package as PackageIcon, 
   UserPlus, FileUp
 } from 'lucide-react';
 
@@ -44,6 +45,7 @@ import { cn } from "@/lib/utils";
 
 // Flow and Schema imports
 import { saveTrip } from '@/ai/flows/manage-trips-flow';
+// Using aliased imports for DB schemas to avoid naming conflicts with form-specific types
 import type { Trip, SaveTripInput, TripLeg as TripLegTypeFromDb, TripStatus } from '@/ai/schemas/trip-schemas';
 import { TripLegSchema as TripLegSchemaDb, TripSchema as FullTripSchemaDb, tripStatuses, legTypes } from '@/ai/schemas/trip-schemas';
 import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
@@ -169,10 +171,10 @@ export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
       const tripDataToSave: SaveTripInput = {
         tripId: data.tripId,
         clientName: data.clientName,
-        aircraftId: data.aircraftId!,
+        aircraftId: data.aircraftId!, // aircraftId is required by schema now
         aircraftLabel: selectedAircraft?.label || data.aircraftId,
         legs: processedLegs,
-        status: data.status as TripStatus,
+        status: data.status as TripStatus, // Cast as TripStatus, should be valid due to form schema
         notes: data.notes,
         quoteId: data.quoteId,
         customerId: data.customerId,
