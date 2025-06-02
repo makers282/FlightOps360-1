@@ -87,6 +87,7 @@ export function AddEditRoleModal({
       id: isEditing && initialData ? initialData.id : undefined,
       // Ensure permissions are correctly typed as Permission[]
       permissions: data.permissions as Permission[], 
+      isSystemRole: data.isSystemRole, // Pass the value from the form
     };
     await onSave(dataToSave);
   };
@@ -95,6 +96,11 @@ export function AddEditRoleModal({
   const modalDescription = isEditing
     ? "Update the role's details and permissions."
     : "Define a new user role and assign permissions.";
+  
+  // Determine if the 'System Role' checkbox should be disabled
+  // It's disabled if:
+  // 1. We are editing an existing role that IS ALREADY a system role (to prevent unmarking it).
+  const isSystemRoleCheckboxDisabled = !!(isEditing && initialData?.isSystemRole);
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!isSaving) setIsOpen(open); }}>
@@ -120,7 +126,7 @@ export function AddEditRoleModal({
             <FormField control={form.control} name="description" render={({ field }) => (
               <FormItem>
                 <FormLabel>Description (Optional)</FormLabel>
-                <FormControl><Textarea placeholder="Briefly describe this role..." {...field} value={field.value || ''} rows={2} disabled={initialData?.isSystemRole} /></FormControl>
+                <FormControl><Textarea placeholder="Briefly describe this role..." {...field} value={field.value || ''} rows={2} disabled={initialData?.isSystemRole && !form.getValues('isSystemRole')} /></FormControl>
                 <FormMessage />
               </FormItem>
             )} />
@@ -149,7 +155,7 @@ export function AddEditRoleModal({
                                       )
                                     );
                               }}
-                              disabled={initialData?.isSystemRole && (initialData?.permissions?.includes(permission) || false)}
+                              disabled={initialData?.isSystemRole && (initialData?.permissions?.includes(permission) || false) && !form.getValues('isSystemRole')}
                             />
                           </FormControl>
                           <FormLabel className="text-sm font-normal cursor-pointer flex-1">
@@ -164,26 +170,31 @@ export function AddEditRoleModal({
               <FormMessage>{form.formState.errors.permissions?.message}</FormMessage>
             </FormItem>
 
-             {initialData?.isSystemRole && (
+            <FormField control={form.control} name="isSystemRole" render={({ field }) => (
+                <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 shadow-sm bg-muted/20">
+                <FormControl>
+                    <Checkbox 
+                        checked={field.value} 
+                        onCheckedChange={field.onChange}
+                        disabled={isSystemRoleCheckboxDisabled}
+                    />
+                </FormControl>
+                <div className="space-y-0.5">
+                    <FormLabel className="text-sm font-normal">System Role</FormLabel>
+                    <FormDescription className="text-xs">
+                        {isSystemRoleCheckboxDisabled 
+                            ? "This is a core system role and its system status cannot be changed here." 
+                            : "System roles have special status and may have restricted editing capabilities."}
+                    </FormDescription>
+                </div>
+              </FormItem>
+            )} />
+            
+            {initialData?.isSystemRole && !form.getValues('isSystemRole') && (
                 <p className="text-xs text-destructive-foreground bg-destructive/80 p-2 rounded-md">
-                    This is a system role. Its name, description, and core permissions cannot be modified. You may be able to add additional permissions if applicable.
+                    Warning: You are attempting to modify a core system role. Some properties like name, description, and core permissions might be protected.
                 </p>
             )}
-             <FormField control={form.control} name="isSystemRole" render={({ field }) => (
-                  <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 shadow-sm bg-muted/20">
-                    <FormControl>
-                        <Checkbox 
-                            checked={field.value} 
-                            onCheckedChange={field.onChange}
-                            disabled // Should only be set programmatically
-                        />
-                    </FormControl>
-                    <div className="space-y-0.5">
-                        <FormLabel className="text-sm font-normal">System Role</FormLabel>
-                        <FormDescription className="text-xs">System roles have restricted editing capabilities.</FormDescription>
-                    </div>
-                </FormItem>
-            )} />
 
 
           </form>
@@ -191,7 +202,11 @@ export function AddEditRoleModal({
         
         <DialogFooter className="pt-4 border-t mt-2">
           <DialogClose asChild><Button type="button" variant="outline" disabled={isSaving}>Cancel</Button></DialogClose>
-          <Button form="role-form" type="submit" disabled={isSaving || (initialData?.isSystemRole && !Object.keys(form.formState.dirtyFields).some(key => key === 'permissions'))}>
+          <Button 
+            form="role-form" 
+            type="submit" 
+            disabled={isSaving || (initialData?.isSystemRole && !Object.keys(form.formState.dirtyFields).some(key => key === 'permissions' || key === 'isSystemRole') && initialData.isSystemRole === form.getValues('isSystemRole'))}
+          >
             {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
             {isEditing ? 'Save Changes' : 'Add Role'}
           </Button>
@@ -200,3 +215,4 @@ export function AddEditRoleModal({
     </Dialog>
   );
 }
+
