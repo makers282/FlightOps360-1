@@ -2,8 +2,7 @@
 "use client";
 
 // React and Next.js imports
-import * as React from 'react';
-import { useState, useEffect, useTransition, useCallback } from 'react';
+import React, { useState, useEffect, useTransition, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 
 // Third-party library imports
@@ -40,16 +39,18 @@ import { cn } from "@/lib/utils";
 
 // Flow and Schema imports
 import { saveTrip } from '@/ai/flows/manage-trips-flow';
-import type { Trip, SaveTripInput, TripLeg as TripLegType, TripStatus } from '@/ai/schemas/trip-schemas';
-import { TripLegSchema, TripSchema as FullTripSchemaFromImport, tripStatuses, legTypes } from '@/ai/schemas/trip-schemas';
+import type { Trip, SaveTripInput, TripLeg as TripLegTypeFromDb, TripStatus } from '@/ai/schemas/trip-schemas';
+import { TripLegSchema as DbTripLegSchema, TripSchema as DbFullTripSchema, tripStatuses, legTypes } from '@/ai/schemas/trip-schemas';
 import { fetchFleetAircraft } from '@/ai/flows/manage-fleet-flow';
 
-// Schema definition for the form
-const TripFormSchema = FullTripSchemaFromImport.omit({ id: true, createdAt: true, updatedAt: true }).extend({
-  legs: z.array(TripLegSchema.extend({
-    departureDateTime: z.date().optional(),
-    arrivalDateTime: z.date().optional(),
-  })).min(1, "At least one flight leg is required.")
+// Schema definition for the form, extending the DB leg schema for Date objects
+const FormLegSchema = DbTripLegSchema.extend({
+  departureDateTime: z.date().optional(),
+  arrivalDateTime: z.date().optional(), // Form uses Date objects for date pickers
+});
+
+const TripFormSchema = DbFullTripSchema.omit({ id: true, createdAt: true, updatedAt: true }).extend({
+  legs: z.array(FormLegSchema).min(1, "At least one flight leg is required.")
 });
 
 type TripFormData = z.infer<typeof TripFormSchema>;
@@ -145,16 +146,28 @@ export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
     startSavingTransition(async () => {
       const selectedAircraft = aircraftOptions.find(opt => opt.value === data.aircraftId);
 
+      const processedLegs: TripLegTypeFromDb[] = data.legs.map(leg => {
+        return {
+          origin: leg.origin,
+          destination: leg.destination,
+          departureDateTime: leg.departureDateTime ? leg.departureDateTime.toISOString() : undefined,
+          arrivalDateTime: leg.arrivalDateTime ? leg.arrivalDateTime.toISOString() : undefined,
+          legType: leg.legType,
+          passengerCount: leg.passengerCount,
+          originFbo: leg.originFbo,
+          destinationFbo: leg.destinationFbo,
+          flightTimeHours: leg.flightTimeHours,
+          blockTimeHours: leg.blockTimeHours,
+        };
+      });
+
       const tripDataToSave: SaveTripInput = {
         tripId: data.tripId,
         clientName: data.clientName,
-        aircraftId: data.aircraftId!, 
+        aircraftId: data.aircraftId!,
         aircraftLabel: selectedAircraft?.label || data.aircraftId,
-        legs: data.legs.map(leg => ({
-          ...leg,
-          departureDateTime: leg.departureDateTime ? leg.departureDateTime.toISOString() : undefined,
-        })),
-        status: data.status as TripStatus, 
+        legs: processedLegs,
+        status: data.status as TripStatus,
         notes: data.notes,
         quoteId: data.quoteId,
         customerId: data.customerId,
@@ -166,10 +179,10 @@ export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
           title: isEditMode ? "Trip Updated" : "Trip Created",
           description: `Trip ${savedTrip.tripId} has been successfully ${isEditMode ? 'updated' : 'created'}.`,
         });
-        if (isEditMode) {
+        if (isEditMode && savedTrip.id) {
            router.push(`/trips/details/${savedTrip.id}`);
         } else {
-          router.push(`/trips/list`); 
+          router.push(`/trips/list`);
         }
       } catch (error) {
         toast({
@@ -283,7 +296,7 @@ export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
                                       newDate.setHours(hours, minutesValue);
                                       field.onChange(newDate);
                                     } else {
-                                      const tempDate = new Date(); 
+                                      const tempDate = new Date();
                                       tempDate.setHours(hours, minutesValue, 0, 0);
                                       field.onChange(tempDate);
                                     }
