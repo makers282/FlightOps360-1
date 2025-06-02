@@ -1,13 +1,15 @@
 
 "use client"; 
 
-import React, { Suspense, useTransition } from 'react'; // Import useTransition
-import { useRouter } from 'next/navigation'; // Import useRouter
+import React, { Suspense, useTransition } from 'react'; 
+import { useRouter } from 'next/navigation'; 
 import { PageHeader } from '@/components/page-header';
-import { TripForm, type FullTripFormData } from '../edit/[tripId]/components/trip-form'; // Adjusted path
+import { TripForm, type FullTripFormData } from '../edit/[tripId]/components/trip-form'; 
 import { CalendarPlus, Loader2 } from 'lucide-react';
-import { saveTrip, type SaveTripInput } from '@/ai/flows/manage-trips-flow'; // Import saveTrip
-import { useToast } from '@/hooks/use-toast'; // Import useToast
+import { saveTrip, type SaveTripInput } from '@/ai/flows/manage-trips-flow'; 
+import { useToast } from '@/hooks/use-toast'; 
+import type { TripStatus } from '@/ai/schemas/trip-schemas'; // Ensure TripStatus is available if needed for default
+
 
 function NewTripPageContent() {
   const [isSaving, startSavingTransition] = useTransition();
@@ -18,13 +20,13 @@ function NewTripPageContent() {
     startSavingTransition(async () => {
       const tripToSave: SaveTripInput = {
         tripId: data.tripId,
-        selectedCustomerId: data.selectedCustomerId,
+        // selectedCustomerId: data.selectedCustomerId, // This seems to be missing in SaveTripInput, but was in FullTripFormData
         clientName: data.clientName,
-        clientEmail: data.clientEmail,
+        clientEmail: data.clientEmail, // Ensure email is passed, handle optionality in schema if needed
         clientPhone: data.clientPhone,
-        aircraftId: data.aircraftId || "UNKNOWN_AC", // Provide a fallback or ensure it's always set
+        aircraftId: data.aircraftId || "UNKNOWN_AC", 
+        aircraftLabel: data.aircraftId ? (data as any).aircraftLabel : undefined, // Pass aircraftLabel if it exists on form data
         legs: data.legs.map(leg => {
-          // Calculate blockTimeHours for each leg
           const originTaxi = Number(leg.originTaxiTimeMinutes || 0);
           const destTaxi = Number(leg.destinationTaxiTimeMinutes || 0);
           const flightTime = Number(leg.flightTimeHours || 0);
@@ -33,13 +35,19 @@ function NewTripPageContent() {
           return {
             ...leg,
             departureDateTime: leg.departureDateTime ? leg.departureDateTime.toISOString() : undefined,
-            blockTimeHours: blockTimeHours, // Add calculated block time
+            blockTimeHours: blockTimeHours, 
           };
         }),
         notes: data.notes,
-        // Default status for new trips, or get from form if added
-        status: "Scheduled", 
+        status: data.status || "Scheduled", // Use status from form or default
       };
+      
+      // If selectedCustomerId exists in form data and should be part of SaveTripInput, add it.
+      // This depends on the exact definition of SaveTripInput. For now, assuming it's not strictly part of it.
+      if (data.selectedCustomerId) {
+        (tripToSave as any).customerId = data.selectedCustomerId; // Casting if customerId is the correct field name
+      }
+
 
       try {
         const savedTrip = await saveTrip(tripToSave);
@@ -47,7 +55,6 @@ function NewTripPageContent() {
           title: "Trip Created",
           description: `Trip ${savedTrip.tripId} has been successfully scheduled.`,
         });
-        // Redirect to the trip details page or trip list
         router.push(`/trips/details/${savedTrip.id}`); 
       } catch (error) {
         console.error("Failed to save trip:", error);

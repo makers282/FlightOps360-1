@@ -11,7 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
-import { Plane, Edit3, UserSearch, Loader2, CalendarIcon, PlusCircle, Trash2, GripVertical, Wand2, PlaneTakeoff, PlaneLanding, Building, Users as PaxIcon, Save } from 'lucide-react';
+import { Plane, Edit3, UserSearch, Loader2, CalendarIcon, PlusCircle, Trash2, GripVertical, Wand2, PlaneTakeoff, PlaneLanding, Building, Users as PaxIcon, Save, InfoIcon } from 'lucide-react';
 import { useForm, useFieldArray, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -22,10 +22,11 @@ import { format, isValid as isValidDate, parseISO } from "date-fns";
 import type { Customer } from '@/ai/schemas/customer-schemas';
 import { fetchCustomers } from '@/ai/flows/manage-customers-flow';
 import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
-import { legTypes } from '@/ai/schemas/quote-schemas';
-import { type TripLeg as DbTripLeg } from '@/ai/schemas/trip-schemas';
+import { legTypes } from '@/ai/schemas/quote-schemas'; // Corrected import
+import { type TripLeg as DbTripLeg, tripStatuses, type TripStatus } from '@/ai/schemas/trip-schemas'; // Import tripStatuses
 import { estimateFlightDetails, type EstimateFlightDetailsOutput } from '@/ai/flows/estimate-flight-details-flow';
 import { fetchAircraftPerformance, type AircraftPerformanceData } from '@/ai/flows/manage-aircraft-performance-flow';
+import { Skeleton } from '@/components/ui/skeleton';
 
 // Schema for individual legs in the form
 const FormLegSchema = z.object({
@@ -51,6 +52,7 @@ const TripFormSchema = z.object({
   clientEmail: z.string().email("Invalid email address.").optional().or(z.literal('')),
   clientPhone: z.string().min(7, "Phone number seems too short.").optional().or(z.literal('')),
   aircraftId: z.string().min(1, "Aircraft selection is required.").optional(),
+  status: z.enum(tripStatuses).default("Scheduled"), // Added status field
   legs: z.array(FormLegSchema).min(1, "At least one flight leg is required."),
   notes: z.string().optional(),
 });
@@ -58,10 +60,11 @@ const TripFormSchema = z.object({
 export type FullTripFormData = z.infer<typeof TripFormSchema>;
 
 interface TripFormProps {
-  initialTripData?: any | null; // Consider using a more specific type if available after full setup
+  initialTripData?: any | null; 
   isEditMode: boolean;
   onSave: (data: FullTripFormData) => Promise<void>; 
   isSaving: boolean; 
+  initialQuoteId?: string | null; // For displaying linked quote ID
 }
 
 interface AircraftSelectOption {
@@ -75,7 +78,7 @@ type LegEstimate = EstimateFlightDetailsOutput & {
   estimatedForInputs?: { origin: string; destination: string; aircraftModel: string; knownCruiseSpeedKts?: number };
 };
 
-export function TripForm({ isEditMode, initialTripData, onSave, isSaving }: TripFormProps) {
+export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initialQuoteId }: TripFormProps) {
   const { toast } = useToast();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [isLoadingCustomers, setIsLoadingCustomers] = useState(false);
@@ -98,6 +101,7 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving }: Trip
       clientEmail: '',
       clientPhone: '',
       aircraftId: undefined,
+      status: "Scheduled", // Default status
       legs: [{
         origin: '', destination: '', legType: 'Charter', departureDateTime: undefined,
         passengerCount: 1, originFbo: '', destinationFbo: '',
@@ -107,7 +111,7 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving }: Trip
     },
   });
 
-  const { setValue, control, getValues, trigger, watch } = form;
+  const { setValue, control, getValues, trigger, watch, reset } = form;
 
   const { fields, append, remove } = useFieldArray({
     control,
@@ -150,13 +154,14 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving }: Trip
   
   useEffect(() => {
     if (isEditMode && initialTripData) {
-      form.reset({
+      reset({ // Use reset to update all form values
         tripId: initialTripData.tripId || '',
         selectedCustomerId: initialTripData.selectedCustomerId || undefined,
         clientName: initialTripData.clientName || '',
         clientEmail: initialTripData.clientEmail || '',
         clientPhone: initialTripData.clientPhone || '',
         aircraftId: initialTripData.aircraftId || undefined,
+        status: initialTripData.status || "Scheduled", // Set status from initial data
         legs: (initialTripData.legs || []).map((leg: DbTripLeg) => ({
           ...leg,
           departureDateTime: leg.departureDateTime ? parseISO(leg.departureDateTime) : undefined,
@@ -170,8 +175,9 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving }: Trip
       setLegEstimates(new Array((initialTripData.legs || []).length).fill(null));
     } else if (!isEditMode && !getValues('tripId')) {
       setValue('tripId', `TRP-${Date.now().toString().slice(-6)}`);
+      setValue('status', "Scheduled"); // Ensure default status for new trips
     }
-  }, [isEditMode, initialTripData, form, getValues, setValue]);
+  }, [isEditMode, initialTripData, reset, getValues, setValue]); // Added reset and setValue to dependencies
 
   useEffect(() => {
     if (currentSelectedAircraftId) {
@@ -216,6 +222,11 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving }: Trip
     append(newLegDefaults as FormLegData);
   };
 
+  const handleRemoveLeg = (index: number) => {
+    remove(index);
+    setLegEstimates(prev => { const newEstimates = [...prev]; newEstimates.splice(index, 1); return newEstimates; });
+  };
+
   const handleEstimateFlightDetails = useCallback(async (legIndex: number) => {
     if (estimatingLegIndex === legIndex) return;
     if (estimatingLegIndex !== null && estimatingLegIndex !== legIndex) {
@@ -235,20 +246,25 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving }: Trip
         aircraftType: selectedAircraft.model, knownCruiseSpeedKts: selectedAircraftPerformance?.cruiseSpeed,
       });
       setValue(`legs.${legIndex}.flightTimeHours`, result.estimatedFlightTimeHours);
-      setLegEstimates(prev => { const newEstimates = [...prev]; newEstimates[legIndex] = {...result, estimatedForInputs: { origin: legData.origin, destination: legData.destination, aircraftModel: selectedAircraft.model, knownCruiseSpeedKts: selectedAircraftPerformance?.cruiseSpeed } }; return newEstimates; });
+      setLegEstimates(prev => { const newEstimates = [...prev]; newEstimates[legIndex] = {...result, estimatedForInputs: { origin: legData.origin.toUpperCase(), destination: legData.destination.toUpperCase(), aircraftModel: selectedAircraft.model, knownCruiseSpeedKts: selectedAircraftPerformance?.cruiseSpeed } }; return newEstimates; });
       toast({ title: "Flight Details Estimated", description: `Leg ${legIndex + 1}: ${result.estimatedMileageNM} NM, ${result.estimatedFlightTimeHours} hrs.` });
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : "AI failed to estimate details.";
       toast({ title: "Estimation Error", description: errorMessage, variant: "destructive" });
       setValue(`legs.${legIndex}.flightTimeHours`, undefined);
-      setLegEstimates(prev => { const newEstimates = [...prev]; newEstimates[legIndex] = { error: errorMessage } as LegEstimate; return newEstimates; });
+      setLegEstimates(prev => { const newEstimates = [...prev]; newEstimates[legIndex] = { error: errorMessage, estimatedForInputs: {origin: legData.origin.toUpperCase(), destination: legData.destination.toUpperCase(), aircraftModel: selectedAircraft.model, knownCruiseSpeedKts: selectedAircraftPerformance?.cruiseSpeed} } as LegEstimate; return newEstimates; });
     } finally {
       setEstimatingLegIndex(null);
     }
   }, [getValues, toast, estimatingLegIndex, setValue, currentSelectedAircraftId, aircraftSelectOptions, selectedAircraftPerformance]);
 
 
-  const onSubmitHandler: SubmitHandler<FullTripFormData> = (data) => {
+  const onSubmitHandler: SubmitHandler<FullTripFormData> = async (data) => {
+    const isValid = await trigger();
+    if (!isValid) {
+      toast({ title: "Validation Error", description: "Please check the form for errors.", variant: "destructive" });
+      return;
+    }
     onSave(data);
   };
 
@@ -266,7 +282,30 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving }: Trip
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            <FormField control={control} name="tripId" render={({ field }) => ( <FormItem> <FormLabel>Trip ID</FormLabel> <FormControl><Input {...field} readOnly={isEditMode} className={isEditMode ? "bg-muted/50 cursor-not-allowed" : ""} /></FormControl> <FormMessage /> </FormItem> )} />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField control={control} name="tripId" render={({ field }) => ( <FormItem> <FormLabel>Trip ID</FormLabel> <FormControl><Input {...field} readOnly={isEditMode} className={isEditMode ? "bg-muted/50 cursor-not-allowed" : ""} /></FormControl> <FormMessage /> </FormItem> )} />
+                {isEditMode && initialQuoteId && (
+                     <FormItem>
+                        <FormLabel>Sourced From Quote</FormLabel>
+                        <Input value={initialQuoteId} readOnly className="bg-muted/50 cursor-not-allowed" />
+                        <FormDescription>This trip was created from quote {initialQuoteId}.</FormDescription>
+                    </FormItem>
+                )}
+            </div>
+            {isEditMode && (
+                <FormField control={control} name="status" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Trip Status</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value} name={field.name}>
+                      <FormControl><SelectTrigger><SelectValue placeholder="Select trip status" /></SelectTrigger></FormControl>
+                      <SelectContent>
+                        {tripStatuses.map(status => (<SelectItem key={status} value={status}>{status}</SelectItem>))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+            )}
             <FormField control={control} name="selectedCustomerId" render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><UserSearch className="h-4 w-4" /> Select Existing Client (Optional)</FormLabel> <Select onValueChange={(value) => { handleCustomerSelect(value); field.onChange(value); }} value={field.value || ""} disabled={isLoadingCustomers}> <FormControl><SelectTrigger><SelectValue placeholder={isLoadingCustomers ? "Loading customers..." : "Select a client or enter details manually"} /></SelectTrigger></FormControl> <SelectContent> {!isLoadingCustomers && customers.length === 0 && <SelectItem value="NO_CUSTOMERS" disabled>No customers</SelectItem>} {customers.map(c => (<SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>))} </SelectContent> </Select> <FormDescription>Auto-fills client details if selected.</FormDescription> <FormMessage /> </FormItem> )} />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <FormField control={control} name="clientName" render={({ field }) => ( <FormItem> <FormLabel>Client Name</FormLabel> <FormControl><Input placeholder="John Doe or Acme Corp" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
@@ -283,7 +322,7 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving }: Trip
                   <CardHeader className="p-0 pb-3">
                     <div className="flex justify-between items-center">
                       <CardTitle className="text-base flex items-center gap-2"><GripVertical className="h-4 w-4 text-muted-foreground" /> Leg {index + 1}</CardTitle>
-                      {fields.length > 1 && (<Button type="button" variant="ghost" size="icon" onClick={() => remove(index)} className="text-destructive hover:text-destructive"><Trash2 className="h-4 w-4" /><span className="sr-only">Remove Leg</span></Button>)}
+                      {fields.length > 1 && (<Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveLeg(index)} className="text-destructive hover:text-destructive"><Trash2 className="h-4 w-4" /><span className="sr-only">Remove Leg</span></Button>)}
                     </div>
                   </CardHeader>
                   <CardContent className="p-0 space-y-3">
@@ -328,7 +367,7 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving }: Trip
                               </PopoverContent>
                             </Popover>
                           ) : (
-                            <Input placeholder="Loading date picker..." disabled />
+                            <Skeleton className="h-10 w-full" />
                           )}
                         </FormControl>
                         <FormMessage />
@@ -348,7 +387,7 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving }: Trip
                       <FormField control={control} name={`legs.${index}.destinationTaxiTimeMinutes`} render={({ field }) => ( <FormItem> <FormLabel>Dest. Taxi (min)</FormLabel> <FormControl><Input type="number" placeholder="15" {...field} onChange={e => field.onChange(parseInt(e.target.value,10))} min="0" /></FormControl> </FormItem> )} />
                     </div>
                     <Button type="button" variant="outline" size="sm" onClick={() => handleEstimateFlightDetails(index)} disabled={estimatingLegIndex === index || !currentSelectedAircraftId || isLoadingAircraftList || isLoadingSelectedAcPerf} className="w-full sm:w-auto text-xs"> {estimatingLegIndex === index || isLoadingSelectedAcPerf ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <Wand2 className="mr-2 h-3 w-3" />} Estimate Flight Details </Button>
-                    {legEstimates[index] && ( <div className="text-xs p-2 mt-2 border rounded bg-muted/50"> AI Est: {legEstimates[index]?.estimatedMileageNM} NM, {legEstimates[index]?.estimatedFlightTimeHours} hrs. Speed: {legEstimates[index]?.assumedCruiseSpeedKts} kts. {legEstimates[index]?.briefExplanation} {legEstimates[index]?.error && <span className="text-destructive">{legEstimates[index]?.error}</span>} </div> )}
+                    {legEstimates[index] && ( <div className="text-xs p-2 mt-2 border rounded bg-muted/50 flex items-start gap-2"> <InfoIcon className="h-4 w-4 mt-0.5 shrink-0 text-blue-500"/> <div> <p className="font-medium">AI Est: {legEstimates[index]?.estimatedMileageNM} NM, {legEstimates[index]?.estimatedFlightTimeHours} hrs. Speed: {legEstimates[index]?.assumedCruiseSpeedKts} kts.</p> <p className="text-muted-foreground">{legEstimates[index]?.briefExplanation}</p> {legEstimates[index]?.error && <p className="text-destructive font-medium">Error: {legEstimates[index]?.error}</p>} </div> </div> )}
                   </CardContent>
                 </Card>
               ))}

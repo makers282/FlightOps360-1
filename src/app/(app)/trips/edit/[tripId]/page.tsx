@@ -7,8 +7,8 @@ import { PageHeader } from '@/components/page-header';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Loader2, Edit3, ArrowLeft, InfoIcon } from 'lucide-react';
-import { fetchTripById, saveTrip } from '@/ai/flows/manage-trips-flow'; // SaveTripInput type is not directly needed here
-import type { Trip, SaveTripInput } from '@/ai/schemas/trip-schemas'; // Import SaveTripInput for type casting
+import { fetchTripById, saveTrip } from '@/ai/flows/manage-trips-flow'; 
+import type { Trip, SaveTripInput, TripStatus } from '@/ai/schemas/trip-schemas'; 
 import { useToast } from '@/hooks/use-toast';
 import { TripForm, type FullTripFormData } from './components/trip-form';
 
@@ -57,16 +57,16 @@ function EditTripPageContent() {
       return;
     }
     startSavingTransition(async () => {
-      // Construct the object to save, ensuring we pass the original Firestore document ID
       const tripToSave: Trip = {
-        ...tripData, // Spread existing trip data to preserve fields like createdAt, status, etc.
-        id: tripData.id, // CRITICAL: Pass the original Firestore document ID for update
-        tripId: formData.tripId, // User-facing Trip ID from form
-        selectedCustomerId: formData.selectedCustomerId,
+        ...tripData, 
+        id: tripData.id, 
+        tripId: formData.tripId, 
+        // selectedCustomerId: formData.selectedCustomerId, // Ensure this aligns with Trip schema if used
         clientName: formData.clientName,
-        clientEmail: formData.clientEmail,
+        clientEmail: formData.clientEmail, 
         clientPhone: formData.clientPhone,
         aircraftId: formData.aircraftId || "UNKNOWN_AC",
+        aircraftLabel: formData.aircraftId ? (aircraftSelectOptions.find(ac => ac.value === formData.aircraftId)?.label) : undefined, // Add aircraftLabel
         legs: formData.legs.map(leg => {
           const originTaxi = Number(leg.originTaxiTimeMinutes || 0);
           const destTaxi = Number(leg.destinationTaxiTimeMinutes || 0);
@@ -80,12 +80,22 @@ function EditTripPageContent() {
           };
         }),
         notes: formData.notes,
-        // status: tripData.status, // Preserve existing status if not changed by form, or update if status is part of FullTripFormData
+        status: formData.status as TripStatus, // Use status from form
       };
+      
+      // Logic for aircraftSelectOptions to get label if needed:
+      const aircraftSelectOptions = await fetchFleetAircraft().then(fleet => fleet.map(ac => ({ value: ac.id, label: `${ac.tailNumber} - ${ac.model}`, model: ac.model })));
+      if (formData.aircraftId) {
+        tripToSave.aircraftLabel = aircraftSelectOptions.find(ac => ac.value === formData.aircraftId)?.label;
+      }
+      if (formData.selectedCustomerId) {
+        (tripToSave as any).customerId = formData.selectedCustomerId;
+      }
+
 
       try {
-        const savedTrip = await saveTrip(tripToSave); // saveTrip now expects the full Trip object
-        setTripData(savedTrip); // Update local state with the response from saveTrip
+        const savedTrip = await saveTrip(tripToSave); 
+        setTripData(savedTrip); 
         toast({
           title: "Trip Updated",
           description: `Trip ${savedTrip.tripId} has been successfully updated.`,
@@ -150,6 +160,7 @@ function EditTripPageContent() {
         isEditMode={true} 
         onSave={handleSaveTrip}
         isSaving={isSaving}
+        initialQuoteId={tripData.quoteId}
       />
     </>
   );
