@@ -10,7 +10,7 @@ import { Loader2, Edit3, ArrowLeft, InfoIcon } from 'lucide-react';
 import { fetchTripById } from '@/ai/flows/manage-trips-flow';
 import type { Trip } from '@/ai/schemas/trip-schemas';
 import { useToast } from '@/hooks/use-toast';
-import { TripForm } from './components/trip-form'; // Path relative to this new file
+import { TripForm } from './components/trip-form';
 
 function EditTripPageContent() {
   const params = useParams();
@@ -46,7 +46,7 @@ function EditTripPageContent() {
     } else {
       setError("No trip ID provided for editing.");
       setIsLoading(false);
-      router.replace('/trips/list'); // Redirect if no ID
+      router.replace('/trips/list'); 
     }
   }, [id, toast, router]);
 
@@ -106,5 +106,3 @@ export default function EditTripPage() {
     </Suspense>
   );
 }
-
-    

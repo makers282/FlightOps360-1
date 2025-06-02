@@ -1,7 +1,7 @@
 
-"use client"; // Required for potential client-side hooks in TripForm later
+"use client"; 
 
-import React, { Suspense } from 'react'; // Import Suspense
+import React, { Suspense } from 'react';
 import { PageHeader } from '@/components/page-header';
 import { TripForm } from '../edit/[tripId]/components/trip-form'; // Adjusted path
 import { CalendarPlus, Loader2 } from 'lucide-react';
@@ -11,7 +11,7 @@ function NewTripPageContent() {
     <>
       <PageHeader 
         title="Create New Trip" 
-        description="Enter the details below to schedule a new trip using the shared form."
+        description="Enter the details below to schedule a new trip."
         icon={CalendarPlus}
       />
       <TripForm isEditMode={false} />
@@ -26,5 +26,3 @@ export default function NewTripPage() {
     </Suspense>
   );
 }
-
-    
