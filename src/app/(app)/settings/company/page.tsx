@@ -11,16 +11,17 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Building2, Plane, PlusCircle, Trash2, Save, XCircle, Loader2, Edit, CheckSquare, Square, Info, Mail, Settings2, Cog } from 'lucide-react';
+import { Building2, Plane, PlusCircle, Trash2, Save, XCircle, Loader2, Edit, CheckSquare, Square, Info, Settings2, Cog, Wind } from 'lucide-react'; // Added Wind for propeller
 import { useToast } from '@/hooks/use-toast';
-import { fetchFleetAircraft, saveFleetAircraft, deleteFleetAircraft, type FleetAircraft, type SaveFleetAircraftInput, type EngineDetail } from '@/ai/flows/manage-fleet-flow';
+import { fetchFleetAircraft, saveFleetAircraft, deleteFleetAircraft, type FleetAircraft, type SaveFleetAircraftInput, type EngineDetail, type PropellerDetail } from '@/ai/schemas/fleet-aircraft-schemas'; // Import PropellerDetail
 import { fetchCompanyProfile, saveCompanyProfile, type CompanyProfile } from '@/ai/flows/manage-company-profile-flow'; 
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton'; 
 import { ManageEngineDetailsModal } from '@/app/(app)/aircraft/currency/[tailNumber]/components/manage-engine-details-modal';
+import { ManagePropellerDetailsModal } from '@/app/(app)/aircraft/currency/[tailNumber]/components/manage-propeller-details-modal'; // Import Propeller Modal
 
 interface CompanyPageFleetAircraft extends FleetAircraft {
-  // No custom fields needed here anymore as engineDetails is directly from FleetAircraft
+  // No custom fields needed here anymore as engineDetails and propellerDetails are directly from FleetAircraft
 }
 
 export default function CompanySettingsPage() {
@@ -44,9 +45,11 @@ export default function CompanySettingsPage() {
   const [newPrimaryContactPhone, setNewPrimaryContactPhone] = useState('');
   const [newPrimaryContactEmail, setNewPrimaryContactEmail] = useState(''); 
   
-  // State for engine details, managed by the modal
   const [currentEngineDetailsForForm, setCurrentEngineDetailsForForm] = useState<EngineDetail[]>([]);
   const [isEngineModalOpen, setIsEngineModalOpen] = useState(false);
+
+  const [currentPropellerDetailsForForm, setCurrentPropellerDetailsForForm] = useState<PropellerDetail[]>([]); // State for propeller details
+  const [isPropellerModalOpen, setIsPropellerModalOpen] = useState(false); // State for propeller modal visibility
 
 
   // State for company information
@@ -119,7 +122,8 @@ export default function CompanySettingsPage() {
     setNewPrimaryContactName('');
     setNewPrimaryContactPhone('');
     setNewPrimaryContactEmail(''); 
-    setCurrentEngineDetailsForForm([]); // Reset engine details
+    setCurrentEngineDetailsForForm([]); 
+    setCurrentPropellerDetailsForForm([]); // Reset propeller details
   };
 
   const handleEditAircraftClick = (aircraft: CompanyPageFleetAircraft) => {
@@ -133,7 +137,8 @@ export default function CompanySettingsPage() {
     setNewPrimaryContactName(aircraft.primaryContactName || '');
     setNewPrimaryContactPhone(aircraft.primaryContactPhone || '');
     setNewPrimaryContactEmail(aircraft.primaryContactEmail || ''); 
-    setCurrentEngineDetailsForForm(aircraft.engineDetails || []); // Set engine details for the modal
+    setCurrentEngineDetailsForForm(aircraft.engineDetails || []); 
+    setCurrentPropellerDetailsForForm(aircraft.propellerDetails || []); // Set propeller details
     setShowAddAircraftForm(true);
   };
   
@@ -164,7 +169,8 @@ export default function CompanySettingsPage() {
       primaryContactName: newPrimaryContactName.trim() || undefined,
       primaryContactPhone: newPrimaryContactPhone.trim() || undefined,
       primaryContactEmail: newPrimaryContactEmail.trim() || undefined, 
-      engineDetails: currentEngineDetailsForForm, // Use engine details from modal state
+      engineDetails: currentEngineDetailsForForm, 
+      propellerDetails: currentPropellerDetailsForForm, // Include propeller details
       internalNotes: editingAircraftId ? fleet.find(ac => ac.id === editingAircraftId)?.internalNotes : undefined, 
     };
 
@@ -226,8 +232,12 @@ export default function CompanySettingsPage() {
 
   const handleEngineDetailsSave = (updatedEngines: EngineDetail[]) => {
     setCurrentEngineDetailsForForm(updatedEngines);
-    // No need to directly save here, it will be saved with the main aircraft form.
   };
+
+  const handlePropellerDetailsSave = (updatedPropellers: PropellerDetail[]) => {
+    setCurrentPropellerDetailsForForm(updatedPropellers);
+  };
+
 
   return (
     <>
@@ -292,7 +302,7 @@ export default function CompanySettingsPage() {
                 <CardDescription>Add, edit, or remove aircraft. (Connected to Firestore)</CardDescription>
               </div>
               {!showAddAircraftForm && (
-                <Button variant="outline" size="sm" onClick={() => { setEditingAircraftId(null); resetAircraftFormFields(); setCurrentEngineDetailsForForm([]); setShowAddAircraftForm(true); setNewTrackedComponentNamesStr('Airframe, Engine 1');}}>
+                <Button variant="outline" size="sm" onClick={() => { setEditingAircraftId(null); resetAircraftFormFields(); setShowAddAircraftForm(true); setNewTrackedComponentNamesStr('Airframe, Engine 1');}}>
                   <PlusCircle className="mr-2 h-4 w-4" /> Add Aircraft
                 </Button>
               )}
@@ -342,21 +352,42 @@ export default function CompanySettingsPage() {
                     </div>
                   </div>
 
-                  <div className="pt-2 space-y-2">
-                    <Label className="font-medium text-sm">Engine Configuration</Label>
-                    <Button 
-                      type="button" 
-                      variant="outline" 
-                      onClick={() => setIsEngineModalOpen(true)}
-                      className="w-full sm:w-auto"
-                    >
-                      <Cog className="mr-2 h-4 w-4" /> Manage Engine Details ({currentEngineDetailsForForm.length} configured)
-                    </Button>
+                  <div className="pt-2 space-y-3">
+                    <div className="space-y-1">
+                        <Label className="font-medium text-sm">Engine Configuration</Label>
+                        <Button 
+                          type="button" 
+                          variant="outline" 
+                          onClick={() => setIsEngineModalOpen(true)}
+                          className="w-full sm:w-auto text-xs"
+                          size="sm"
+                        >
+                          <Cog className="mr-2 h-3.5 w-3.5" /> Manage Engine Details ({currentEngineDetailsForForm.length} configured)
+                        </Button>
+                    </div>
                      <ManageEngineDetailsModal
                         isOpen={isEngineModalOpen}
                         setIsOpen={setIsEngineModalOpen}
                         initialEngineDetails={currentEngineDetailsForForm}
                         onSave={handleEngineDetailsSave}
+                    />
+                    <div className="space-y-1">
+                        <Label className="font-medium text-sm">Propeller Configuration (if applicable)</Label>
+                        <Button 
+                          type="button" 
+                          variant="outline" 
+                          onClick={() => setIsPropellerModalOpen(true)}
+                          className="w-full sm:w-auto text-xs"
+                          size="sm"
+                        >
+                          <Wind className="mr-2 h-3.5 w-3.5" /> Manage Propeller Details ({currentPropellerDetailsForForm.length} configured)
+                        </Button>
+                    </div>
+                     <ManagePropellerDetailsModal
+                        isOpen={isPropellerModalOpen}
+                        setIsOpen={setIsPropellerModalOpen}
+                        initialPropellerDetails={currentPropellerDetailsForForm}
+                        onSave={handlePropellerDetailsSave}
                     />
                   </div>
 
@@ -403,7 +434,7 @@ export default function CompanySettingsPage() {
               <Alert className="mb-4">
                 <Settings2 className="h-4 w-4" />
                 <AlertDescription className="text-xs">
-                  Aircraft year, detailed multi-engine configuration, and internal notes can be managed on the 
+                  Aircraft year and internal notes can be managed on the 
                   <Button variant="link" size="sm" className="p-0 h-auto ml-1 text-xs" asChild><Link href="/aircraft/currency">Aircraft Maintenance Currency page</Link></Button>.
                 </AlertDescription>
               </Alert>
@@ -453,3 +484,4 @@ export default function CompanySettingsPage() {
     </>
   );
 }
+

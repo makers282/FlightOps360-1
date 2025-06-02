@@ -23,15 +23,14 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { z } from 'zod';
 import { AddMaintenanceTaskModal, type MaintenanceTaskFormData, defaultMaintenanceTaskFormValues } from './components/add-maintenance-task-modal';
-// import { ManageEngineDetailsModal } from './components/manage-engine-details-modal'; 
+// import { ManageEngineDetailsModal } from './components/manage-engine-details-modal'; // No longer directly used in THIS file's template
 import { Badge } from '@/components/ui/badge';
 
 import { Wrench, PlusCircle, ArrowLeft, PlaneIcon, Edit, Loader2, InfoIcon, Phone, UserCircle, MapPin, Save, XCircle, Edit2, Edit3, AlertTriangle, CheckCircle2, XCircle as XCircleIcon, Search, ArrowUpDown, ArrowDown, ArrowUp, Printer, Filter, Mail, BookText, Hash, Tag, Settings2 } from 'lucide-react';
 import { format, parse, addDays, isValid, addMonths, addYears, endOfMonth, parseISO, differenceInCalendarDays } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { fetchFleetAircraft, saveFleetAircraft } from '@/ai/flows/manage-fleet-flow';
-import type { FleetAircraft, EngineDetail, SaveFleetAircraftInput } from '@/ai/schemas/fleet-aircraft-schemas';
-// import { EngineDetailSchema } from '@/ai/schemas/fleet-aircraft-schemas'; // No longer needed directly here
+import type { FleetAircraft, EngineDetail, PropellerDetail, SaveFleetAircraftInput } from '@/ai/schemas/fleet-aircraft-schemas'; // Added PropellerDetail
 import { fetchMaintenanceTasksForAircraft, saveMaintenanceTask, deleteMaintenanceTask, type MaintenanceTask as FlowMaintenanceTask } from '@/ai/flows/manage-maintenance-tasks-flow';
 import { fetchComponentTimesForAircraft, saveComponentTimesForAircraft, type AircraftComponentTimes } from '@/ai/flows/manage-component-times-flow';
 import { fetchCompanyProfile, type CompanyProfile } from '@/ai/flows/manage-company-profile-flow';
@@ -54,7 +53,6 @@ const aircraftInfoEditSchema = z.object({
   primaryContactPhone: z.string().optional(),
   primaryContactEmail: z.string().email("Invalid email format.").optional().or(z.literal('')),
   internalNotes: z.string().optional(),
-  // engineDetails field is removed from this specific form schema, managed separately if needed
 });
 type AircraftInfoEditFormData = z.infer<typeof aircraftInfoEditSchema>;
 
@@ -99,8 +97,6 @@ export default function AircraftMaintenanceDetailPage() {
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
   const [isGeneratingReport, startReportGenerationTransition] = useTransition();
   
-  // State for ManageEngineDetailsModal removed from here as its trigger is removed from this page's direct UI
-
 
   const aircraftInfoForm = useForm<AircraftInfoEditFormData>({ 
     resolver: zodResolver(aircraftInfoEditSchema),
@@ -347,6 +343,7 @@ export default function AircraftMaintenanceDetailPage() {
           primaryContactEmail: data.primaryContactEmail === '' ? undefined : data.primaryContactEmail,
           internalNotes: data.internalNotes === '' ? undefined : data.internalNotes,
           engineDetails: currentAircraft.engineDetails || [], 
+          propellerDetails: currentAircraft.propellerDetails || [],
           isMaintenanceTracked: currentAircraft.isMaintenanceTracked, 
           trackedComponentNames: currentAircraft.trackedComponentNames,
         };
@@ -920,11 +917,20 @@ export default function AircraftMaintenanceDetailPage() {
                         subText = `${currentAircraft.model || ''}${currentAircraft.serialNumber ? `/${currentAircraft.serialNumber}` : ''}`;
                     } else if (comp.componentName.startsWith("Engine ")) {
                         const engineIndexMatch = comp.componentName.match(/Engine (\d+)/);
-                        if (engineIndexMatch && currentAircraft.engineDetails) {
+                        if (engineIndexMatch && currentAircraft.engineDetails && currentAircraft.engineDetails.length > 0) {
                             const engineNum = parseInt(engineIndexMatch[1], 10);
                             if (engineNum > 0 && engineNum <= currentAircraft.engineDetails.length) {
                                 const engine = currentAircraft.engineDetails[engineNum - 1];
                                 subText = `${engine.model || 'N/A Model'}${engine.serialNumber ? `/${engine.serialNumber}` : ''}`;
+                            }
+                        }
+                    } else if (comp.componentName.startsWith("Propeller ")) {
+                        const propIndexMatch = comp.componentName.match(/Propeller (\d+)/);
+                        if (propIndexMatch && currentAircraft.propellerDetails && currentAircraft.propellerDetails.length > 0) {
+                            const propNum = parseInt(propIndexMatch[1], 10);
+                             if (propNum > 0 && propNum <= currentAircraft.propellerDetails.length) {
+                                const propeller = currentAircraft.propellerDetails[propNum - 1];
+                                subText = `${propeller.model || 'N/A Model'}${propeller.serialNumber ? `/${propeller.serialNumber}` : ''}`;
                             }
                         }
                     }
