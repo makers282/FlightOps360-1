@@ -15,12 +15,14 @@ import { collection, doc, getDocs, setDoc, deleteDoc, writeBatch } from 'firebas
 import type { 
   FleetAircraft, 
   EngineDetail, // Ensure EngineDetail type is imported if used explicitly
+  PropellerDetail, // Added PropellerDetail type
   SaveFleetAircraftInput, 
   DeleteFleetAircraftInput 
 } from '@/ai/schemas/fleet-aircraft-schemas';
 import { 
   FleetAircraftSchema,
   // EngineDetailSchema is not directly used for flow input/output here
+  // PropellerDetailSchema is not directly used for flow input/output here
   SaveFleetAircraftInputSchema,
   DeleteFleetAircraftInputSchema,
   FetchFleetAircraftOutputSchema,
@@ -55,6 +57,7 @@ export async function saveFleetAircraft(input: SaveFleetAircraftInput): Promise<
     isMaintenanceTracked: input.isMaintenanceTracked ?? true,
     trackedComponentNames: (input.trackedComponentNames && input.trackedComponentNames.length > 0) ? input.trackedComponentNames : ['Airframe', 'Engine 1'],
     engineDetails: input.engineDetails || [],
+    propellerDetails: input.propellerDetails || [], // Ensure propellerDetails are handled
   };
   console.log('[ManageFleetFlow Firestore WRAPPER] Data prepared for flow:', aircraftToSave.id, 'Data:', JSON.stringify(aircraftToSave));
   return saveFleetAircraftFlow(aircraftToSave);
@@ -88,6 +91,7 @@ const fetchFleetAircraftFlow = ai.defineFlow(
           aircraftYear: data.aircraftYear ?? undefined, 
           baseLocation: data.baseLocation ?? undefined,
           engineDetails: data.engineDetails || [], 
+          propellerDetails: data.propellerDetails || [], // Fetch propellerDetails
           isMaintenanceTracked: data.isMaintenanceTracked ?? true,
           trackedComponentNames: data.trackedComponentNames || ['Airframe', 'Engine 1'],
           primaryContactName: data.primaryContactName ?? undefined,
@@ -123,6 +127,7 @@ const saveFleetAircraftFlow = ai.defineFlow(
         aircraftYear: input.aircraftYear === undefined ? null : input.aircraftYear,
         baseLocation: input.baseLocation === undefined ? null : input.baseLocation,
         engineDetails: input.engineDetails ?? [],
+        propellerDetails: input.propellerDetails ?? [], // Save propellerDetails
         isMaintenanceTracked: input.isMaintenanceTracked ?? true,
         trackedComponentNames: input.trackedComponentNames ?? ['Airframe', 'Engine 1'],
         primaryContactName: input.primaryContactName === undefined ? null : input.primaryContactName,
@@ -170,3 +175,4 @@ const deleteFleetAircraftFlow = ai.defineFlow(
     }
   }
 );
+
