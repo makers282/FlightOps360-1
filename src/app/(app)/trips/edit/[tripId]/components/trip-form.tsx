@@ -1,3 +1,4 @@
+
 // src/app/(app)/trips/edit/[tripId]/components/trip-form.tsx
 'use client';
 
@@ -22,8 +23,8 @@ import { format, isValid as isValidDate, parseISO } from "date-fns";
 import type { Customer } from '@/ai/schemas/customer-schemas';
 import { fetchCustomers } from '@/ai/flows/manage-customers-flow';
 import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
-import { legTypes } from '@/ai/schemas/quote-schemas'; // Corrected import
-import { type TripLeg as DbTripLeg, tripStatuses, type TripStatus } from '@/ai/schemas/trip-schemas'; // Import tripStatuses
+import { legTypes } from '@/ai/schemas/quote-schemas';
+import { type TripLeg as DbTripLeg, tripStatuses, type TripStatus } from '@/ai/schemas/trip-schemas';
 import { estimateFlightDetails, type EstimateFlightDetailsOutput } from '@/ai/flows/estimate-flight-details-flow';
 import { fetchAircraftPerformance, type AircraftPerformanceData } from '@/ai/flows/manage-aircraft-performance-flow';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -52,7 +53,7 @@ const TripFormSchema = z.object({
   clientEmail: z.string().email("Invalid email address.").optional().or(z.literal('')),
   clientPhone: z.string().min(7, "Phone number seems too short.").optional().or(z.literal('')),
   aircraftId: z.string().min(1, "Aircraft selection is required.").optional(),
-  status: z.enum(tripStatuses).default("Scheduled"), // Added status field
+  status: z.enum(tripStatuses).default("Scheduled"),
   legs: z.array(FormLegSchema).min(1, "At least one flight leg is required."),
   notes: z.string().optional(),
 });
@@ -64,7 +65,7 @@ interface TripFormProps {
   isEditMode: boolean;
   onSave: (data: FullTripFormData) => Promise<void>; 
   isSaving: boolean; 
-  initialQuoteId?: string | null; // For displaying linked quote ID
+  initialQuoteId?: string | null;
 }
 
 interface AircraftSelectOption {
@@ -101,7 +102,7 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
       clientEmail: '',
       clientPhone: '',
       aircraftId: undefined,
-      status: "Scheduled", // Default status
+      status: "Scheduled",
       legs: [{
         origin: '', destination: '', legType: 'Charter', departureDateTime: undefined,
         passengerCount: 1, originFbo: '', destinationFbo: '',
@@ -154,14 +155,14 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
   
   useEffect(() => {
     if (isEditMode && initialTripData) {
-      reset({ // Use reset to update all form values
+      reset({ 
         tripId: initialTripData.tripId || '',
-        selectedCustomerId: initialTripData.selectedCustomerId || undefined,
+        selectedCustomerId: initialTripData.selectedCustomerId || initialTripData.customerId || undefined, // Check both
         clientName: initialTripData.clientName || '',
         clientEmail: initialTripData.clientEmail || '',
         clientPhone: initialTripData.clientPhone || '',
         aircraftId: initialTripData.aircraftId || undefined,
-        status: initialTripData.status || "Scheduled", // Set status from initial data
+        status: initialTripData.status || "Scheduled",
         legs: (initialTripData.legs || []).map((leg: DbTripLeg) => ({
           ...leg,
           departureDateTime: leg.departureDateTime ? parseISO(leg.departureDateTime) : undefined,
@@ -175,9 +176,9 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
       setLegEstimates(new Array((initialTripData.legs || []).length).fill(null));
     } else if (!isEditMode && !getValues('tripId')) {
       setValue('tripId', `TRP-${Date.now().toString().slice(-6)}`);
-      setValue('status', "Scheduled"); // Ensure default status for new trips
+      setValue('status', "Scheduled");
     }
-  }, [isEditMode, initialTripData, reset, getValues, setValue]); // Added reset and setValue to dependencies
+  }, [isEditMode, initialTripData, reset, getValues, setValue]);
 
   useEffect(() => {
     if (currentSelectedAircraftId) {
@@ -275,37 +276,36 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               {isEditMode ? <Edit3 className="h-6 w-6 text-primary" /> : <Plane className="h-6 w-6 text-primary" />}
-              {isEditMode ? `Edit Trip (ID: ${getValues('tripId') || initialTripData?.tripId || 'N/A'})` : 'Create New Trip'}
+              {isEditMode ? `Edit Trip` : 'Create New Trip'}
             </CardTitle>
             <CardDescription>
-              {isEditMode ? 'Modify the details for this trip.' : 'Enter the details below to schedule a new trip.'}
+              {isEditMode ? `Modify the details for Trip ID: ${getValues('tripId') || initialTripData?.tripId || 'N/A'}` : 'Enter the details below to schedule a new trip.'}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField control={control} name="tripId" render={({ field }) => ( <FormItem> <FormLabel>Trip ID</FormLabel> <FormControl><Input {...field} readOnly={isEditMode} className={isEditMode ? "bg-muted/50 cursor-not-allowed" : ""} /></FormControl> <FormMessage /> </FormItem> )} />
+                <FormField control={control} name="tripId" render={({ field }) => ( <FormItem> <FormLabel>Trip ID</FormLabel> <FormControl><Input {...field} readOnly className="bg-muted/50 cursor-not-allowed" /></FormControl> <FormMessage /> </FormItem> )} />
                 {isEditMode && initialQuoteId && (
                      <FormItem>
                         <FormLabel>Sourced From Quote</FormLabel>
                         <Input value={initialQuoteId} readOnly className="bg-muted/50 cursor-not-allowed" />
-                        <FormDescription>This trip was created from quote {initialQuoteId}.</FormDescription>
                     </FormItem>
                 )}
             </div>
-            {isEditMode && (
-                <FormField control={control} name="status" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Trip Status</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value} name={field.name}>
-                      <FormControl><SelectTrigger><SelectValue placeholder="Select trip status" /></SelectTrigger></FormControl>
-                      <SelectContent>
-                        {tripStatuses.map(status => (<SelectItem key={status} value={status}>{status}</SelectItem>))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-            )}
+            
+            <FormField control={control} name="status" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Trip Status</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value} name={field.name}>
+                  <FormControl><SelectTrigger><SelectValue placeholder="Select trip status" /></SelectTrigger></FormControl>
+                  <SelectContent>
+                    {tripStatuses.map(status => (<SelectItem key={status} value={status}>{status}</SelectItem>))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )} />
+
             <FormField control={control} name="selectedCustomerId" render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><UserSearch className="h-4 w-4" /> Select Existing Client (Optional)</FormLabel> <Select onValueChange={(value) => { handleCustomerSelect(value); field.onChange(value); }} value={field.value || ""} disabled={isLoadingCustomers}> <FormControl><SelectTrigger><SelectValue placeholder={isLoadingCustomers ? "Loading customers..." : "Select a client or enter details manually"} /></SelectTrigger></FormControl> <SelectContent> {!isLoadingCustomers && customers.length === 0 && <SelectItem value="NO_CUSTOMERS" disabled>No customers</SelectItem>} {customers.map(c => (<SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>))} </SelectContent> </Select> <FormDescription>Auto-fills client details if selected.</FormDescription> <FormMessage /> </FormItem> )} />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <FormField control={control} name="clientName" render={({ field }) => ( <FormItem> <FormLabel>Client Name</FormLabel> <FormControl><Input placeholder="John Doe or Acme Corp" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
