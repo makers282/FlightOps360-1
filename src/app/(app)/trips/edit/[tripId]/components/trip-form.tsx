@@ -1,9 +1,10 @@
 
 "use client";
 
-import React, { useState, useEffect, useTransition, useCallback } from 'react';
+import * as React from 'react'; // Explicit React import
+import { useState, useEffect, useTransition, useCallback } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useForm, type SubmitHandler, useFieldArray } from 'react-hook-form'; // Removed Controller as it's used via FormField
+import { useForm, type SubmitHandler, useFieldArray } from 'react-hook-form';
 import { z } from 'zod';
 import { useRouter } from 'next/navigation';
 
@@ -35,8 +36,8 @@ import { Separator } from '@/components/ui/separator';
 
 const TripFormSchema = FullTripSchema.omit({ id: true, createdAt: true, updatedAt: true }).extend({
   legs: z.array(TripLegSchema.extend({
-    departureDateTime: z.date().optional(), 
-    arrivalDateTime: z.date().optional(), 
+    departureDateTime: z.date().optional(),
+    arrivalDateTime: z.date().optional(),
   })).min(1, "At least one flight leg is required.")
 });
 
@@ -75,7 +76,7 @@ export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
     },
   });
 
-  const { control, handleSubmit, reset, setValue, formState: { errors } } = form; // Removed watch as it's not directly used
+  const { control, handleSubmit, reset, setValue, formState: { errors } } = form;
   const { fields, append, remove } = useFieldArray({
     control,
     name: "legs",
@@ -116,7 +117,7 @@ export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
         })),
       });
     } else if (!isEditMode) {
-      reset({ 
+      reset({
         tripId: generateNewUserFacingTripId(),
         clientName: '',
         aircraftId: undefined,
@@ -154,7 +155,7 @@ export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
           router.push(`/trips/details/${savedTrip.id}`);
         } else {
           router.push(`/trips/list`);
-          reset({ 
+          reset({
              tripId: generateNewUserFacingTripId(), clientName: '', aircraftId: undefined,
              legs: [{ origin: '', destination: '', departureDateTime: undefined, arrivalDateTime: undefined, legType: 'Charter', passengerCount: 1, originFbo: '', destinationFbo: '', flightTimeHours: undefined, blockTimeHours: undefined }],
              status: 'Scheduled', notes: '', quoteId: undefined, customerId: undefined, aircraftLabel: undefined,
@@ -185,7 +186,7 @@ export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
       <Form {...form}>
         <form onSubmit={handleSubmit(onSubmit)}>
           <CardContent className="space-y-8">
-            
+
             <section>
               <CardTitle className="text-lg border-b pb-2 mb-4">Core Trip Details</CardTitle>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -268,7 +269,7 @@ export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
                                     const time = e.target.value;
                                     const [hours, minutesValue] = time.split(':').map(Number);
                                     const newDate = field.value ? new Date(field.value) : new Date();
-                                    newDate.setHours(hours, minutesValue); 
+                                    newDate.setHours(hours, minutesValue);
                                     field.onChange(newDate);
                                   }}
                                 />
@@ -350,3 +351,5 @@ export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
     </Card>
   );
 }
+
+    
