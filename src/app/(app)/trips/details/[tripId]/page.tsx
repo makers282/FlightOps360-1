@@ -6,7 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button'; // Import buttonVariants
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -21,18 +21,18 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Loader2, ArrowLeft, Plane, User, CalendarDays, DollarSign, InfoIcon, Edit3, Trash2, Send, Users as CrewIcon, FileText as FileIcon, Package as LoadManifestIcon } from 'lucide-react';
-import { fetchTripById, deleteTrip } from '@/ai/flows/manage-trips-flow'; 
-import type { Trip, TripLeg, TripStatus } from '@/ai/schemas/trip-schemas'; 
+import { fetchTripById, deleteTrip } from '@/ai/flows/manage-trips-flow';
+import type { Trip, TripLeg, TripStatus } from '@/ai/schemas/trip-schemas';
 import { useToast } from '@/hooks/use-toast';
 import { format, parseISO, isValid } from 'date-fns';
 
 // Helper to get badge variant for status
 const getStatusBadgeVariant = (status?: TripStatus): "default" | "secondary" | "outline" | "destructive" => {
   switch (status?.toLowerCase()) {
-    case 'completed': case 'confirmed': return 'default'; 
-    case 'en route': return 'secondary'; 
-    case 'scheduled': case 'awaiting closeout': return 'outline'; 
-    case 'cancelled': case 'diverted': return 'destructive'; 
+    case 'completed': case 'confirmed': return 'default';
+    case 'en route': return 'secondary';
+    case 'scheduled': case 'awaiting closeout': return 'outline';
+    case 'cancelled': case 'diverted': return 'destructive';
     default: return 'outline';
   }
 };
@@ -88,7 +88,7 @@ export default function ViewTripDetailsPage() {
   const [trip, setTrip] = useState<Trip | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
+
   const [isDeleting, startDeletingTransition] = useTransition();
   const [showDeleteConfirm1, setShowDeleteConfirm1] = useState(false);
   const [showDeleteConfirm2, setShowDeleteConfirm2] = useState(false);
@@ -117,7 +117,7 @@ export default function ViewTripDetailsPage() {
       setIsLoading(false);
     }
   }, [id, toast]);
-  
+
   const handleDeleteInitialConfirm = () => {
       setShowDeleteConfirm1(false);
       setShowDeleteConfirm2(true);
@@ -167,7 +167,7 @@ export default function ViewTripDetailsPage() {
 
   return (
     <>
-      <PageHeader 
+      <PageHeader
         title={`Trip Details: ${trip.tripId}`}
         description={`Viewing details for trip with ${trip.clientName || 'N/A'}.`}
         icon={Plane}
@@ -176,7 +176,7 @@ export default function ViewTripDetailsPage() {
             <Button variant="outline" disabled><Edit3 className="mr-2 h-4 w-4" /> Edit Trip</Button>
             <Button variant="outline" disabled><Send className="mr-2 h-4 w-4" /> Send Itinerary</Button>
             <Button variant="destructive" onClick={() => setShowDeleteConfirm1(true)} disabled={isDeleting}>
-                {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Trash2 className="mr-2 h-4 w-4" />} 
+                {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Trash2 className="mr-2 h-4 w-4" />}
                 Delete Trip
             </Button>
             <Button onClick={() => router.push('/trips/list')} variant="outline">
@@ -212,7 +212,7 @@ export default function ViewTripDetailsPage() {
           </CardContent>
         </Card>
       </div>
-      
+
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mt-6">
         <Card className="shadow-sm">
           <CardHeader>
@@ -240,7 +240,7 @@ export default function ViewTripDetailsPage() {
             <Button variant="outline" size="sm" className="mt-3" disabled>Add/Edit Notes</Button>
           </CardContent>
         </Card>
-        
+
         <Card className="shadow-sm">
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><LoadManifestIcon className="h-5 w-5 text-primary"/>Files & Load Manifest</CardTitle>
@@ -275,7 +275,7 @@ export default function ViewTripDetailsPage() {
                 <Trash2 className="h-6 w-6"/>Final Confirmation: Delete Trip {trip.tripId}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              This action is permanent and will remove all data associated with Trip <strong className="text-foreground">{trip.tripId}</strong>. 
+              This action is permanent and will remove all data associated with Trip <strong className="text-foreground">{trip.tripId}</strong>.
               Are you absolutely sure you wish to proceed?
             </AlertDialogDescription>
           </AlertDialogHeader>
