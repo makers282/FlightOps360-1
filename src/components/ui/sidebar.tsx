@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { Slot } from "@radix-ui/react-slot"
 import { VariantProps, cva } from "class-variance-authority"
 import { PanelLeft, ChevronRight } from "lucide-react" 
-import { usePathname } from 'next/navigation'; // Added for SidebarMenuItem
+import { usePathname } from 'next/navigation'; 
 
 import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
@@ -71,67 +71,88 @@ const SidebarProvider = React.forwardRef<
     },
     ref
   ) => {
-    const isMobile = useIsMobile()
-    const [openMobile, setOpenMobile] = React.useState(false)
+    const isMobileHookValue = useIsMobile(); // Value from the hook
     const [isClientMounted, setIsClientMounted] = React.useState(false);
+    const [internalOpen, setInternalOpen] = React.useState(defaultOpen);
+    const [openMobile, setOpenMobile] = React.useState(false);
+
+    // Determine the effective 'open' state
+    const open = openProp !== undefined ? openProp : internalOpen;
+
+    // Determine 'isMobile' state safely for context
+    // It should be false until client is mounted and hook has updated.
+    const isMobile = isClientMounted ? isMobileHookValue : false;
+
 
     React.useEffect(() => {
-      setIsClientMounted(true);
-    }, []);
+      setIsClientMounted(true); // Signal client has mounted
 
-    const [_open, _setOpen] = React.useState(defaultOpen)
-    const open = openProp ?? _open
-    const setOpen = React.useCallback(
-      (value: boolean | ((value: boolean) => boolean)) => {
-        const openState = typeof value === "function" ? value(open) : value
-        if (setOpenProp) {
-          setOpenProp(openState)
-        } else {
-          _setOpen(openState)
+      // Cookie reading logic
+      if (openProp === undefined && typeof document !== 'undefined') { // Only if uncontrolled
+        const cookieValue = document.cookie
+          .split("; ")
+          .find((row) => row.startsWith(`${SIDEBAR_COOKIE_NAME}=`))
+          ?.split("=")[1];
+        if (cookieValue !== undefined) {
+          const cookieOpenState = cookieValue === "true";
+          if (cookieOpenState !== internalOpen) {
+            setInternalOpen(cookieOpenState);
+          }
         }
-        if (typeof document !== 'undefined') {
-          document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`
+      }
+    }, [openProp, internalOpen]); // Added internalOpen to deps for cookie sync
+
+    const setOpen = React.useCallback(
+      (value: boolean | ((currentOpen: boolean) => boolean)) => {
+        const newOpenState = typeof value === "function" ? value(open) : value;
+        if (setOpenProp) {
+          setOpenProp(newOpenState);
+        } else {
+          setInternalOpen(newOpenState);
+        }
+        if (isClientMounted && typeof document !== 'undefined') {
+          document.cookie = `${SIDEBAR_COOKIE_NAME}=${newOpenState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`;
         }
       },
-      [setOpenProp, open]
-    )
+      [setOpenProp, open, isClientMounted]
+    );
 
     const toggleSidebar = React.useCallback(() => {
-      return isMobile
-        ? setOpenMobile((open) => !open)
-        : setOpen((open) => !open)
-    }, [isMobile, setOpen, setOpenMobile])
+      if (isMobile) { // Use context's isMobile
+        setOpenMobile((current) => !current);
+      } else {
+        setOpen((current) => !current);
+      }
+    }, [isMobile, setOpen, setOpenMobile]);
 
     React.useEffect(() => {
       const handleKeyDown = (event: KeyboardEvent) => {
-        if (
-          event.key === SIDEBAR_KEYBOARD_SHORTCUT &&
-          (event.metaKey || event.ctrlKey)
-        ) {
-          event.preventDefault()
-          toggleSidebar()
+        if (event.key === SIDEBAR_KEYBOARD_SHORTCUT && (event.metaKey || event.ctrlKey)) {
+          event.preventDefault();
+          toggleSidebar();
         }
+      };
+      if (isClientMounted) { // Add event listener only on client
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
       }
+    }, [toggleSidebar, isClientMounted]);
 
-      window.addEventListener("keydown", handleKeyDown)
-      return () => window.removeEventListener("keydown", handleKeyDown)
-    }, [toggleSidebar])
-
-    const state = open ? "expanded" : "collapsed"
+    const state = open ? "expanded" : "collapsed";
 
     const contextValue = React.useMemo<SidebarContext>(
       () => ({
         state,
         open,
         setOpen,
-        isMobile,
+        isMobile, // Use the derived isMobile state
         openMobile,
         setOpenMobile,
         toggleSidebar,
         isClientMounted,
       }),
       [state, open, setOpen, isMobile, openMobile, setOpenMobile, toggleSidebar, isClientMounted]
-    )
+    );
 
     return (
       <SidebarContext.Provider value={contextValue}>
@@ -155,9 +176,9 @@ const SidebarProvider = React.forwardRef<
           </div>
         </TooltipProvider>
       </SidebarContext.Provider>
-    )
+    );
   }
-)
+);
 SidebarProvider.displayName = "SidebarProvider"
 
 const Sidebar = React.forwardRef<
@@ -195,7 +216,8 @@ const Sidebar = React.forwardRef<
         </div>
       )
     }
-
+    
+    // Key change: Only render mobile Sheet if isClientMounted is true AND isMobile is true
     if (isClientMounted && isMobile) {
       return (
         <Sheet open={openMobile} onOpenChange={setOpenMobile} {...props}>
@@ -215,7 +237,9 @@ const Sidebar = React.forwardRef<
         </Sheet>
       )
     }
-
+    
+    // Fallback to desktop sidebar if not client mounted or not mobile
+    // This ensures server and initial client render are consistent (desktop view)
     return (
       <div
         ref={ref}
@@ -521,14 +545,15 @@ const SidebarMenuItem = React.forwardRef<
 
   React.useEffect(() => {
     if (isClientMounted) {
-      if (sidebarState === "collapsed" && !isMobile) {
-        setIsSubMenuOpen(false);
-      } else {
-        // Only set based on isActive if not collapsed (or if mobile, where it's a sheet)
-        setIsSubMenuOpen(isButtonActive);
+      if (sidebarState === "collapsed" && !isMobile && isSubMenuOpen) {
+        setIsSubMenuOpen(false); // Force close if collapsed and it was open
+      } else if (sidebarState === "expanded" && !isMobile && isButtonActive && !isSubMenuOpen) {
+        // If expanded and button is active but submenu is closed (e.g. after collapse/expand), reopen it.
+        // This might need refinement if we want to remember user's explicit toggle.
+        // setIsSubMenuOpen(true); 
       }
     }
-  }, [isButtonActive, sidebarState, isMobile, isClientMounted]);
+  }, [sidebarState, isMobile, isClientMounted, isSubMenuOpen, isButtonActive]);
 
 
   const isSidebarCollapsedIconOnly = sidebarState === "collapsed" && !isMobile;
@@ -619,15 +644,7 @@ const SidebarMenuButton = React.forwardRef<
     const { isMobile, state, isClientMounted } = useSidebar();
     const isIconOnly = state === "collapsed" && !isMobile;
     
-    const [showChevronIcon, setShowChevronIcon] = React.useState(false);
-    React.useEffect(() => {
-      if (isClientMounted && isSubmenuTrigger && !isIconOnly) {
-        setShowChevronIcon(true);
-      } else {
-        setShowChevronIcon(false);
-      }
-    }, [isClientMounted, isSubmenuTrigger, isIconOnly]);
-
+    const showChevronIcon = isClientMounted && isSubmenuTrigger && !isIconOnly;
 
     const commonClassAndData = {
       "data-sidebar": "menu-button",
@@ -684,8 +701,7 @@ const SidebarMenuButton = React.forwardRef<
       );
     }
     
-    const tooltipContentHidden = !isClientMounted || (isClientMounted && (state !== "collapsed" || isMobile));
-
+    const tooltipContentHidden = !isClientMounted || (state !== "collapsed" || isMobile);
 
     if (!tooltip) {
       return element;
@@ -699,7 +715,7 @@ const SidebarMenuButton = React.forwardRef<
         <TooltipContent
           side="right"
           align="center"
-          hidden={tooltipContentHidden}
+          className={cn(tooltipContentHidden && "hidden")} // Use className to control visibility
           {...tooltipProps}
         />
       </Tooltip>
