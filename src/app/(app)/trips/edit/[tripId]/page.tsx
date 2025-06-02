@@ -6,12 +6,12 @@ import { useParams, useRouter } from 'next/navigation';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, Edit3, ArrowLeft, InfoIcon } from 'lucide-react';
+import { Loader2, Edit3, ArrowLeft, InfoIcon, Send, Users as CrewIcon, FileText as FileIcon, Package as LoadManifestIcon } from 'lucide-react'; // Added Send, CrewIcon, FileIcon, LoadManifestIcon
 import { fetchTripById, saveTrip } from '@/ai/flows/manage-trips-flow'; 
 import type { Trip, SaveTripInput, TripStatus } from '@/ai/schemas/trip-schemas'; 
 import { useToast } from '@/hooks/use-toast';
 import { TripForm, type FullTripFormData } from './components/trip-form';
-import { fetchFleetAircraft } from '@/ai/flows/manage-fleet-flow'; // Added for aircraftLabel resolution
+import { fetchFleetAircraft } from '@/ai/flows/manage-fleet-flow'; 
 
 function EditTripPageContent() {
   const params = useParams();
@@ -83,18 +83,16 @@ function EditTripPageContent() {
         }),
         notes: formData.notes,
         status: formData.status as TripStatus,
-        // Explicitly include customerId if it exists on formData, mapping to the correct field in Trip
         ...(formData.selectedCustomerId && { customerId: formData.selectedCustomerId }),
       };
       
       try {
         const savedTrip = await saveTrip(tripToSave); 
-        // Do not update tripData state here as we are redirecting
         toast({
           title: "Trip Updated",
           description: `Trip ${savedTrip.tripId} has been successfully updated.`,
         });
-        router.push(`/trips/details/${savedTrip.id}`); // Redirect after successful save
+        router.push(`/trips/details/${savedTrip.id}`); 
       } catch (error) {
         console.error("Failed to save trip:", error);
         toast({
@@ -104,6 +102,16 @@ function EditTripPageContent() {
         });
       }
     });
+  };
+
+  const handleSendItinerary = () => {
+    if (!tripData) return;
+    toast({
+      title: "Send Itinerary (Simulation)",
+      description: `Simulating sending itinerary for Trip ID: ${tripData.tripId} to ${tripData.clientName}.`,
+    });
+    // Future: Call a Genkit flow here
+    // await sendTripItineraryEmailFlow({ tripId: tripData.id, ... });
   };
 
 
@@ -145,9 +153,23 @@ function EditTripPageContent() {
         description="Modify the details for this trip."
         icon={Edit3}
         actions={
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={handleSendItinerary} variant="outline" disabled={isSaving}>
+                <Send className="mr-2 h-4 w-4" /> Send Updated Itinerary
+            </Button>
+            <Button variant="outline" disabled>
+                <CrewIcon className="mr-2 h-4 w-4" /> Assign Crew
+            </Button>
+             <Button variant="outline" disabled>
+                <LoadManifestIcon className="mr-2 h-4 w-4" /> View Load Manifest
+            </Button>
+            <Button variant="outline" disabled>
+                <FileIcon className="mr-2 h-4 w-4" /> Generate Flight Log
+            </Button>
             <Button onClick={() => router.push('/trips/list')} variant="outline">
               <ArrowLeft className="mr-2 h-4 w-4" /> Back to Trip List
             </Button>
+          </div>
         }
       />
       <TripForm 
