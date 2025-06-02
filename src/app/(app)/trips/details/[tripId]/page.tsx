@@ -10,7 +10,7 @@ import { Button, buttonVariants } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Textarea } from '@/components/ui/textarea'; 
+import { Textarea } from '@/components/ui/textarea';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,9 +21,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Loader2, ArrowLeft, Plane, User, CalendarDays, DollarSign, InfoIcon, Edit3, Trash2, Send, Users as CrewIcon, FileText as FileIcon, Package as LoadManifestIcon, Save } from 'lucide-react'; 
-import { fetchTripById, deleteTrip, saveTrip } from '@/ai/flows/manage-trips-flow'; 
-import type { Trip, TripLeg, TripStatus, SaveTripInput } from '@/ai/schemas/trip-schemas'; 
+import { Loader2, ArrowLeft, Plane, User, CalendarDays, DollarSign, InfoIcon, Edit3, Trash2, Send, Users as CrewIcon, FileText as FileIcon, Package as LoadManifestIcon, Save } from 'lucide-react';
+import { fetchTripById, deleteTrip, saveTrip } from '@/ai/flows/manage-trips-flow';
+import type { Trip, TripLeg, TripStatus, SaveTripInput } from '@/ai/schemas/trip-schemas';
 import { useToast } from '@/hooks/use-toast';
 import { format, parseISO, isValid } from 'date-fns';
 
@@ -148,30 +148,16 @@ export default function ViewTripDetailsPage() {
   const handleSaveNotes = () => {
     if (!trip) return;
     startSavingNotesTransition(async () => {
-      const tripDataToSave: SaveTripInput = {
-        ...trip, 
-        notes: editableNotes.trim(), 
-        id: undefined, 
-        createdAt: undefined, 
-        updatedAt: undefined,
-      };
-      
-      const { id: tripDocId, createdAt, updatedAt, ...restOfTripData } = trip;
-
-      const finalDataToSave: SaveTripInput = {
-        tripId: restOfTripData.tripId,
-        clientName: restOfTripData.clientName,
-        aircraftId: restOfTripData.aircraftId,
-        legs: restOfTripData.legs,
-        status: restOfTripData.status,
-        ...restOfTripData, 
+      // Construct the full trip object with updated notes to pass to saveTrip
+      const tripDataToSave: Trip = {
+        ...trip,
         notes: editableNotes.trim(),
       };
-
-
+      
       try {
-        const savedTrip = await saveTrip(finalDataToSave);
-        setTrip(savedTrip); 
+        // saveTrip expects the full Trip object, it will handle Firestore ID internally
+        const savedTrip = await saveTrip(tripDataToSave);
+        setTrip(savedTrip);
         setEditableNotes(savedTrip.notes || '');
         setIsEditingNotes(false);
         toast({ title: "Notes Saved", description: "Trip notes have been updated." });
