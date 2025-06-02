@@ -113,12 +113,13 @@ const DEFAULT_AIRCRAFT_RATE_FALLBACK: Pick<AircraftRate, 'buy' | 'sell'> = {
   sell: 4000,
 };
 
-const DEFAULT_SERVICE_RATES: Record<string, ServiceFeeRate> = {
-  [SERVICE_KEY_FUEL_SURCHARGE]: { displayDescription: "Fuel Surcharge", buy: 300, sell: 400, unitDescription: "Block Hour" },
-  [SERVICE_KEY_LANDING_FEES]: { displayDescription: "Landing Fees", buy: 400, sell: 500, unitDescription: "Per Leg" },
-  [SERVICE_KEY_OVERNIGHT_FEES]: { displayDescription: "Overnight Fees", buy: 1000, sell: 1300, unitDescription: "Per Night"},
-  [SERVICE_KEY_MEDICS]: { displayDescription: "Medical Team", buy: 1800, sell: 2500, unitDescription: "Service" }, 
-  [SERVICE_KEY_CATERING]: { displayDescription: "Catering", buy: 350, sell: 500, unitDescription: "Service" },
+// These defaults are primarily for UI placeholders if company profile data is missing.
+const UI_DEFAULT_SERVICE_RATES: Record<string, Pick<ServiceFeeRate, 'sell'>> = {
+  [SERVICE_KEY_FUEL_SURCHARGE]: { sell: 400 },
+  [SERVICE_KEY_LANDING_FEES]: { sell: 500 },
+  [SERVICE_KEY_OVERNIGHT_FEES]: { sell: 1300},
+  [SERVICE_KEY_MEDICS]: { sell: 2500 }, 
+  [SERVICE_KEY_CATERING]: { sell: 500 },
 };
 
 interface CreateQuoteFormProps {
@@ -198,7 +199,7 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
   const { control, setValue, getValues, trigger, formState: { errors }, reset } = form;
   
   const legsArray = useWatch({ control, name: "legs", defaultValue: [] });
-  const currentSelectedAircraftId = useWatch({ control, name: "aircraftId" }); // Renamed to avoid conflict
+  const currentSelectedAircraftId = useWatch({ control, name: "aircraftId" }); 
   const fuelSurchargeRequested = useWatch({ control, name: "fuelSurchargeRequested" });
   const sellPriceFuelSurchargePerHour = useWatch({ control, name: "sellPriceFuelSurchargePerHour" });
   const medicsRequested = useWatch({ control, name: "medicsRequested" });
@@ -229,11 +230,11 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
         })
         .catch(error => {
           console.warn(`Could not fetch performance data for aircraft ${currentSelectedAircraftId}:`, error);
-          setSelectedAircraftPerformance(null); // Reset if error
+          setSelectedAircraftPerformance(null); 
         })
         .finally(() => setIsLoadingSelectedAcPerf(false));
     } else {
-      setSelectedAircraftPerformance(null); // Clear performance data if no aircraft is selected
+      setSelectedAircraftPerformance(null); 
     }
   }, [currentSelectedAircraftId]);
 
@@ -310,10 +311,6 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
               notes: quoteData.options.notes || '',
             };
             reset(formDataToReset);
-            // Ensure aircraftId is set to trigger performance data fetch if editing
-            if (quoteData.aircraftId) {
-                // setSelectedAircraftId(quoteData.aircraftId); // This might cause issues with react-hook-form, aircraftId from useWatch is better.
-            }
             setCalculatedLineItems(quoteData.lineItems || []);
             setLegEstimates(new Array(quoteData.legs.length).fill(null));
             toast({ title: "Quote Loaded", description: `Editing quote ${quoteData.quoteId}.`, variant: "default"});
@@ -371,7 +368,8 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
         const originTaxi = Number(leg.originTaxiTimeMinutes || 0);
         const destTaxi = Number(leg.destinationTaxiTimeMinutes || 0);
         const legBlockMinutes = originTaxi + (flightTime * 60) + destTaxi;
-        totalBlockHours += parseFloat((legBlockMinutes / 60).toFixed(2));
+        const currentLegBlockHours = parseFloat((legBlockMinutes / 60).toFixed(2));
+        totalBlockHours += currentLegBlockHours;
 
         if (flightTime > 0 && ["Charter", "Owner", "Ambulance", "Cargo"].includes(leg.legType)) {
             totalFlightTimeBuyCost += flightTime * aircraftBuyRate;
@@ -379,7 +377,7 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
             totalRevenueFlightHours += flightTime;
         } else if (flightTime > 0 && ["Positioning", "Ferry", "Maintenance"].includes(leg.legType)) {
             totalFlightTimeBuyCost += flightTime * aircraftBuyRate;
-            totalFlightTimeSellCost += flightTime * aircraftBuyRate; 
+            totalFlightTimeSellCost += flightTime * aircraftBuyRate; // Positioning legs sell at buy rate
         }
     });
 
@@ -402,45 +400,55 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
     }
     
     const companyServiceRates = fetchedCompanyProfile?.serviceFeeRates || {};
+    const getServiceRate = (key: string, type: 'buy' | 'sell', defaultAmount: number) => {
+      return companyServiceRates[key]?.[type] ?? defaultAmount;
+    };
+    const getServiceUnit = (key: string, defaultUnit: string) => {
+        return companyServiceRates[key]?.unitDescription ?? defaultUnit;
+    }
+    const getServiceDisplay = (key: string, defaultDisplay: string) => {
+        return companyServiceRates[key]?.displayDescription ?? defaultDisplay;
+    }
+
 
     if (fuelSurchargeRequested && totalBlockHours > 0) {
-      const config = companyServiceRates[SERVICE_KEY_FUEL_SURCHARGE] || DEFAULT_SERVICE_RATES[SERVICE_KEY_FUEL_SURCHARGE];
-      const buyRate = config.buy;
-      const sellRate = sellPriceFuelSurchargePerHour ?? config.sell;
+      const buyRate = getServiceRate(SERVICE_KEY_FUEL_SURCHARGE, 'buy', 300);
+      const sellRate = sellPriceFuelSurchargePerHour ?? getServiceRate(SERVICE_KEY_FUEL_SURCHARGE, 'sell', 400);
       newItems.push({
-        id: 'fuelSurcharge', description: config.displayDescription, buyRate, sellRate, unitDescription: config.unitDescription,
+        id: 'fuelSurcharge', description: getServiceDisplay(SERVICE_KEY_FUEL_SURCHARGE, "Fuel Surcharge"), 
+        buyRate, sellRate, unitDescription: getServiceUnit(SERVICE_KEY_FUEL_SURCHARGE, "Block Hour"),
         quantity: parseFloat(totalBlockHours.toFixed(2)),
         buyTotal: buyRate * totalBlockHours, sellTotal: sellRate * totalBlockHours,
       });
     }
 
     if (medicsRequested) {
-      const config = companyServiceRates[SERVICE_KEY_MEDICS] || DEFAULT_SERVICE_RATES[SERVICE_KEY_MEDICS];
-      const buyRate = config.buy;
-      const sellRate = sellPriceMedics ?? config.sell;
+      const buyRate = getServiceRate(SERVICE_KEY_MEDICS, 'buy', 1800);
+      const sellRate = sellPriceMedics ?? getServiceRate(SERVICE_KEY_MEDICS, 'sell', 2500);
       newItems.push({
-        id: 'medicsFee', description: config.displayDescription, buyRate, sellRate, unitDescription: config.unitDescription,
+        id: 'medicsFee', description: getServiceDisplay(SERVICE_KEY_MEDICS, "Medical Team"), 
+        buyRate, sellRate, unitDescription: getServiceUnit(SERVICE_KEY_MEDICS, "Service"),
         quantity: 1, buyTotal: buyRate, sellTotal: sellRate,
       });
     }
 
     if (cateringRequested) {
-      const config = companyServiceRates[SERVICE_KEY_CATERING] || DEFAULT_SERVICE_RATES[SERVICE_KEY_CATERING];
-      const buyRate = config.buy;
-      const sellRate = sellPriceCatering ?? config.sell;
+      const buyRate = getServiceRate(SERVICE_KEY_CATERING, 'buy', 350);
+      const sellRate = sellPriceCatering ?? getServiceRate(SERVICE_KEY_CATERING, 'sell', 500);
       newItems.push({
-        id: 'cateringFee', description: config.displayDescription, buyRate, sellRate, unitDescription: config.unitDescription,
+        id: 'cateringFee', description: getServiceDisplay(SERVICE_KEY_CATERING, "Catering"), 
+        buyRate, sellRate, unitDescription: getServiceUnit(SERVICE_KEY_CATERING, "Service"),
         quantity: 1, buyTotal: buyRate, sellTotal: sellRate,
       });
     }
 
     const validLegsCount = legsArray.filter(leg => leg.origin && leg.destination && leg.origin.length >=3 && leg.destination.length >=3).length;
     if (includeLandingFees && validLegsCount > 0) {
-      const config = companyServiceRates[SERVICE_KEY_LANDING_FEES] || DEFAULT_SERVICE_RATES[SERVICE_KEY_LANDING_FEES];
-      const buyRate = config.buy;
-      const sellRate = sellPriceLandingFeePerLeg ?? config.sell;
+      const buyRate = getServiceRate(SERVICE_KEY_LANDING_FEES, 'buy', 400);
+      const sellRate = sellPriceLandingFeePerLeg ?? getServiceRate(SERVICE_KEY_LANDING_FEES, 'sell', 500);
       newItems.push({
-        id: 'landingFees', description: config.displayDescription, buyRate, sellRate, unitDescription: config.unitDescription,
+        id: 'landingFees', description: getServiceDisplay(SERVICE_KEY_LANDING_FEES, "Landing Fees"), 
+        buyRate, sellRate, unitDescription: getServiceUnit(SERVICE_KEY_LANDING_FEES, "Per Leg"),
         quantity: validLegsCount,
         buyTotal: buyRate * validLegsCount, sellTotal: sellRate * validLegsCount,
       });
@@ -448,11 +456,11 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
 
     const numericEstimatedOvernights = Number(currentEstimatedOvernights || 0);
     if (numericEstimatedOvernights > 0) {
-      const config = companyServiceRates[SERVICE_KEY_OVERNIGHT_FEES] || DEFAULT_SERVICE_RATES[SERVICE_KEY_OVERNIGHT_FEES];
-      const buyRate = config.buy;
-      const sellRate = sellPriceOvernight ?? config.sell;
+      const buyRate = getServiceRate(SERVICE_KEY_OVERNIGHT_FEES, 'buy', 1000);
+      const sellRate = sellPriceOvernight ?? getServiceRate(SERVICE_KEY_OVERNIGHT_FEES, 'sell', 1300);
       newItems.push({
-        id: 'overnightFees', description: config.displayDescription, buyRate, sellRate, unitDescription: config.unitDescription,
+        id: 'overnightFees', description: getServiceDisplay(SERVICE_KEY_OVERNIGHT_FEES, "Overnight Fees"), 
+        buyRate, sellRate, unitDescription: getServiceUnit(SERVICE_KEY_OVERNIGHT_FEES, "Per Night"),
         quantity: numericEstimatedOvernights,
         buyTotal: buyRate * numericEstimatedOvernights, sellTotal: sellRate * numericEstimatedOvernights,
       });
@@ -656,7 +664,6 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
           setLegEstimates([]);
           setCalculatedLineItems([]);
         } else {
-          // If editing, re-fetch the quote to ensure form reflects the saved status, including the potentially changed status
           const updatedQuoteData = await fetchQuoteById({ id: savedQuote.id });
           if (updatedQuoteData) {
             const formDataToReset: FullQuoteFormData = {
@@ -687,7 +694,6 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
               notes: updatedQuoteData.options.notes || '',
             };
             reset(formDataToReset);
-            // Also update calculatedLineItems to ensure consistency with the saved quote
             setCalculatedLineItems(updatedQuoteData.lineItems || []);
           }
         }
@@ -864,7 +870,7 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
   };
   
   const getServiceLabel = (serviceKey: string, defaultLabel: string, unitDescription?: string) => {
-    const serviceConfig = fetchedCompanyProfile?.serviceFeeRates?.[serviceKey] || DEFAULT_SERVICE_RATES[serviceKey];
+    const serviceConfig = fetchedCompanyProfile?.serviceFeeRates?.[serviceKey];
     let label = serviceConfig?.displayDescription || defaultLabel;
     if (serviceConfig?.sell) {
       label += ` (${formatCurrencyLocal(serviceConfig.sell)}`;
@@ -872,9 +878,18 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
         label += `/${unitDescription || serviceConfig.unitDescription}`;
       }
       label += ")";
+    } else if(UI_DEFAULT_SERVICE_RATES[serviceKey]?.sell) { // Fallback for UI if profile not loaded
+      label += ` (Default: ${formatCurrencyLocal(UI_DEFAULT_SERVICE_RATES[serviceKey]?.sell)}`;
+      if (unitDescription) label += `/${unitDescription}`;
+      label += ")";
     }
     return label;
   };
+
+  const getServicePlaceholder = (serviceKey: string) => {
+    const defaultSellRate = fetchedCompanyProfile?.serviceFeeRates?.[serviceKey]?.sell ?? UI_DEFAULT_SERVICE_RATES[serviceKey]?.sell ?? 0;
+    return `Default: ${formatCurrencyLocal(defaultSellRate)}`;
+  }
 
   if (isLoadingQuoteDataForEdit) {
     return (
@@ -1148,7 +1163,7 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
                       <FormControl>
                         <Input 
                           type="number" 
-                          placeholder={`Default: ${formatCurrencyLocal(fetchedCompanyProfile?.serviceFeeRates?.[SERVICE_KEY_FUEL_SURCHARGE]?.sell || DEFAULT_SERVICE_RATES[SERVICE_KEY_FUEL_SURCHARGE]?.sell || 0)}`} 
+                          placeholder={getServicePlaceholder(SERVICE_KEY_FUEL_SURCHARGE)} 
                           {...field} 
                           value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : String(field.value)}
                           onChange={e => { const val = parseFloat(e.target.value); field.onChange(isNaN(val) ? undefined : val); }}
@@ -1159,7 +1174,7 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
                     <FormField control={control} name="medicsRequested" render={({ field }) => ( <FormItem className="flex flex-row items-center space-x-3 space-y-0 p-3 border rounded-md hover:bg-muted/50"> <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl> <div className="space-y-1 leading-none"><FormLabel className="flex items-center gap-2"><Users className="h-4 w-4 text-primary" /> {getServiceLabel(SERVICE_KEY_MEDICS, "Medics Requested")}</FormLabel></div> </FormItem> )} />
                     {medicsRequested && <FormField control={control} name="sellPriceMedics" render={({ field }) => (<FormItem className="pl-8"> <FormLabel>Medics Fee Sell Price</FormLabel> 
                       <FormControl>
-                        <Input type="number" placeholder={`Default: ${formatCurrencyLocal(fetchedCompanyProfile?.serviceFeeRates?.[SERVICE_KEY_MEDICS]?.sell || DEFAULT_SERVICE_RATES[SERVICE_KEY_MEDICS]?.sell || 0)}`}  {...field} value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : String(field.value)} onChange={e => { const val = parseFloat(e.target.value); field.onChange(isNaN(val) ? undefined : val); }} />
+                        <Input type="number" placeholder={getServicePlaceholder(SERVICE_KEY_MEDICS)}  {...field} value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : String(field.value)} onChange={e => { const val = parseFloat(e.target.value); field.onChange(isNaN(val) ? undefined : val); }} />
                       </FormControl> 
                     <FormMessage /> </FormItem> )} />}
                     
@@ -1167,14 +1182,14 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
                     {cateringRequested && ( <FormField control={control} name="cateringNotes" render={({ field }) => ( <FormItem className="pl-8"> <FormLabel>Catering Notes</FormLabel> <FormControl><Textarea placeholder="Specify catering details..." {...field} value={field.value || ''} rows={3} /></FormControl> <FormMessage /> </FormItem> )} /> )}
                     {cateringRequested && <FormField control={control} name="sellPriceCatering" render={({ field }) => (<FormItem className="pl-8"> <FormLabel>Catering Fee Sell Price</FormLabel> 
                       <FormControl>
-                        <Input type="number" placeholder={`Default: ${formatCurrencyLocal(fetchedCompanyProfile?.serviceFeeRates?.[SERVICE_KEY_CATERING]?.sell || DEFAULT_SERVICE_RATES[SERVICE_KEY_CATERING]?.sell || 0)}`} {...field} value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : String(field.value)} onChange={e => { const val = parseFloat(e.target.value); field.onChange(isNaN(val) ? undefined : val); }}/>
+                        <Input type="number" placeholder={getServicePlaceholder(SERVICE_KEY_CATERING)} {...field} value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : String(field.value)} onChange={e => { const val = parseFloat(e.target.value); field.onChange(isNaN(val) ? undefined : val); }}/>
                       </FormControl> 
                     <FormMessage /> </FormItem> )} />}
 
                     <FormField control={control} name="includeLandingFees" render={({ field }) => ( <FormItem className="flex flex-row items-center space-x-3 space-y-0 p-3 border rounded-md hover:bg-muted/50"> <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl> <div className="space-y-1 leading-none"><FormLabel className="flex items-center gap-2"><Landmark className="h-4 w-4 text-primary" /> {getServiceLabel(SERVICE_KEY_LANDING_FEES, "Include Landing Fees", "Leg")}</FormLabel></div> </FormItem> )} />
                     {includeLandingFees && <FormField control={control} name="sellPriceLandingFeePerLeg" render={({ field }) => (<FormItem className="pl-8"> <FormLabel>Landing Fee Sell Price (per Leg)</FormLabel> 
                       <FormControl>
-                        <Input type="number" placeholder={`Default: ${formatCurrencyLocal(fetchedCompanyProfile?.serviceFeeRates?.[SERVICE_KEY_LANDING_FEES]?.sell || DEFAULT_SERVICE_RATES[SERVICE_KEY_LANDING_FEES]?.sell || 0)}`} {...field} value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : String(field.value)} onChange={e => { const val = parseFloat(e.target.value); field.onChange(isNaN(val) ? undefined : val); }}/>
+                        <Input type="number" placeholder={getServicePlaceholder(SERVICE_KEY_LANDING_FEES)} {...field} value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : String(field.value)} onChange={e => { const val = parseFloat(e.target.value); field.onChange(isNaN(val) ? undefined : val); }}/>
                       </FormControl> 
                     <FormMessage /> </FormItem> )} />}
 
@@ -1185,7 +1200,7 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
                     <FormDescription>Number of overnight stays for crew/aircraft.</FormDescription> <FormMessage /> </FormItem> )} />
                     {Number(currentEstimatedOvernights || 0) > 0 && <FormField control={control} name="sellPriceOvernight" render={({ field }) => (<FormItem className="pl-8"> <FormLabel>Overnight Fee Sell Price (per Night)</FormLabel> 
                       <FormControl>
-                        <Input type="number" placeholder={`Default: ${formatCurrencyLocal(fetchedCompanyProfile?.serviceFeeRates?.[SERVICE_KEY_OVERNIGHT_FEES]?.sell || DEFAULT_SERVICE_RATES[SERVICE_KEY_OVERNIGHT_FEES]?.sell || 0)}`} {...field} value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : String(field.value)} onChange={e => { const val = parseFloat(e.target.value); field.onChange(isNaN(val) ? undefined : val); }}/>
+                        <Input type="number" placeholder={getServicePlaceholder(SERVICE_KEY_OVERNIGHT_FEES)} {...field} value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : String(field.value)} onChange={e => { const val = parseFloat(e.target.value); field.onChange(isNaN(val) ? undefined : val); }}/>
                       </FormControl> 
                     <FormMessage /> </FormItem> )} />}
                 </div>
@@ -1214,7 +1229,7 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
                 onClick={async () => {
                     if (isEditMode) {
                         const currentQuote = await fetchQuoteById({ id: quoteIdToEdit! });
-                        handleSave(currentQuote?.status || "Sent"); // If fetching status fails, default to "Sent"
+                        handleSave(currentQuote?.status || "Sent"); 
                     } else {
                         handleSave("Sent");
                     }
