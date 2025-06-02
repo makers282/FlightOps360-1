@@ -63,6 +63,7 @@ import {
   SidebarMenuBadge
 } from '@/components/ui/sidebar';
 import { Icons } from '@/components/icons';
+import { ClientOnly } from '@/components/client-only';
 
 
 export default function AppLayout({ children }: PropsWithChildren) {
@@ -71,7 +72,7 @@ export default function AppLayout({ children }: PropsWithChildren) {
   return (
     <SidebarProvider defaultOpen>
       <Sidebar collapsible="icon"> 
-        <SidebarHeader className="p-4">
+        <SidebarHeader className="p-2">
           <Link href="/dashboard" className="flex items-center">
             <Icons.Logo className="h-8 w-auto" /> 
           </Link>
@@ -258,7 +259,9 @@ export default function AppLayout({ children }: PropsWithChildren) {
       </Sidebar>
       <SidebarInset>
         <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background/80 px-4 backdrop-blur-sm sm:h-16 sm:px-6">
-          <SidebarTrigger /> 
+          <ClientOnly>
+            <SidebarTrigger /> 
+          </ClientOnly>
           <div className="flex-1">
           </div>
           <DropdownMenu>
