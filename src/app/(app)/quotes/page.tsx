@@ -34,8 +34,10 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { fetchQuotes, deleteQuote, saveQuote } from '@/ai/flows/manage-quotes-flow'; 
-import type { Quote, QuoteLeg, quoteStatuses as QuoteStatusType } from '@/ai/schemas/quote-schemas';
+import type { Quote, QuoteLeg, quoteStatuses as QuoteStatusType, SaveQuoteInput } from '@/ai/schemas/quote-schemas'; // Updated import
 import { quoteStatuses } from '@/ai/schemas/quote-schemas';
+import { saveTrip } from '@/ai/flows/manage-trips-flow'; // Import saveTrip
+import type { SaveTripInput as TripToSave, TripLeg as TripLegType } from '@/ai/schemas/trip-schemas'; // Import Trip types
 import { useToast } from '@/hooks/use-toast';
 import { format, parseISO } from 'date-fns';
 
@@ -124,27 +126,58 @@ export default function AllQuotesPage() {
     if (!quoteToBook) return;
     startBookingTransition(async () => {
       try {
+        // 1. Update the quote status to "Booked"
         const updatedQuoteData: Quote = {
           ...quoteToBook,
           status: "Booked",
         };
-        // The saveQuote flow expects SaveQuoteInput, which omits id, createdAt, updatedAt
-        const { id, createdAt, updatedAt, ...saveData } = updatedQuoteData;
-        const inputForSave: any = saveData; // Cast to any to satisfy schema if necessary, or map explicitly
+        const { id: quoteDocId, createdAt: quoteCreatedAt, updatedAt: quoteUpdatedAt, ...quoteSaveData } = updatedQuoteData;
+        await saveQuote(quoteSaveData as SaveQuoteInput); // Pass as SaveQuoteInput
         
-        await saveQuote(inputForSave as unknown as Parameters<typeof saveQuote>[0]);
+        // 2. Create a new Trip record from the quote
+        const newTripId = `TRP-${quoteToBook.quoteId.replace('QT-', '')}-${Date.now().toString().slice(-4)}`;
+        const tripLegs: TripLegType[] = quoteToBook.legs.map(qLeg => ({
+          origin: qLeg.origin,
+          destination: qLeg.destination,
+          departureDateTime: qLeg.departureDateTime, // Already ISO string or undefined
+          // arrivalDateTime will be calculated or set later
+          legType: qLeg.legType,
+          passengerCount: qLeg.passengerCount,
+          originFbo: qLeg.originFbo,
+          destinationFbo: qLeg.destinationFbo,
+          flightTimeHours: qLeg.flightTimeHours,
+          blockTimeHours: qLeg.calculatedBlockTimeHours,
+        }));
+
+        const tripToSave: TripToSave = {
+          tripId: newTripId,
+          quoteId: quoteToBook.id, // Link to the original quote document ID
+          customerId: quoteToBook.selectedCustomerId,
+          clientName: quoteToBook.clientName,
+          aircraftId: quoteToBook.aircraftId || "UNKNOWN_AC", // Ensure aircraftId is present
+          aircraftLabel: quoteToBook.aircraftLabel,
+          legs: tripLegs,
+          status: "Scheduled", // Initial status for a new trip
+          notes: `Trip created from Quote ${quoteToBook.quoteId}. ${quoteToBook.options.notes || ''}`.trim(),
+          // Timestamps (createdAt, updatedAt) will be set by saveTrip flow
+        };
+
+        await saveTrip(tripToSave);
 
         toast({ 
-            title: "Quote Booked!", 
-            description: `Quote "${quoteToBook.quoteId}" status updated to "Booked". Next step: Schedule this trip.`,
+            title: "Quote Booked & Trip Created!", 
+            description: `Quote "${quoteToBook.quoteId}" is Booked. New Trip ${newTripId} created and scheduled.`,
             variant: "default"
         });
-        console.log(`Placeholder: Quote ${quoteToBook.quoteId} booked. Trigger trip scheduling process here.`);
+        
         setShowBookConfirm(false);
         setQuoteToBook(null);
-        await loadQuotes();
+        await loadQuotes(); // Refresh quotes list
+        // Potentially redirect to trip list or trip details page here if desired
+        // router.push('/trips/list');
+
       } catch (error) {
-        console.error("Failed to book quote:", error);
+        console.error("Failed to book quote and create trip:", error);
         toast({ title: "Error Booking Quote", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
         setShowBookConfirm(false);
         setQuoteToBook(null);
@@ -257,7 +290,7 @@ export default function AllQuotesPage() {
                                 <span className="sr-only">Book Trip</span>
                               </Button>
                             </TooltipTrigger>
-                            <TooltipContent><p>Book Trip</p></TooltipContent>
+                            <TooltipContent><p>Book Trip & Create Schedule Item</p></TooltipContent>
                           </Tooltip>
                         )}
                         <Tooltip>
@@ -334,14 +367,14 @@ export default function AllQuotesPage() {
               <AlertDialogTitle>Confirm Booking</AlertDialogTitle>
               <AlertDialogDescription>
                 Are you sure you want to mark quote "{quoteToBook.quoteId}" for {quoteToBook.clientName} as "Booked"? 
-                This will typically initiate trip scheduling.
+                This will create a new trip record and set its status to "Scheduled".
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel onClick={() => setShowBookConfirm(false)} disabled={isBooking}>Cancel</AlertDialogCancel>
               <Button variant="default" onClick={executeBookQuote} disabled={isBooking} className="bg-green-600 hover:bg-green-700 text-white">
                 {isBooking ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
-                Confirm & Book
+                Confirm & Book Trip
               </Button>
             </AlertDialogFooter>
           </AlertDialogContent>

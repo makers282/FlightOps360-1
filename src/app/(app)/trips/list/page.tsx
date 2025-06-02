@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useMemo, useEffect } from 'react'; // Added useEffect
+import React, { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -16,33 +16,23 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { ListChecks, Search, Eye } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
+import { ListChecks, Search, Eye, Loader2 } from 'lucide-react';
+import { format, parseISO, isValid } from 'date-fns';
+import { fetchTrips, type Trip } from '@/ai/flows/manage-trips-flow'; // Import fetchTrips and Trip type
+import { useToast } from '@/hooks/use-toast'; // Import useToast
 
-// Mock data similar to dashboard for consistency
-const mockTripData = [
-  { id: 'TRP-001', origin: 'KHPN', destination: 'KMIA', aircraft: 'N123AB', status: 'Scheduled', departure: '2024-08-15T10:00:00Z' },
-  { id: 'TRP-002', origin: 'KTEB', destination: 'KSDL', aircraft: 'N456CD', status: 'En Route', departure: '2024-08-14T14:30:00Z' },
-  { id: 'TRP-004', origin: 'KDAL', destination: 'KAPA', aircraft: 'N123AB', status: 'Awaiting Closeout', departure: '2024-08-15T18:00:00Z' },
-  { id: 'TRP-003', origin: 'KLAX', destination: 'KLAS', aircraft: 'N789EF', status: 'Completed', departure: '2024-08-13T09:00:00Z' },
-  { id: 'TRP-005', title: 'N520PW Challenger 300', aircraft: 'N520PW', origin: 'KVNY', destination: 'TXKF', status: 'Scheduled', departure: '2024-10-02T08:00:00Z' },
-  { id: 'TRP-006', title: 'N123MW Gulfstream-G500', aircraft: 'N123MW', origin: 'KSFO', destination: 'KLAS', status: 'Completed', departure: '2024-10-02T10:00:00Z'},
-  { id: 'TRP-007', title: 'N555VP Gulfstream-G650', aircraft: 'N555VP', origin: 'LFPB', destination: 'LKPR', status: 'En Route', departure: '2024-10-08T11:00:00Z'},
-  { id: 'TRP-008', title: 'N345AG Gulfstream-4', aircraft: 'N345AG', origin: 'KDAL', destination: 'KOPF', status: 'Awaiting Closeout', departure: '2024-10-09T10:00:00Z'},
-];
-
-const getStatusBadgeVariant = (status: string): "default" | "secondary" | "outline" | "destructive" => {
-  switch (status.toLowerCase()) {
+const getStatusBadgeVariant = (status?: Trip['status']): "default" | "secondary" | "outline" | "destructive" => {
+  switch (status?.toLowerCase()) {
     case 'completed':
-    case 'available':
+    case 'confirmed': // Assuming 'Confirmed' is a positive status
       return 'default';
     case 'en route':
-    case 'on duty':
       return 'secondary';
     case 'scheduled':
-    case 'awaiting closeout':
+    case 'awaiting closeout': // (If this is a status for trips)
       return 'outline';
     case 'cancelled':
+    case 'diverted': // Assuming 'Diverted' is a problematic status
       return 'destructive';
     default:
       return 'default';
@@ -52,37 +42,63 @@ const getStatusBadgeVariant = (status: string): "default" | "secondary" | "outli
 export default function TripListPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isMounted, setIsMounted] = useState(false);
+  const [trips, setTrips] = useState<Trip[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const { toast } = useToast();
 
   useEffect(() => {
     setIsMounted(true);
-  }, []);
+    const loadTrips = async () => {
+      setIsLoading(true);
+      try {
+        const fetchedTrips = await fetchTrips();
+        setTrips(fetchedTrips);
+      } catch (error) {
+        console.error("Failed to load trips:", error);
+        toast({ title: "Error Loading Trips", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadTrips();
+  }, [toast]);
 
   const filteredTrips = useMemo(() => {
-    if (!searchTerm) return mockTripData;
+    if (!searchTerm) return trips;
     const lowerSearchTerm = searchTerm.toLowerCase();
-    return mockTripData.filter(trip => 
-      trip.id.toLowerCase().includes(lowerSearchTerm) ||
-      trip.origin.toLowerCase().includes(lowerSearchTerm) ||
-      trip.destination.toLowerCase().includes(lowerSearchTerm) ||
-      trip.aircraft.toLowerCase().includes(lowerSearchTerm) ||
-      trip.status.toLowerCase().includes(lowerSearchTerm)
+    return trips.filter(trip => 
+      (trip.tripId && trip.tripId.toLowerCase().includes(lowerSearchTerm)) ||
+      (trip.clientName && trip.clientName.toLowerCase().includes(lowerSearchTerm)) ||
+      (trip.aircraftLabel && trip.aircraftLabel.toLowerCase().includes(lowerSearchTerm)) ||
+      (trip.status && trip.status.toLowerCase().includes(lowerSearchTerm)) ||
+      (trip.legs && trip.legs.length > 0 && 
+        `${trip.legs[0].origin || 'N/A'} -> ${trip.legs[trip.legs.length - 1].destination || 'N/A'}`.toLowerCase().includes(lowerSearchTerm))
     );
-  }, [searchTerm]);
+  }, [searchTerm, trips]);
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return 'N/A';
     try {
-      return format(parseISO(dateString), 'MM/dd/yyyy HH:mm zz');
+      const date = parseISO(dateString);
+      return isValid(date) ? format(date, 'MM/dd/yyyy HH:mm zz') : 'Invalid Date';
     } catch (e) {
-      return 'Invalid Date';
+      return 'Invalid Date Format';
     }
+  };
+  
+  const getRouteDisplay = (legs: Trip['legs']) => {
+    if (!legs || legs.length === 0) return 'N/A';
+    const origin = legs[0].origin || 'UNK';
+    const destination = legs[legs.length - 1].destination || 'UNK';
+    if (legs.length === 1) return `${origin} -> ${destination}`;
+    return `${origin} -> ... -> ${destination} (${legs.length} legs)`;
   };
 
   return (
     <>
       <PageHeader
         title="Trip List View"
-        description="View all trips in a filterable and sortable list format."
+        description="View all trips in a filterable and sortable list format. Data from Firestore."
         icon={ListChecks}
       />
       <Card className="shadow-lg">
@@ -92,54 +108,65 @@ export default function TripListPage() {
           <div className="mt-4 relative">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input 
-              placeholder="Search trips (ID, route, aircraft, status)..." 
+              placeholder="Search trips (ID, client, route, aircraft, status)..." 
               className="pl-8 w-full md:w-1/2 lg:w-1/3"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
+              disabled={isLoading}
             />
           </div>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Trip ID</TableHead>
-                <TableHead>Route</TableHead>
-                <TableHead>Aircraft</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Departure</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredTrips.length === 0 ? (
+          {isLoading ? (
+            <div className="flex items-center justify-center py-10">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <p className="ml-2 text-muted-foreground">Loading trips from Firestore...</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-10">
-                    No trips found{searchTerm ? " matching your search" : ""}.
-                  </TableCell>
+                  <TableHead>Trip ID</TableHead>
+                  <TableHead>Client</TableHead>
+                  <TableHead>Route</TableHead>
+                  <TableHead>Aircraft</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Departure (First Leg)</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
-              ) : (
-                filteredTrips.map((trip) => (
-                  <TableRow key={trip.id}>
-                    <TableCell className="font-medium">{trip.id}</TableCell>
-                    <TableCell>{trip.origin} &rarr; {trip.destination}</TableCell>
-                    <TableCell>{trip.aircraft}</TableCell>
-                    <TableCell>
-                      <Badge variant={getStatusBadgeVariant(trip.status)}>{trip.status}</Badge>
-                    </TableCell>
-                    <TableCell>{isMounted ? formatDate(trip.departure) : "Loading..."}</TableCell>
-                    <TableCell className="text-right">
-                      <Button variant="ghost" size="sm" asChild>
-                        <Link href={`/trips/details/${trip.id}`}> 
-                          <Eye className="mr-2 h-4 w-4" /> View
-                        </Link>
-                      </Button>
+              </TableHeader>
+              <TableBody>
+                {filteredTrips.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center text-muted-foreground py-10">
+                      No trips found{searchTerm && trips.length > 0 ? " matching your search" : (trips.length === 0 ? ". No trips in the system yet." : "")}.
                     </TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                ) : (
+                  filteredTrips.map((trip) => (
+                    <TableRow key={trip.id}>
+                      <TableCell className="font-medium">{trip.tripId || trip.id}</TableCell>
+                      <TableCell>{trip.clientName || 'N/A'}</TableCell>
+                      <TableCell>{getRouteDisplay(trip.legs)}</TableCell>
+                      <TableCell>{trip.aircraftLabel || trip.aircraftId}</TableCell>
+                      <TableCell>
+                        <Badge variant={getStatusBadgeVariant(trip.status)}>{trip.status}</Badge>
+                      </TableCell>
+                      <TableCell>{isMounted ? formatDate(trip.legs?.[0]?.departureDateTime) : "Loading..."}</TableCell>
+                      <TableCell className="text-right">
+                        <Button variant="ghost" size="sm" asChild disabled> {/* Link to trip details page later */}
+                          <span className="cursor-not-allowed"><Eye className="mr-2 h-4 w-4" /> View</span>
+                          {/* <Link href={`/trips/details/${trip.id}`}> 
+                            <Eye className="mr-2 h-4 w-4" /> View
+                          </Link> */}
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
     </>
