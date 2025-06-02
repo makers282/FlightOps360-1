@@ -18,15 +18,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow'; 
+import { fetchTrips, type Trip, type TripStatus } from '@/ai/flows/manage-trips-flow';
 import { useToast } from '@/hooks/use-toast'; 
-
-// Static data for sections not yet dynamic
-const tripData = [
-  { id: 'TRP-001', origin: 'KHPN', destination: 'KMIA', aircraft: 'N123AB', status: 'Scheduled', departure: '2024-08-15 10:00 EDT' },
-  { id: 'TRP-002', origin: 'KTEB', destination: 'KSDL', aircraft: 'N456CD', status: 'En Route', departure: '2024-08-14 14:30 EDT' },
-  { id: 'TRP-004', origin: 'KDAL', destination: 'KAPA', aircraft: 'N123AB', status: 'Awaiting Closeout', departure: '2024-08-15 18:00 CDT' },
-  { id: 'TRP-003', origin: 'KLAX', destination: 'KLAS', aircraft: 'N789EF', status: 'Completed', departure: '2024-08-13 09:00 PDT' },
-];
+import { format, parseISO, isValid } from 'date-fns';
 
 const bulletinData = [
   { id: 'B001', title: 'Upcoming System Maintenance', message: 'Scheduled maintenance on Sunday at 02:00 UTC. Expect brief downtime.', date: '2024-08-20', type: 'warning' as 'info' | 'warning' | 'critical' },
@@ -41,12 +35,13 @@ const crewAlertData = [
 ];
 
 
-const getStatusBadgeVariant = (status: string) => {
-  switch (status.toLowerCase()) {
+const getStatusBadgeVariant = (status?: TripStatus | 'Active' | 'Needs Review'): "default" | "secondary" | "outline" | "destructive" => {
+  switch (status?.toLowerCase()) {
     case 'available':
     case 'completed':
     case 'off duty':
-    case 'active': // Added for aircraft status
+    case 'active':
+    case 'confirmed':
       return 'default';
     case 'in flight':
     case 'en route':
@@ -56,8 +51,11 @@ const getStatusBadgeVariant = (status: string) => {
     case 'scheduled':
     case 'awaiting closeout':
     case 'standby':
-    case 'needs review': // Added for aircraft status
+    case 'needs review':
       return 'outline';
+    case 'cancelled':
+    case 'diverted':
+      return 'destructive';
     default:
       return 'default';
   }
@@ -88,17 +86,18 @@ const getAlertIcon = (alert: typeof crewAlertData[0]) => {
 export default function DashboardPage() {
   const [aircraftList, setAircraftList] = useState<FleetAircraft[]>([]);
   const [isLoadingAircraft, setIsLoadingAircraft] = useState(true);
+  const [dashboardTrips, setDashboardTrips] = useState<Trip[]>([]);
+  const [isLoadingTrips, setIsLoadingTrips] = useState(true);
   const { toast } = useToast();
 
   useEffect(() => {
     let isMounted = true; 
     const loadAircraft = async () => {
-      // No need to set isLoadingAircraft to true here, it's true by default.
+      setIsLoadingAircraft(true);
       try {
         const fleet = await fetchFleetAircraft();
         if (isMounted) {
           setAircraftList(fleet);
-          setIsLoadingAircraft(false); 
         }
       } catch (error) {
         if (isMounted) {
@@ -108,17 +107,63 @@ export default function DashboardPage() {
             description: "Could not fetch aircraft status for the dashboard.",
             variant: "destructive",
           });
-          setIsLoadingAircraft(false); 
         }
+      } finally {
+        if (isMounted) setIsLoadingAircraft(false); 
+      }
+    };
+
+    const loadTrips = async () => {
+      setIsLoadingTrips(true);
+      try {
+        const fetchedTrips = await fetchTrips();
+        if (isMounted) {
+          // Sort trips by departure date (most recent first) and take top 5
+          const sortedTrips = fetchedTrips.sort((a, b) => {
+            const dateA = a.legs?.[0]?.departureDateTime ? parseISO(a.legs[0].departureDateTime).getTime() : 0;
+            const dateB = b.legs?.[0]?.departureDateTime ? parseISO(b.legs[0].departureDateTime).getTime() : 0;
+            return dateB - dateA;
+          });
+          setDashboardTrips(sortedTrips.slice(0, 5));
+        }
+      } catch (error) {
+        if (isMounted) {
+          console.error("Failed to load trips for dashboard:", error);
+          toast({
+            title: "Error Loading Trips",
+            description: "Could not fetch trip data for the dashboard.",
+            variant: "destructive",
+          });
+        }
+      } finally {
+        if (isMounted) setIsLoadingTrips(false);
       }
     };
 
     loadAircraft();
+    loadTrips();
 
     return () => {
-      isMounted = false; // Set to false when the component unmounts
+      isMounted = false; 
     };
-  }, []); // Empty dependency array to run once on mount
+  }, [toast]);
+
+  const getRouteDisplay = (legs: Trip['legs']) => {
+    if (!legs || legs.length === 0) return 'N/A';
+    const origin = legs[0].origin || 'UNK';
+    const destination = legs[legs.length - 1].destination || 'UNK';
+    return `${origin} -> ${destination}`;
+  };
+
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return 'N/A';
+    try {
+      const date = parseISO(dateString);
+      return isValid(date) ? format(date, 'MM/dd HH:mm zz') : 'Invalid Date';
+    } catch (e) {
+      return 'Invalid Date Format';
+    }
+  };
 
   return (
     <>
@@ -150,9 +195,17 @@ export default function DashboardPage() {
       <Card className="md:col-span-2 lg:col-span-3 mb-6">
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><Milestone className="h-5 w-5 text-primary" />Trip Status</CardTitle>
-            <CardDescription>Overview of current and upcoming trips. (Static Data)</CardDescription>
+            <CardDescription>Overview of recent and upcoming trips.</CardDescription>
           </CardHeader>
           <CardContent>
+            {isLoadingTrips ? (
+               <div className="flex items-center justify-center py-10">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                <p className="ml-2 text-muted-foreground">Loading trip data...</p>
+              </div>
+            ) : dashboardTrips.length === 0 ? (
+              <p className="text-muted-foreground text-center py-5">No trips to display.</p>
+            ) : (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -160,21 +213,22 @@ export default function DashboardPage() {
                   <TableHead>Route</TableHead>
                   <TableHead>Aircraft</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Departure</TableHead>
+                  <TableHead>Departure (First Leg)</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {tripData.map((trip) => (
+                {dashboardTrips.map((trip) => (
                   <TableRow key={trip.id}>
-                    <TableCell className="font-medium">{trip.id}</TableCell>
-                    <TableCell>{trip.origin} &rarr; {trip.destination}</TableCell>
-                    <TableCell>{trip.aircraft}</TableCell>
+                    <TableCell className="font-medium">{trip.tripId || trip.id}</TableCell>
+                    <TableCell>{getRouteDisplay(trip.legs)}</TableCell>
+                    <TableCell>{trip.aircraftLabel || trip.aircraftId}</TableCell>
                     <TableCell><Badge variant={getStatusBadgeVariant(trip.status)}>{trip.status}</Badge></TableCell>
-                    <TableCell>{trip.departure}</TableCell>
+                    <TableCell>{formatDate(trip.legs?.[0]?.departureDateTime)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
+            )}
           </CardContent>
         </Card>
 

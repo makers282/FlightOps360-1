@@ -3,16 +3,18 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { PageHeader } from '@/components/page-header';
-import { Calendar as CalendarIconLucide, Plane } from 'lucide-react';
+import { Calendar as CalendarIconLucide, Plane, Loader2 } from 'lucide-react';
 import { Calendar as ShadcnCalendar } from "@/components/ui/calendar";
 import type { DayProps } from "react-day-picker";
 import { Card, CardContent, CardHeader, CardDescription } from '@/components/ui/card';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import Link from 'next/link';
 import { cn } from "@/lib/utils";
-import { format, isSameDay, parseISO, startOfDay, endOfDay, isToday } from 'date-fns';
+import { format, isSameDay, parseISO, startOfDay, endOfDay, isToday, addHours } from 'date-fns';
 import { buttonVariants } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { fetchTrips, type Trip, type TripStatus } from '@/ai/flows/manage-trips-flow';
+import { useToast } from '@/hooks/use-toast';
 
 interface CalendarEvent {
   id: string;
@@ -25,54 +27,34 @@ interface CalendarEvent {
   color: string; 
   textColor: string; 
   description?: string;
+  status?: TripStatus;
 }
 
-// Mock data removed
-const mockTripData: Omit<CalendarEvent, 'type' | 'color' | 'textColor' | 'description'>[] = [];
 
-const mockMaintenanceData: Omit<CalendarEvent, 'type' | 'color' | 'textColor' | 'description' | 'route'>[] = [];
+const getTripEventColor = (status?: TripStatus): { color: string, textColor: string } => {
+  switch (status?.toLowerCase()) {
+    case 'scheduled': return { color: 'bg-blue-500', textColor: 'text-white' };
+    case 'confirmed': return { color: 'bg-green-600', textColor: 'text-white' };
+    case 'en route': return { color: 'bg-indigo-600', textColor: 'text-white' };
+    case 'completed': return { color: 'bg-gray-500', textColor: 'text-white' };
+    case 'cancelled':
+    case 'diverted':
+      return { color: 'bg-red-600', textColor: 'text-white' };
+    default: return { color: 'bg-sky-600', textColor: 'text-white' };
+  }
+};
 
-const allEvents: CalendarEvent[] = [
-  ...mockTripData.map(trip => ({ 
-    ...trip, 
-    type: 'trip' as const, 
-    color: trip.aircraft === 'N520PW' ? 'bg-cyan-500' : 
-           trip.aircraft === 'N123MW' ? 'bg-blue-600' : 
-           trip.aircraft === 'N555VP' ? 'bg-red-600' : 
-           trip.aircraft === 'N345AG' ? 'bg-neutral-800' : 
-           trip.aircraft === 'N170SCC' ? 'bg-lime-500' : 'bg-sky-600',
-    textColor: trip.aircraft === 'N345AG' ? 'text-white' :
-               trip.aircraft === 'N170SCC' ? 'text-black':
-               'text-white', 
-    description: `Trip for ${trip.aircraft}: ${trip.route}. Departs ${format(trip.start, 'Pp')}, Returns ${format(trip.end, 'Pp')}.` 
-  })),
-  ...mockMaintenanceData.map(mx => ({ 
-    ...mx, 
-    type: 'maintenance' as const, 
-    color: 'bg-yellow-500', 
-    textColor: 'text-yellow-950', 
-    description: `Maintenance for ${mx.aircraft}: ${mx.title}. From ${format(mx.start, 'Pp')} to ${format(mx.end, 'Pp')}.` 
-  })),
-];
-
-function CustomDay(props: DayProps) {
-  const { date, displayMonth } = props;
+function CustomDay({ date, displayMonth, eventsForDay }: DayProps & { eventsForDay: CalendarEvent[] }) {
   const isCurrentMonth = date.getMonth() === displayMonth.getMonth();
 
   if (!isCurrentMonth) {
     return <div className="h-full w-full" />;
   }
 
-  const eventsForDay = useMemo(() => {
-    const currentDayStart = startOfDay(date); 
-    const currentDayEnd = endOfDay(date);     
-
-    return allEvents
-      .filter(event => {
-        return event.start < currentDayEnd && event.end > currentDayStart;
-      })
-      .sort((a, b) => a.start.getTime() - b.start.getTime());
-  }, [date]);
+  // Events are pre-filtered and passed in
+  const dayEvents = useMemo(() => {
+    return eventsForDay.sort((a, b) => a.start.getTime() - b.start.getTime());
+  }, [eventsForDay]);
 
   return (
     <div className={cn("relative h-full w-full flex flex-col p-1")}>
@@ -82,9 +64,9 @@ function CustomDay(props: DayProps) {
       )}>
         {format(date, "d")}
       </time>
-      {eventsForDay.length > 0 && (
+      {dayEvents.length > 0 && (
         <div className="space-y-px mt-0.5 overflow-y-auto flex-grow max-h-[calc(100%-1rem)] sm:max-h-[calc(100%-1.25rem)] pr-0.5">
-          {eventsForDay.map(event => (
+          {dayEvents.map(event => (
             <TooltipProvider key={event.id} delayDuration={100}>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -99,7 +81,7 @@ function CustomDay(props: DayProps) {
                   </Link>
                 </TooltipTrigger>
                 <TooltipContent side="top" align="center" className="max-w-xs p-2 bg-popover text-popover-foreground border shadow-md rounded-md text-xs">
-                  <p className="font-semibold">{event.title}</p>
+                  <p className="font-semibold">{event.title} {event.status && <span className="text-muted-foreground">({event.status})</span>}</p>
                   {event.route && <p>Route: {event.route}</p>}
                   <p className="text-muted-foreground">
                     {format(event.start, 'MMM d, H:mm zz')} - {format(event.end, 'MMM d, H:mm zz')}
@@ -116,15 +98,110 @@ function CustomDay(props: DayProps) {
 }
 
 export default function TripCalendarPage() {
-  const [currentMonth, setCurrentMonth] = useState<Date | undefined>(undefined);
+  const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
   const [isClientReady, setIsClientReady] = useState(false);
+  const [allEvents, setAllEvents] = useState<CalendarEvent[]>([]);
+  const [isLoadingTrips, setIsLoadingTrips] = useState(true);
+  const { toast } = useToast();
 
   useEffect(() => {
-    setCurrentMonth(new Date()); // Default to current month
     setIsClientReady(true);
-  }, []);
+    const loadTrips = async () => {
+      setIsLoadingTrips(true);
+      try {
+        const fetchedTrips = await fetchTrips();
+        const calendarEvents: CalendarEvent[] = fetchedTrips.map(trip => {
+          let startDate: Date | null = null;
+          let endDate: Date | null = null;
+          let route = "N/A";
 
-  if (!isClientReady) {
+          if (trip.legs && trip.legs.length > 0) {
+            const firstLeg = trip.legs[0];
+            const lastLeg = trip.legs[trip.legs.length - 1];
+            route = `${firstLeg.origin || 'UNK'} -> ${lastLeg.destination || 'UNK'}`;
+
+            if (firstLeg.departureDateTime && isValidISO(firstLeg.departureDateTime)) {
+              startDate = parseISO(firstLeg.departureDateTime);
+            }
+            
+            if (lastLeg.arrivalDateTime && isValidISO(lastLeg.arrivalDateTime)) {
+              endDate = parseISO(lastLeg.arrivalDateTime);
+            } else if (startDate && lastLeg.blockTimeHours && lastLeg.blockTimeHours > 0) {
+              const lastLegStart = (lastLeg.departureDateTime && isValidISO(lastLeg.departureDateTime)) ? parseISO(lastLeg.departureDateTime) : startDate; // Best guess for last leg start
+              endDate = addHours(lastLegStart, lastLeg.blockTimeHours);
+            } else if (startDate) {
+              endDate = addHours(startDate, trip.legs.reduce((sum, leg) => sum + (leg.blockTimeHours || 2), 0) ); // Default to 2hr per leg if block time missing
+            }
+          }
+          
+          // Fallback if dates couldn't be determined
+          if (!startDate) startDate = new Date(); // Should not happen if trips have legs
+          if (!endDate) endDate = addHours(startDate, 2);
+
+
+          const { color, textColor } = getTripEventColor(trip.status);
+
+          return {
+            id: trip.id,
+            title: trip.tripId,
+            start: startDate,
+            end: endDate,
+            type: 'trip',
+            aircraft: trip.aircraftLabel || trip.aircraftId,
+            route: route,
+            color,
+            textColor,
+            description: `Trip for ${trip.clientName} on ${trip.aircraftLabel || trip.aircraftId}. Status: ${trip.status}.`,
+            status: trip.status
+          };
+        });
+        setAllEvents(calendarEvents);
+      } catch (error) {
+        console.error("Failed to load trips for calendar:", error);
+        toast({ title: "Error Loading Trips", description: (error instanceof Error ? error.message : "Failed to fetch trip data."), variant: "destructive"});
+      } finally {
+        setIsLoadingTrips(false);
+      }
+    };
+    loadTrips();
+  }, [toast]);
+
+  const isValidISO = (dateString?: string): boolean => {
+    if (!dateString) return false;
+    return isValid(parseISO(dateString));
+  };
+  
+  const eventsByDay = useMemo(() => {
+    const map = new Map<string, CalendarEvent[]>();
+    allEvents.forEach(event => {
+      const dayKey = format(startOfDay(event.start), "yyyy-MM-dd");
+      if (!map.has(dayKey)) {
+        map.set(dayKey, []);
+      }
+      map.get(dayKey)!.push(event);
+
+      // For multi-day events, add to subsequent days as well (simplified)
+      let current = startOfDay(addHours(event.start, 24)); // Check next day
+      const endOfEvent = endOfDay(event.end);
+      while(current <= endOfEvent) {
+        const multiDayKey = format(current, "yyyy-MM-dd");
+        if(!isSameDay(event.start, current)){ // Don't add to start day again
+             if (!map.has(multiDayKey)) {
+                map.set(multiDayKey, []);
+            }
+            // Only add if not already added via its own start date
+            if (!map.get(multiDayKey)!.find(e => e.id === event.id)) {
+                map.get(multiDayKey)!.push(event);
+            }
+        }
+        current = startOfDay(addHours(current, 24));
+      }
+    });
+    return map;
+  }, [allEvents]);
+
+
+  if (!isClientReady || isLoadingTrips) {
     return (
       <>
         <PageHeader
@@ -134,8 +211,9 @@ export default function TripCalendarPage() {
         />
         <Card className="shadow-xl border-border/50">
           <CardHeader className="border-b py-3 px-4">
-            <CardDescription>
-              Loading calendar...
+            <CardDescription className="flex items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading calendar and trip data...
             </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
@@ -156,7 +234,7 @@ export default function TripCalendarPage() {
       <Card className="shadow-xl border-border/50">
         <CardHeader className="border-b py-3 px-4">
           <CardDescription>
-            Calendar is ready. Event data will be loaded from Firestore in a future update.
+            Displaying trips from Firestore. Maintenance events will be added later.
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
@@ -175,16 +253,13 @@ export default function TripCalendarPage() {
                     "w-[calc(100%/7)]" 
                 ),
                 row: "flex w-full", 
-
                 cell: cn(
                     "p-0 m-0 text-left align-top relative", 
                     "h-24 min-h-[6rem] sm:h-28 sm:min-h-[7rem] md:h-32 md:min-h-[8rem] lg:h-36 lg:min-h-[9rem] xl:h-40 xl:min-h-[10rem]", 
                     "border-r border-b border-border/30", 
                     "w-[calc(100%/7)]" 
                 ),
-                
                 day_disabled: "opacity-50 pointer-events-none",
-                
                 caption: "flex justify-center items-center py-2.5 relative gap-x-1 px-2",
                 caption_label: "text-sm font-medium px-2", 
                 nav_button: cn(buttonVariants({ variant: "outline" }), "h-7 w-7 bg-transparent p-0 opacity-80 hover:opacity-100"),
@@ -192,7 +267,10 @@ export default function TripCalendarPage() {
                 nav_button_next: "absolute right-1",
             }}
             components={{
-              Day: CustomDay,
+              Day: (dayProps) => {
+                const dayKey = format(startOfDay(dayProps.date), "yyyy-MM-dd");
+                return <CustomDay {...dayProps} eventsForDay={eventsByDay.get(dayKey) || []} />;
+              },
             }}
             showOutsideDays={false}
             numberOfMonths={1}
