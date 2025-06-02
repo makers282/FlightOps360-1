@@ -1,4 +1,3 @@
-
 // src/app/(app)/trips/edit/[tripId]/components/trip-form.tsx
 'use client';
 
@@ -59,7 +58,7 @@ const TripFormSchema = z.object({
 export type FullTripFormData = z.infer<typeof TripFormSchema>;
 
 interface TripFormProps {
-  initialTripData?: any | null;
+  initialTripData?: any | null; // Consider using a more specific type if available after full setup
   isEditMode: boolean;
   onSave: (data: FullTripFormData) => Promise<void>; 
   isSaving: boolean; 
@@ -110,7 +109,7 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving }: Trip
 
   const { setValue, control, getValues, trigger, watch } = form;
 
-  const { fields, append, remove } = useFieldArray({ // Removed 'replace' as it's not used
+  const { fields, append, remove } = useFieldArray({
     control,
     name: "legs",
   });
@@ -260,7 +259,7 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving }: Trip
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               {isEditMode ? <Edit3 className="h-6 w-6 text-primary" /> : <Plane className="h-6 w-6 text-primary" />}
-              {isEditMode ? `Edit Trip (ID: ${initialTripData?.tripId || 'N/A'})` : 'Create New Trip'}
+              {isEditMode ? `Edit Trip (ID: ${getValues('tripId') || initialTripData?.tripId || 'N/A'})` : 'Create New Trip'}
             </CardTitle>
             <CardDescription>
               {isEditMode ? 'Modify the details for this trip.' : 'Enter the details below to schedule a new trip.'}
