@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardDescription } from '@/components/ui/
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import Link from 'next/link';
 import { cn } from "@/lib/utils";
-import { format, isSameDay, parseISO, startOfDay, endOfDay, isToday, addHours, isValid, addDays } from 'date-fns';
+import { format, isSameDay, parseISO, startOfDay, endOfDay, isToday, addHours, isValid, addDays, isBefore, isAfter } from 'date-fns';
 import { buttonVariants } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { fetchTrips, type Trip, type TripStatus } from '@/ai/flows/manage-trips-flow';
@@ -57,59 +57,66 @@ function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
   }, [eventsForDay]);
 
   return (
-    <div className="h-full w-full flex flex-col"> {/* CustomDay root takes full cell height */}
-      {/* Day number: positioned absolutely within the cell to not affect flow of events */}
-      <div className="absolute top-0.5 right-0.5 z-20"> {/* z-20 to be above event bars */}
+    <div className="h-full w-full flex flex-col"> {/* Root container for the day cell */}
+      {/* Day Number Section */}
+      <div className="flex justify-end p-0.5"> {/* Aligns day number to the right, minimal padding */}
         <time
           dateTime={format(date, "yyyy-MM-dd")}
           className={cn(
-            "text-xs px-1", // Minimal padding for the number itself
-            isToday(date) && "text-primary font-bold rounded-full bg-primary/10 size-5 flex items-center justify-center"
+            "text-xs", // Base styling for the day number
+            isToday(date) 
+              ? "text-primary font-bold rounded-full bg-primary/10 size-5 flex items-center justify-center" // "Today" styling
+              : "px-1" // Padding for non-today numbers
           )}
         >
           {format(date, "d")}
         </time>
       </div>
 
-      {/* Events container: takes full cell space, events are layered under day number if they overlap */}
+      {/* Events Section */}
       {dayEvents.length > 0 && (
-        <div className="flex-1 flex flex-col gap-px pt-5"> {/* pt-5 to leave space for absolute positioned day number */}
+        // This container takes remaining space and handles overflow if too many events.
+        // p-px ensures negative margins on children don't cause scrollbars on this container.
+        <div className="flex-1 flex flex-col gap-px overflow-hidden p-px"> 
           {dayEvents.map(event => {
             const mapKey = `${event.id}-${format(date, "yyyy-MM-dd")}`;
+            
+            const currentDayStart = startOfDay(date);
+            const currentDayEnd = endOfDay(date);
 
-            const isActualEventStartDay = isSameDay(date, event.start);
-            const isActualEventEndDay = isSameDay(date, event.end);
-            const eventStartedBeforeCell = event.start < startOfDay(date);
-            const eventEndsAfterCell = event.end > endOfDay(date);
+            const eventIsActuallyStartingInCell = isSameDay(event.start, date);
+            const eventIsActuallyEndingInCell = isSameDay(event.end, date);
+            
+            const eventStartedBeforeCell = isBefore(event.start, currentDayStart);
+            const eventEndsAfterCell = isAfter(event.end, currentDayEnd);
 
-            let borderRadiusClasses = "";
-            let marginClasses = "";
+            let borderRadiusClasses = "rounded-sm"; // Default: fully contained or fallback
+            let marginClasses = ""; // Default: no specific margins
 
-            if (isActualEventStartDay && isActualEventEndDay) {
-              borderRadiusClasses = "rounded-sm"; // Starts and ends in this cell
-            } else if (isActualEventStartDay && eventEndsAfterCell) {
-              borderRadiusClasses = "rounded-l-sm rounded-r-none"; // Starts here, continues
-              marginClasses = "mr-[-1px] relative z-10";
-            } else if (eventStartedBeforeCell && isActualEventEndDay) {
-              borderRadiusClasses = "rounded-r-sm rounded-l-none"; // Started before, ends here
-              marginClasses = "ml-[-1px] relative z-10";
-            } else if (eventStartedBeforeCell && eventEndsAfterCell) {
-              borderRadiusClasses = "rounded-none"; // Middle segment
-              marginClasses = "mx-[-1px] relative z-10";
-            } else {
-              // Fallback, treat as contained if logic doesn't perfectly align (e.g., very short event at cell boundary)
+            if (eventIsActuallyStartingInCell && eventEndsAfterCell) { // Starts here, continues
+              borderRadiusClasses = "rounded-l-sm rounded-r-none";
+              marginClasses = "mr-[-1px]";
+            } else if (eventStartedBeforeCell && eventIsActuallyEndingInCell) { // Started before, ends here
+              borderRadiusClasses = "rounded-r-sm rounded-l-none";
+              marginClasses = "ml-[-1px]";
+            } else if (eventStartedBeforeCell && eventEndsAfterCell) { // Middle segment
+              borderRadiusClasses = "rounded-none";
+              marginClasses = "mx-[-1px]";
+            } else if (eventIsActuallyStartingInCell && eventIsActuallyEndingInCell) { // Starts and ends in this cell
               borderRadiusClasses = "rounded-sm";
             }
-            
-            const displayTitle = isActualEventStartDay;
-            const showPaddingForText = displayTitle; // Only pad text on the first segment
+            // Else: default to rounded-sm, likely a single-day representation in this cell
+
+            const displayTitle = eventIsActuallyStartingInCell;
+            const showPaddingForText = displayTitle;
 
             const eventBarDivClasses = cn(
               "h-full w-full text-[0.55rem] sm:text-[0.6rem] flex items-center hover:opacity-90",
               event.color,
               event.textColor,
               borderRadiusClasses,
-              marginClasses
+              marginClasses,
+              "relative z-10" // Ensure event bar is above cell borders if it bleeds
             );
 
             return (
@@ -119,7 +126,7 @@ function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
                     <Link href={`/trips/details/${event.id}`} className="block h-full w-full">
                       <div className={eventBarDivClasses}>
                         <span className={cn(
-                            "w-full overflow-hidden whitespace-nowrap",
+                            "w-full overflow-hidden whitespace-nowrap truncate", // Added truncate
                             showPaddingForText ? "px-0.5 sm:px-1" : "" 
                         )}>
                           {displayTitle ? event.title : <>&nbsp;</>}
@@ -172,16 +179,22 @@ export default function TripCalendarPage() {
               startDate = parseISO(firstLeg.departureDateTime);
             }
             
+            // Try to get end date from last leg's arrival or estimate
+            let lastLegDeparture: Date | null = null;
+            if (lastLeg.departureDateTime && isValidISO(lastLeg.departureDateTime)) {
+                lastLegDeparture = parseISO(lastLeg.departureDateTime);
+            }
+
             if (lastLeg.arrivalDateTime && isValidISO(lastLeg.arrivalDateTime)) {
               endDate = parseISO(lastLeg.arrivalDateTime);
-            } else if (isValidISO(lastLeg.departureDateTime) && lastLeg.blockTimeHours && lastLeg.blockTimeHours > 0) {
-              endDate = addHours(parseISO(lastLeg.departureDateTime!), lastLeg.blockTimeHours);
-            } else if (startDate) { 
+            } else if (lastLegDeparture && lastLeg.blockTimeHours && lastLeg.blockTimeHours > 0) {
+              endDate = addHours(lastLegDeparture, lastLeg.blockTimeHours);
+            } else if (startDate) { // Fallback: estimate based on total block time from start
               let totalBlockTimeForEndDate = 0;
               trip.legs.forEach(leg => {
                 totalBlockTimeForEndDate += (leg.blockTimeHours || (leg.flightTimeHours ? leg.flightTimeHours + 0.5 : 1)); 
               });
-              endDate = addHours(startDate, totalBlockTimeForEndDate > 0 ? totalBlockTimeForEndDate : 2); // Min 2 hour duration
+              endDate = addHours(startDate, totalBlockTimeForEndDate > 0 ? totalBlockTimeForEndDate : 2);
             }
           }
           
@@ -189,11 +202,11 @@ export default function TripCalendarPage() {
             startDate = new Date(); 
             console.warn(`Trip ${trip.id} missing valid start date, defaulting to now.`);
           }
+          // Ensure end date is always after start date with a minimum duration
           if (!endDate || endDate <= startDate) { 
-            let cumulativeBlockTime = (trip.legs || []).reduce((sum, leg) => sum + (leg.blockTimeHours || (leg.flightTimeHours ? leg.flightTimeHours + 0.5 : 1)), 0);
-            endDate = addHours(startDate, Math.max(2, cumulativeBlockTime)); // Ensure at least 2h, use calculated if longer
-            if (endDate <= startDate) endDate = addHours(startDate, 2); // Absolute fallback
+            endDate = addHours(startDate, 2); // Min 2 hour duration if end date is invalid or before start
           }
+
 
           const { color, textColor } = getTripEventColor(trip.status);
 
@@ -231,7 +244,6 @@ export default function TripCalendarPage() {
     const map = new Map<string, CalendarEvent[]>();
     allEvents.forEach(event => {
       if (!event.start || !event.end || !isValid(event.start) || !isValid(event.end)) {
-        console.warn(`Skipping event ${event.id} due to invalid start/end dates`);
         return;
       }
       let currentDayIter = startOfDay(event.start);
@@ -242,9 +254,10 @@ export default function TripCalendarPage() {
         if (!map.has(dayKey)) {
           map.set(dayKey, []);
         }
-        // Ensure event is added only once per day to avoid duplicates if logic overlaps
-        if (!map.get(dayKey)!.find(e => e.id === event.id)) {
-            map.get(dayKey)!.push(event);
+        
+        const dayEvents = map.get(dayKey)!;
+        if (!dayEvents.find(e => e.id === event.id)) { // Ensure event is added only once per day
+            dayEvents.push(event);
         }
         currentDayIter = addDays(currentDayIter, 1);
       }
