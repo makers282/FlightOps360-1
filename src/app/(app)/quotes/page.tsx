@@ -5,7 +5,7 @@ import React, { useState, useEffect, useTransition } from 'react';
 import Link from 'next/link';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { FileArchive, PlusCircle, Edit3, Trash2, Search, Eye, Loader2, CheckCircle, CalendarPlus, Edit } from 'lucide-react'; // Added Edit
+import { FileArchive, PlusCircle, Edit3, Trash2, Search, Eye, Loader2, CheckCircle, CalendarPlus, Edit } from 'lucide-react'; 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -64,6 +64,7 @@ const getStatusBadgeVariant = (status?: typeof QuoteStatusType[number]): "defaul
       return 'outline'; 
     case 'expired':
     case 'rejected': 
+    case 'cancelled': // Added cancelled here for badge variant consistency
       return 'destructive'; 
     default: return 'outline';
   }
@@ -184,7 +185,7 @@ export default function AllQuotesPage() {
           ...quoteToProcess,
           status: newStatusForQuote,
         };
-        // Firestore functions expect data without id, createdAt, updatedAt for saving
+        
         const { id: quoteDocId, createdAt: quoteCreatedAt, updatedAt: quoteUpdatedAt, ...quoteSaveData } = updatedQuoteData;
         const savedQuote = await saveQuote(quoteSaveData as SaveQuoteInput); 
 
@@ -303,78 +304,80 @@ export default function AllQuotesPage() {
                       </TableCell>
                       <TableCell>{quote.createdAt ? format(parseISO(quote.createdAt), 'MMM d, yyyy') : 'N/A'}</TableCell>
                       <TableCell>{formatCurrency(quote.totalSellPrice)}</TableCell>
-                      <TableCell className="text-right space-x-1">
-                        <Select
-                            value={quote.status}
-                            onValueChange={(newStatus) => handleStatusChange(quote, newStatus as typeof QuoteStatusType[number])}
-                            disabled={isBookingOrUpdating && quoteToProcess?.id === quote.id}
-                          >
-                          <SelectTrigger className="h-8 w-[130px] text-xs inline-flex mr-1">
-                            <SelectValue placeholder="Change Status" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {quoteStatuses.map(stat => (
-                              <SelectItem key={stat} value={stat} className="text-xs">
-                                {stat}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end space-x-1">
+                          <Select
+                              value={quote.status}
+                              onValueChange={(newStatus) => handleStatusChange(quote, newStatus as typeof QuoteStatusType[number])}
+                              disabled={isBookingOrUpdating && quoteToProcess?.id === quote.id}
+                            >
+                            <SelectTrigger className="h-8 w-[130px] text-xs">
+                              <SelectValue placeholder="Change Status" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {quoteStatuses.map(stat => ( // Ensure quoteStatuses is used here
+                                <SelectItem key={stat} value={stat} className="text-xs">
+                                  {stat}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
 
-                        {canBookQuote(quote.status as typeof QuoteStatusType[number]) && (
+                          {canBookQuote(quote.status as typeof QuoteStatusType[number]) && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button 
+                                  variant="outline" 
+                                  size="icon" 
+                                  onClick={() => handleStatusChange(quote, "Booked")}
+                                  disabled={isBookingOrUpdating}
+                                  className="text-green-600 border-green-600 hover:bg-green-50 hover:text-green-700 h-8 w-8"
+                                >
+                                  <CalendarPlus className="h-4 w-4" /> 
+                                  <span className="sr-only">Book Trip</span>
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent><p>Book Trip & Create Schedule Item</p></TooltipContent>
+                            </Tooltip>
+                          )}
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <Button 
-                                variant="outline" 
-                                size="icon" 
-                                onClick={() => handleStatusChange(quote, "Booked")}
-                                disabled={isBookingOrUpdating}
-                                className="text-green-600 border-green-600 hover:bg-green-50 hover:text-green-700 h-8 w-8"
-                              >
-                                <CalendarPlus className="h-4 w-4" /> 
-                                <span className="sr-only">Book Trip</span>
-                              </Button>
+                               <Button variant="ghost" size="icon" asChild className="h-8 w-8">
+                                  <Link href={`/quotes/${quote.id}`}>
+                                    <Eye className="h-4 w-4" />
+                                    <span className="sr-only">View Quote</span>
+                                  </Link>
+                                </Button>
                             </TooltipTrigger>
-                            <TooltipContent><p>Book Trip & Create Schedule Item</p></TooltipContent>
+                            <TooltipContent><p>View Quote</p></TooltipContent>
                           </Tooltip>
-                        )}
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                             <Button variant="ghost" size="icon" asChild className="h-8 w-8">
-                                <Link href={`/quotes/${quote.id}`}>
-                                  <Eye className="h-4 w-4" />
-                                  <span className="sr-only">View Quote</span>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button variant="ghost" size="icon" asChild className="h-8 w-8">
+                                <Link href={`/quotes/new?editMode=true&quoteId=${quote.id}`}>
+                                  <Edit3 className="h-4 w-4" />
+                                  <span className="sr-only">Edit Quote</span>
                                 </Link>
                               </Button>
-                          </TooltipTrigger>
-                          <TooltipContent><p>View Quote</p></TooltipContent>
-                        </Tooltip>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" asChild className="h-8 w-8">
-                              <Link href={`/quotes/new?editMode=true&quoteId=${quote.id}`}>
-                                <Edit3 className="h-4 w-4" />
-                                <span className="sr-only">Edit Quote</span>
-                              </Link>
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent><p>Edit Quote</p></TooltipContent>
-                        </Tooltip>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                className="text-destructive hover:text-destructive h-8 w-8" 
-                                onClick={() => handleDeleteClick(quote)} 
-                                disabled={isDeleting || quote.status === 'Booked'}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                                <span className="sr-only">Delete Quote</span>
-                              </Button>
                             </TooltipTrigger>
-                            <TooltipContent><p>{quote.status === 'Booked' ? 'Cannot delete booked quote' : 'Delete Quote'}</p></TooltipContent>
-                        </Tooltip>
+                            <TooltipContent><p>Edit Quote</p></TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="text-destructive hover:text-destructive h-8 w-8" 
+                                  onClick={() => handleDeleteClick(quote)} 
+                                  disabled={isDeleting || quote.status === 'Booked'}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                  <span className="sr-only">Delete Quote</span>
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent><p>{quote.status === 'Booked' ? 'Cannot delete booked quote' : 'Delete Quote'}</p></TooltipContent>
+                          </Tooltip>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))
@@ -418,7 +421,7 @@ export default function AllQuotesPage() {
             <AlertDialogFooter>
               <AlertDialogCancel onClick={() => {setShowStatusConfirm(false); setQuoteToProcess(null); setNewStatusForQuote(null);}} disabled={isBookingOrUpdating}>Cancel</AlertDialogCancel>
               <Button 
-                variant={newStatusForQuote === "Booked" || newStatusForQuote === "Accepted" ? "default" : (newStatusForQuote === "Rejected" || newStatusForQuote === "Expired" ? "destructive" : "secondary")}
+                variant={newStatusForQuote === "Booked" || newStatusForQuote === "Accepted" ? "default" : (newStatusForQuote === "Rejected" || newStatusForQuote === "Expired" || newStatusForQuote === "Cancelled" ? "destructive" : "secondary")}
                 onClick={executeStatusUpdate} 
                 disabled={isBookingOrUpdating}
               >
