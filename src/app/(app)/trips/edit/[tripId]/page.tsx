@@ -11,6 +11,7 @@ import { fetchTripById, saveTrip } from '@/ai/flows/manage-trips-flow';
 import type { Trip, SaveTripInput, TripStatus } from '@/ai/schemas/trip-schemas'; 
 import { useToast } from '@/hooks/use-toast';
 import { TripForm, type FullTripFormData } from './components/trip-form';
+import { fetchFleetAircraft } from '@/ai/flows/manage-fleet-flow'; // Added for aircraftLabel resolution
 
 function EditTripPageContent() {
   const params = useParams();
@@ -57,16 +58,17 @@ function EditTripPageContent() {
       return;
     }
     startSavingTransition(async () => {
+      const aircraftSelectOptions = await fetchFleetAircraft().then(fleet => fleet.map(ac => ({ value: ac.id, label: `${ac.tailNumber} - ${ac.model}`, model: ac.model })));
+      
       const tripToSave: Trip = {
         ...tripData, 
         id: tripData.id, 
         tripId: formData.tripId, 
-        // selectedCustomerId: formData.selectedCustomerId, // Ensure this aligns with Trip schema if used
         clientName: formData.clientName,
         clientEmail: formData.clientEmail, 
         clientPhone: formData.clientPhone,
         aircraftId: formData.aircraftId || "UNKNOWN_AC",
-        aircraftLabel: formData.aircraftId ? (aircraftSelectOptions.find(ac => ac.value === formData.aircraftId)?.label) : undefined, // Add aircraftLabel
+        aircraftLabel: formData.aircraftId ? (aircraftSelectOptions.find(ac => ac.value === formData.aircraftId)?.label) : undefined,
         legs: formData.legs.map(leg => {
           const originTaxi = Number(leg.originTaxiTimeMinutes || 0);
           const destTaxi = Number(leg.destinationTaxiTimeMinutes || 0);
@@ -80,26 +82,19 @@ function EditTripPageContent() {
           };
         }),
         notes: formData.notes,
-        status: formData.status as TripStatus, // Use status from form
+        status: formData.status as TripStatus,
+        // Explicitly include customerId if it exists on formData, mapping to the correct field in Trip
+        ...(formData.selectedCustomerId && { customerId: formData.selectedCustomerId }),
       };
       
-      // Logic for aircraftSelectOptions to get label if needed:
-      const aircraftSelectOptions = await fetchFleetAircraft().then(fleet => fleet.map(ac => ({ value: ac.id, label: `${ac.tailNumber} - ${ac.model}`, model: ac.model })));
-      if (formData.aircraftId) {
-        tripToSave.aircraftLabel = aircraftSelectOptions.find(ac => ac.value === formData.aircraftId)?.label;
-      }
-      if (formData.selectedCustomerId) {
-        (tripToSave as any).customerId = formData.selectedCustomerId;
-      }
-
-
       try {
         const savedTrip = await saveTrip(tripToSave); 
-        setTripData(savedTrip); 
+        // Do not update tripData state here as we are redirecting
         toast({
           title: "Trip Updated",
           description: `Trip ${savedTrip.tripId} has been successfully updated.`,
         });
+        router.push(`/trips/details/${savedTrip.id}`); // Redirect after successful save
       } catch (error) {
         console.error("Failed to save trip:", error);
         toast({
