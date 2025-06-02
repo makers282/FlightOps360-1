@@ -351,5 +351,3 @@ export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
     </Card>
   );
 }
-
-    
