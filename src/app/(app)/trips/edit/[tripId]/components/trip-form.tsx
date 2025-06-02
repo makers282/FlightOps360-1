@@ -23,11 +23,12 @@ import { format, isValid as isValidDate, parseISO } from "date-fns";
 import type { Customer } from '@/ai/schemas/customer-schemas';
 import { fetchCustomers } from '@/ai/flows/manage-customers-flow';
 import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
-import { legTypes } from '@/ai/schemas/quote-schemas';
+import { legTypes } from '@/ai/schemas/quote-schemas'; 
 import { type TripLeg as DbTripLeg, tripStatuses, type TripStatus } from '@/ai/schemas/trip-schemas';
 import { estimateFlightDetails, type EstimateFlightDetailsOutput } from '@/ai/flows/estimate-flight-details-flow';
 import { fetchAircraftPerformance, type AircraftPerformanceData } from '@/ai/flows/manage-aircraft-performance-flow';
 import { Skeleton } from '@/components/ui/skeleton';
+import { LegsSummaryTable } from '@/app/(app)/quotes/new/components/legs-summary-table'; // Import the summary table
 
 // Schema for individual legs in the form
 const FormLegSchema = z.object({
@@ -120,6 +121,7 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
   });
   
   const currentSelectedAircraftId = watch("aircraftId");
+  const legsArray = watch("legs"); // Watch the legs array for the summary table
 
   useEffect(() => {
     setIsClient(true);
@@ -157,7 +159,7 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
     if (isEditMode && initialTripData) {
       reset({ 
         tripId: initialTripData.tripId || '',
-        selectedCustomerId: initialTripData.selectedCustomerId || initialTripData.customerId || undefined, // Check both
+        selectedCustomerId: initialTripData.selectedCustomerId || initialTripData.customerId || undefined,
         clientName: initialTripData.clientName || '',
         clientEmail: initialTripData.clientEmail || '',
         clientPhone: initialTripData.clientPhone || '',
@@ -394,6 +396,13 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
               <Button type="button" variant="outline" onClick={handleAddLeg} className="w-full sm:w-auto mt-2"> <PlusCircle className="mr-2 h-4 w-4" /> Add New Leg </Button>
               {form.formState.errors.legs && typeof form.formState.errors.legs === 'object' && !Array.isArray(form.formState.errors.legs) && ( <FormMessage>{(form.formState.errors.legs as any).message}</FormMessage> )}
             </section>
+            <Separator />
+            {/* Render LegsSummaryTable */}
+            {legsArray && legsArray.length > 0 && (
+              <section className="mt-6">
+                <LegsSummaryTable legs={legsArray} />
+              </section>
+            )}
             <Separator />
             <FormField control={control} name="notes" render={({ field }) => ( <FormItem> <FormLabel>Trip Notes (Optional)</FormLabel> <FormControl><Textarea placeholder="Enter any internal notes specific to this trip..." {...field} value={field.value || ''} rows={3} /></FormControl> <FormMessage /> </FormItem> )} />
           </CardContent>
