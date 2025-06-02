@@ -2,7 +2,7 @@
 'use client';
 
 // React and Next.js imports
-import * as React from 'react'; // Ensure React is in scope for JSX
+import * as React from 'react';
 import { useState, useEffect, useTransition, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 
@@ -17,7 +17,7 @@ import {
   Loader2, Save, XCircle, PlusCircle, Trash2, Plane, Users, CalendarIcon, Info, Edit3,
   FileText as FileTextIcon, 
   Package as PackageIcon, 
-  UserPlus, FileUp
+  UserPlus, FileUp, Building
 } from 'lucide-react';
 
 // ShadCN UI component imports
@@ -171,10 +171,10 @@ export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
       const tripDataToSave: SaveTripInput = {
         tripId: data.tripId,
         clientName: data.clientName,
-        aircraftId: data.aircraftId!, // aircraftId is required by schema now
+        aircraftId: data.aircraftId!, 
         aircraftLabel: selectedAircraft?.label || data.aircraftId,
         legs: processedLegs,
-        status: data.status as TripStatus, // Cast as TripStatus, should be valid due to form schema
+        status: data.status as TripStatus, 
         notes: data.notes,
         quoteId: data.quoteId,
         customerId: data.customerId,
@@ -327,8 +327,8 @@ export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
                       <FormField control={control} name={`legs.${index}.passengerCount`} render={({ field }) => (<FormItem><FormLabel>Passengers</FormLabel><FormControl><Input type="number" placeholder="e.g., 2" {...field} onChange={e => field.onChange(parseInt(e.target.value,10) || 0)} /></FormControl><FormMessage /></FormItem>)} />
                     </div>
                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <FormField control={control} name={`legs.${index}.originFbo`} render={({ field }) => (<FormItem><FormLabel>Origin FBO (Optional)</FormLabel><FormControl><Input placeholder="e.g., Signature" {...field} /></FormControl><FormMessage /></FormItem>)} />
-                        <FormField control={control} name={`legs.${index}.destinationFbo`} render={({ field }) => (<FormItem><FormLabel>Destination FBO (Optional)</FormLabel><FormControl><Input placeholder="e.g., Atlantic" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                        <FormField control={control} name={`legs.${index}.originFbo`} render={({ field }) => (<FormItem><FormLabel className="flex items-center gap-1"><Building className="h-4 w-4" />Origin FBO (Optional)</FormLabel><FormControl><Input placeholder="e.g., Signature" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                        <FormField control={control} name={`legs.${index}.destinationFbo`} render={({ field }) => (<FormItem><FormLabel className="flex items-center gap-1"><Building className="h-4 w-4" />Destination FBO (Optional)</FormLabel><FormControl><Input placeholder="e.g., Atlantic" {...field} /></FormControl><FormMessage /></FormItem>)} />
                     </div>
                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <FormField control={control} name={`legs.${index}.flightTimeHours`} render={({ field }) => (<FormItem><FormLabel>Flight Time (hrs)</FormLabel><FormControl><Input type="number" step="0.1" placeholder="e.g., 2.5" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || undefined)} /></FormControl><FormMessage /></FormItem>)} />
