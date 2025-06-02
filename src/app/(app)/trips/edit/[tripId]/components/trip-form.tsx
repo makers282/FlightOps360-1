@@ -5,7 +5,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plane, Edit3, UserSearch, Loader2 } from 'lucide-react';
@@ -106,6 +106,10 @@ export function TripForm({ isEditMode, initialTripData }: TripFormProps) {
   const handleCustomerSelect = (customerId: string | undefined) => {
     setValue('selectedCustomerId', customerId);
     if (!customerId) {
+      // Optionally clear client fields if "None" is selected or input is cleared
+      // setValue('clientName', '');
+      // setValue('clientEmail', '');
+      // setValue('clientPhone', '');
       return;
     }
     const selectedCustomer = customers.find(c => c.id === customerId);
@@ -116,9 +120,11 @@ export function TripForm({ isEditMode, initialTripData }: TripFormProps) {
     }
   };
 
+  // Placeholder onSubmit for this stage
   const onSubmit = (data: TripFormDataBase) => {
     console.log("Form submitted (client & aircraft details section):", data);
     toast({ title: "Form Section Submitted (Placeholder)", description: "Client & Aircraft details section submitted." });
+    // Actual save logic will be more complex and involve legs etc.
   };
 
 
@@ -241,6 +247,7 @@ export function TripForm({ isEditMode, initialTripData }: TripFormProps) {
           </CardContent>
           <CardFooter>
             <Button type="submit" disabled>
+              {/* Placeholder submit button, actual save logic will be more complex */}
               {isEditMode ? 'Save Changes (Placeholder)' : 'Create Trip (Placeholder)'}
             </Button>
           </CardFooter>
