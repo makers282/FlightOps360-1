@@ -1,16 +1,16 @@
 
 "use client";
 
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, Suspense, useTransition } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Loader2, Edit3, ArrowLeft, InfoIcon } from 'lucide-react';
-import { fetchTripById } from '@/ai/flows/manage-trips-flow';
+import { fetchTripById, saveTrip, type SaveTripInput } from '@/ai/flows/manage-trips-flow';
 import type { Trip } from '@/ai/schemas/trip-schemas';
 import { useToast } from '@/hooks/use-toast';
-import { TripForm } from './components/trip-form';
+import { TripForm, type FullTripFormData } from './components/trip-form';
 
 function EditTripPageContent() {
   const params = useParams();
@@ -23,6 +23,7 @@ function EditTripPageContent() {
   const [tripData, setTripData] = useState<Trip | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isSaving, startSavingTransition] = useTransition();
 
   useEffect(() => {
     if (id) {
@@ -49,6 +50,58 @@ function EditTripPageContent() {
       router.replace('/trips/list'); 
     }
   }, [id, toast, router]);
+
+  const handleSaveTrip = async (formData: FullTripFormData) => {
+    if (!tripData) {
+      toast({ title: "Error", description: "Original trip data not available for update.", variant: "destructive" });
+      return;
+    }
+    startSavingTransition(async () => {
+      const tripToSave: SaveTripInput = {
+        tripId: tripData.tripId, // Use existing tripId
+        selectedCustomerId: formData.selectedCustomerId,
+        clientName: formData.clientName,
+        clientEmail: formData.clientEmail,
+        clientPhone: formData.clientPhone,
+        aircraftId: formData.aircraftId || "UNKNOWN_AC",
+        legs: formData.legs.map(leg => {
+          const originTaxi = Number(leg.originTaxiTimeMinutes || 0);
+          const destTaxi = Number(leg.destinationTaxiTimeMinutes || 0);
+          const flightTime = Number(leg.flightTimeHours || 0);
+          const blockTimeTotalMinutes = originTaxi + (flightTime * 60) + destTaxi;
+          const blockTimeHours = parseFloat((blockTimeTotalMinutes / 60).toFixed(2));
+          return {
+            ...leg,
+            departureDateTime: leg.departureDateTime ? leg.departureDateTime.toISOString() : undefined,
+            blockTimeHours: blockTimeHours,
+          };
+        }),
+        notes: formData.notes,
+        status: tripData.status, // Preserve existing status, status change is handled elsewhere
+      };
+
+      try {
+        // The saveTrip flow needs the Firestore document ID (tripData.id) to know which document to update.
+        // And the data itself should contain the user-facing tripId.
+        const updatedTrip = await saveTrip({ ...tripToSave, id: tripData.id });
+        setTripData(updatedTrip); // Update local state with the response from saveTrip
+        toast({
+          title: "Trip Updated",
+          description: `Trip ${updatedTrip.tripId} has been successfully updated.`,
+        });
+        // Optionally, redirect or indicate success
+        // router.push(`/trips/details/${updatedTrip.id}`);
+      } catch (error) {
+        console.error("Failed to save trip:", error);
+        toast({
+          title: "Error Updating Trip",
+          description: (error instanceof Error ? error.message : "Unknown error"),
+          variant: "destructive",
+        });
+      }
+    });
+  };
+
 
   if (isLoading) {
     return (
@@ -93,7 +146,12 @@ function EditTripPageContent() {
             </Button>
         }
       />
-      <TripForm initialTripData={tripData} isEditMode={true} />
+      <TripForm 
+        initialTripData={tripData} 
+        isEditMode={true} 
+        onSave={handleSaveTrip}
+        isSaving={isSaving}
+      />
     </>
   );
 }
