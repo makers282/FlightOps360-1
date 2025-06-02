@@ -1,4 +1,5 @@
 
+// src/app/(app)/trips/edit/[tripId]/components/trip-form.tsx
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -12,7 +13,8 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useToast } from '@/hooks/use-toast';
-import { fetchCustomers, type Customer } from '@/ai/schemas/customer-schemas';
+import type { Customer } from '@/ai/schemas/customer-schemas';
+import { fetchCustomers } from '@/ai/flows/manage-customers-flow';
 import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
 
 // Schema for the client details and aircraft selection
@@ -64,12 +66,12 @@ export function TripForm({ isEditMode, initialTripData }: TripFormProps) {
       setIsLoadingCustomers(true);
       setIsLoadingAircraftList(true);
       try {
-        const [fetchedCustomers, fetchedFleet] = await Promise.all([
+        const [fetchedCustomersData, fetchedFleetData] = await Promise.all([
           fetchCustomers(),
           fetchFleetAircraft()
         ]);
-        setCustomers(fetchedCustomers);
-        const options = fetchedFleet.map(ac => ({
+        setCustomers(fetchedCustomersData);
+        const options = fetchedFleetData.map(ac => ({
           value: ac.id,
           label: `${ac.tailNumber} - ${ac.model}`,
           model: ac.model
@@ -77,6 +79,7 @@ export function TripForm({ isEditMode, initialTripData }: TripFormProps) {
         setAircraftSelectOptions(options);
 
       } catch (error) {
+        console.error("Failed to load initial data for trip form:", error);
         toast({ title: "Error loading initial data", description: "Could not load customers or aircraft.", variant: "destructive" });
       } finally {
         setIsLoadingCustomers(false);
@@ -99,6 +102,7 @@ export function TripForm({ isEditMode, initialTripData }: TripFormProps) {
     }
   }, [initialTripData, form]);
 
+
   const handleCustomerSelect = (customerId: string | undefined) => {
     setValue('selectedCustomerId', customerId);
     if (!customerId) {
@@ -114,8 +118,9 @@ export function TripForm({ isEditMode, initialTripData }: TripFormProps) {
 
   const onSubmit = (data: TripFormDataBase) => {
     console.log("Form submitted (client & aircraft details section):", data);
-    toast({ title: "Form Submitted (Placeholder)", description: "Client & Aircraft details section submitted." });
+    toast({ title: "Form Section Submitted (Placeholder)", description: "Client & Aircraft details section submitted." });
   };
+
 
   return (
     <Card className="shadow-lg max-w-4xl mx-auto">
@@ -162,6 +167,7 @@ export function TripForm({ isEditMode, initialTripData }: TripFormProps) {
                       {customers.map(customer => (<SelectItem key={customer.id} value={customer.id}>{customer.name} {customer.customerType && `(${customer.customerType})`}</SelectItem>))}
                     </SelectContent>
                   </Select>
+                  <FormDescription>Choosing a client will auto-populate their details below.</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -232,12 +238,10 @@ export function TripForm({ isEditMode, initialTripData }: TripFormProps) {
                 </FormItem>
               )}
             />
-
-            <p className="text-sm text-muted-foreground">More sections (Legs, Notes) will be added next.</p>
           </CardContent>
           <CardFooter>
             <Button type="submit" disabled>
-              {isEditMode ? 'Save Changes (Disabled)' : 'Create Trip (Disabled)'}
+              {isEditMode ? 'Save Changes (Placeholder)' : 'Create Trip (Placeholder)'}
             </Button>
           </CardFooter>
         </form>
