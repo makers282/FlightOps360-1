@@ -70,7 +70,7 @@ export default function AppLayout({ children }: PropsWithChildren) {
 
   return (
     <SidebarProvider defaultOpen>
-      <Sidebar collapsible="icon"> {/* Changed collapsible to "icon" */}
+      <Sidebar collapsible="icon"> 
         <SidebarHeader className="p-4">
           <Link href="/dashboard" className="flex items-center">
             <Icons.Logo className="h-8 w-auto" /> 
@@ -153,7 +153,7 @@ export default function AppLayout({ children }: PropsWithChildren) {
                 tooltip="Crew Management" 
                 isActive={
                   pathname.startsWith('/crew') || 
-                  pathname === '/trips/crew-schedule' // Crew Schedule is under Trips for now
+                  pathname === '/trips/crew-schedule'
                 }
               >
                 <Users /> 
@@ -258,7 +258,7 @@ export default function AppLayout({ children }: PropsWithChildren) {
       </Sidebar>
       <SidebarInset>
         <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background/80 px-4 backdrop-blur-sm sm:h-16 sm:px-6">
-          <SidebarTrigger /> {/* Removed md:hidden */}
+          <SidebarTrigger /> 
           <div className="flex-1">
           </div>
           <DropdownMenu>
