@@ -35,12 +35,53 @@ import {
 
 import { fetchRoles, saveRole, deleteRole } from '@/ai/flows/manage-roles-flow';
 import type { Role, SaveRoleInput, Permission } from '@/ai/schemas/role-schemas';
+import { availablePermissions } from '@/ai/schemas/role-schemas'; // Import availablePermissions for predefining
 import { AddEditRoleModal } from './components/add-edit-role-modal';
 import { useToast } from '@/hooks/use-toast';
 
 const formatPermissionName = (permission: Permission | string) => {
   return permission.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 };
+
+const predefinedRoles: Omit<SaveRoleInput, 'id'>[] = [
+  {
+    name: "Administrator",
+    description: "Full access to all system features and settings.",
+    permissions: [...availablePermissions], // All defined permissions
+    isSystemRole: true,
+  },
+  {
+    name: "Flight Crew",
+    description: "Access to flight schedules, aircraft status, and FRAT submission.",
+    permissions: ["VIEW_TRIPS", "ACCESS_FRAT_PAGE", "ACCESS_DOCUMENTS_PAGE", "VIEW_DASHBOARD"],
+    isSystemRole: true,
+  },
+  {
+    name: "Dispatch",
+    description: "Manages trip scheduling, flight releases, and optimal routing.",
+    permissions: ["MANAGE_TRIPS", "VIEW_TRIPS", "ACCESS_OPTIMAL_ROUTE_PAGE", "VIEW_DASHBOARD"],
+    isSystemRole: true,
+  },
+  {
+    name: "Maintenance",
+    description: "Tracks aircraft compliance and maintenance schedules.",
+    permissions: ["MANAGE_AIRCRAFT_MAINTENANCE_DATA", "VIEW_DASHBOARD"],
+    isSystemRole: true,
+  },
+  {
+    name: "Sales",
+    description: "Manages quotes and customer communication.",
+    permissions: ["CREATE_QUOTES", "VIEW_ALL_QUOTES", "MANAGE_CUSTOMERS", "VIEW_DASHBOARD"],
+    isSystemRole: true,
+  },
+  {
+    name: "FAA Inspector",
+    description: "Read-only access to compliance and operational data.",
+    permissions: ["ACCESS_DOCUMENTS_PAGE", "VIEW_TRIPS", "VIEW_DASHBOARD"],
+    isSystemRole: true,
+  }
+];
+
 
 export default function UserRolesPage() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -57,10 +98,36 @@ export default function UserRolesPage() {
   const [roleToDelete, setRoleToDelete] = useState<Role | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
+  const seedPredefinedRoles = async (existingRoles: Role[]) => {
+    const rolesToCreate = predefinedRoles.filter(
+      pRole => !existingRoles.some(eRole => eRole.name === pRole.name && eRole.isSystemRole)
+    );
+
+    if (rolesToCreate.length > 0) {
+      toast({ title: "Initializing System Roles", description: `Creating ${rolesToCreate.length} predefined roles...` });
+      try {
+        for (const roleData of rolesToCreate) {
+          await saveRole(roleData);
+        }
+        toast({ title: "System Roles Initialized", description: "Predefined roles have been added to Firestore.", variant: "default" });
+        return true; // Indicate that roles were seeded
+      } catch (error) {
+        console.error("Failed to seed predefined roles:", error);
+        toast({ title: "Error Seeding Roles", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
+        return false;
+      }
+    }
+    return false; // No roles needed to be seeded
+  };
+
   const loadRoles = async () => {
     setIsLoading(true);
     try {
-      const fetchedRoles = await fetchRoles();
+      let fetchedRoles = await fetchRoles();
+      const wasSeeded = await seedPredefinedRoles(fetchedRoles);
+      if (wasSeeded) {
+        fetchedRoles = await fetchRoles(); // Re-fetch after seeding
+      }
       setRolesList(fetchedRoles);
     } catch (error) {
       console.error("Failed to load roles:", error);
@@ -89,7 +156,9 @@ export default function UserRolesPage() {
   const handleSaveRole = async (data: SaveRoleInput) => {
     startSavingRoleTransition(async () => {
       try {
-        const savedData = await saveRole(data);
+        // For new roles, ensure isSystemRole is false unless specifically set by predefined logic (which it isn't here)
+        const dataToSave = isEditingModal ? data : { ...data, isSystemRole: data.isSystemRole || false };
+        const savedData = await saveRole(dataToSave);
         toast({
           title: isEditingModal ? "Role Updated" : "Role Added",
           description: `Role "${savedData.name}" has been successfully ${isEditingModal ? 'updated' : 'saved'}.`,
@@ -109,7 +178,7 @@ export default function UserRolesPage() {
 
   const handleDeleteClick = (role: Role) => {
     if (role.isSystemRole) {
-        toast({ title: "Cannot Delete", description: "System roles cannot be deleted.", variant: "destructive" });
+        toast({ title: "Action Not Allowed", description: "System roles cannot be deleted.", variant: "destructive" });
         return;
     }
     setRoleToDelete(role);
@@ -118,8 +187,8 @@ export default function UserRolesPage() {
 
   const executeDeleteRole = async () => {
     if (!roleToDelete) return;
-    if (roleToDelete.isSystemRole) {
-        toast({ title: "Cannot Delete", description: "System roles cannot be deleted.", variant: "destructive" });
+    if (roleToDelete.isSystemRole) { // Double check here, though button should be disabled
+        toast({ title: "Action Not Allowed", description: "System roles cannot be deleted.", variant: "destructive" });
         setShowDeleteConfirm(false);
         return;
     }
@@ -183,7 +252,7 @@ export default function UserRolesPage() {
                 <TableRow>
                   <TableHead>Role Name</TableHead>
                   <TableHead>Description</TableHead>
-                  <TableHead>Permissions</TableHead>
+                  <TableHead>Key Permissions</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -200,9 +269,9 @@ export default function UserRolesPage() {
                       <TableCell className="font-medium flex items-center gap-2">
                         <ShieldCheck className={`h-5 w-5 ${role.isSystemRole ? 'text-blue-500' : 'text-primary'}`} /> 
                         {role.name}
-                        {role.isSystemRole && <Badge variant="secondary" className="text-xs">System</Badge>}
+                        {role.isSystemRole && <Badge variant="secondary" className="text-xs">System Role</Badge>}
                       </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{role.description || '-'}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground max-w-xs truncate">{role.description || '-'}</TableCell>
                       <TableCell>
                         <div className="flex flex-wrap gap-1">
                           {(role.permissions || []).slice(0,3).map(permission => (

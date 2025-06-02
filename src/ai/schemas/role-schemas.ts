@@ -7,18 +7,34 @@ import { z } from 'zod';
 // Define available permissions for the system
 // These can be expanded as more granular control is needed.
 export const availablePermissions = [
-  "MANAGE_COMPANY_SETTINGS", // Edit company profile, manage fleet in company settings
-  "MANAGE_QUOTE_CONFIG",     // Manage aircraft hourly rates, standard service/fee rates
-  "MANAGE_CUSTOMERS",        // Add, edit, delete customers
+  // Company & System Management
+  "MANAGE_COMPANY_SETTINGS", // Edit company profile, manage fleet in company settings (Covers "System Settings")
+  "MANAGE_QUOTE_CONFIG",     // Manage aircraft hourly rates, standard service/fee rates (Part of "System Settings")
+  "MANAGE_USERS_ROLES",      // Manage user roles and permissions (Covers Admin "Manage Users")
+  "MANAGE_BILLING",          // New for Admin "Billing"
+
+  // Customer Management
+  "MANAGE_CUSTOMERS",        // Add, edit, delete customers (Covers Sales "View Customer Data" broadly)
+  
+  // Quote Management
   "CREATE_QUOTES",
   "VIEW_ALL_QUOTES",
   "MANAGE_ALL_QUOTES",       // Edit, delete any quote
-  "MANAGE_AIRCRAFT_MAINTENANCE_DATA", // Manage tasks, component times on currency page
-  "VIEW_TRIPS",
-  "MANAGE_TRIPS",            // Create, edit, delete trips
-  "MANAGE_USERS_ROLES",      // Manage user roles and permissions
+  
+  // Aircraft & Maintenance
+  "MANAGE_AIRCRAFT_MAINTENANCE_DATA", // Manage tasks, component times, log maintenance, forecast (Covers Maintenance "Log Maintenance", "Forecast Maintenance", "View Aircraft Status")
+  
+  // Trip & Schedule Management
+  "VIEW_TRIPS",              // View trip calendar, list, details (Covers Flight Crew "View Schedule", FAA "View Flight Logs")
+  "MANAGE_TRIPS",            // Create, edit, delete trips (Covers Dispatch "Schedule Trips", "Release Flights")
+  
+  // Page/Feature Access
   "VIEW_DASHBOARD",
   "ACCESS_SETTINGS_MENU",    // General access to settings section
+  "ACCESS_FRAT_PAGE",        // Access to FRAT page (Covers Flight Crew "Submit FRAT")
+  "ACCESS_DOCUMENTS_PAGE",   // Access to Document Hub (Covers Flight Crew "Access Documents", FAA "View Compliance Docs")
+  "ACCESS_OPTIMAL_ROUTE_PAGE",// Access to Optimal Route tool (Covers Dispatch "Use Optimal Route Tool")
+
 ] as const;
 export const PermissionSchema = z.enum(availablePermissions);
 export type Permission = z.infer<typeof PermissionSchema>;
@@ -56,3 +72,4 @@ export const DeleteRoleOutputSchema = z.object({
   success: z.boolean(),
   roleId: z.string(),
 });
+
