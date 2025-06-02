@@ -49,8 +49,6 @@ function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
   const isCurrentMonth = date.getMonth() === displayMonth.getMonth();
 
   if (!isCurrentMonth) {
-    // For days outside the current month, render an empty div to maintain grid structure.
-    // No need for react-day-picker's default button styling here if we're fully overriding.
     return <div className="h-full w-full" />;
   }
 
@@ -59,89 +57,88 @@ function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
   }, [eventsForDay]);
 
   return (
-    // CustomDay root: Removed p-1. Ensure it fills the cell.
-    <div className={cn("relative h-full w-full flex flex-col")}>
-      <time dateTime={format(date, "yyyy-MM-dd")} className={cn(
-        "text-[0.6rem] sm:text-xs self-end mb-0.5 px-1", // Added px-1 for a bit of space from edge
-        isToday(date) && "text-primary font-bold rounded-full bg-primary/10 w-4 h-4 sm:w-5 sm:h-5 flex items-center justify-center"
-      )}>
-        {format(date, "d")}
-      </time>
+    <div className="h-full w-full flex flex-col"> {/* CustomDay root takes full cell height */}
+      {/* Day number: positioned absolutely within the cell to not affect flow of events */}
+      <div className="absolute top-0.5 right-0.5 z-20"> {/* z-20 to be above event bars */}
+        <time
+          dateTime={format(date, "yyyy-MM-dd")}
+          className={cn(
+            "text-xs px-1", // Minimal padding for the number itself
+            isToday(date) && "text-primary font-bold rounded-full bg-primary/10 size-5 flex items-center justify-center"
+          )}
+        >
+          {format(date, "d")}
+        </time>
+      </div>
+
+      {/* Events container: takes full cell space, events are layered under day number if they overlap */}
       {dayEvents.length > 0 && (
-        // Event list container: Removed overflow-hidden for negative margins to work.
-        <div className="flex-grow"> 
-          <div className="flex flex-col gap-px h-full"> {/* Ensure this takes height */}
-            {dayEvents.map(event => {
-              const mapKey = `${event.id}-${format(date, "yyyy-MM-dd")}`;
+        <div className="flex-1 flex flex-col gap-px pt-5"> {/* pt-5 to leave space for absolute positioned day number */}
+          {dayEvents.map(event => {
+            const mapKey = `${event.id}-${format(date, "yyyy-MM-dd")}`;
 
-              // Determine if the event's actual start/end falls on THIS calendar cell's date.
-              const eventIsActuallyStartingInCell = isSameDay(date, event.start);
-              const eventIsActuallyEndingInCell = isSameDay(date, event.end);
-              
-              // Determine if the event spans beyond THIS calendar cell's date.
-              const eventContinuesPastThisCell = event.end > endOfDay(date);
-              const eventStartedBeforeThisCell = event.start < startOfDay(date);
+            const isActualEventStartDay = isSameDay(date, event.start);
+            const isActualEventEndDay = isSameDay(date, event.end);
+            const eventStartedBeforeCell = event.start < startOfDay(date);
+            const eventEndsAfterCell = event.end > endOfDay(date);
 
-              let borderRadiusClasses = "";
-              let marginClasses = "";
+            let borderRadiusClasses = "";
+            let marginClasses = "";
 
-              if (eventIsActuallyStartingInCell && eventIsActuallyEndingInCell) {
-                borderRadiusClasses = "rounded-sm";
-              } else if (eventIsActuallyStartingInCell && eventContinuesPastThisCell) {
-                borderRadiusClasses = "rounded-l-sm rounded-r-none";
-                marginClasses = "mr-[-1px] relative z-10"; 
-              } else if (eventStartedBeforeThisCell && eventIsActuallyEndingInCell) {
-                borderRadiusClasses = "rounded-r-sm rounded-l-none";
-                marginClasses = "ml-[-1px] relative z-10";
-              } else if (eventStartedBeforeThisCell && eventContinuesPastThisCell) {
-                borderRadiusClasses = "rounded-none";
-                marginClasses = "mx-[-1px] relative z-10";
-              } else {
-                borderRadiusClasses = "rounded-sm"; // Fallback
-              }
-              
-              // Display title only on the very first day the event appears.
-              const displayTitle = eventIsActuallyStartingInCell;
-              const showPaddingForText = displayTitle;
+            if (isActualEventStartDay && isActualEventEndDay) {
+              borderRadiusClasses = "rounded-sm"; // Starts and ends in this cell
+            } else if (isActualEventStartDay && eventEndsAfterCell) {
+              borderRadiusClasses = "rounded-l-sm rounded-r-none"; // Starts here, continues
+              marginClasses = "mr-[-1px] relative z-10";
+            } else if (eventStartedBeforeCell && isActualEventEndDay) {
+              borderRadiusClasses = "rounded-r-sm rounded-l-none"; // Started before, ends here
+              marginClasses = "ml-[-1px] relative z-10";
+            } else if (eventStartedBeforeCell && eventEndsAfterCell) {
+              borderRadiusClasses = "rounded-none"; // Middle segment
+              marginClasses = "mx-[-1px] relative z-10";
+            } else {
+              // Fallback, treat as contained if logic doesn't perfectly align (e.g., very short event at cell boundary)
+              borderRadiusClasses = "rounded-sm";
+            }
+            
+            const displayTitle = isActualEventStartDay;
+            const showPaddingForText = displayTitle; // Only pad text on the first segment
 
-              const eventBarDivClasses = cn(
-                "h-full w-full text-[0.55rem] sm:text-[0.6rem] flex items-center hover:opacity-90",
-                event.color,
-                event.textColor,
-                borderRadiusClasses,
-                marginClasses
-                // Removed truncate, as it might interfere with visual bleeding. 
-                // Text overflow handled by span.
-              );
+            const eventBarDivClasses = cn(
+              "h-full w-full text-[0.55rem] sm:text-[0.6rem] flex items-center hover:opacity-90",
+              event.color,
+              event.textColor,
+              borderRadiusClasses,
+              marginClasses
+            );
 
-              return (
-                <TooltipProvider key={mapKey} delayDuration={100}>
-                  <Tooltip>
-                    <TooltipTrigger asChild className="h-5 sm:h-6 block w-full"> 
-                      <Link href={`/trips/details/${event.id}`} className="block h-full w-full focus:outline-none focus-visible:ring-1 focus-visible:ring-ring">
-                        <div className={eventBarDivClasses}>
-                          <span className={cn(
-                              "w-full overflow-hidden whitespace-nowrap",
-                              showPaddingForText ? "px-0.5 sm:px-1" : "" 
-                          )}>
-                            {displayTitle ? event.title : <>&nbsp;</>}
-                          </span>
-                        </div>
-                      </Link>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" align="center" className="max-w-xs p-2 bg-popover text-popover-foreground border shadow-md rounded-md text-xs">
-                      <p className="font-semibold">{event.title} {event.status && <span className="text-muted-foreground">({event.status})</span>}</p>
-                      {event.route && <p>Route: {event.route}</p>}
-                      <p className="text-muted-foreground">
-                        {format(event.start, 'MMM d, H:mm zz')} - {format(event.end, 'MMM d, H:mm zz')}
-                      </p>
-                      {event.description && <p className="mt-1">{event.description}</p>}
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              );
-            })}
-          </div>
+            return (
+              <TooltipProvider key={mapKey} delayDuration={100}>
+                <Tooltip>
+                  <TooltipTrigger asChild className="block w-full h-5 sm:h-6 focus:outline-none focus-visible:ring-1 focus-visible:ring-ring">
+                    <Link href={`/trips/details/${event.id}`} className="block h-full w-full">
+                      <div className={eventBarDivClasses}>
+                        <span className={cn(
+                            "w-full overflow-hidden whitespace-nowrap",
+                            showPaddingForText ? "px-0.5 sm:px-1" : "" 
+                        )}>
+                          {displayTitle ? event.title : <>&nbsp;</>}
+                        </span>
+                      </div>
+                    </Link>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" align="center" className="max-w-xs p-2 bg-popover text-popover-foreground border shadow-md rounded-md text-xs">
+                    <p className="font-semibold">{event.title} {event.status && <span className="text-muted-foreground">({event.status})</span>}</p>
+                    {event.route && <p>Route: {event.route}</p>}
+                    <p className="text-muted-foreground">
+                      {format(event.start, 'MMM d, H:mm zz')} - {format(event.end, 'MMM d, H:mm zz')}
+                    </p>
+                    {event.description && <p className="mt-1">{event.description}</p>}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            );
+          })}
         </div>
       )}
     </div>
@@ -177,14 +174,14 @@ export default function TripCalendarPage() {
             
             if (lastLeg.arrivalDateTime && isValidISO(lastLeg.arrivalDateTime)) {
               endDate = parseISO(lastLeg.arrivalDateTime);
-            } else if (lastLeg.departureDateTime && isValidISO(lastLeg.departureDateTime) && lastLeg.blockTimeHours && lastLeg.blockTimeHours > 0) {
-              endDate = addHours(parseISO(lastLeg.departureDateTime), lastLeg.blockTimeHours);
+            } else if (isValidISO(lastLeg.departureDateTime) && lastLeg.blockTimeHours && lastLeg.blockTimeHours > 0) {
+              endDate = addHours(parseISO(lastLeg.departureDateTime!), lastLeg.blockTimeHours);
             } else if (startDate) { 
               let totalBlockTimeForEndDate = 0;
               trip.legs.forEach(leg => {
                 totalBlockTimeForEndDate += (leg.blockTimeHours || (leg.flightTimeHours ? leg.flightTimeHours + 0.5 : 1)); 
               });
-              endDate = addHours(startDate, totalBlockTimeForEndDate > 0 ? totalBlockTimeForEndDate : 1);
+              endDate = addHours(startDate, totalBlockTimeForEndDate > 0 ? totalBlockTimeForEndDate : 2); // Min 2 hour duration
             }
           }
           
@@ -192,10 +189,10 @@ export default function TripCalendarPage() {
             startDate = new Date(); 
             console.warn(`Trip ${trip.id} missing valid start date, defaulting to now.`);
           }
-          if (!endDate || endDate <= startDate) { // ensure end is after start
+          if (!endDate || endDate <= startDate) { 
             let cumulativeBlockTime = (trip.legs || []).reduce((sum, leg) => sum + (leg.blockTimeHours || (leg.flightTimeHours ? leg.flightTimeHours + 0.5 : 1)), 0);
-            endDate = addHours(startDate, Math.max(1, cumulativeBlockTime));
-            if (endDate <= startDate) endDate = addHours(startDate, 1); // Absolute fallback
+            endDate = addHours(startDate, Math.max(2, cumulativeBlockTime)); // Ensure at least 2h, use calculated if longer
+            if (endDate <= startDate) endDate = addHours(startDate, 2); // Absolute fallback
           }
 
           const { color, textColor } = getTripEventColor(trip.status);
@@ -213,7 +210,7 @@ export default function TripCalendarPage() {
             description: `Trip for ${trip.clientName} on ${trip.aircraftLabel || trip.aircraftId}. Status: ${trip.status}.`,
             status: trip.status
           };
-        }).filter(event => event.start && event.end); // Filter out events with invalid dates
+        }).filter(event => event.start && event.end && isValid(event.start) && isValid(event.end)); 
         setAllEvents(calendarEvents);
       } catch (error) {
         console.error("Failed to load trips for calendar:", error);
@@ -238,25 +235,18 @@ export default function TripCalendarPage() {
         return;
       }
       let currentDayIter = startOfDay(event.start);
-      const eventEndBoundary = endOfDay(event.end); // Use end of day for comparison
+      const eventEndBoundary = endOfDay(event.end); 
 
-      while (currentDayIter <= eventEndBoundary) { // Use <= to include the end day itself
+      while (currentDayIter <= eventEndBoundary) { 
         const dayKey = format(currentDayIter, "yyyy-MM-dd");
         if (!map.has(dayKey)) {
           map.set(dayKey, []);
         }
+        // Ensure event is added only once per day to avoid duplicates if logic overlaps
         if (!map.get(dayKey)!.find(e => e.id === event.id)) {
             map.get(dayKey)!.push(event);
         }
         currentDayIter = addDays(currentDayIter, 1);
-        if (currentDayIter > eventEndBoundary && !isSameDay(currentDayIter, eventEndBoundary) && isSameDay(addDays(currentDayIter,-1),event.end)) {
-            // This is to catch events ending exactly on midnight, make sure they are on their "end day"
-             const finalEndDayKey = format(startOfDay(event.end), "yyyy-MM-dd");
-             if (!map.has(finalEndDayKey)) map.set(finalEndDayKey, []);
-             if (!map.get(finalEndDayKey)!.find(e => e.id === event.id)) {
-                 map.get(finalEndDayKey)!.push(event);
-             }
-        }
       }
     });
     return map;
@@ -316,7 +306,7 @@ export default function TripCalendarPage() {
                 ),
                 row: "flex w-full", 
                 cell: cn(
-                    "p-0 m-0 text-left align-top relative", // Cell itself has no padding now
+                    "p-0 m-0 text-left align-top relative", 
                     "h-24 min-h-[6rem] sm:h-28 sm:min-h-[7rem] md:h-32 md:min-h-[8rem] lg:h-36 lg:min-h-[9rem] xl:h-40 xl:min-h-[10rem]", 
                     "border-r border-b border-border/30", 
                     "w-[calc(100%/7)]" 
