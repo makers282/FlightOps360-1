@@ -23,7 +23,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { Loader2, Save, XCircle, PlusCircle, Trash2, Plane, Users, CalendarIcon, Info, Edit3 } from 'lucide-react';
+import { Loader2, Save, XCircle, PlusCircle, Trash2, Plane, Users, CalendarIcon, Info, Edit3, FileText as FileTextIcon, Package as PackageIcon, UserPlus, FileUp } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { format, parseISO, isValid as isValidDate } from "date-fns";
 import { useToast } from '@/hooks/use-toast';
@@ -152,14 +152,9 @@ export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
           description: `Trip ${savedTrip.tripId} has been successfully ${isEditMode ? 'updated' : 'created'}.`,
         });
         if (isEditMode) {
-          router.push(`/trips/details/${savedTrip.id}`);
+           router.push(`/trips/details/${savedTrip.id}`);
         } else {
           router.push(`/trips/list`);
-          reset({
-             tripId: generateNewUserFacingTripId(), clientName: '', aircraftId: undefined,
-             legs: [{ origin: '', destination: '', departureDateTime: undefined, arrivalDateTime: undefined, legType: 'Charter', passengerCount: 1, originFbo: '', destinationFbo: '', flightTimeHours: undefined, blockTimeHours: undefined }],
-             status: 'Scheduled', notes: '', quoteId: undefined, customerId: undefined, aircraftLabel: undefined,
-          });
         }
       } catch (error) {
         toast({
@@ -308,32 +303,36 @@ export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
 
             <Separator />
              <section>
-              <CardTitle className="text-lg border-b pb-2 mb-4">Notes</CardTitle>
-              <FormField control={control} name="notes" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>General Trip Notes</FormLabel>
-                  <FormControl><Textarea placeholder="Any specific instructions or details for this trip..." {...field} value={field.value || ''} rows={4} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
+                <CardTitle className="text-lg border-b pb-2 mb-4">Notes</CardTitle>
+                <FormField control={control} name="notes" render={({ field }) => (
+                    <FormItem>
+                        <FormLabel>General Trip Notes</FormLabel>
+                        <FormControl><Textarea placeholder="Any specific instructions or details for this trip..." {...field} value={field.value || ''} rows={4} /></FormControl>
+                        <FormMessage />
+                    </FormItem>
+                )} />
             </section>
-
+            
             <Separator />
+            {/* Placeholder Sections */}
             <Card className="bg-muted/30 border-dashed">
               <CardHeader><CardTitle className="text-base text-muted-foreground flex items-center gap-2"><Users className="h-5 w-5"/>Crew Assignment</CardTitle></CardHeader>
-              <CardContent><p className="text-sm text-muted-foreground italic">Crew assignment UI will be here.</p></CardContent>
+              <CardContent><p className="text-sm text-muted-foreground italic">Placeholder: Crew assignment UI will be implemented here.</p></CardContent>
             </Card>
+            
             <Card className="bg-muted/30 border-dashed">
-              <CardHeader><CardTitle className="text-base text-muted-foreground flex items-center gap-2"><Users className="h-5 w-5"/>Passenger Manifest</CardTitle></CardHeader>
-              <CardContent><p className="text-sm text-muted-foreground italic">Passenger details and manifest management UI will be here.</p></CardContent>
+              <CardHeader><CardTitle className="text-base text-muted-foreground flex items-center gap-2"><UserPlus className="h-5 w-5"/>Passenger Manifest</CardTitle></CardHeader>
+              <CardContent><p className="text-sm text-muted-foreground italic">Placeholder: Passenger details and manifest management UI will be here.</p></CardContent>
             </Card>
-             <Card className="bg-muted/30 border-dashed">
-              <CardHeader><CardTitle className="text-base text-muted-foreground flex items-center gap-2"><Plane className="h-5 w-5"/>Cargo & Load</CardTitle></CardHeader>
-              <CardContent><p className="text-sm text-muted-foreground italic">Cargo details, load manifest, and Hazmat declaration UI will be here.</p></CardContent>
+            
+            <Card className="bg-muted/30 border-dashed">
+              <CardHeader><CardTitle className="text-base text-muted-foreground flex items-center gap-2"><PackageIcon className="h-5 w-5"/>Cargo & Load</CardTitle></CardHeader>
+              <CardContent><p className="text-sm text-muted-foreground italic">Placeholder: Cargo details, load manifest, and Hazmat declaration UI will be here.</p></CardContent>
             </Card>
-             <Card className="bg-muted/30 border-dashed">
-              <CardHeader><CardTitle className="text-base text-muted-foreground flex items-center gap-2"><Info className="h-5 w-5"/>Files & Documents</CardTitle></CardHeader>
-              <CardContent><p className="text-sm text-muted-foreground italic">File attachment UI for this trip will be here.</p></CardContent>
+            
+            <Card className="bg-muted/30 border-dashed">
+              <CardHeader><CardTitle className="text-base text-muted-foreground flex items-center gap-2"><FileUp className="h-5 w-5"/>Files & Documents</CardTitle></CardHeader>
+              <CardContent><p className="text-sm text-muted-foreground italic">Placeholder: File attachment UI for this trip will be implemented here.</p></CardContent>
             </Card>
 
           </CardContent>
@@ -351,3 +350,5 @@ export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
     </Card>
   );
 }
+
+    
