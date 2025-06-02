@@ -5,7 +5,7 @@ import React, { useState, useEffect, useTransition } from 'react';
 import Link from 'next/link';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { FileArchive, PlusCircle, Edit3, Trash2, Search, Eye, Loader2 } from 'lucide-react';
+import { FileArchive, PlusCircle, Edit3, Trash2, Search, Eye, Loader2, CheckCircle, CalendarPlus } from 'lucide-react'; // Added CheckCircle, CalendarPlus
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -33,7 +33,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { fetchQuotes, deleteQuote } from '@/ai/flows/manage-quotes-flow'; 
+import { fetchQuotes, deleteQuote, saveQuote } from '@/ai/flows/manage-quotes-flow'; 
 import type { Quote, QuoteLeg, quoteStatuses as QuoteStatusType } from '@/ai/schemas/quote-schemas';
 import { quoteStatuses } from '@/ai/schemas/quote-schemas';
 import { useToast } from '@/hooks/use-toast';
@@ -69,6 +69,10 @@ export default function AllQuotesPage() {
   const [isDeleting, startDeletingTransition] = useTransition();
   const [quoteToDelete, setQuoteToDelete] = useState<Quote | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  const [isBooking, startBookingTransition] = useTransition();
+  const [quoteToBook, setQuoteToBook] = useState<Quote | null>(null);
+  const [showBookConfirm, setShowBookConfirm] = useState(false);
 
 
   const loadQuotes = async () => {
@@ -111,6 +115,43 @@ export default function AllQuotesPage() {
     });
   };
 
+  const handleBookQuoteClick = (quote: Quote) => {
+    setQuoteToBook(quote);
+    setShowBookConfirm(true);
+  };
+
+  const executeBookQuote = async () => {
+    if (!quoteToBook) return;
+    startBookingTransition(async () => {
+      try {
+        const updatedQuoteData: Quote = {
+          ...quoteToBook,
+          status: "Booked",
+        };
+        // The saveQuote flow expects SaveQuoteInput, which omits id, createdAt, updatedAt
+        const { id, createdAt, updatedAt, ...saveData } = updatedQuoteData;
+        const inputForSave: any = saveData; // Cast to any to satisfy schema if necessary, or map explicitly
+        
+        await saveQuote(inputForSave as unknown as Parameters<typeof saveQuote>[0]);
+
+        toast({ 
+            title: "Quote Booked!", 
+            description: `Quote "${quoteToBook.quoteId}" status updated to "Booked". Next step: Schedule this trip.`,
+            variant: "default"
+        });
+        console.log(`Placeholder: Quote ${quoteToBook.quoteId} booked. Trigger trip scheduling process here.`);
+        setShowBookConfirm(false);
+        setQuoteToBook(null);
+        await loadQuotes();
+      } catch (error) {
+        console.error("Failed to book quote:", error);
+        toast({ title: "Error Booking Quote", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
+        setShowBookConfirm(false);
+        setQuoteToBook(null);
+      }
+    });
+  };
+
 
   const filteredQuotes = quotesList.filter(quote =>
     (quote.quoteId && quote.quoteId.toLowerCase().includes(searchTerm.toLowerCase())) ||
@@ -127,6 +168,10 @@ export default function AllQuotesPage() {
     const destination = legs[legs.length - 1].destination || 'UNK';
     if (legs.length === 1) return `${origin} -> ${destination}`;
     return `${origin} -> ... -> ${destination} (${legs.length} legs)`;
+  };
+
+  const canBookQuote = (status?: typeof QuoteStatusType[number]) => {
+    return status === 'Sent' || status === 'Accepted';
   };
 
 
@@ -198,6 +243,23 @@ export default function AllQuotesPage() {
                       <TableCell>{quote.createdAt ? format(parseISO(quote.createdAt), 'MMM d, yyyy') : 'N/A'}</TableCell>
                       <TableCell>{formatCurrency(quote.totalSellPrice)}</TableCell>
                       <TableCell className="text-right space-x-1">
+                        {canBookQuote(quote.status as typeof QuoteStatusType[number]) && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button 
+                                variant="outline" 
+                                size="icon" 
+                                onClick={() => handleBookQuoteClick(quote)}
+                                disabled={isBooking}
+                                className="text-green-600 border-green-600 hover:bg-green-50 hover:text-green-700"
+                              >
+                                <CalendarPlus className="h-4 w-4" /> 
+                                <span className="sr-only">Book Trip</span>
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent><p>Book Trip</p></TooltipContent>
+                          </Tooltip>
+                        )}
                         <Tooltip>
                           <TooltipTrigger asChild>
                              <Button variant="ghost" size="icon" asChild>
@@ -222,12 +284,18 @@ export default function AllQuotesPage() {
                         </Tooltip>
                         <Tooltip>
                             <TooltipTrigger asChild>
-                              <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDeleteClick(quote)} disabled={isDeleting}>
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="text-destructive hover:text-destructive" 
+                                onClick={() => handleDeleteClick(quote)} 
+                                disabled={isDeleting || quote.status === 'Booked'}
+                              >
                                 <Trash2 className="h-4 w-4" />
                                 <span className="sr-only">Delete Quote</span>
                               </Button>
                             </TooltipTrigger>
-                            <TooltipContent><p>Delete Quote</p></TooltipContent>
+                            <TooltipContent><p>{quote.status === 'Booked' ? 'Cannot delete booked quote' : 'Delete Quote'}</p></TooltipContent>
                         </Tooltip>
                       </TableCell>
                     </TableRow>
@@ -238,6 +306,7 @@ export default function AllQuotesPage() {
           )}
         </CardContent>
       </Card>
+      
       {showDeleteConfirm && quoteToDelete && (
         <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
           <AlertDialogContent>
@@ -257,8 +326,28 @@ export default function AllQuotesPage() {
           </AlertDialogContent>
         </AlertDialog>
       )}
+
+      {showBookConfirm && quoteToBook && (
+        <AlertDialog open={showBookConfirm} onOpenChange={setShowBookConfirm}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Confirm Booking</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to mark quote "{quoteToBook.quoteId}" for {quoteToBook.clientName} as "Booked"? 
+                This will typically initiate trip scheduling.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setShowBookConfirm(false)} disabled={isBooking}>Cancel</AlertDialogCancel>
+              <Button variant="default" onClick={executeBookQuote} disabled={isBooking} className="bg-green-600 hover:bg-green-700 text-white">
+                {isBooking ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
+                Confirm & Book
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </TooltipProvider>
   );
 }
-
     
