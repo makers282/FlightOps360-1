@@ -5,7 +5,7 @@ import React, { useState, useEffect, useTransition } from 'react';
 import Link from 'next/link';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { FileArchive, PlusCircle, Edit3, Trash2, Search, Eye, Loader2, CheckCircle, CalendarPlus } from 'lucide-react'; // Added CheckCircle, CalendarPlus
+import { FileArchive, PlusCircle, Edit3, Trash2, Search, Eye, Loader2, CheckCircle, CalendarPlus, Edit } from 'lucide-react'; // Added Edit
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -16,6 +16,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Badge } from '@/components/ui/badge';
 import {
   Tooltip,
@@ -34,10 +41,10 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { fetchQuotes, deleteQuote, saveQuote } from '@/ai/flows/manage-quotes-flow'; 
-import type { Quote, QuoteLeg, quoteStatuses as QuoteStatusType, SaveQuoteInput } from '@/ai/schemas/quote-schemas'; // Updated import
+import type { Quote, QuoteLeg, quoteStatuses as QuoteStatusType, SaveQuoteInput } from '@/ai/schemas/quote-schemas';
 import { quoteStatuses } from '@/ai/schemas/quote-schemas';
-import { saveTrip } from '@/ai/flows/manage-trips-flow'; // Import saveTrip
-import type { SaveTripInput as TripToSave, TripLeg as TripLegType } from '@/ai/schemas/trip-schemas'; // Import Trip types
+import { saveTrip } from '@/ai/flows/manage-trips-flow'; 
+import type { SaveTripInput as TripToSave, TripLeg as TripLegType } from '@/ai/schemas/trip-schemas'; 
 import { useToast } from '@/hooks/use-toast';
 import { format, parseISO } from 'date-fns';
 
@@ -72,9 +79,10 @@ export default function AllQuotesPage() {
   const [quoteToDelete, setQuoteToDelete] = useState<Quote | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  const [isBooking, startBookingTransition] = useTransition();
-  const [quoteToBook, setQuoteToBook] = useState<Quote | null>(null);
-  const [showBookConfirm, setShowBookConfirm] = useState(false);
+  const [isBookingOrUpdating, startBookingOrUpdatingTransition] = useTransition();
+  const [quoteToProcess, setQuoteToProcess] = useState<Quote | null>(null);
+  const [newStatusForQuote, setNewStatusForQuote] = useState<typeof QuoteStatusType[number] | null>(null);
+  const [showStatusConfirm, setShowStatusConfirm] = useState(false);
 
 
   const loadQuotes = async () => {
@@ -117,70 +125,90 @@ export default function AllQuotesPage() {
     });
   };
 
-  const handleBookQuoteClick = (quote: Quote) => {
-    setQuoteToBook(quote);
-    setShowBookConfirm(true);
+  const createTripFromQuote = async (bookedQuote: Quote): Promise<boolean> => {
+    try {
+      const newTripId = `TRP-${bookedQuote.quoteId.replace('QT-', '')}-${Date.now().toString().slice(-4)}`;
+      const tripLegs: TripLegType[] = bookedQuote.legs.map(qLeg => ({
+        origin: qLeg.origin,
+        destination: qLeg.destination,
+        departureDateTime: qLeg.departureDateTime,
+        legType: qLeg.legType,
+        passengerCount: qLeg.passengerCount,
+        originFbo: qLeg.originFbo,
+        destinationFbo: qLeg.destinationFbo,
+        flightTimeHours: qLeg.flightTimeHours,
+        blockTimeHours: qLeg.calculatedBlockTimeHours,
+      }));
+
+      const tripToSave: TripToSave = {
+        tripId: newTripId,
+        quoteId: bookedQuote.id,
+        customerId: bookedQuote.selectedCustomerId,
+        clientName: bookedQuote.clientName,
+        aircraftId: bookedQuote.aircraftId || "UNKNOWN_AC",
+        aircraftLabel: bookedQuote.aircraftLabel,
+        legs: tripLegs,
+        status: "Scheduled",
+        notes: `Trip created from Quote ${bookedQuote.quoteId}. ${bookedQuote.options.notes || ''}`.trim(),
+      };
+      await saveTrip(tripToSave);
+      toast({ 
+          title: "Trip Created!", 
+          description: `New Trip ${newTripId} created and scheduled from Quote ${bookedQuote.quoteId}.`,
+          variant: "default"
+      });
+      return true;
+    } catch (tripError) {
+      console.error("Failed to create trip from quote:", tripError);
+      toast({ title: "Error Creating Trip", description: (tripError instanceof Error ? tripError.message : "Unknown error creating trip record."), variant: "destructive" });
+      return false;
+    }
   };
 
-  const executeBookQuote = async () => {
-    if (!quoteToBook) return;
-    startBookingTransition(async () => {
+
+  const handleStatusChange = (quote: Quote, newStatus: typeof QuoteStatusType[number]) => {
+    setQuoteToProcess(quote);
+    setNewStatusForQuote(newStatus);
+    setShowStatusConfirm(true);
+  };
+
+  const executeStatusUpdate = async () => {
+    if (!quoteToProcess || !newStatusForQuote) return;
+    
+    const wasPreviouslyBooked = quoteToProcess.status === "Booked";
+    const isNowBooking = newStatusForQuote === "Booked";
+
+    startBookingOrUpdatingTransition(async () => {
       try {
-        // 1. Update the quote status to "Booked"
         const updatedQuoteData: Quote = {
-          ...quoteToBook,
-          status: "Booked",
+          ...quoteToProcess,
+          status: newStatusForQuote,
         };
+        // Firestore functions expect data without id, createdAt, updatedAt for saving
         const { id: quoteDocId, createdAt: quoteCreatedAt, updatedAt: quoteUpdatedAt, ...quoteSaveData } = updatedQuoteData;
-        await saveQuote(quoteSaveData as SaveQuoteInput); // Pass as SaveQuoteInput
-        
-        // 2. Create a new Trip record from the quote
-        const newTripId = `TRP-${quoteToBook.quoteId.replace('QT-', '')}-${Date.now().toString().slice(-4)}`;
-        const tripLegs: TripLegType[] = quoteToBook.legs.map(qLeg => ({
-          origin: qLeg.origin,
-          destination: qLeg.destination,
-          departureDateTime: qLeg.departureDateTime, // Already ISO string or undefined
-          // arrivalDateTime will be calculated or set later
-          legType: qLeg.legType,
-          passengerCount: qLeg.passengerCount,
-          originFbo: qLeg.originFbo,
-          destinationFbo: qLeg.destinationFbo,
-          flightTimeHours: qLeg.flightTimeHours,
-          blockTimeHours: qLeg.calculatedBlockTimeHours,
-        }));
+        const savedQuote = await saveQuote(quoteSaveData as SaveQuoteInput); 
 
-        const tripToSave: TripToSave = {
-          tripId: newTripId,
-          quoteId: quoteToBook.id, // Link to the original quote document ID
-          customerId: quoteToBook.selectedCustomerId,
-          clientName: quoteToBook.clientName,
-          aircraftId: quoteToBook.aircraftId || "UNKNOWN_AC", // Ensure aircraftId is present
-          aircraftLabel: quoteToBook.aircraftLabel,
-          legs: tripLegs,
-          status: "Scheduled", // Initial status for a new trip
-          notes: `Trip created from Quote ${quoteToBook.quoteId}. ${quoteToBook.options.notes || ''}`.trim(),
-          // Timestamps (createdAt, updatedAt) will be set by saveTrip flow
-        };
-
-        await saveTrip(tripToSave);
+        let tripCreatedSuccessfully = false;
+        if (isNowBooking && !wasPreviouslyBooked) {
+          tripCreatedSuccessfully = await createTripFromQuote(savedQuote);
+        }
 
         toast({ 
-            title: "Quote Booked & Trip Created!", 
-            description: `Quote "${quoteToBook.quoteId}" is Booked. New Trip ${newTripId} created and scheduled.`,
+            title: "Quote Status Updated", 
+            description: `Quote "${savedQuote.quoteId}" status changed to ${newStatusForQuote}.${isNowBooking && !wasPreviouslyBooked && tripCreatedSuccessfully ? ' Trip also created.' : (isNowBooking && !wasPreviouslyBooked && !tripCreatedSuccessfully ? ' Trip creation FAILED.' : '') }`,
             variant: "default"
         });
         
-        setShowBookConfirm(false);
-        setQuoteToBook(null);
-        await loadQuotes(); // Refresh quotes list
-        // Potentially redirect to trip list or trip details page here if desired
-        // router.push('/trips/list');
-
+        setShowStatusConfirm(false);
+        setQuoteToProcess(null);
+        setNewStatusForQuote(null);
+        await loadQuotes(); 
       } catch (error) {
-        console.error("Failed to book quote and create trip:", error);
-        toast({ title: "Error Booking Quote", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
-        setShowBookConfirm(false);
-        setQuoteToBook(null);
+        console.error("Failed to update quote status:", error);
+        toast({ title: "Error Updating Status", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
+        setShowStatusConfirm(false);
+        setQuoteToProcess(null);
+        setNewStatusForQuote(null);
       }
     });
   };
@@ -253,7 +281,7 @@ export default function AllQuotesPage() {
                   <TableHead>Status</TableHead>
                   <TableHead>Quote Date</TableHead>
                   <TableHead>Amount</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead className="text-right pr-12">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -276,15 +304,32 @@ export default function AllQuotesPage() {
                       <TableCell>{quote.createdAt ? format(parseISO(quote.createdAt), 'MMM d, yyyy') : 'N/A'}</TableCell>
                       <TableCell>{formatCurrency(quote.totalSellPrice)}</TableCell>
                       <TableCell className="text-right space-x-1">
+                        <Select
+                            value={quote.status}
+                            onValueChange={(newStatus) => handleStatusChange(quote, newStatus as typeof QuoteStatusType[number])}
+                            disabled={isBookingOrUpdating && quoteToProcess?.id === quote.id}
+                          >
+                          <SelectTrigger className="h-8 w-[130px] text-xs inline-flex mr-1">
+                            <SelectValue placeholder="Change Status" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {quoteStatuses.map(stat => (
+                              <SelectItem key={stat} value={stat} className="text-xs">
+                                {stat}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+
                         {canBookQuote(quote.status as typeof QuoteStatusType[number]) && (
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <Button 
                                 variant="outline" 
                                 size="icon" 
-                                onClick={() => handleBookQuoteClick(quote)}
-                                disabled={isBooking}
-                                className="text-green-600 border-green-600 hover:bg-green-50 hover:text-green-700"
+                                onClick={() => handleStatusChange(quote, "Booked")}
+                                disabled={isBookingOrUpdating}
+                                className="text-green-600 border-green-600 hover:bg-green-50 hover:text-green-700 h-8 w-8"
                               >
                                 <CalendarPlus className="h-4 w-4" /> 
                                 <span className="sr-only">Book Trip</span>
@@ -295,7 +340,7 @@ export default function AllQuotesPage() {
                         )}
                         <Tooltip>
                           <TooltipTrigger asChild>
-                             <Button variant="ghost" size="icon" asChild>
+                             <Button variant="ghost" size="icon" asChild className="h-8 w-8">
                                 <Link href={`/quotes/${quote.id}`}>
                                   <Eye className="h-4 w-4" />
                                   <span className="sr-only">View Quote</span>
@@ -306,7 +351,7 @@ export default function AllQuotesPage() {
                         </Tooltip>
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" asChild>
+                            <Button variant="ghost" size="icon" asChild className="h-8 w-8">
                               <Link href={`/quotes/new?editMode=true&quoteId=${quote.id}`}>
                                 <Edit3 className="h-4 w-4" />
                                 <span className="sr-only">Edit Quote</span>
@@ -320,7 +365,7 @@ export default function AllQuotesPage() {
                               <Button 
                                 variant="ghost" 
                                 size="icon" 
-                                className="text-destructive hover:text-destructive" 
+                                className="text-destructive hover:text-destructive h-8 w-8" 
                                 onClick={() => handleDeleteClick(quote)} 
                                 disabled={isDeleting || quote.status === 'Booked'}
                               >
@@ -360,21 +405,25 @@ export default function AllQuotesPage() {
         </AlertDialog>
       )}
 
-      {showBookConfirm && quoteToBook && (
-        <AlertDialog open={showBookConfirm} onOpenChange={setShowBookConfirm}>
+      {showStatusConfirm && quoteToProcess && newStatusForQuote && (
+        <AlertDialog open={showStatusConfirm} onOpenChange={(open) => {if(!isBookingOrUpdating) setShowStatusConfirm(open)}}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Confirm Booking</AlertDialogTitle>
+              <AlertDialogTitle>Confirm Status Change</AlertDialogTitle>
               <AlertDialogDescription>
-                Are you sure you want to mark quote "{quoteToBook.quoteId}" for {quoteToBook.clientName} as "Booked"? 
-                This will create a new trip record and set its status to "Scheduled".
+                Are you sure you want to change the status of quote "{quoteToProcess.quoteId}" to "{newStatusForQuote}"?
+                {newStatusForQuote === "Booked" && quoteToProcess.status !== "Booked" && " This will also create a new trip record."}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => setShowBookConfirm(false)} disabled={isBooking}>Cancel</AlertDialogCancel>
-              <Button variant="default" onClick={executeBookQuote} disabled={isBooking} className="bg-green-600 hover:bg-green-700 text-white">
-                {isBooking ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
-                Confirm & Book Trip
+              <AlertDialogCancel onClick={() => {setShowStatusConfirm(false); setQuoteToProcess(null); setNewStatusForQuote(null);}} disabled={isBookingOrUpdating}>Cancel</AlertDialogCancel>
+              <Button 
+                variant={newStatusForQuote === "Booked" || newStatusForQuote === "Accepted" ? "default" : (newStatusForQuote === "Rejected" || newStatusForQuote === "Expired" ? "destructive" : "secondary")}
+                onClick={executeStatusUpdate} 
+                disabled={isBookingOrUpdating}
+              >
+                {isBookingOrUpdating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Confirm & Change to {newStatusForQuote}
               </Button>
             </AlertDialogFooter>
           </AlertDialogContent>
@@ -384,3 +433,4 @@ export default function AllQuotesPage() {
   );
 }
     
+
