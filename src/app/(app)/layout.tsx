@@ -35,6 +35,7 @@ import {
   DollarSign, // New icon for Financial Reports
   Package, // New icon for Load Manifests
   TrendingUp, // New icon for Operational Analytics
+  Users2, // Icon for Crew Roster
 } from 'lucide-react';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -164,6 +165,10 @@ export default function AppLayout({ children }: PropsWithChildren) {
                  <SidebarMenuSubButton href="/crew/status" tooltip="Crew Status" isActive={pathname === '/crew/status'}>
                   <UsersRound /> 
                   Crew Status
+                </SidebarMenuSubButton>
+                 <SidebarMenuSubButton href="/crew/roster" tooltip="Crew Roster" isActive={pathname === '/crew/roster'}>
+                  <Users2 /> 
+                  Crew Roster
                 </SidebarMenuSubButton>
                 <SidebarMenuSubButton href="/crew/documents" tooltip="Crew Documents" isActive={pathname === '/crew/documents'}>
                   <FolderArchive />
