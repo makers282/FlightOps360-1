@@ -184,12 +184,8 @@ export default function ViewTripDetailsPage() {
       
       try {
         // Correctly call saveTrip with the modified Trip object
-        // The saveTrip flow expects an object that conforms to SaveTripInput or Trip
-        // If `tripDataToSave` has an `id`, it needs to be handled by the saveTripFlow appropriately
-        // Our current saveTripFlow has an internal schema that separates id and data.
-        // Let's assume the wrapper saveTrip function can handle the full Trip object.
         const { id: tripDocId, createdAt, updatedAt, ...tripSaveData } = tripDataToSave;
-        const savedTrip = await saveTrip({ ...tripSaveData, id: tripDocId });
+        const savedTrip = await saveTrip({ ...tripSaveData, id: tripDocId }); // Ensure id is correctly passed or handled
         
         setTrip(savedTrip);
         setEditableNotes(savedTrip.notes || '');
@@ -407,7 +403,3 @@ export default function ViewTripDetailsPage() {
     </>
   );
 }
-
-    
-
-    

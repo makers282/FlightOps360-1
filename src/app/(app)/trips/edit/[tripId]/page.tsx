@@ -61,7 +61,7 @@ function EditTripPageContent() {
     startSavingTransition(async () => {
       const aircraftSelectOptions = await fetchFleetAircraft().then(fleet => fleet.map(ac => ({ value: ac.id, label: `${ac.tailNumber} - ${ac.model}`, model: ac.model })));
       
-      const flightAttendantIds = [formData.assignedFlightAttendantId1, formData.assignedFlightAttendantId2].filter(id => id && id !== "--UNASSIGNED--") as string[];
+      const flightAttendantIds = [formData.assignedFlightAttendantId1, formData.assignedFlightAttendantId2].filter(faId => faId && faId !== "--UNASSIGNED--") as string[];
 
       const tripToSave: Trip = {
         ...tripData, 
@@ -161,9 +161,6 @@ function EditTripPageContent() {
             <Button onClick={handleSendItinerary} variant="outline" disabled={isSaving}>
                 <Send className="mr-2 h-4 w-4" /> Send Updated Itinerary
             </Button>
-            {/* <Button variant="outline" disabled>
-                <CrewIcon className="mr-2 h-4 w-4" /> Assign Crew  // This functionality is now within the form
-            </Button> */}
              <Button variant="outline" disabled>
                 <LoadManifestIcon className="mr-2 h-4 w-4" /> View Load Manifest
             </Button>
@@ -197,5 +194,3 @@ export default function EditTripPage() {
     </Suspense>
   );
 }
-
-    

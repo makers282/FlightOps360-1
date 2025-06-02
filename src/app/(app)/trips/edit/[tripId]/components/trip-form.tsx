@@ -369,7 +369,7 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
     onSave(data);
   };
 
-  const flightAttendants = crewRoster.filter(c => c.role === 'Flight Attendant' && c.isActive);
+  const flightAttendants = crewRoster.filter(c => c.isActive && c.role === 'Flight Attendant');
 
 
   return (
@@ -625,6 +625,3 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
     </Card>
   );
 }
-
-
-    
