@@ -19,11 +19,11 @@ export const TripLegSchema = z.object({
   // Fields for actuals to be added later
   // actualDepartureTime: z.string().optional(),
   // actualArrivalTime: z.string().optional(),
-  // assignedCrewIds: z.array(z.string()).optional(),
+  // assignedCrewIds: z.array(z.string()).optional(), // This would be for individual leg assignments if needed
 });
 export type TripLeg = z.infer<typeof TripLegSchema>;
 
-export const tripStatuses = ["Scheduled", "Confirmed", "En Route", "Completed", "Cancelled", "Diverted"] as const;
+export const tripStatuses = ["Scheduled", "Confirmed", "En Route", "Completed", "Cancelled", "Diverted", "Awaiting Closeout"] as const;
 export type TripStatus = typeof tripStatuses[number];
 
 export const TripSchema = z.object({
@@ -41,10 +41,12 @@ export const TripSchema = z.object({
   
   status: z.enum(tripStatuses).default("Scheduled"),
   
-  // Placeholder for crew assignments - to be detailed later
-  // primaryPilotId: z.string().optional(),
-  // secondaryPilotId: z.string().optional(),
-  // flightAttendantIds: z.array(z.string()).optional(),
+  // Crew assignments for the overall trip
+  assignedPilotId: z.string().optional().describe("ID of the assigned Pilot in Command (PIC)."),
+  assignedCoPilotId: z.string().optional().describe("ID of the assigned Second in Command (SIC) / Co-Pilot."),
+  assignedFlightAttendantIds: z.array(z.string()).optional().default([]).describe("IDs of assigned Flight Attendants."),
+  // assignedOtherCrewIds: z.array(z.string()).optional().default([]).describe("IDs of other assigned crew members like medics, loadmasters."),
+
 
   notes: z.string().optional().describe("Internal notes about the trip."),
   
