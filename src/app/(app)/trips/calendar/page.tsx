@@ -44,7 +44,8 @@ const getTripEventColor = (status?: TripStatus): { color: string, textColor: str
   }
 };
 
-function CustomDay({ date, displayMonth, eventsForDay }: DayProps & { eventsForDay: CalendarEvent[] }) {
+function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
+  const { date, displayMonth, eventsForDay } = dayProps;
   const isCurrentMonth = date.getMonth() === displayMonth.getMonth();
 
   if (!isCurrentMonth) {
@@ -67,39 +68,41 @@ function CustomDay({ date, displayMonth, eventsForDay }: DayProps & { eventsForD
         <div className="mt-0.5 flex-grow overflow-hidden">
           <div className="flex flex-col gap-px">
             {dayEvents.map(event => {
-              const cellStartTime = startOfDay(date);
-              const cellEndTime = endOfDay(date);
-
-              const eventIsStartingInCell = event.start >= cellStartTime && event.start <= cellEndTime;
-              // Ensure event.end is strictly greater than cellStartTime to be considered ending *in* this cell
-              // and event.end is less than or equal to cellEndTime.
-              const eventIsEndingInCell = event.end > cellStartTime && event.end <= cellEndTime; 
-              
-              const eventStartedBeforeCell = event.start < cellStartTime;
-              const eventEndsAfterCell = event.end > cellEndTime;
+              const isActualEventStartDay = isSameDay(date, event.start);
+              const isActualEventEndDay = isSameDay(date, event.end);
+              const eventSpansMultipleDays = !isSameDay(event.start, event.end);
 
               let borderRadiusClasses = "";
-              if (eventIsStartingInCell && eventIsEndingInCell) {
-                  borderRadiusClasses = "rounded-sm"; // Starts and finishes within this cell
-              } else if (eventIsStartingInCell && eventEndsAfterCell) {
-                  borderRadiusClasses = "rounded-tl-sm rounded-bl-sm"; // Starts in this cell, continues to next day (round left)
-              } else if (eventStartedBeforeCell && eventIsEndingInCell) {
-                  borderRadiusClasses = "rounded-tr-sm rounded-br-sm"; // Started before this cell, ends in this cell (round right)
-              } else if (eventStartedBeforeCell && eventEndsAfterCell) {
-                  borderRadiusClasses = "rounded-none"; // Middle segment - started before, continues after (no rounding)
+
+              if (eventSpansMultipleDays) {
+                if (isActualEventStartDay && !isActualEventEndDay) {
+                  // Starts today, continues to next day(s)
+                  borderRadiusClasses = "rounded-l-sm rounded-r-none";
+                } else if (!isActualEventStartDay && isActualEventEndDay) {
+                  // Started before today, ends today
+                  borderRadiusClasses = "rounded-r-sm rounded-l-none";
+                } else if (!isActualEventStartDay && !isActualEventEndDay) {
+                  // Middle segment of a multi-day event
+                  borderRadiusClasses = "rounded-none";
+                } else {
+                  // Event starts and ends on the same day, but eventSpansMultipleDays might be true if it crosses midnight but less than 24h.
+                  // Or, a very short event that is technically multi-day but fits in one cell display.
+                  borderRadiusClasses = "rounded-sm";
+                }
               } else {
-                  // Fallback case, usually implies event is treated as contained within the cell for rendering if it doesn't fit specific span conditions
-                  borderRadiusClasses = "rounded-sm"; 
+                // Single day event (start and end are on the same day)
+                borderRadiusClasses = "rounded-sm";
               }
               
-              const displayTitle = eventIsStartingInCell || (eventStartedBeforeCell && !isSameDay(date, addDays(event.start,0))); // Show title on first day it appears or if it started before today
+              const displayTitle = isActualEventStartDay;
+              const showPaddingForText = displayTitle; 
 
               const mapKey = `${event.id}-${format(date, "yyyy-MM-dd")}`;
 
               return (
                 <TooltipProvider key={mapKey} delayDuration={100}>
                   <Tooltip>
-                    <TooltipTrigger asChild className="h-3.5 sm:h-4 block w-full">
+                    <TooltipTrigger asChild className="h-5 sm:h-6 block w-full"> 
                       <Link href={`/trips/details/${event.id}`} className="block h-full w-full focus:outline-none focus-visible:ring-1 focus-visible:ring-ring">
                         <div className={cn(
                           "h-full w-full text-[0.55rem] sm:text-[0.6rem] flex items-center hover:opacity-90",
@@ -110,7 +113,7 @@ function CustomDay({ date, displayMonth, eventsForDay }: DayProps & { eventsForD
                         )}>
                           <span className={cn(
                               "w-full overflow-hidden whitespace-nowrap",
-                              displayTitle ? "px-0.5 sm:px-1" : "" // Only add padding if title is shown
+                              showPaddingForText ? "px-0.5 sm:px-1" : "" 
                           )}>
                             {displayTitle ? event.title : <>&nbsp;</>}
                           </span>
@@ -153,9 +156,7 @@ export default function TripCalendarPage() {
           let startDate: Date | null = null;
           let endDate: Date | null = null;
           let route = "N/A";
-          let firstLegDepartureForEndDateCalc: Date | null = null;
-
-
+          
           if (trip.legs && trip.legs.length > 0) {
             const firstLeg = trip.legs[0];
             const lastLeg = trip.legs[trip.legs.length - 1];
@@ -163,25 +164,19 @@ export default function TripCalendarPage() {
 
             if (firstLeg.departureDateTime && isValidISO(firstLeg.departureDateTime)) {
               startDate = parseISO(firstLeg.departureDateTime);
-              firstLegDepartureForEndDateCalc = startDate;
             }
             
+            // Calculate end date more robustly
             if (lastLeg.arrivalDateTime && isValidISO(lastLeg.arrivalDateTime)) {
               endDate = parseISO(lastLeg.arrivalDateTime);
             } else if (lastLeg.departureDateTime && isValidISO(lastLeg.departureDateTime) && lastLeg.blockTimeHours && lastLeg.blockTimeHours > 0) {
               endDate = addHours(parseISO(lastLeg.departureDateTime), lastLeg.blockTimeHours);
-            } else if (firstLegDepartureForEndDateCalc && firstLeg.blockTimeHours && firstLeg.blockTimeHours > 0 && trip.legs.length === 1) {
-                endDate = addHours(firstLegDepartureForEndDateCalc, firstLeg.blockTimeHours);
-            } else if (firstLegDepartureForEndDateCalc) { 
-                let totalBlockTimeForEndDate = 0;
-                if (trip.legs.length > 1) {
-                     // For multi-leg trips without a clear end, sum block times from first leg departure.
-                    // This is a simplification; a real scheduler would calculate this precisely leg by leg.
-                    totalBlockTimeForEndDate = trip.legs.reduce((sum, leg) => sum + (leg.blockTimeHours || 2), 0);
-                } else { 
-                    totalBlockTimeForEndDate = firstLeg.blockTimeHours || 2; 
-                }
-                endDate = addHours(firstLegDepartureForEndDateCalc, totalBlockTimeForEndDate);
+            } else if (startDate) { // Fallback: sum block times from first leg if no better end date
+              let totalBlockTimeForEndDate = 0;
+              trip.legs.forEach(leg => {
+                totalBlockTimeForEndDate += (leg.blockTimeHours || (leg.flightTimeHours ? leg.flightTimeHours + 0.5 : 1)); // Add taxi or default
+              });
+              endDate = addHours(startDate, totalBlockTimeForEndDate > 0 ? totalBlockTimeForEndDate : 1);
             }
           }
           
@@ -190,14 +185,14 @@ export default function TripCalendarPage() {
             console.warn(`Trip ${trip.id} missing valid start date, defaulting to now.`);
           }
           if (!endDate) {
-            endDate = addHours(startDate, 2); // Default duration if all else fails
-             console.warn(`Trip ${trip.id} missing valid end date calculation, defaulting to 2 hours after start.`);
+            endDate = addHours(startDate, 1); 
+             console.warn(`Trip ${trip.id} missing valid end date calculation, defaulting to 1 hour after start.`);
           }
 
-          // Ensure end is always after start, with a minimum duration for visibility
           if (endDate <= startDate) {
-            endDate = addHours(startDate, 1); 
-            console.warn(`Trip ${trip.id} had end date before or at start date. Adjusted to 1 hour duration.`);
+            let cumulativeBlockTime = trip.legs.reduce((sum, leg) => sum + (leg.blockTimeHours || (leg.flightTimeHours ? leg.flightTimeHours + 0.5 : 1)), 0);
+            endDate = addHours(startDate, Math.max(1, cumulativeBlockTime));
+            console.warn(`Trip ${trip.id} had end date before or at start date. Adjusted using cumulative block time or 1hr min.`);
           }
 
           const { color, textColor } = getTripEventColor(trip.status);
@@ -238,17 +233,27 @@ export default function TripCalendarPage() {
       let currentDayIter = startOfDay(event.start);
       const eventEndBoundary = event.end; 
 
-      while (currentDayIter < eventEndBoundary) { 
+      // Iterate through each day the event spans
+      while (currentDayIter < eventEndBoundary) {
         const dayKey = format(currentDayIter, "yyyy-MM-dd");
         if (!map.has(dayKey)) {
           map.set(dayKey, []);
         }
-        
+        // Ensure the event is only added once per day to avoid duplicates if logic reruns
         if (!map.get(dayKey)!.find(e => e.id === event.id)) {
             map.get(dayKey)!.push(event);
         }
         currentDayIter = addDays(currentDayIter, 1);
       }
+       // Special case: if event ends exactly at midnight or very early, ensure it's on its end day.
+       // Or if event is single day (start and end on same day)
+      const endDayKey = format(startOfDay(event.end), "yyyy-MM-dd");
+      if (!map.has(endDayKey)) map.set(endDayKey, []);
+      if (!map.get(endDayKey)!.find(e => e.id === event.id)) {
+         map.get(endDayKey)!.push(event);
+      }
+
+
     });
     return map;
   }, [allEvents]);
