@@ -12,11 +12,21 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { SlidersHorizontal, DollarSign, Edit, Percent, PlusCircle, Trash2, Save, XCircle, Loader2, Info } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { fetchAircraftRates, saveAircraftRate, deleteAircraftRate } from '@/ai/flows/manage-aircraft-rates-flow';
-import type { AircraftRate } from '@/ai/schemas/aircraft-rate-schemas'; // Updated import
+import type { AircraftRate } from '@/ai/schemas/aircraft-rate-schemas'; 
 import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
 import { fetchCompanyProfile, saveCompanyProfile, type CompanyProfile, type ServiceFeeRate } from '@/ai/flows/manage-company-profile-flow';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const formatCurrency = (amount: number) => {
   return amount.toLocaleString(undefined, { style: "currency", currency: "USD" });
@@ -38,12 +48,13 @@ export default function QuoteConfigPage() {
   const [isSavingServiceFee, startSavingServiceFeeTransition] = useTransition();
 
   const [currentDeletingRateId, setCurrentDeletingRateId] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [rateToDelete, setRateToDelete] = useState<AircraftRate | null>(null);
   const { toast } = useToast();
 
   const [showAddAircraftRateForm, setShowAddAircraftRateForm] = useState(false);
   const [selectedFleetAircraftIdForRate, setSelectedFleetAircraftIdForRate] = useState<string>('');
   
-  // State for simple buy/sell aircraft rates in the form
   const [newAircraftBuyRate, setNewAircraftBuyRate] = useState('');
   const [newAircraftSellRate, setNewAircraftSellRate] = useState('');
   const [editingAircraftRateId, setEditingAircraftRateId] = useState<string | null>(null);
@@ -133,14 +144,20 @@ export default function QuoteConfigPage() {
     setShowAddAircraftRateForm(false);
   };
 
-  const handleDeleteAircraftRate = (aircraftIdToDelete: string) => {
-    setCurrentDeletingRateId(aircraftIdToDelete);
+  const confirmDeleteAircraftRate = (rate: AircraftRate) => {
+    setRateToDelete(rate);
+    setShowDeleteConfirm(true);
+  };
+
+  const executeDeleteAircraftRate = () => {
+    if (!rateToDelete) return;
+    setCurrentDeletingRateId(rateToDelete.id);
     startDeletingAircraftRateTransition(async () => {
       try {
-        await deleteAircraftRate({ aircraftId: aircraftIdToDelete });
+        await deleteAircraftRate({ aircraftId: rateToDelete.id });
         await loadInitialData(); 
         toast({ title: "Success", description: "Aircraft rate deleted." });
-        if (editingAircraftRateId === aircraftIdToDelete) { 
+        if (editingAircraftRateId === rateToDelete.id) { 
           handleCancelEditAircraftRate();
         }
       } catch (error) {
@@ -148,6 +165,8 @@ export default function QuoteConfigPage() {
         toast({ title: "Error", description: `Could not delete aircraft rate. ${error instanceof Error ? error.message : ''}`, variant: "destructive" });
       } finally {
         setCurrentDeletingRateId(null);
+        setShowDeleteConfirm(false);
+        setRateToDelete(null);
       }
     });
   };
@@ -420,7 +439,7 @@ export default function QuoteConfigPage() {
                                 <Edit className="h-4 w-4" />
                                 <span className="sr-only">Edit rate for {rate.id}</span>
                             </Button>
-                            <Button variant="ghost" size="icon" onClick={() => handleDeleteAircraftRate(rate.id)} className="text-destructive hover:text-destructive" disabled={isSavingAircraftRate || (isDeletingAircraftRate && currentDeletingRateId === rate.id)}>
+                            <Button variant="ghost" size="icon" onClick={() => confirmDeleteAircraftRate(rate)} className="text-destructive hover:text-destructive" disabled={isSavingAircraftRate || (isDeletingAircraftRate && currentDeletingRateId === rate.id)}>
                             {isDeletingAircraftRate && currentDeletingRateId === rate.id ? <Loader2 className="h-4 w-4 animate-spin"/> : <Trash2 className="h-4 w-4" />}
                             <span className="sr-only">Delete rate for {rate.id}</span>
                             </Button>
@@ -542,18 +561,37 @@ export default function QuoteConfigPage() {
         
         <Card className="shadow-md border-primary/30">
             <CardHeader>
-                <CardTitle className="flex items-center gap-2"><Info className="h-5 w-5 text-blue-500"/> Current Implementation</CardTitle>
+                <CardTitle className="flex items-center gap-2"><Info className="h-5 w-5 text-blue-500"/> Current Implementation Notes</CardTitle>
             </CardHeader>
             <CardContent>
                  <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
-                    <li>Aircraft hourly rates reverted to a single standard buy/sell per aircraft.</li>
-                    <li>The "Create New Quote" form uses this single standard rate for the selected aircraft.</li>
-                    <li>The idea of manually editing the rate in the quote itself is noted for future quote editing features.</li>
+                    <li>Aircraft hourly rates are managed with a standard buy and sell rate per aircraft.</li>
+                    <li>Service/Fee rates are default values used in quote generation.</li>
+                    <li>Both sections are connected to Firestore and allow adding, editing, and deleting.</li>
                 </ul>
             </CardContent>
         </Card>
 
       </div>
+      {showDeleteConfirm && rateToDelete && (
+        <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete the rate for aircraft "{getAircraftDisplayLabel(rateToDelete.id)}"? This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setShowDeleteConfirm(false)} disabled={isDeletingAircraftRate}>Cancel</AlertDialogCancel>
+              <Button variant="destructive" onClick={executeDeleteAircraftRate} disabled={isDeletingAircraftRate}>
+                {isDeletingAircraftRate && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Delete
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </>
   );
 }
