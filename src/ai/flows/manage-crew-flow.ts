@@ -24,6 +24,91 @@ import { z } from 'zod';
 
 const CREW_MEMBERS_COLLECTION = 'crewMembers';
 
+// Mock data for testing if Firestore is empty
+const mockCrewMembersList: CrewMember[] = [
+  {
+    id: 'mock-capt-001',
+    employeeId: 'EMP001',
+    firstName: 'Ava',
+    lastName: 'Williams',
+    role: 'Captain',
+    email: 'ava.williams@example.com',
+    phone: '555-0101',
+    licenses: [{ type: 'ATP', number: '12345', expiryDate: '2025-12-31' }],
+    typeRatings: ['C560', 'GLEX'],
+    homeBase: 'KTEB',
+    isActive: true,
+    notes: 'Experienced captain, check airman.',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+  {
+    id: 'mock-fo-002',
+    employeeId: 'EMP002',
+    firstName: 'Ben',
+    lastName: 'Carter',
+    role: 'First Officer',
+    email: 'ben.carter@example.com',
+    phone: '555-0102',
+    licenses: [{ type: 'CPL', number: '67890', expiryDate: '2024-11-15' }],
+    typeRatings: ['C560'],
+    homeBase: 'KHPN',
+    isActive: true,
+    notes: 'Recently completed line training.',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+  {
+    id: 'mock-fa-003',
+    employeeId: 'EMP003',
+    firstName: 'Chloe',
+    lastName: 'Davis',
+    role: 'Flight Attendant',
+    email: 'chloe.davis@example.com',
+    phone: '555-0103',
+    licenses: [{ type: 'FA Cert', expiryDate: '2026-06-01' }],
+    typeRatings: [],
+    homeBase: 'KDAL',
+    isActive: true,
+    notes: 'Lead flight attendant.',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+  {
+    id: 'mock-fa-004',
+    employeeId: 'EMP004',
+    firstName: 'David',
+    lastName: 'Miller',
+    role: 'Flight Attendant',
+    email: 'david.miller@example.com',
+    phone: '555-0104',
+    licenses: [{ type: 'FA Cert', expiryDate: '2025-08-10' }],
+    typeRatings: [],
+    homeBase: 'KVNY',
+    isActive: true,
+    notes: '',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+  {
+    id: 'mock-other-005',
+    employeeId: 'EMP005',
+    firstName: 'Elena',
+    lastName: 'Rodriguez',
+    role: 'Mechanic',
+    email: 'elena.rodriguez@example.com',
+    phone: '555-0105',
+    licenses: [{ type: 'A&P License' }],
+    typeRatings: [],
+    homeBase: 'KMIA',
+    isActive: false,
+    notes: 'Specializes in avionics. Currently on leave.',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+];
+
+
 // Exported async functions that clients will call
 export async function fetchCrewMembers(): Promise<CrewMember[]> {
   console.log('[ManageCrewFlow Firestore] Attempting to fetch all crew members.');
@@ -62,6 +147,10 @@ const fetchCrewMembersFlow = ai.defineFlow(
     try {
       const crewMembersCollectionRef = collection(db, CREW_MEMBERS_COLLECTION);
       const snapshot = await getDocs(crewMembersCollectionRef);
+      if (snapshot.empty) {
+        console.log('No crew members found in Firestore. Returning mock data for testing.');
+        return mockCrewMembersList;
+      }
       const crewList = snapshot.docs.map(docSnapshot => {
         const data = docSnapshot.data();
         // Convert Firestore Timestamps to ISO strings for client compatibility
@@ -79,6 +168,9 @@ const fetchCrewMembersFlow = ai.defineFlow(
       return crewList;
     } catch (error) {
       console.error('Error fetching crew members from Firestore:', error);
+      // Optionally, return mock data on error during testing phase
+      // console.log('Error occurred, returning mock data for testing.');
+      // return mockCrewMembersList; 
       throw new Error(`Failed to fetch crew members: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
