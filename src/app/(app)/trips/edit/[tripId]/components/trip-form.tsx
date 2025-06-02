@@ -2,7 +2,7 @@
 "use client";
 
 // React and Next.js imports
-import * as React from 'react'; // Explicit React import
+import * as React from 'react';
 import { useState, useEffect, useTransition, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 
@@ -22,7 +22,7 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
-} from '@/components/ui/card'; // Card and related components are imported here
+} from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -31,7 +31,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
-
 // Hook imports
 import { useToast } from '@/hooks/use-toast';
 import { cn } from "@/lib/utils";
@@ -46,7 +45,7 @@ import { fetchFleetAircraft } from '@/ai/flows/manage-fleet-flow';
 const TripFormSchema = FullTripSchema.omit({ id: true, createdAt: true, updatedAt: true }).extend({
   legs: z.array(TripLegSchema.extend({
     departureDateTime: z.date().optional(),
-    arrivalDateTime: z.date().optional(),
+    arrivalDateTime: z.date().optional(), // This field might not be directly on the form but could be calculated
   })).min(1, "At least one flight leg is required.")
 });
 
@@ -151,12 +150,12 @@ export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
       const tripDataToSave: SaveTripInput = {
         tripId: data.tripId,
         clientName: data.clientName,
-        aircraftId: data.aircraftId!,
+        aircraftId: data.aircraftId!, 
         aircraftLabel: selectedAircraft?.label || data.aircraftId,
         legs: data.legs.map(leg => ({
           ...leg,
           departureDateTime: leg.departureDateTime ? leg.departureDateTime.toISOString() : undefined,
-          arrivalDateTime: leg.arrivalDateTime ? leg.arrivalDateTime.toISOString() : undefined,
+          arrivalDateTime: undefined, 
         })),
         status: data.status as TripStatus,
         notes: data.notes,
@@ -173,7 +172,7 @@ export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
         if (isEditMode) {
            router.push(`/trips/details/${savedTrip.id}`);
         } else {
-          router.push(`/trips/list`);
+          router.push(`/trips/list`); 
         }
       } catch (error) {
         toast({
@@ -189,7 +188,6 @@ export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
   const titleText = isEditMode ? `Edit Trip: ${initialTripData?.tripId || 'N/A'}` : "Create New Trip";
   const descriptionText = isEditMode ? "Modify the details of this existing trip." : "Enter the details for the new trip.";
 
-  // Component Return
   return (
     <Card className="shadow-lg max-w-4xl mx-auto">
       <CardHeader>
@@ -209,7 +207,7 @@ export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
                 <FormField control={control} name="tripId" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Trip ID</FormLabel>
-                    <FormControl><Input placeholder="e.g., TRP-12345" {...field} readOnly={isEditMode || !isEditMode} className={(isEditMode || !isEditMode) ? "bg-muted/50 cursor-not-allowed" : ""} /></FormControl>
+                    <FormControl><Input placeholder="e.g., TRP-12345" {...field} readOnly className="bg-muted/50 cursor-not-allowed" /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
@@ -288,7 +286,7 @@ export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
                                     if (isValidDate(newDate)) {
                                       newDate.setHours(hours, minutesValue);
                                       field.onChange(newDate);
-                                    } else {
+                                    } else { 
                                       const tempDate = new Date();
                                       tempDate.setHours(hours, minutesValue, 0, 0);
                                       field.onChange(tempDate);
@@ -341,7 +339,6 @@ export function TripForm({ initialTripData, isEditMode }: TripFormProps) {
             </section>
             
             <Separator />
-            {/* Placeholder Sections */}
             <Card className="bg-muted/30 border-dashed">
               <CardHeader><CardTitle className="text-base text-muted-foreground flex items-center gap-2"><Users className="h-5 w-5"/>Crew Assignment</CardTitle></CardHeader>
               <CardContent><p className="text-sm text-muted-foreground italic">Placeholder: Crew assignment UI will be implemented here.</p></CardContent>
