@@ -23,7 +23,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { z } from 'zod';
 import { AddMaintenanceTaskModal, type MaintenanceTaskFormData, defaultMaintenanceTaskFormValues } from './components/add-maintenance-task-modal';
-import { ManageEngineDetailsModal } from './components/manage-engine-details-modal'; 
+// import { ManageEngineDetailsModal } from './components/manage-engine-details-modal'; 
 import { Badge } from '@/components/ui/badge';
 
 import { Wrench, PlusCircle, ArrowLeft, PlaneIcon, Edit, Loader2, InfoIcon, Phone, UserCircle, MapPin, Save, XCircle, Edit2, Edit3, AlertTriangle, CheckCircle2, XCircle as XCircleIcon, Search, ArrowUpDown, ArrowDown, ArrowUp, Printer, Filter, Mail, BookText, Hash, Tag, Settings2 } from 'lucide-react';
@@ -31,7 +31,7 @@ import { format, parse, addDays, isValid, addMonths, addYears, endOfMonth, parse
 import { useToast } from '@/hooks/use-toast';
 import { fetchFleetAircraft, saveFleetAircraft } from '@/ai/flows/manage-fleet-flow';
 import type { FleetAircraft, EngineDetail, SaveFleetAircraftInput } from '@/ai/schemas/fleet-aircraft-schemas';
-import { EngineDetailSchema } from '@/ai/schemas/fleet-aircraft-schemas';
+// import { EngineDetailSchema } from '@/ai/schemas/fleet-aircraft-schemas'; // No longer needed directly here
 import { fetchMaintenanceTasksForAircraft, saveMaintenanceTask, deleteMaintenanceTask, type MaintenanceTask as FlowMaintenanceTask } from '@/ai/flows/manage-maintenance-tasks-flow';
 import { fetchComponentTimesForAircraft, saveComponentTimesForAircraft, type AircraftComponentTimes } from '@/ai/flows/manage-component-times-flow';
 import { fetchCompanyProfile, type CompanyProfile } from '@/ai/flows/manage-company-profile-flow';
@@ -100,7 +100,6 @@ export default function AircraftMaintenanceDetailPage() {
   const [isGeneratingReport, startReportGenerationTransition] = useTransition();
   
   // State for ManageEngineDetailsModal removed from here as its trigger is removed from this page's direct UI
-  // const [isEngineModalOpen, setIsEngineModalOpen] = useState(false);
 
 
   const aircraftInfoForm = useForm<AircraftInfoEditFormData>({ 
@@ -114,12 +113,9 @@ export default function AircraftMaintenanceDetailPage() {
         primaryContactPhone: '',
         primaryContactEmail: '',
         internalNotes: '',
-        // engineDetails not part of this form anymore
     }
   });
   
-  // currentEngineDetailsForForm watch removed
-
 
   const calculateToGo = useCallback((item: DisplayMaintenanceItem, currentComponentTimes: Array<{ componentName: string; currentTime: number; currentCycles: number }>): { text: string; numeric: number; unit: 'days' | 'hrs' | 'cycles' | 'N/A'; isOverdue: boolean } => {
     const now = new Date();
@@ -276,7 +272,6 @@ export default function AircraftMaintenanceDetailPage() {
             primaryContactPhone: foundAircraft.primaryContactPhone || '',
             primaryContactEmail: foundAircraft.primaryContactEmail || '',
             internalNotes: foundAircraft.internalNotes || '',
-            // engineDetails not managed by this form directly
           });
           await loadAndInitializeComponentTimes(foundAircraft); 
           await loadMaintenanceTasks(foundAircraft.id);
@@ -336,8 +331,6 @@ export default function AircraftMaintenanceDetailPage() {
     setIsEditingComponentTimes(false);
   };
 
-  // handleSaveEngineDetailsInModal function removed as modal trigger is removed
-
 
   const onSubmitAircraftInfo: SubmitHandler<AircraftInfoEditFormData> = (data) => {
     if (!currentAircraft) return;
@@ -353,7 +346,7 @@ export default function AircraftMaintenanceDetailPage() {
           primaryContactPhone: data.primaryContactPhone === '' ? undefined : data.primaryContactPhone,
           primaryContactEmail: data.primaryContactEmail === '' ? undefined : data.primaryContactEmail,
           internalNotes: data.internalNotes === '' ? undefined : data.internalNotes,
-          engineDetails: currentAircraft.engineDetails || [], // Preserve existing engine details
+          engineDetails: currentAircraft.engineDetails || [], 
           isMaintenanceTracked: currentAircraft.isMaintenanceTracked, 
           trackedComponentNames: currentAircraft.trackedComponentNames,
         };
@@ -920,9 +913,29 @@ export default function AircraftMaintenanceDetailPage() {
                 <p className="text-sm text-muted-foreground">No components configured for time tracking. Update in Company Settings or component data not yet loaded.</p>
             ) : (
                 <div className="space-y-3">
-                {editableComponentTimes.map(comp => (
-                    <div key={comp.componentName} className="grid grid-cols-3 items-center gap-2 border-b pb-2 last:border-b-0 last:pb-0">
-                        <span className="col-span-1 text-sm font-medium">{comp.componentName}</span>
+                {editableComponentTimes.map(comp => {
+                  let subText = null;
+                  if (currentAircraft) {
+                    if (comp.componentName === "Airframe") {
+                        subText = `${currentAircraft.model || ''}${currentAircraft.serialNumber ? `/${currentAircraft.serialNumber}` : ''}`;
+                    } else if (comp.componentName.startsWith("Engine ")) {
+                        const engineIndexMatch = comp.componentName.match(/Engine (\d+)/);
+                        if (engineIndexMatch && currentAircraft.engineDetails) {
+                            const engineNum = parseInt(engineIndexMatch[1], 10);
+                            if (engineNum > 0 && engineNum <= currentAircraft.engineDetails.length) {
+                                const engine = currentAircraft.engineDetails[engineNum - 1];
+                                subText = `${engine.model || 'N/A Model'}${engine.serialNumber ? `/${engine.serialNumber}` : ''}`;
+                            }
+                        }
+                    }
+                  }
+
+                  return (
+                    <div key={comp.componentName} className="grid grid-cols-3 items-start gap-2 border-b pb-2 last:border-b-0 last:pb-0">
+                        <div className="col-span-1">
+                            <span className="text-sm font-medium">{comp.componentName}</span>
+                            {subText && <p className="text-xs text-muted-foreground -mt-0.5">{subText}</p>}
+                        </div>
                         {isEditingComponentTimes ? (
                         <>
                             <Input 
@@ -942,12 +955,13 @@ export default function AircraftMaintenanceDetailPage() {
                         </>
                         ) : (
                         <>
-                            <span className="col-span-1 text-sm text-right">{comp.currentTime.toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1})} hrs</span>
-                            <span className="col-span-1 text-sm text-right">{comp.currentCycles.toLocaleString()} cyc</span>
+                            <span className="col-span-1 text-sm text-right pt-1">{comp.currentTime.toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1})} hrs</span>
+                            <span className="col-span-1 text-sm text-right pt-1">{comp.currentCycles.toLocaleString()} cyc</span>
                         </>
                         )}
                     </div>
-                ))}
+                  );
+                })}
                 </div>
             )}
            </CardContent>
@@ -1017,7 +1031,7 @@ export default function AircraftMaintenanceDetailPage() {
                 <p><strong className="text-muted-foreground w-28 inline-block">Contact:</strong> {currentAircraft.primaryContactName || 'N/A'}</p>
                 <p><strong className="text-muted-foreground w-28 inline-block">Phone:</strong> {currentAircraft.primaryContactPhone || 'N/A'}</p>
                 <p><strong className="text-muted-foreground w-28 inline-block">Email:</strong> {currentAircraft.primaryContactEmail || 'N/A'}</p>
-                                
+                
                 <div className="pt-2">
                   <h4 className="font-semibold text-muted-foreground">Internal Notes:</h4>
                   {currentAircraft.internalNotes ? (
@@ -1186,9 +1200,10 @@ export default function AircraftMaintenanceDetailPage() {
           )}
         </CardContent>
       </Card>
-      {/* ManageEngineDetailsModal instance removed from here */}
     </div>
   );
 }
+
+    
 
     
