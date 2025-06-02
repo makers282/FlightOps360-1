@@ -155,7 +155,7 @@ export default function AppLayout({ children }: PropsWithChildren) {
                 tooltip="Crew Management" 
                 isActive={
                   pathname.startsWith('/crew') || 
-                  pathname === '/trips/crew-schedule'
+                  pathname === '/trips/crew-schedule' // Keeping crew schedule under this broader menu
                 }
               >
                 <Users /> 

@@ -17,12 +17,11 @@ export const CrewMemberSchema = z.object({
   email: z.string().email("Invalid email format.").optional().or(z.literal('')),
   phone: z.string().optional(),
   
-  // Example qualification fields - can be expanded
   licenses: z.array(z.object({
-    type: z.string(), // e.g., ATP, CPL, Medical Class 1
+    type: z.string().min(1, "License type is required."),
     number: z.string().optional(),
-    expiryDate: z.string().optional().describe("YYYY-MM-DD format"),
-  })).optional().default([]),
+    expiryDate: z.string().optional().describe("YYYY-MM-DD format, if applicable."),
+  })).optional().default([]).describe("List of licenses held by the crew member."),
   
   typeRatings: z.array(z.string()).optional().default([]).describe("List of aircraft type ratings, e.g., C525, GLEX"),
   

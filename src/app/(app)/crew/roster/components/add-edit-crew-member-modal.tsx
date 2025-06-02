@@ -25,6 +25,7 @@ import { Loader2, Save, UserPlus, Edit3 } from 'lucide-react';
 import type { CrewMember, SaveCrewMemberInput } from '@/ai/schemas/crew-member-schemas';
 import { crewRoles } from '@/ai/schemas/crew-member-schemas';
 
+// Form schema for the modal
 const crewMemberFormSchema = z.object({
   firstName: z.string().min(1, "First name is required."),
   lastName: z.string().min(1, "Last name is required."),
@@ -32,7 +33,8 @@ const crewMemberFormSchema = z.object({
   employeeId: z.string().optional(),
   email: z.string().email("Invalid email format.").optional().or(z.literal('')),
   phone: z.string().optional(),
-  licensesStr: z.string().optional().describe("Comma-separated license types/numbers for simplicity. E.g., ATP #12345, Medical Class 1"),
+  // For simplicity in the form, licenses will be a string, parsed on submit
+  licensesStr: z.string().optional().describe("Comma-separated licenses. E.g., ATP, Medical Class 1 Exp:2025-12-31, CPL #12345"),
   typeRatingsStr: z.string().optional().describe("Comma-separated type ratings. E.g., C525, GLEX"),
   homeBase: z.string().optional(),
   isActive: z.boolean().default(true),
@@ -62,17 +64,8 @@ export function AddEditCrewMemberModal({
   const form = useForm<CrewMemberFormData>({
     resolver: zodResolver(crewMemberFormSchema),
     defaultValues: {
-      firstName: '',
-      lastName: '',
-      role: 'Other',
-      employeeId: '',
-      email: '',
-      phone: '',
-      licensesStr: '',
-      typeRatingsStr: '',
-      homeBase: '',
-      isActive: true,
-      notes: '',
+      firstName: '', lastName: '', role: 'Other', employeeId: '', email: '', phone: '',
+      licensesStr: '', typeRatingsStr: '', homeBase: '', isActive: true, notes: '',
     },
   });
 
@@ -86,14 +79,17 @@ export function AddEditCrewMemberModal({
           employeeId: initialData.employeeId || '',
           email: initialData.email || '',
           phone: initialData.phone || '',
-          licensesStr: (initialData.licenses || []).map(l => `${l.type}${l.number ? ` (#${l.number})` : ''}${l.expiryDate ? ` Exp: ${l.expiryDate}` : ''}`).join(', '),
+          // Convert structured licenses back to string for the form field
+          licensesStr: (initialData.licenses || [])
+            .map(l => `${l.type}${l.number ? ` (#${l.number})` : ''}${l.expiryDate ? ` Exp:${l.expiryDate}` : ''}`)
+            .join(', '),
           typeRatingsStr: (initialData.typeRatings || []).join(', '),
           homeBase: initialData.homeBase || '',
           isActive: initialData.isActive === undefined ? true : initialData.isActive,
           notes: initialData.notes || '',
         });
       } else {
-        form.reset({
+        form.reset({ // Reset to defaults for "add new"
           firstName: '', lastName: '', role: 'Other', employeeId: '', email: '', phone: '',
           licensesStr: '', typeRatingsStr: '', homeBase: '', isActive: true, notes: '',
         });
@@ -102,9 +98,21 @@ export function AddEditCrewMemberModal({
   }, [isOpen, isEditing, initialData, form]);
 
   const onSubmit: SubmitHandler<CrewMemberFormData> = async (formData) => {
-    // For simplicity, storing licenses and type ratings as simple string arrays for now.
-    // A more robust solution would parse them into structured objects.
-    const licensesArray = formData.licensesStr ? formData.licensesStr.split(',').map(s => s.trim()).filter(Boolean).map(l => ({ type: l })) : [];
+    // Parse licensesStr back into structured array for saving
+    const licensesArray = formData.licensesStr
+      ? formData.licensesStr.split(',').map(s => s.trim()).filter(Boolean).map(entry => {
+          // Basic parsing: "Type (#Number) Exp:YYYY-MM-DD"
+          const typeMatch = entry.match(/^([^#\(]+)/);
+          const numberMatch = entry.match(/\(#([^\)]+)\)/);
+          const expiryMatch = entry.match(/Exp:(\S+)/);
+          return {
+            type: typeMatch ? typeMatch[1].trim() : entry.trim(),
+            number: numberMatch ? numberMatch[1].trim() : undefined,
+            expiryDate: expiryMatch ? expiryMatch[1].trim() : undefined,
+          };
+        })
+      : [];
+    
     const typeRatingsArray = formData.typeRatingsStr ? formData.typeRatingsStr.split(',').map(s => s.trim()).filter(Boolean) : [];
 
     const dataToSave: SaveCrewMemberInput = {
@@ -160,7 +168,7 @@ export function AddEditCrewMemberModal({
 
               <FormField control={form.control} name="homeBase" render={({ field }) => (<FormItem><FormLabel>Home Base (Optional)</FormLabel><FormControl><Input placeholder="e.g., KTEB, KJFK" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>)} />
 
-              <FormField control={form.control} name="licensesStr" render={({ field }) => (<FormItem><FormLabel>Licenses (Optional)</FormLabel><FormControl><Textarea placeholder="Comma-separated, e.g., ATP #12345, Medical Class 1 Exp: 2025-12-31" {...field} value={field.value || ''} rows={2} /></FormControl><FormDescription className="text-xs">Enter license type, number, and expiry if applicable. Multiple licenses can be comma-separated.</FormDescription><FormMessage /></FormItem>)} />
+              <FormField control={form.control} name="licensesStr" render={({ field }) => (<FormItem><FormLabel>Licenses (Optional)</FormLabel><FormControl><Textarea placeholder="Comma-separated, e.g., ATP #12345, Medical Class 1 Exp:YYYY-MM-DD" {...field} value={field.value || ''} rows={2} /></FormControl><FormDescription className="text-xs">Enter license type, number, and expiry if applicable. Multiple licenses can be comma-separated.</FormDescription><FormMessage /></FormItem>)} />
               <FormField control={form.control} name="typeRatingsStr" render={({ field }) => (<FormItem><FormLabel>Type Ratings (Optional)</FormLabel><FormControl><Textarea placeholder="Comma-separated, e.g., C525, GLEX, B737" {...field} value={field.value || ''} rows={2} /></FormControl><FormDescription className="text-xs">Enter aircraft type ratings, comma-separated.</FormDescription><FormMessage /></FormItem>)} />
               
               <FormField control={form.control} name="isActive" render={({ field }) => (<FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 shadow-sm"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><div className="space-y-0.5"><FormLabel className="text-sm font-normal">Active Crew Member</FormLabel><FormDescription className="text-xs">Inactive members may be hidden from some views.</FormDescription></div></FormItem>)} />
@@ -180,4 +188,3 @@ export function AddEditCrewMemberModal({
     </Dialog>
   );
 }
-

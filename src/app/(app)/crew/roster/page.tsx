@@ -35,7 +35,7 @@ import {
 
 import { fetchCrewMembers, saveCrewMember, deleteCrewMember } from '@/ai/flows/manage-crew-flow';
 import type { CrewMember, SaveCrewMemberInput } from '@/ai/schemas/crew-member-schemas';
-import { AddEditCrewMemberModal, type CrewMemberFormData } from './components/add-edit-crew-member-modal';
+import { AddEditCrewMemberModal } from './components/add-edit-crew-member-modal'; // Ensure correct path
 import { useToast } from '@/hooks/use-toast';
 
 export default function CrewRosterPage() {
@@ -160,7 +160,7 @@ export default function CrewRosterPage() {
               className="pl-8 w-full sm:w-1/2 lg:w-1/3" 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              disabled={isLoading || crewList.length === 0 && !searchTerm}
+              disabled={isLoading || (crewList.length === 0 && !searchTerm)}
             />
           </div>
         </CardHeader>
