@@ -2,6 +2,7 @@
 "use client";
 
 import React, { useState, useEffect, useTransition } from 'react';
+import Link from 'next/link'; // Added Link import
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -56,6 +57,7 @@ export default function CompanySettingsPage() {
   const [companyAddress, setCompanyAddress] = useState('');
   const [companyEmail, setCompanyEmail] = useState('');
   const [companyPhone, setCompanyPhone] = useState('');
+  const [currentCompanyProfile, setCurrentCompanyProfile] = useState<CompanyProfile | null>(null);
   const [isLoadingCompanyInfo, setIsLoadingCompanyInfo] = useState(true);
   const [isSavingCompanyInfo, startSavingCompanyInfoTransition] = useTransition();
 
@@ -81,12 +83,21 @@ export default function CompanySettingsPage() {
         setCompanyAddress(profile.companyAddress || '');
         setCompanyEmail(profile.companyEmail || '');
         setCompanyPhone(profile.companyPhone || '');
+        setCurrentCompanyProfile(profile);
       } else {
         // Set default or example values if no profile exists
         setCompanyName("FlightOps360 LLC (Example)");
         setCompanyAddress("123 Aviation Way, Hangar B, Anytown, USA 12345");
         setCompanyEmail("ops@flightops360.example.com");
         setCompanyPhone("(555) 012-3456");
+        setCurrentCompanyProfile({
+            id: 'main',
+            companyName: "FlightOps360 LLC (Example)",
+            companyAddress: "123 Aviation Way, Hangar B, Anytown, USA 12345",
+            companyEmail: "ops@flightops360.example.com",
+            companyPhone: "(555) 012-3456",
+            serviceFeeRates: {},
+        });
       }
     } catch (error) {
       console.error("Failed to fetch company profile:", error);
@@ -158,10 +169,6 @@ export default function CompanySettingsPage() {
     if (engine2Model.trim() || engine2SN.trim()) {
       engineDetails.push({ model: engine2Model.trim() || undefined, serialNumber: engine2SN.trim() || undefined });
     }
-    // If only engine 2 has data but engine 1 doesn't, we should still push an empty object for engine 1
-    // to maintain the order, or ensure engine 1 is filled if engine 2 is.
-    // For simplicity now, if E1 is blank but E2 has data, E2 effectively becomes E1 in the array.
-    // A more robust UI would prevent this or handle indexing explicitly.
 
     const aircraftData: SaveFleetAircraftInput = {
       id: editingAircraftId || newTailNumber.toUpperCase().replace(/\s+/g, ''), 
@@ -170,13 +177,13 @@ export default function CompanySettingsPage() {
       isMaintenanceTracked: newIsMaintenanceTracked,
       trackedComponentNames: parsedTrackedComponentNames.length > 0 ? parsedTrackedComponentNames : ['Airframe', 'Engine 1'],
       serialNumber: newSerialNumber.trim() || undefined,
-      aircraftYear: editingAircraftId ? fleet.find(ac => ac.id === editingAircraftId)?.aircraftYear : undefined, // Preserve year if editing
+      aircraftYear: editingAircraftId ? fleet.find(ac => ac.id === editingAircraftId)?.aircraftYear : undefined, 
       baseLocation: newBaseLocation.trim() || undefined,
       primaryContactName: newPrimaryContactName.trim() || undefined,
       primaryContactPhone: newPrimaryContactPhone.trim() || undefined,
       primaryContactEmail: newPrimaryContactEmail.trim() || undefined, 
-      engineDetails: engineDetails.length > 0 ? engineDetails : undefined, // Send undefined if no engine details
-      internalNotes: editingAircraftId ? fleet.find(ac => ac.id === editingAircraftId)?.internalNotes : undefined, // Preserve notes if editing
+      engineDetails: engineDetails.length > 0 ? engineDetails : [], 
+      internalNotes: editingAircraftId ? fleet.find(ac => ac.id === editingAircraftId)?.internalNotes : undefined, 
     };
 
     startSavingAircraftTransition(async () => {
@@ -222,13 +229,11 @@ export default function CompanySettingsPage() {
         companyAddress: companyAddress.trim(),
         companyEmail: companyEmail.trim(),
         companyPhone: companyPhone.trim(),
-        // Ensure serviceFeeRates is preserved if it exists on the current companyProfile state
-        serviceFeeRates: companyProfile?.serviceFeeRates || {},
+        serviceFeeRates: currentCompanyProfile?.serviceFeeRates || {},
       };
       try {
         await saveCompanyProfile(profileData);
-        // Update local state after successful save
-        setCompanyProfile(prevProfile => ({...prevProfile, ...profileData} as CompanyProfile));
+        setCurrentCompanyProfile(prevProfile => ({...prevProfile, ...profileData} as CompanyProfile));
         toast({ title: "Success", description: "Company information updated in Firestore." });
       } catch (error) {
         console.error("Failed to save company profile:", error);
