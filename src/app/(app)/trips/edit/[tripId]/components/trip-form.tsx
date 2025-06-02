@@ -1,8 +1,8 @@
 
 "use client";
 
-// React and Next.js imports
-import React, { useState, useEffect, useTransition, useCallback } from 'react';
+import * as React from 'react';
+import { useState, useEffect, useTransition, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 
 // Third-party library imports
@@ -23,7 +23,12 @@ import {
 import { Button } from '@/components/ui/button';
 import { Calendar } from "@/components/ui/calendar";
 import {
-  Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle
 } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
@@ -40,16 +45,16 @@ import { cn } from "@/lib/utils";
 // Flow and Schema imports
 import { saveTrip } from '@/ai/flows/manage-trips-flow';
 import type { Trip, SaveTripInput, TripLeg as TripLegTypeFromDb, TripStatus } from '@/ai/schemas/trip-schemas';
-import { TripLegSchema as DbTripLegSchema, TripSchema as DbFullTripSchema, tripStatuses, legTypes } from '@/ai/schemas/trip-schemas';
-import { fetchFleetAircraft } from '@/ai/flows/manage-fleet-flow';
+import { TripLegSchema as TripLegSchemaDb, TripSchema as FullTripSchemaDb, tripStatuses, legTypes } from '@/ai/schemas/trip-schemas';
+import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
 
 // Schema definition for the form, extending the DB leg schema for Date objects
-const FormLegSchema = DbTripLegSchema.extend({
+const FormLegSchema = TripLegSchemaDb.extend({
   departureDateTime: z.date().optional(),
   arrivalDateTime: z.date().optional(), // Form uses Date objects for date pickers
 });
 
-const TripFormSchema = DbFullTripSchema.omit({ id: true, createdAt: true, updatedAt: true }).extend({
+const TripFormSchema = FullTripSchemaDb.omit({ id: true, createdAt: true, updatedAt: true }).extend({
   legs: z.array(FormLegSchema).min(1, "At least one flight leg is required.")
 });
 
