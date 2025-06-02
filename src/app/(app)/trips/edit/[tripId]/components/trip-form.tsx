@@ -12,7 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
-import { Plane, Edit3, UserSearch, Loader2, CalendarIcon, PlusCircle, Trash2, GripVertical, Wand2, PlaneTakeoff, PlaneLanding, Building, Users as PaxIcon } from 'lucide-react';
+import { Plane, Edit3, UserSearch, Loader2, CalendarIcon, PlusCircle, Trash2, GripVertical, Wand2, PlaneTakeoff, PlaneLanding, Building, Users as PaxIcon, Save } from 'lucide-react';
 import { useForm, useFieldArray, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -23,8 +23,8 @@ import { format, isValid as isValidDate, parseISO } from "date-fns";
 import type { Customer } from '@/ai/schemas/customer-schemas';
 import { fetchCustomers } from '@/ai/flows/manage-customers-flow';
 import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
-import { legTypes } from '@/ai/schemas/quote-schemas'; // Corrected import for legTypes
-import { type TripLeg as DbTripLeg } from '@/ai/schemas/trip-schemas'; // DbTripLeg type from trip-schemas
+import { legTypes } from '@/ai/schemas/quote-schemas';
+import { type TripLeg as DbTripLeg } from '@/ai/schemas/trip-schemas';
 import { estimateFlightDetails, type EstimateFlightDetailsOutput } from '@/ai/flows/estimate-flight-details-flow';
 import { fetchAircraftPerformance, type AircraftPerformanceData } from '@/ai/flows/manage-aircraft-performance-flow';
 
@@ -59,10 +59,10 @@ const TripFormSchema = z.object({
 export type FullTripFormData = z.infer<typeof TripFormSchema>;
 
 interface TripFormProps {
-  initialTripData?: any | null; // Using 'any' for now, will be typed as full Trip from DB
+  initialTripData?: any | null;
   isEditMode: boolean;
-  onSave: (data: FullTripFormData) => Promise<void>; // Callback for saving
-  isSaving: boolean; // Prop to indicate saving state
+  onSave: (data: FullTripFormData) => Promise<void>; 
+  isSaving: boolean; 
 }
 
 interface AircraftSelectOption {
@@ -110,7 +110,7 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving }: Trip
 
   const { setValue, control, getValues, trigger, watch } = form;
 
-  const { fields, append, remove, replace } = useFieldArray({
+  const { fields, append, remove } = useFieldArray({ // Removed 'replace' as it's not used
     control,
     name: "legs",
   });
@@ -211,7 +211,7 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving }: Trip
       if (prevLeg.departureDateTime && isValidDate(prevLeg.departureDateTime)) {
         const prevDep = new Date(prevLeg.departureDateTime);
         const prevFlightHours = Number(prevLeg.flightTimeHours || 1);
-        newLegDefaults.departureDateTime = new Date(prevDep.getTime() + (prevFlightHours + 1) * 60 * 60 * 1000); // Add 1 hour turnaround
+        newLegDefaults.departureDateTime = new Date(prevDep.getTime() + (prevFlightHours + 1) * 60 * 60 * 1000);
       }
     }
     append(newLegDefaults as FormLegData);
@@ -292,7 +292,49 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving }: Trip
                       <FormField control={control} name={`legs.${index}.origin`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><PlaneTakeoff className="h-4 w-4" />Origin</FormLabel> <FormControl><Input placeholder="KJFK" {...field} onChange={(e) => field.onChange(e.target.value.toUpperCase())} /></FormControl> <FormMessage /> </FormItem> )} />
                       <FormField control={control} name={`legs.${index}.destination`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><PlaneLanding className="h-4 w-4" />Destination</FormLabel> <FormControl><Input placeholder="KLAX" {...field} onChange={(e) => field.onChange(e.target.value.toUpperCase())} /></FormControl> <FormMessage /> </FormItem> )} />
                     </div>
-                    <FormField control={control} name={`legs.${index}.departureDateTime`} render={({ field }) => ( <FormItem className="flex flex-col"> <FormLabel>Departure Date & Time</FormLabel> {isClient ? ( <Popover> <PopoverTrigger asChild> <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !(field.value && isValidDate(field.value)) && "text-muted-foreground")}> <CalendarIcon className="mr-2 h-4 w-4" /> {field.value && isValidDate(field.value) ? format(field.value, "PPP HH:mm") : <span>Pick a date and time</span>} </Button> </PopoverTrigger> <PopoverContent className="w-auto p-0"> <Calendar mode="single" selected={field.value} onSelect={field.onChange} disabled={(date) => minLegDepartureDate ? date < minLegDepartureDate : true} initialFocus /> <div className="p-2 border-t"><Input type="time" defaultValue={field.value ? format(field.value, "HH:mm") : ""} onChange={(e) => { const time = e.target.value; const [hours, minutes] = time.split(':').map(Number); let newDate = field.value ? new Date(field.value) : new Date(); if (!isValidDate(newDate)) newDate = new Date(); newDate.setHours(hours, minutes); field.onChange(newDate); }} /></div> </PopoverContent> </Popover> ) : <Input placeholder="Loading date picker..." disabled />} <FormMessage /> </FormItem> )} />
+                    <FormField control={control} name={`legs.${index}.departureDateTime`} render={({ field }) => (
+                      <FormItem className="flex flex-col">
+                        <FormLabel>Desired Departure Date & Time</FormLabel>
+                        <FormControl>
+                          {isClient ? (
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !(field.value && field.value instanceof Date && isValidDate(field.value)) && "text-muted-foreground")}>
+                                  <CalendarIcon className="mr-2 h-4 w-4" />
+                                  <span>{field.value && field.value instanceof Date && isValidDate(field.value) ? format(field.value, "PPP HH:mm") : "Pick a date and time"}</span>
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-auto p-0">
+                                <Calendar
+                                  mode="single"
+                                  selected={field.value && field.value instanceof Date && isValidDate(field.value) ? field.value : undefined}
+                                  onSelect={field.onChange}
+                                  disabled={(date) => minLegDepartureDate ? date < minLegDepartureDate : true}
+                                  initialFocus
+                                />
+                                <div className="p-2 border-t">
+                                  <Input
+                                    type="time"
+                                    defaultValue={field.value && field.value instanceof Date && isValidDate(field.value) ? format(field.value, "HH:mm") : ""}
+                                    onChange={(e) => {
+                                      const time = e.target.value;
+                                      const [hours, minutes] = time.split(':').map(Number);
+                                      let newDate = field.value && field.value instanceof Date && isValidDate(field.value) ? new Date(field.value) : new Date();
+                                      if (!isValidDate(newDate)) newDate = new Date();
+                                      newDate.setHours(hours, minutes, 0, 0);
+                                      field.onChange(newDate);
+                                    }}
+                                  />
+                                </div>
+                              </PopoverContent>
+                            </Popover>
+                          ) : (
+                            <Input placeholder="Loading date picker..." disabled />
+                          )}
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       <FormField control={control} name={`legs.${index}.legType`} render={({ field }) => ( <FormItem> <FormLabel>Leg Type</FormLabel> <Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger></FormControl><SelectContent>{legTypes.map(type => (<SelectItem key={type} value={type}>{type}</SelectItem>))}</SelectContent></Select><FormMessage /> </FormItem> )} />
                       <FormField control={control} name={`legs.${index}.passengerCount`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><PaxIcon className="h-4 w-4" />Pax</FormLabel> <FormControl><Input type="number" placeholder="1" {...field} onChange={e => field.onChange(parseInt(e.target.value,10))} min="0" /></FormControl> <FormMessage /> </FormItem> )} />
@@ -316,11 +358,10 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving }: Trip
             </section>
             <Separator />
             <FormField control={control} name="notes" render={({ field }) => ( <FormItem> <FormLabel>Trip Notes (Optional)</FormLabel> <FormControl><Textarea placeholder="Enter any internal notes specific to this trip..." {...field} value={field.value || ''} rows={3} /></FormControl> <FormMessage /> </FormItem> )} />
-
           </CardContent>
           <CardFooter>
             <Button type="submit" disabled={isSaving}>
-              {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plane className="mr-2 h-4 w-4" />}
+              {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
               {isEditMode ? 'Save Trip Changes' : 'Create Trip'}
             </Button>
           </CardFooter>
