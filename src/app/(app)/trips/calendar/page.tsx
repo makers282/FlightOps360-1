@@ -3,22 +3,22 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { PageHeader } from '@/components/page-header';
-import { Calendar as CalendarIconLucide, Plane, Loader2, Filter as FilterIcon } from 'lucide-react'; // Added FilterIcon
+import { Calendar as CalendarIconLucide, Plane, Loader2, Filter as FilterIcon, PlusCircle } from 'lucide-react'; // Added PlusCircle
 import { Calendar as ShadcnCalendar } from "@/components/ui/calendar";
 import type { DayProps } from "react-day-picker";
-import { Card, CardContent, CardHeader, CardDescription, CardTitle } from '@/components/ui/card'; // Added CardTitle
+import { Card, CardContent, CardHeader, CardDescription, CardTitle } from '@/components/ui/card';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import Link from 'next/link';
+import Link from 'next/link'; // Added Link
 import { cn } from "@/lib/utils";
 import { format, isSameDay, parseISO, startOfDay, endOfDay, isToday, addHours, isValid, addDays, isBefore, isAfter } from 'date-fns';
-import { Button, buttonVariants } from '@/components/ui/button'; // Added Button
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { fetchTrips, type Trip, type TripStatus } from '@/ai/flows/manage-trips-flow';
 import { useToast } from '@/hooks/use-toast';
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"; // Added Popover
-import { Checkbox } from "@/components/ui/checkbox"; // Added Checkbox
-import { ScrollArea } from "@/components/ui/scroll-area"; // Added ScrollArea
-import { Label } from "@/components/ui/label"; // Added Label
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Label } from "@/components/ui/label";
 
 interface CalendarEvent {
   id: string;
@@ -26,8 +26,8 @@ interface CalendarEvent {
   start: Date;
   end: Date;
   type: 'trip' | 'maintenance';
-  aircraftId?: string; // Store aircraft ID for filtering
-  aircraftLabel?: string; // Keep label for display
+  aircraftId?: string;
+  aircraftLabel?: string;
   route?: string;
   color: string;
   textColor: string;
@@ -167,7 +167,7 @@ function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
 export default function TripCalendarPage() {
   const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
   const [isClientReady, setIsClientReady] = useState(false);
-  const [rawEvents, setRawEvents] = useState<CalendarEvent[]>([]); // Store raw events from fetch
+  const [rawEvents, setRawEvents] = useState<CalendarEvent[]>([]);
   const [isLoadingTrips, setIsLoadingTrips] = useState(true);
   const { toast } = useToast();
 
@@ -183,7 +183,7 @@ export default function TripCalendarPage() {
       nextColorIndex++;
     }
     return aircraftColorMap.get(aircraftId) || DEFAULT_AIRCRAFT_COLOR;
-  }, [aircraftColorMap, nextColorIndex]); // Removed nextColorIndex as it's mutated
+  }, [aircraftColorMap]);
 
 
   useEffect(() => {
@@ -192,10 +192,10 @@ export default function TripCalendarPage() {
       setIsLoadingTrips(true);
       try {
         const fetchedTrips = await fetchTrips();
-        aircraftColorMap.clear(); // Reset for consistent coloring
-        nextColorIndex = 0; // Reset for consistent coloring
+        aircraftColorMap.clear(); 
+        nextColorIndex = 0; 
 
-        const aircraftSet = new Map<string, string>(); // Use Map to store id -> label
+        const aircraftSet = new Map<string, string>();
 
         const calendarEvents: CalendarEvent[] = fetchedTrips.map(trip => {
           let startDate: Date | null = null;
@@ -264,7 +264,7 @@ export default function TripCalendarPage() {
 
   const eventsByDay = useMemo(() => {
     const map = new Map<string, CalendarEvent[]>();
-    filteredEvents.forEach(event => { // Use filteredEvents here
+    filteredEvents.forEach(event => {
       if (!event.start || !event.end || !isValid(event.start) || !isValid(event.end)) {
         return;
       }
@@ -279,7 +279,7 @@ export default function TripCalendarPage() {
       }
     });
     return map;
-  }, [filteredEvents]); // Depend on filteredEvents
+  }, [filteredEvents]);
 
   const handleAircraftFilterChange = (aircraftId: string, checked: boolean) => {
     setActiveAircraftFilters(prev => 
@@ -314,52 +314,58 @@ export default function TripCalendarPage() {
     <>
       <PageHeader title="Trip & Maintenance Calendar" description="Visual overview of scheduled trips and maintenance events." icon={CalendarIconLucide} />
       <Card className="shadow-xl border-border/50">
-        <CardHeader className="border-b py-3 px-4 flex flex-row justify-between items-center">
+        <CardHeader className="border-b py-3 px-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
           <div>
             <CardTitle className="text-lg">Activity View</CardTitle>
             <CardDescription>Different colors represent different aircraft.</CardDescription>
           </div>
-          {uniqueAircraftForFilter.length > 0 && (
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" size="sm">
-                  <FilterIcon className="mr-2 h-4 w-4" /> Filter Aircraft ({activeAircraftFilters.length > 0 ? `${activeAircraftFilters.length} selected` : 'All'})
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-64 p-0" align="end">
-                <div className="p-4 border-b">
-                  <h4 className="font-medium text-sm">Filter by Aircraft</h4>
-                </div>
-                <ScrollArea className="h-[200px] p-4">
-                  <div className="space-y-2">
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="filter-all-aircraft"
-                        checked={activeAircraftFilters.length === uniqueAircraftForFilter.length}
-                        onCheckedChange={(checked) => handleSelectAllAircraftFilter(Boolean(checked))}
-                      />
-                      <Label htmlFor="filter-all-aircraft" className="font-medium text-sm">
-                        All Aircraft
-                      </Label>
-                    </div>
-                    {uniqueAircraftForFilter.map(aircraft => (
-                      <div key={aircraft.id} className="flex items-center space-x-2">
+          <div className="flex gap-2 items-center">
+            {uniqueAircraftForFilter.length > 0 && (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <FilterIcon className="mr-2 h-4 w-4" /> Filter Aircraft ({activeAircraftFilters.length > 0 ? `${activeAircraftFilters.length} selected` : 'All'})
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-64 p-0" align="end">
+                  <div className="p-4 border-b">
+                    <h4 className="font-medium text-sm">Filter by Aircraft</h4>
+                  </div>
+                  <ScrollArea className="h-[200px] p-4">
+                    <div className="space-y-2">
+                      <div className="flex items-center space-x-2">
                         <Checkbox
-                          id={`filter-ac-${aircraft.id}`}
-                          checked={activeAircraftFilters.includes(aircraft.id)}
-                          onCheckedChange={(checked) => handleAircraftFilterChange(aircraft.id, Boolean(checked))}
+                          id="filter-all-aircraft"
+                          checked={activeAircraftFilters.length === uniqueAircraftForFilter.length && uniqueAircraftForFilter.length > 0}
+                          onCheckedChange={(checked) => handleSelectAllAircraftFilter(Boolean(checked))}
                         />
-                        <Label htmlFor={`filter-ac-${aircraft.id}`} className="text-sm font-normal">
-                          {aircraft.label}
+                        <Label htmlFor="filter-all-aircraft" className="font-medium text-sm">
+                          All Aircraft
                         </Label>
                       </div>
-                    ))}
-                  </div>
-                </ScrollArea>
-                {/* Apply/Clear buttons could be added here if not applying on change */}
-              </PopoverContent>
-            </Popover>
-          )}
+                      {uniqueAircraftForFilter.map(aircraft => (
+                        <div key={aircraft.id} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`filter-ac-${aircraft.id}`}
+                            checked={activeAircraftFilters.includes(aircraft.id)}
+                            onCheckedChange={(checked) => handleAircraftFilterChange(aircraft.id, Boolean(checked))}
+                          />
+                          <Label htmlFor={`filter-ac-${aircraft.id}`} className="text-sm font-normal">
+                            {aircraft.label}
+                          </Label>
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                </PopoverContent>
+              </Popover>
+            )}
+            <Button asChild size="sm">
+              <Link href="/trips/new">
+                <PlusCircle className="mr-2 h-4 w-4" /> New Trip
+              </Link>
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="p-0">
           <ShadcnCalendar
@@ -384,3 +390,5 @@ export default function TripCalendarPage() {
   );
 }
 
+
+    
