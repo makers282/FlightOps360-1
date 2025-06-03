@@ -29,12 +29,14 @@ import {
 } from "@/components/ui/tooltip";
 
 const PHASE_COLORS = {
-  DEFAULT_TRIP: { color: 'bg-sky-500',    textColor: 'text-white' }, // Default for unknown aircraft
+  DEFAULT_TRIP: { color: 'bg-sky-500',    textColor: 'text-white' }, 
   BLOCK_OUT: { color: 'bg-slate-700', textColor: 'text-slate-100' },
 };
 
 const AIRCRAFT_EVENT_COLORS = [
-  { color: 'bg-cyan-500', textColor: 'text-white' },
+  { color: 'bg-cyan-500', textColor: 'text-white' },    // N1327J
+  { color: 'bg-green-500', textColor: 'text-white' },   // N630MW, N89TB
+  { color: 'bg-slate-800', textColor: 'text-white' }, // N907DK (darker than block_out)
   { color: 'bg-teal-500', textColor: 'text-white' },
   { color: 'bg-emerald-500', textColor: 'text-white' },
   { color: 'bg-lime-500', textColor: 'text-black' },
@@ -48,7 +50,7 @@ interface CalendarEvent {
   id: string;
   title: string;
   start: Date;
-  end: Date; // Now INCLUSIVE end date
+  end: Date; // INCLUSIVE end date
   type: 'trip' | 'block_out';
   aircraftId?: string;
   aircraftLabel?: string;
@@ -81,8 +83,9 @@ const CustomDay = React.memo(function CustomDay(dayProps: DayProps & { eventsFor
   }, [eventsForDay]);
 
   const dayNumberSectionClasses = cn("flex justify-end p-0.5 h-6 items-start");
-  const eventsForDayContainerClasses = cn("h-full flex flex-col gap-px"); // gap-px for stacking different events
-  const eventBarHeight = "h-5 sm:h-6"; // Controlled height for event bars
+  // The gap-px here is for separating *different stacked events*
+  const eventsForDayContainerClasses = cn("h-full flex flex-col gap-px"); 
+  const eventBarHeight = "h-5 sm:h-6"; 
   const baseTextSize = "text-[0.6rem]";
 
   return (
@@ -107,26 +110,49 @@ const CustomDay = React.memo(function CustomDay(dayProps: DayProps & { eventsFor
             const mapKey = `${event.id}-${format(date, "yyyy-MM-dd")}`;
             const displayColor = event.color;
             const displayTextColor = event.textColor;
-            let titleToRender = '\u00A0'; 
-            const eventStartsOnThisDay = isSameDay(event.start, date);
+            
+            const eventStartsOnThisDay = isSameDay(date, event.start);
+            const eventEndsOnThisDay = isSameDay(date, event.end); // event.end is INCLUSIVE
 
+            let titleToRender = '\u00A0'; // Non-breaking space for height consistency
             if (eventStartsOnThisDay) {
                 titleToRender = event.title;
+            }
+            
+            let borderRadiusClasses = "rounded-sm";
+            let marginClasses = "mx-0"; // Default: no horizontal bleed
+
+            if (eventStartsOnThisDay && eventEndsOnThisDay) {
+                // Single day event
+                borderRadiusClasses = "rounded-sm";
+                // marginClasses remains "mx-0"
+            } else if (eventStartsOnThisDay) {
+                // Multi-day, starts today
+                borderRadiusClasses = "rounded-l-sm rounded-r-none";
+                marginClasses = "ml-0 mr-[-1px]"; // Bleed right
+            } else if (eventEndsOnThisDay) {
+                // Multi-day, ends today
+                borderRadiusClasses = "rounded-r-sm rounded-l-none";
+                marginClasses = "mr-0 ml-[-1px]"; // Bleed left
+            } else { 
+                // Middle segment (started before this day, ends after this day)
+                borderRadiusClasses = "rounded-none";
+                marginClasses = "mx-[-1px]"; // Bleed both sides
             }
             
             const EventLinkOrDiv = event.type === 'trip' && event.id ? Link : 'div';
             const hrefProp = event.type === 'trip' && event.id ? { href: `/trips/details/${event.id}` } : {};
             const tooltipText = event.title;
 
-            // Removed marginClasses and borderRadiusClasses
             const eventBarClasses = cn(
                 "block w-full", 
                 eventBarHeight,
                 "flex items-center overflow-hidden whitespace-nowrap",
-                "relative", 
+                "relative z-10", // z-index to paint over cell borders
                 displayColor, 
                 displayTextColor,
-                "rounded-sm" // Simple rounding for all segments now
+                borderRadiusClasses,
+                marginClasses
             );
 
             return (
@@ -159,6 +185,7 @@ const CustomDay = React.memo(function CustomDay(dayProps: DayProps & { eventsFor
     </div>
   );
 }, (prevProps, nextProps) => {
+    // Memoization check
     return isSameDay(prevProps.date, nextProps.date) &&
            prevProps.displayMonth.getTime() === nextProps.displayMonth.getTime() &&
            prevProps.eventsForDay.length === nextProps.eventsForDay.length &&
@@ -219,7 +246,7 @@ export default function TripCalendarPage() {
         
         const tripCalendarEvents: CalendarEvent[] = fetchedTrips.map(trip => {
           let overallStartDate: Date | null = null;
-          let lastActiveDay: Date | null = null; // This will be the inclusive end date
+          let lastActiveDayInclusive: Date | null = null; 
           let route = "N/A";
 
           if (trip.legs && trip.legs.length > 0) {
@@ -228,21 +255,20 @@ export default function TripCalendarPage() {
             route = `${firstLeg.origin || 'UNK'} -> ${lastLegTripData.destination || 'UNK'}`;
             if (isValidISO(firstLeg.departureDateTime)) overallStartDate = startOfDay(parseISO(firstLeg.departureDateTime));
 
-            // Determine the actual last day of activity for the trip (inclusive end)
             if (isValidISO(lastLegTripData.arrivalDateTime)) {
-                lastActiveDay = startOfDay(parseISO(lastLegTripData.arrivalDateTime));
+                lastActiveDayInclusive = startOfDay(parseISO(lastLegTripData.arrivalDateTime));
             } else if (isValidISO(lastLegTripData.departureDateTime) && lastLegTripData.blockTimeHours && lastLegTripData.blockTimeHours > 0) {
-                lastActiveDay = startOfDay(addHours(parseISO(lastLegTripData.departureDateTime), lastLegTripData.blockTimeHours));
+                lastActiveDayInclusive = startOfDay(addHours(parseISO(lastLegTripData.departureDateTime), lastLegTripData.blockTimeHours));
             } else if (overallStartDate) { 
                 let totalBlockTime = 0;
                 trip.legs.forEach(leg => { totalBlockTime += (leg.blockTimeHours || (leg.flightTimeHours ? leg.flightTimeHours + 0.5 : 1));});
-                lastActiveDay = startOfDay(addHours(overallStartDate, totalBlockTime > 0 ? totalBlockTime : 2)); 
+                lastActiveDayInclusive = startOfDay(addHours(overallStartDate, totalBlockTime > 0 ? totalBlockTime : 2)); 
             }
           }
           
           if (!overallStartDate || !isValid(overallStartDate)) overallStartDate = startOfDay(new Date()); 
-          if (!lastActiveDay || !isValid(lastActiveDay) || isBefore(lastActiveDay, overallStartDate)) {
-             lastActiveDay = overallStartDate; 
+          if (!lastActiveDayInclusive || !isValid(lastActiveDayInclusive) || isBefore(lastActiveDayInclusive, overallStartDate)) {
+             lastActiveDayInclusive = overallStartDate; 
           }
           
           const aircraftIdentifier = trip.aircraftId || 'UNKNOWN_AIRCRAFT';
@@ -255,7 +281,7 @@ export default function TripCalendarPage() {
 
           return {
             id: trip.id, title: `${aircraftDisplayLabel} - ${trip.tripId}`, 
-            start: overallStartDate, end: lastActiveDay, // End date is now inclusive
+            start: overallStartDate, end: lastActiveDayInclusive, // end is inclusive
             type: 'trip',
             aircraftId: aircraftIdentifier, aircraftLabel: aircraftDisplayLabel,
             route: route, 
@@ -271,13 +297,13 @@ export default function TripCalendarPage() {
                 aircraftSetForFilter.set(blockOut.aircraftId, aircraftDisplayLabel);
             }
             const blockOutStartDate = startOfDay(parseISO(blockOut.startDate));
-            const blockOutEndDateInclusive = startOfDay(parseISO(blockOut.endDate)); // End date is inclusive
+            const blockOutEndDateInclusive = startOfDay(parseISO(blockOut.endDate));
 
             return {
                 id: blockOut.id,
                 title: `${aircraftDisplayLabel}: ${blockOut.title}`,
                 start: blockOutStartDate,
-                end: blockOutEndDateInclusive, // End date is now inclusive     
+                end: blockOutEndDateInclusive,  
                 type: 'block_out',
                 aircraftId: blockOut.aircraftId,
                 aircraftLabel: aircraftDisplayLabel,
@@ -357,7 +383,8 @@ export default function TripCalendarPage() {
         const dayKey = format(dayIter, "yyyy-MM-dd");
         if (!map.has(dayKey)) map.set(dayKey, []);
         const dayEvents = map.get(dayKey)!;
-        if (!dayEvents.find(e => e.id === event.id)) {
+        // Prevent duplicate event segments on the same day if data processing was imperfect
+        if (!dayEvents.find(e => e.id === event.id && e.type === event.type)) { 
            dayEvents.push(event);
         }
       }
