@@ -71,7 +71,8 @@ function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
   }, [eventsForDay]);
 
   const dayNumberSectionClasses = cn("flex justify-end p-0.5 h-6 items-start");
-  const eventsForDayContainerClasses = cn("h-full flex flex-col gap-px overflow-hidden pt-1"); // Added pt-1 for a little space after day number
+  // Removed overflow-hidden from here
+  const eventsForDayContainerClasses = cn("h-full flex flex-col gap-px pt-1"); 
 
   return (
     <div className="h-full w-full flex flex-col">
@@ -115,26 +116,30 @@ function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
                 marginClasses = "mx-[-1px]";
             }
             
-            const displayTitleText = eventStartsInThisCell
+            const displayTitleText = eventStartsInThisCell 
                 ? (event.type === 'block_out'
-                    ? `${event.aircraftLabel || 'UNK'}: ${event.title}`
-                    : `${event.aircraftLabel || 'UNK'}: ${event.title}`) // For trips, event.title is trip.tripId
+                    ? `${event.aircraftLabel || 'UNK'}: ${event.title}` 
+                    : `${event.aircraftLabel || 'UNK'}: ${event.title}`) 
                 : null; 
             
-            const eventDisplayTitle = displayTitleText ? displayTitleText : '\u00A0'; // Non-breaking space
+            const eventDisplayTitle = displayTitleText ? displayTitleText : '\u00A0'; // Non-breaking space for height
             const showPaddingForText = !!displayTitleText;
               
             const eventLink = event.type === 'trip' ? `/trips/details/${event.id}` : undefined;
 
             const EventBarContent = () => (
-              <div className={cn(
-                "h-full w-full text-[0.55rem] sm:text-[0.6rem] flex items-center hover:opacity-90 relative z-[1]", 
-                event.color, event.textColor, borderRadiusClasses, marginClasses
-              )}>
-                <span className={cn(
+              <div
+                className={cn(
+                  "h-full w-full text-[0.55rem] sm:text-[0.6rem] flex items-center hover:opacity-90 relative z-[1]", 
+                  event.color, event.textColor, borderRadiusClasses, marginClasses
+                )}
+              >
+                <span
+                  className={cn(
                     "w-full overflow-hidden whitespace-nowrap truncate",
                     showPaddingForText ? "px-0.5 sm:px-1" : ""
-                )}>
+                  )}
+                >
                   {eventDisplayTitle}
                 </span>
               </div>
@@ -142,7 +147,7 @@ function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
             
             const EventBarWrapper = ({ children }: { children: React.ReactNode }) => {
                 const commonProps = {
-                  className: cn("block focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-5 sm:h-6"),
+                  className: cn("block focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-5 sm:h-6 relative"),
                 };
                 if (eventLink) {
                   return <Link href={eventLink} {...commonProps}>{children}</Link>;
@@ -230,11 +235,11 @@ export default function TripCalendarPage() {
             
             if (lastLeg.arrivalDateTime && isValidISO(lastLeg.arrivalDateTime)) endDate = parseISO(lastLeg.arrivalDateTime);
             else if (lastLegDeparture && lastLeg.blockTimeHours && lastLeg.blockTimeHours > 0) endDate = addHours(lastLegDeparture, lastLeg.blockTimeHours);
-            else if (startDate && lastLeg.blockTimeHours && lastLeg.blockTimeHours > 0) endDate = addHours(startDate, lastLeg.blockTimeHours); // Use first leg start + block for end if no arrival
-            else if (startDate) { // Fallback if block time is also missing, or if only one leg with no block time
+            else if (startDate && lastLeg.blockTimeHours && lastLeg.blockTimeHours > 0) endDate = addHours(startDate, lastLeg.blockTimeHours); 
+            else if (startDate) { 
               let totalBlockTimeForEndDate = 0;
               trip.legs.forEach(leg => { totalBlockTimeForEndDate += (leg.blockTimeHours || (leg.flightTimeHours ? leg.flightTimeHours + 0.5 : 1)); });
-              endDate = addHours(startDate, totalBlockTimeForEndDate > 0 ? totalBlockTimeForEndDate : 2); // Ensure at least a 2-hour block if no other data
+              endDate = addHours(startDate, totalBlockTimeForEndDate > 0 ? totalBlockTimeForEndDate : 2); 
             }
           }
           
@@ -308,8 +313,6 @@ export default function TripCalendarPage() {
     }
 
     const blockOutToSave = {
-      // id field is not part of SaveAircraftBlockOutInput, Firestore generates it.
-      // If an ID is needed for an update, it would be passed differently.
       aircraftId: data.aircraftId,
       aircraftLabel: selectedAircraft.label,
       title: data.title,
@@ -318,9 +321,7 @@ export default function TripCalendarPage() {
     };
 
     try {
-      // Assuming saveAircraftBlockOut takes SaveAircraftBlockOutInput
-      // and returns the saved AircraftBlockOut (which includes the Firestore-generated ID)
-      await saveAircraftBlockOut(blockOutToSave as any); // Cast as any if types mismatch slightly on id
+      await saveAircraftBlockOut(blockOutToSave as any); 
       toast({
         title: "Aircraft Block-Out Saved",
         description: `${selectedAircraft.label} blocked from ${format(data.startDate, "PPP")} to ${format(data.endDate, "PPP")} has been saved to Firestore.`,
