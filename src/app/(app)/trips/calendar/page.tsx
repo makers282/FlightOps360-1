@@ -44,16 +44,16 @@ export interface AircraftFilterOption {
 }
 
 const AIRCRAFT_COLORS_PALETTE = [
-  { color: 'bg-sky-500', textColor: 'text-white' }, // Sky Blue
-  { color: 'bg-emerald-500', textColor: 'text-white' }, // Emerald Green
-  { color: 'bg-amber-500', textColor: 'text-black' }, // Amber/Orange
-  { color: 'bg-rose-500', textColor: 'text-white' }, // Rose/Red
-  { color: 'bg-violet-500', textColor: 'text-white' }, // Violet/Purple
-  { color: 'bg-lime-500', textColor: 'text-black' },   // Lime Green
-  { color: 'bg-cyan-500', textColor: 'text-black' },   // Cyan
-  { color: 'bg-pink-500', textColor: 'text-white' },  // Pink
-  { color: 'bg-teal-500', textColor: 'text-white' },  // Teal
-  { color: 'bg-orange-500', textColor: 'text-black' }, // Orange
+  { color: 'bg-sky-500', textColor: 'text-white' }, 
+  { color: 'bg-emerald-500', textColor: 'text-white' }, 
+  { color: 'bg-amber-500', textColor: 'text-black' }, 
+  { color: 'bg-rose-500', textColor: 'text-white' }, 
+  { color: 'bg-violet-500', textColor: 'text-white' }, 
+  { color: 'bg-lime-500', textColor: 'text-black' },   
+  { color: 'bg-cyan-500', textColor: 'text-black' },   
+  { color: 'bg-pink-500', textColor: 'text-white' },  
+  { color: 'bg-teal-500', textColor: 'text-white' },  
+  { color: 'bg-orange-500', textColor: 'text-black' }, 
 ];
 const DEFAULT_AIRCRAFT_COLOR = { color: 'bg-gray-400', textColor: 'text-white' };
 const BLOCK_OUT_EVENT_COLOR = { color: 'bg-slate-600', textColor: 'text-slate-100' }; 
@@ -71,8 +71,7 @@ function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
   }, [eventsForDay]);
 
   const dayNumberSectionClasses = cn("flex justify-end p-0.5 h-6 items-start");
-  // Removed overflow-hidden
-  const eventsForDayContainerClasses = cn("h-full flex flex-col gap-px pt-1"); 
+  const eventsForDayContainerClasses = cn("h-full flex flex-col gap-px pt-1"); // No overflow-hidden
 
   return (
     <div className="h-full w-full flex flex-col">
@@ -94,13 +93,11 @@ function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
         <div className={eventsForDayContainerClasses}>
           {dayEvents.map(event => {
             const mapKey = `${event.id}-${format(date, "yyyy-MM-dd")}`;
-            const currentCellDayStart = startOfDay(date);
-            // const currentCellDayEnd = endOfDay(date); // Not strictly needed with current logic
-
+            
             const eventStartsInThisCell = isSameDay(event.start, date);
             const eventEndsInThisCell = isSameDay(event.end, date);
-            const eventStartedBeforeCell = isBefore(event.start, currentCellDayStart);
-            const eventEndsAfterCell = isAfter(event.end, currentCellDayStart); // Check if event ends after *start* of current day
+            const eventStartedBeforeCell = isBefore(event.start, startOfDay(date));
+            const eventEndsAfterCell = isAfter(event.end, startOfDay(date));
 
             let borderRadiusClasses = "rounded-sm";
             let widthAndPositionClasses = "w-full left-0";
@@ -111,34 +108,28 @@ function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
             } else if (eventStartedBeforeCell && eventEndsInThisCell) { // Started before, ends in cell
                 borderRadiusClasses = "rounded-r-sm rounded-l-none";
                 widthAndPositionClasses = "w-[calc(100%+1px)] left-[-1px]";
-            } else if (eventStartedBeforeCell && eventEndsAfterCell) { // Middle segment
+            } else if (eventStartedBeforeCell && eventEndsAfterCell) { // Middle segment of a multi-day event
                 borderRadiusClasses = "rounded-none";
                 widthAndPositionClasses = "w-[calc(100%+2px)] left-[-1px]";
             }
-            // Single day event: eventStartsInThisCell && eventEndsInThisCell uses default "rounded-sm" and "w-full left-0"
+            // Single day event (eventStartsInThisCell && eventEndsInThisCell) uses default "rounded-sm" and "w-full left-0"
             
-            const displayTitleText = eventStartsInThisCell 
-                ? (event.type === 'block_out'
-                    ? `${event.aircraftLabel || 'UNK'}: ${event.title}` 
-                    : `${event.aircraftLabel || 'UNK'}: ${event.title}`) 
-                : null; 
+            const eventDisplayTitle = eventStartsInThisCell
+                ? `${event.aircraftLabel || 'UNK'}: ${event.title || event.id}`
+                : '\u00A0'; // Non-breaking space for height consistency
             
-            const eventDisplayTitle = displayTitleText ? displayTitleText : '\u00A0'; 
-            const showPaddingForText = !!displayTitleText;
-              
             const eventLink = event.type === 'trip' ? `/trips/details/${event.id}` : undefined;
 
             const EventBarContent = () => (
               <div
                 className={cn(
-                  "h-full text-[0.55rem] sm:text-[0.6rem] flex items-center hover:opacity-90 relative z-[1]", 
+                  "h-full text-[0.55rem] sm:text-[0.6rem] flex items-center hover:opacity-90 relative z-10", // Increased z-index
                   event.color, event.textColor, borderRadiusClasses, widthAndPositionClasses
                 )}
               >
                 <span
                   className={cn(
-                    "w-full overflow-hidden whitespace-nowrap truncate",
-                    showPaddingForText ? "px-0.5 sm:px-1" : ""
+                    "w-full overflow-hidden whitespace-nowrap truncate px-0.5 sm:px-1" // Always apply padding
                   )}
                 >
                   {eventDisplayTitle}
@@ -148,7 +139,7 @@ function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
             
             const EventBarWrapper = ({ children }: { children: React.ReactNode }) => {
                 const commonProps = {
-                  className: cn("block focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-5 sm:h-6 relative"), // Outer wrapper has fixed height and is relative for tooltip
+                  className: cn("block focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-5 sm:h-6 relative"), // Outer wrapper
                 };
                 if (eventLink) {
                   return <Link href={eventLink} {...commonProps}>{children}</Link>;
@@ -163,7 +154,7 @@ function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
                     <EventBarWrapper><EventBarContent /></EventBarWrapper>
                   </TooltipTrigger>
                   <TooltipContent side="top" align="center" className="max-w-xs p-2 bg-popover text-popover-foreground border shadow-md rounded-md text-xs">
-                    <p className="font-semibold">{event.type === 'block_out' ? `${event.aircraftLabel || 'UNK'}: ${event.title}` : `${event.aircraftLabel || 'UNK'}: ${event.title}`} {event.status && event.type === 'trip' && <span className="text-muted-foreground">({event.status})</span>}</p>
+                    <p className="font-semibold">{`${event.aircraftLabel || 'UNK'}: ${event.title}`} {event.status && event.type === 'trip' && <span className="text-muted-foreground">({event.status})</span>}</p>
                     {event.route && event.type === 'trip' && <p>Route: {event.route}</p>}
                     <p className="text-muted-foreground">
                       {format(event.start, 'MMM d, H:mm zz')} - {format(event.end, 'MMM d, H:mm zz')}
@@ -322,15 +313,13 @@ export default function TripCalendarPage() {
     };
 
     try {
-      // The saveAircraftBlockOut flow might return the saved object with an ID
-      // We'll assume it does for potential optimistic updates, or rely on reload.
       await saveAircraftBlockOut(blockOutToSave as any); 
       toast({
         title: "Aircraft Block-Out Saved",
         description: `${selectedAircraft.label} blocked from ${format(data.startDate, "PPP")} to ${format(data.endDate, "PPP")} has been saved to Firestore.`,
         variant: "default"
       });
-      await loadInitialData(); // Reload all data to ensure consistency
+      await loadInitialData(); 
       setIsBlockOutModalOpen(false);
     } catch (error) {
       console.error("Failed to save block-out event:", error);
@@ -351,12 +340,11 @@ export default function TripCalendarPage() {
         return;
       }
       let currentDayIter = startOfDay(event.start);
-      const eventEndBoundary = endOfDay(event.end); // Use endOfDay to include the full last day
+      const eventEndBoundary = endOfDay(event.end); 
       while (currentDayIter <= eventEndBoundary) {
         const dayKey = format(currentDayIter, "yyyy-MM-dd");
         if (!map.has(dayKey)) map.set(dayKey, []);
         const dayEvents = map.get(dayKey)!;
-        // Ensure an event is only added once per day to the list for that day
         if (!dayEvents.find(e => e.id === event.id)) dayEvents.push(event);
         currentDayIter = addDays(currentDayIter, 1);
       }
@@ -482,4 +470,3 @@ export default function TripCalendarPage() {
     </>
   );
 }
-
