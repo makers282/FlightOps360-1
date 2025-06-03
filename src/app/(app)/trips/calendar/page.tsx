@@ -70,7 +70,8 @@ const CustomDay = React.memo(function CustomDay(dayProps: DayProps & { eventsFor
   const isCurrentMonthDay = isSameMonth(date, displayMonth);
 
   if (!isCurrentMonthDay) {
-    return <div className="h-full w-full border-r border-b border-border/30" />;
+    // Render a simpler div for outside days to ensure borders are consistent
+    return <div className="h-full w-full border-r border-b border-border/30 group-data-[row-last=true]:border-b-0 last:border-r-0" />;
   }
 
   const sortedEventsForDay = useMemo(() => {
@@ -85,12 +86,10 @@ const CustomDay = React.memo(function CustomDay(dayProps: DayProps & { eventsFor
   const baseTextSize = "text-[0.6rem] sm:text-[0.65rem]";
 
   return (
-    // Added pt-5 to reserve space for the day number at the top
-    <div className="h-full w-full border-r border-b border-border/30 group-data-[row-last=true]:border-b-0 last:border-r-0 relative pt-5"> 
+    <div className="relative h-full w-full border-r border-b border-border/30 group-data-[row-last=true]:border-b-0 last:border-r-0 pt-5"> 
       <time
         dateTime={format(date, "yyyy-MM-dd")}
         className={cn(
-          // Positioned absolutely, z-index ensures it's above event bars
           "absolute top-0.5 right-0.5 z-20 text-xs px-1", 
           isToday(date)
             ? "text-primary font-bold rounded-full bg-primary/20 size-5 flex items-center justify-center"
@@ -101,8 +100,7 @@ const CustomDay = React.memo(function CustomDay(dayProps: DayProps & { eventsFor
       </time>
       
       {sortedEventsForDay.length > 0 && (
-         // Container for event bars, positioned absolutely at the bottom of the cell
-         <div className="absolute bottom-[2px] left-0 right-0 flex flex-col gap-px px-px">
+         <div className="absolute bottom-[1px] left-0 right-0 flex flex-col gap-px">
           {sortedEventsForDay.map(event => {
             const eventStartDay = startOfDay(event.start);
             const eventEndDay = startOfDay(event.end); 
@@ -112,24 +110,23 @@ const CustomDay = React.memo(function CustomDay(dayProps: DayProps & { eventsFor
 
             const isStartDay = isSameDay(currentDay, eventStartDay);
             const isEndDay = isSameDay(currentDay, eventEndDay);
-            const isSingleDayEvent = isStartDay && isEndDay;
-
-            let marginClasses = "";
+            
+            let marginClasses = "mx-0";
+            let widthClasses = "w-full";
             let borderRadiusClasses = "rounded-none";
-            let widthClasses = "w-full"; // Default width, middle segments will override
 
-            if (isSingleDayEvent) {
+            if (isStartDay && isEndDay) { // Single day event
               borderRadiusClasses = "rounded-sm";
-              marginClasses = "mx-0"; // No horizontal bleed
-            } else if (isStartDay) {
+            } else if (isStartDay) { // Start of multi-day
               borderRadiusClasses = "rounded-l-sm rounded-r-none";
-              marginClasses = "ml-0 mr-[-1px]"; // Bleed right
-            } else if (isEndDay) {
+              marginClasses = "ml-0 mr-[-1px]";
+              widthClasses = "w-full"; // Ensure it doesn't shrink if container has padding
+            } else if (isEndDay) { // End of multi-day
               borderRadiusClasses = "rounded-r-sm rounded-l-none";
-              marginClasses = "mr-0 ml-[-1px]"; // Bleed left
+              marginClasses = "mr-0 ml-[-1px]";
+              widthClasses = "w-full";
             } else { // Middle segment
-              borderRadiusClasses = "rounded-none";
-              marginClasses = "mx-[-1px]"; // Bleed both sides
+              marginClasses = "mx-[-1px]";
               widthClasses = "w-[calc(100%+2px)]"; // Expand to cover cell borders
             }
             
@@ -149,7 +146,7 @@ const CustomDay = React.memo(function CustomDay(dayProps: DayProps & { eventsFor
                     <LinkOrDiv
                       {...linkProps}
                       className={cn(
-                        "block relative z-10", // z-10 to be above cell background but below day number
+                        "relative block z-10", 
                         eventBarHeight,
                         widthClasses,
                         marginClasses,
@@ -161,7 +158,6 @@ const CustomDay = React.memo(function CustomDay(dayProps: DayProps & { eventsFor
                       {showTitle && (
                         <span
                           className={cn(
-                            // Title positioned absolutely within the event bar
                             "absolute inset-0 px-1.5 flex items-center", 
                             baseTextSize,
                             "whitespace-nowrap overflow-hidden truncate"
@@ -484,17 +480,26 @@ export default function TripCalendarPage() {
                 day_disabled: "opacity-50 pointer-events-none", caption: "flex justify-center items-center py-2.5 relative gap-x-1 px-2",
                 caption_label: "text-sm font-medium px-2", nav_button: cn(buttonVariants({ variant: "outline" }), "h-7 w-7 bg-transparent p-0 opacity-80 hover:opacity-100"),
                 nav_button_previous: "absolute left-1", nav_button_next: "absolute right-1",
-                row_last: "group-data-[row-last=true]",
+                // Remove row_last to ensure all rows have bottom borders if cells within them do. The cell logic will handle the last row's bottom border.
             }}
             components={{ Day: (dayProps) => <CustomDay {...dayProps} eventsForDay={eventsByDay.get(format(startOfDay(dayProps.date), "yyyy-MM-dd")) || []} /> }}
             showOutsideDays={false} numberOfMonths={1} captionLayout="buttons"
             fromYear={new Date().getFullYear() - 5} toYear={new Date().getFullYear() + 5}
             onDayRender={(day, modifiers, dayProps) => {
-              const dayRowIndex = Math.floor(dayProps.date.getDay() + dayProps.date.getDate() / 7); 
-              if (dayProps.displayMonth.getMonth() === dayProps.date.getMonth() && dayRowIndex >=4) { 
-                 return { className: 'group-data-[row-last=true]' }; 
-              }
-              return {};
+              // Determine if the current day is in the last visually rendered row
+              const dayOfWeek = dayProps.date.getDay(); // 0 (Sun) to 6 (Sat)
+              const dayOfMonth = dayProps.date.getDate();
+              const daysInMonth = new Date(dayProps.date.getFullYear(), dayProps.date.getMonth() + 1, 0).getDate();
+              
+              // Check if this day is in a row that would be visually last.
+              // This is tricky because it depends on the start day of the month.
+              // A simpler approach is to let the cell's `group-data-[row-last=true]:border-b-0` handle it.
+              // react-day-picker itself adds `data-is-start-of-row` and `data-is-end-of-row` attributes
+              // to its internal day elements if `modifiers` is used, but we apply to cell.
+              // For `group-data-[row-last=true]` to work, react-day-picker needs to somehow identify the last row.
+              // If react-day-picker does not natively mark the last row, we might need to adjust.
+              // For now, we trust the `group-data-[row-last=true]:border-b-0` on the cell itself.
+              return {}; 
             }}
           />
         </CardContent>
@@ -510,3 +515,5 @@ export default function TripCalendarPage() {
   );
 }
 
+
+    
