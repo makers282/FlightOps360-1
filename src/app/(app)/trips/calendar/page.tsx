@@ -71,7 +71,7 @@ function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
   }, [eventsForDay]);
 
   const dayNumberSectionClasses = cn("flex justify-end p-0.5 h-6 items-start");
-  // Removed overflow-hidden from here
+  // Removed overflow-hidden
   const eventsForDayContainerClasses = cn("h-full flex flex-col gap-px pt-1"); 
 
   return (
@@ -95,26 +95,27 @@ function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
           {dayEvents.map(event => {
             const mapKey = `${event.id}-${format(date, "yyyy-MM-dd")}`;
             const currentCellDayStart = startOfDay(date);
-            const currentCellDayEnd = endOfDay(date);
+            // const currentCellDayEnd = endOfDay(date); // Not strictly needed with current logic
 
             const eventStartsInThisCell = isSameDay(event.start, date);
             const eventEndsInThisCell = isSameDay(event.end, date);
             const eventStartedBeforeCell = isBefore(event.start, currentCellDayStart);
-            const eventEndsAfterCell = isAfter(event.end, currentCellDayEnd);
-            
-            let borderRadiusClasses = "rounded-sm";
-            let marginClasses = "";
+            const eventEndsAfterCell = isAfter(event.end, currentCellDayStart); // Check if event ends after *start* of current day
 
-            if (eventStartsInThisCell && eventEndsAfterCell) {
+            let borderRadiusClasses = "rounded-sm";
+            let widthAndPositionClasses = "w-full left-0";
+
+            if (eventStartsInThisCell && eventEndsAfterCell) { // Starts in cell, continues past
                 borderRadiusClasses = "rounded-l-sm rounded-r-none";
-                marginClasses = "mr-[-1px]"; 
-            } else if (eventStartedBeforeCell && eventEndsInThisCell) {
+                widthAndPositionClasses = "w-[calc(100%+1px)] left-0";
+            } else if (eventStartedBeforeCell && eventEndsInThisCell) { // Started before, ends in cell
                 borderRadiusClasses = "rounded-r-sm rounded-l-none";
-                marginClasses = "ml-[-1px]";
-            } else if (eventStartedBeforeCell && eventEndsAfterCell) {
+                widthAndPositionClasses = "w-[calc(100%+1px)] left-[-1px]";
+            } else if (eventStartedBeforeCell && eventEndsAfterCell) { // Middle segment
                 borderRadiusClasses = "rounded-none";
-                marginClasses = "mx-[-1px]";
+                widthAndPositionClasses = "w-[calc(100%+2px)] left-[-1px]";
             }
+            // Single day event: eventStartsInThisCell && eventEndsInThisCell uses default "rounded-sm" and "w-full left-0"
             
             const displayTitleText = eventStartsInThisCell 
                 ? (event.type === 'block_out'
@@ -122,7 +123,7 @@ function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
                     : `${event.aircraftLabel || 'UNK'}: ${event.title}`) 
                 : null; 
             
-            const eventDisplayTitle = displayTitleText ? displayTitleText : '\u00A0'; // Non-breaking space for height
+            const eventDisplayTitle = displayTitleText ? displayTitleText : '\u00A0'; 
             const showPaddingForText = !!displayTitleText;
               
             const eventLink = event.type === 'trip' ? `/trips/details/${event.id}` : undefined;
@@ -130,8 +131,8 @@ function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
             const EventBarContent = () => (
               <div
                 className={cn(
-                  "h-full w-full text-[0.55rem] sm:text-[0.6rem] flex items-center hover:opacity-90 relative z-[1]", 
-                  event.color, event.textColor, borderRadiusClasses, marginClasses
+                  "h-full text-[0.55rem] sm:text-[0.6rem] flex items-center hover:opacity-90 relative z-[1]", 
+                  event.color, event.textColor, borderRadiusClasses, widthAndPositionClasses
                 )}
               >
                 <span
@@ -147,7 +148,7 @@ function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
             
             const EventBarWrapper = ({ children }: { children: React.ReactNode }) => {
                 const commonProps = {
-                  className: cn("block focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-5 sm:h-6 relative"),
+                  className: cn("block focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-5 sm:h-6 relative"), // Outer wrapper has fixed height and is relative for tooltip
                 };
                 if (eventLink) {
                   return <Link href={eventLink} {...commonProps}>{children}</Link>;
@@ -321,13 +322,15 @@ export default function TripCalendarPage() {
     };
 
     try {
+      // The saveAircraftBlockOut flow might return the saved object with an ID
+      // We'll assume it does for potential optimistic updates, or rely on reload.
       await saveAircraftBlockOut(blockOutToSave as any); 
       toast({
         title: "Aircraft Block-Out Saved",
         description: `${selectedAircraft.label} blocked from ${format(data.startDate, "PPP")} to ${format(data.endDate, "PPP")} has been saved to Firestore.`,
         variant: "default"
       });
-      await loadInitialData(); 
+      await loadInitialData(); // Reload all data to ensure consistency
       setIsBlockOutModalOpen(false);
     } catch (error) {
       console.error("Failed to save block-out event:", error);
@@ -348,11 +351,12 @@ export default function TripCalendarPage() {
         return;
       }
       let currentDayIter = startOfDay(event.start);
-      const eventEndBoundary = endOfDay(event.end);
+      const eventEndBoundary = endOfDay(event.end); // Use endOfDay to include the full last day
       while (currentDayIter <= eventEndBoundary) {
         const dayKey = format(currentDayIter, "yyyy-MM-dd");
         if (!map.has(dayKey)) map.set(dayKey, []);
         const dayEvents = map.get(dayKey)!;
+        // Ensure an event is only added once per day to the list for that day
         if (!dayEvents.find(e => e.id === event.id)) dayEvents.push(event);
         currentDayIter = addDays(currentDayIter, 1);
       }
@@ -478,3 +482,4 @@ export default function TripCalendarPage() {
     </>
   );
 }
+
