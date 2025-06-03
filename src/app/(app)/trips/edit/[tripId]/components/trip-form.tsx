@@ -161,14 +161,16 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
           fetchFleetAircraft(),
           fetchCrewMembers()
         ]);
-        setCustomers(fetchedCustomersData);
-        const options = fetchedFleetData.map(ac => ({
-          value: ac.id,
-          label: `${ac.tailNumber} - ${ac.model}`,
-          model: ac.model
-        }));
+        setCustomers(fetchedCustomersData.filter(c => c.id)); // Filter out customers with empty IDs
+        const options = fetchedFleetData
+          .filter(ac => ac.id) // Filter out aircraft with empty IDs
+          .map(ac => ({
+            value: ac.id,
+            label: `${ac.tailNumber} - ${ac.model}`,
+            model: ac.model
+          }));
         setAircraftSelectOptions(options);
-        setCrewRoster(fetchedCrewData);
+        setCrewRoster(fetchedCrewData.filter(cr => cr.id)); // Filter out crew with empty IDs
       } catch (error) {
         console.error("Failed to load initial data for trip form:", error);
         toast({ title: "Error loading initial data", description: "Could not load customers, aircraft, or crew.", variant: "destructive" });
@@ -199,8 +201,12 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
         status: initialTripData.status || "Scheduled",
         legs: (initialTripData.legs || []).map((leg: DbTripLeg) => ({
           ...leg,
+          origin: leg.origin || '',
+          destination: leg.destination || '',
           departureDateTime: leg.departureDateTime ? parseISO(leg.departureDateTime) : undefined,
-          passengerCount: leg.passengerCount || 1,
+          passengerCount: leg.passengerCount || 1, 
+          originFbo: leg.originFbo || '',
+          destinationFbo: leg.destinationFbo || '',
           originTaxiTimeMinutes: leg.originTaxiTimeMinutes === undefined ? 15 : leg.originTaxiTimeMinutes,
           destinationTaxiTimeMinutes: leg.destinationTaxiTimeMinutes === undefined ? 15 : leg.destinationTaxiTimeMinutes,
           flightTimeHours: leg.flightTimeHours,
@@ -290,7 +296,7 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
 
   const handleAddLeg = () => {
     let newLegDefaults: Partial<FormLegData> = {
-      legType: 'Charter', passengerCount: 1, originTaxiTimeMinutes: 15, destinationTaxiTimeMinutes: 15,
+      origin: '', destination: '', legType: 'Charter', passengerCount: 1, originTaxiTimeMinutes: 15, destinationTaxiTimeMinutes: 15, originFbo: '', destinationFbo: '', flightTimeHours: undefined,
     };
     if (fields.length > 0) {
       const prevLeg = getValues(`legs.${fields.length - 1}`);
@@ -387,11 +393,11 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField control={control} name="tripId" render={({ field }) => ( <FormItem> <FormLabel>Trip ID</FormLabel> <FormControl><Input {...field} readOnly className="bg-muted/50 cursor-not-allowed" /></FormControl> <FormMessage /> </FormItem> )} />
+                <FormField control={control} name="tripId" render={({ field }) => ( <FormItem> <FormLabel>Trip ID</FormLabel> <FormControl><Input {...field} value={field.value || ''} readOnly className="bg-muted/50 cursor-not-allowed" /></FormControl> <FormMessage /> </FormItem> )} />
                 {isEditMode && getValues('initialQuoteId') && (
                      <FormItem>
                         <FormLabel>Sourced From Quote</FormLabel>
-                        <Input value={getValues('initialQuoteId')} readOnly className="bg-muted/50 cursor-not-allowed" />
+                        <Input value={getValues('initialQuoteId') || ''} readOnly className="bg-muted/50 cursor-not-allowed" />
                     </FormItem>
                 )}
             </div>
@@ -411,10 +417,10 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
 
             <FormField control={control} name="selectedCustomerId" render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><UserSearch className="h-4 w-4" /> Select Existing Client (Optional)</FormLabel> <Select onValueChange={(value) => { handleCustomerSelect(value); field.onChange(value); }} value={field.value || ""} disabled={isLoadingCustomers}> <FormControl><SelectTrigger><SelectValue placeholder={isLoadingCustomers ? "Loading customers..." : "Select a client or enter details manually"} /></SelectTrigger></FormControl> <SelectContent> {!isLoadingCustomers && customers.length === 0 && <SelectItem value="NO_CUSTOMERS" disabled>No customers</SelectItem>} {customers.map(c => (<SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>))} </SelectContent> </Select> <FormDescription>Auto-fills client details if selected.</FormDescription> <FormMessage /> </FormItem> )} />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <FormField control={control} name="clientName" render={({ field }) => ( <FormItem> <FormLabel>Client Name</FormLabel> <FormControl><Input placeholder="John Doe or Acme Corp" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
-              <FormField control={control} name="clientEmail" render={({ field }) => ( <FormItem> <FormLabel>Client Email</FormLabel> <FormControl><Input type="email" placeholder="contact@example.com" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
+              <FormField control={control} name="clientName" render={({ field }) => ( <FormItem> <FormLabel>Client Name</FormLabel> <FormControl><Input placeholder="John Doe or Acme Corp" value={field.value || ''} onChange={field.onChange} onBlur={field.onBlur} name={field.name} ref={field.ref} /></FormControl> <FormMessage /> </FormItem> )} />
+              <FormField control={control} name="clientEmail" render={({ field }) => ( <FormItem> <FormLabel>Client Email</FormLabel> <FormControl><Input type="email" placeholder="contact@example.com" value={field.value || ''} onChange={field.onChange} onBlur={field.onBlur} name={field.name} ref={field.ref} /></FormControl> <FormMessage /> </FormItem> )} />
             </div>
-            <FormField control={control} name="clientPhone" render={({ field }) => ( <FormItem> <FormLabel>Client Phone (Optional)</FormLabel> <FormControl><Input type="tel" placeholder="(555) 123-4567" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
+            <FormField control={control} name="clientPhone" render={({ field }) => ( <FormItem> <FormLabel>Client Phone (Optional)</FormLabel> <FormControl><Input type="tel" placeholder="(555) 123-4567" value={field.value || ''} onChange={field.onChange} onBlur={field.onBlur} name={field.name} ref={field.ref} /></FormControl> <FormMessage /> </FormItem> )} />
             
             <FormItem>
                 <FormLabel className="flex items-center gap-1">
@@ -521,8 +527,8 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
                   </CardHeader>
                   <CardContent className="p-0 space-y-3">
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <FormField control={control} name={`legs.${index}.origin`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><PlaneTakeoff className="h-4 w-4" />Origin</FormLabel> <FormControl><Input placeholder="KJFK" {...field} onChange={(e) => field.onChange(e.target.value.toUpperCase())} /></FormControl> <FormMessage /> </FormItem> )} />
-                      <FormField control={control} name={`legs.${index}.destination`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><PlaneLanding className="h-4 w-4" />Destination</FormLabel> <FormControl><Input placeholder="KLAX" {...field} onChange={(e) => field.onChange(e.target.value.toUpperCase())} /></FormControl> <FormMessage /> </FormItem> )} />
+                      <FormField control={control} name={`legs.${index}.origin`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><PlaneTakeoff className="h-4 w-4" />Origin</FormLabel> <FormControl><Input placeholder="KJFK" value={field.value || ''} onChange={(e) => field.onChange(e.target.value.toUpperCase())} onBlur={field.onBlur} name={field.name} ref={field.ref}/></FormControl> <FormMessage /> </FormItem> )} />
+                      <FormField control={control} name={`legs.${index}.destination`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><PlaneLanding className="h-4 w-4" />Destination</FormLabel> <FormControl><Input placeholder="KLAX" value={field.value || ''} onChange={(e) => field.onChange(e.target.value.toUpperCase())} onBlur={field.onBlur} name={field.name} ref={field.ref} /></FormControl> <FormMessage /> </FormItem> )} />
                     </div>
                     <FormField control={control} name={`legs.${index}.departureDateTime`} render={({ field }) => (
                       <FormItem className="flex flex-col">
@@ -569,16 +575,27 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
                     )} />
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       <FormField control={control} name={`legs.${index}.legType`} render={({ field }) => ( <FormItem> <FormLabel>Leg Type</FormLabel> <Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger></FormControl><SelectContent>{legTypes.map(type => (<SelectItem key={type} value={type}>{type}</SelectItem>))}</SelectContent></Select><FormMessage /> </FormItem> )} />
-                      <FormField control={control} name={`legs.${index}.passengerCount`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><PaxIcon className="h-4 w-4" />Pax</FormLabel> <FormControl><Input type="number" placeholder="1" {...field} onChange={e => field.onChange(parseInt(e.target.value,10))} min="0" /></FormControl> <FormMessage /> </FormItem> )} />
+                      <FormField control={control} name={`legs.${index}.passengerCount`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><PaxIcon className="h-4 w-4" />Pax</FormLabel> 
+                        <FormControl>
+                          <Input 
+                            type="number" 
+                            placeholder="1" 
+                            value={String(field.value ?? '')} 
+                            onChange={e => field.onChange(e.target.value === '' ? undefined : parseInt(e.target.value,10))} 
+                            onBlur={field.onBlur} name={field.name} ref={field.ref} 
+                            min="0"
+                          />
+                        </FormControl> 
+                      <FormMessage /> </FormItem> )} />
                     </div>
                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <FormField control={control} name={`legs.${index}.originFbo`} render={({ field }) => ( <FormItem> <FormLabel><Building className="inline h-4 w-4 mr-1"/>Origin FBO</FormLabel> <FormControl><Input placeholder="Optional" {...field} /></FormControl> </FormItem> )} />
-                      <FormField control={control} name={`legs.${index}.destinationFbo`} render={({ field }) => ( <FormItem> <FormLabel><Building className="inline h-4 w-4 mr-1"/>Destination FBO</FormLabel> <FormControl><Input placeholder="Optional" {...field} /></FormControl> </FormItem> )} />
+                      <FormField control={control} name={`legs.${index}.originFbo`} render={({ field }) => ( <FormItem> <FormLabel><Building className="inline h-4 w-4 mr-1"/>Origin FBO</FormLabel> <FormControl><Input placeholder="Optional" value={field.value || ''} onChange={field.onChange} onBlur={field.onBlur} name={field.name} ref={field.ref}/></FormControl> </FormItem> )} />
+                      <FormField control={control} name={`legs.${index}.destinationFbo`} render={({ field }) => ( <FormItem> <FormLabel><Building className="inline h-4 w-4 mr-1"/>Destination FBO</FormLabel> <FormControl><Input placeholder="Optional" value={field.value || ''} onChange={field.onChange} onBlur={field.onBlur} name={field.name} ref={field.ref}/></FormControl> </FormItem> )} />
                     </div>
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                      <FormField control={control} name={`legs.${index}.originTaxiTimeMinutes`} render={({ field }) => ( <FormItem> <FormLabel>Orig. Taxi (min)</FormLabel> <FormControl><Input type="number" placeholder="15" {...field} onChange={e => field.onChange(parseInt(e.target.value,10))} min="0" /></FormControl> </FormItem> )} />
-                      <FormField control={control} name={`legs.${index}.flightTimeHours`} render={({ field }) => ( <FormItem> <FormLabel>Flight Time (hr)</FormLabel> <FormControl><Input type="number" step="0.1" placeholder="e.g., 2.5" {...field} onChange={e => field.onChange(parseFloat(e.target.value))} /></FormControl> </FormItem> )} />
-                      <FormField control={control} name={`legs.${index}.destinationTaxiTimeMinutes`} render={({ field }) => ( <FormItem> <FormLabel>Dest. Taxi (min)</FormLabel> <FormControl><Input type="number" placeholder="15" {...field} onChange={e => field.onChange(parseInt(e.target.value,10))} min="0" /></FormControl> </FormItem> )} />
+                      <FormField control={control} name={`legs.${index}.originTaxiTimeMinutes`} render={({ field }) => ( <FormItem> <FormLabel>Orig. Taxi (min)</FormLabel> <FormControl><Input type="number" placeholder="15" value={String(field.value ?? '')} onChange={e => field.onChange(e.target.value === '' ? undefined : parseInt(e.target.value,10))} onBlur={field.onBlur} name={field.name} ref={field.ref} min="0" /></FormControl> </FormItem> )} />
+                      <FormField control={control} name={`legs.${index}.flightTimeHours`} render={({ field }) => ( <FormItem> <FormLabel>Flight Time (hr)</FormLabel> <FormControl><Input type="number" step="0.1" placeholder="e.g., 2.5" value={String(field.value ?? '')} onChange={e => field.onChange(e.target.value === '' ? undefined : parseFloat(e.target.value))} onBlur={field.onBlur} name={field.name} ref={field.ref} /></FormControl> </FormItem> )} />
+                      <FormField control={control} name={`legs.${index}.destinationTaxiTimeMinutes`} render={({ field }) => ( <FormItem> <FormLabel>Dest. Taxi (min)</FormLabel> <FormControl><Input type="number" placeholder="15" value={String(field.value ?? '')} onChange={e => field.onChange(e.target.value === '' ? undefined : parseInt(e.target.value,10))} onBlur={field.onBlur} name={field.name} ref={field.ref} min="0" /></FormControl> </FormItem> )} />
                     </div>
                     <Button type="button" variant="outline" size="sm" onClick={() => handleEstimateFlightDetails(index)} disabled={estimatingLegIndex === index || !currentSelectedAircraftId || isLoadingAircraftList || isLoadingSelectedAcPerf} className="w-full sm:w-auto text-xs"> {estimatingLegIndex === index || isLoadingSelectedAcPerf ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <Wand2 className="mr-2 h-3 w-3" />} Estimate Flight Details </Button>
                     {legEstimates[index] && (
@@ -612,7 +629,7 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
               </section>
             )}
             <Separator />
-            <FormField control={control} name="notes" render={({ field }) => ( <FormItem> <FormLabel>Trip Notes (Optional)</FormLabel> <FormControl><Textarea placeholder="Enter any internal notes specific to this trip..." {...field} value={field.value || ''} rows={3} /></FormControl> <FormMessage /> </FormItem> )} />
+            <FormField control={control} name="notes" render={({ field }) => ( <FormItem> <FormLabel>Trip Notes (Optional)</FormLabel> <FormControl><Textarea placeholder="Enter any internal notes specific to this trip..." value={field.value || ''} onChange={field.onChange} onBlur={field.onBlur} name={field.name} ref={field.ref} rows={3} /></FormControl> <FormMessage /> </FormItem> )} />
           </CardContent>
           <CardFooter>
             <Button type="submit" disabled={isSaving}>
@@ -625,3 +642,5 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
     </Card>
   );
 }
+
+    
