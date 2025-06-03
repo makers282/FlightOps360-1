@@ -14,14 +14,7 @@
             color: white; /* Default, assuming dark backgrounds */
             font-weight: bold;
         }
-        /* You might need to adjust text color based on specific event background colors */
-        .fc-event[style*="background-color: orange"],
-        .fc-event[style*="background-color: blue"] {
-            color: white;
-        }
-        .fc-event[style*="background-color: gray"] {
-            color: white; /* Or black if gray is light */
-        }
+        /* Specific overrides if needed, but white generally works for colored backgrounds */
     </style>
 </head>
 <body>
@@ -34,59 +27,35 @@
             
             const events = [
               {
-                id: "trip1-scheduled",
-                title: "N630MW – Scheduled",
+                id: "trip123", // Consistent with prompt
+                title: "N630MW – PA-31T2 – TRP-275", // Consistent with prompt
                 start: "2025-06-15",
-                end:   "2025-06-17",  // paints June 15 & 16
-                color: "orange",
-                allDay: true
+                end:   "2025-06-20",  // Paints June 15, 16, 17, 18, 19
+                allDay: true,
+                backgroundColor: "#FF9900" // Orange
               },
               {
-                id: "trip1-active",
-                title: "N630MW – Active",
-                start: "2025-06-17",
-                end:   "2025-06-19",  // paints June 17 & 18
-                color: "gray",
-                allDay: true
+                id: "trip456", // Consistent with prompt
+                title: "N907DK – Cessna 525 – Owner Trip", // Consistent with prompt
+                start: "2025-06-16",
+                end:   "2025-06-21",  // Paints June 16, 17, 18, 19, 20
+                allDay: true,
+                backgroundColor: "#336699" // Dark Blue
               },
               {
-                id: "trip1-closeout",
-                title: "N630MW – Closeout",
-                start: "2025-06-19",
-                end:   "2025-06-20",  // paints June 19
-                color: "blue",
-                allDay: true
-              },
-              // You can add more events here for other tail numbers
-              // Example for a second aircraft
-              {
-                id: "trip2-scheduled",
-                title: "N123AB – Scheduled",
-                start: "2025-06-20",
-                end:   "2025-06-22", 
-                color: "orange",
-                allDay: true
-              },
-              {
-                id: "trip2-active",
-                title: "N123AB – Active",
-                start: "2025-06-22",
-                end:   "2025-06-24",
-                color: "gray",
-                allDay: true
-              },
+                id: "trip789", // Consistent with prompt
+                title: "N1327J – Cessna 525 – TRP-999", // Consistent with prompt
+                start: "2025-06-11",
+                end:   "2025-06-15",  // Paints June 11, 12, 13, 14
+                allDay: true,
+                backgroundColor: "#33CCFF" // Light Blue
+              }
             ];
 
             const calendar = new FullCalendar.Calendar(calendarEl, {
                 initialView: "dayGridMonth",
-                events: events,
-                eventTextColor: function(info) {
-                    // A simple way to ensure text contrast
-                    // You might need a more sophisticated approach based on your actual colors
-                    let bgColor = info.event.backgroundColor || info.event.borderColor || 'blue'; // default to blue
-                    if (bgColor === 'orange' || bgColor === 'gray' || bgColor === 'blue') return 'white';
-                    return 'black'; // default for other colors
-                }
+                events: events
+                // Removed the eventTextColor JavaScript function
             });
 
             calendar.render();
