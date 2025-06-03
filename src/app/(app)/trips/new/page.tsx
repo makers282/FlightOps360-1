@@ -8,7 +8,8 @@ import { TripForm, type FullTripFormData } from '../edit/[tripId]/components/tri
 import { CalendarPlus, Loader2 } from 'lucide-react';
 import { saveTrip, type SaveTripInput } from '@/ai/flows/manage-trips-flow'; 
 import { useToast } from '@/hooks/use-toast'; 
-import type { TripStatus } from '@/ai/schemas/trip-schemas'; // Ensure TripStatus is available if needed for default
+import type { TripStatus } from '@/ai/schemas/trip-schemas';
+import { fetchFleetAircraft } from '@/ai/flows/manage-fleet-flow';
 
 
 function NewTripPageContent() {
@@ -18,14 +19,26 @@ function NewTripPageContent() {
 
   const handleSaveTrip = async (data: FullTripFormData) => {
     startSavingTransition(async () => {
+      let aircraftLabelForSave: string | undefined = undefined;
+      if (data.aircraftId) {
+        try {
+          const fleetForLabel = await fetchFleetAircraft();
+          const selectedAircraftInfo = fleetForLabel.find(ac => ac.id === data.aircraftId);
+          aircraftLabelForSave = selectedAircraftInfo?.model ? `${selectedAircraftInfo.tailNumber} - ${selectedAircraftInfo.model}` : selectedAircraftInfo?.tailNumber;
+        } catch (e) {
+            console.warn("Could not fetch aircraft details for label on new trip save", e);
+        }
+      }
+      
+      const flightAttendantIds = [data.assignedFlightAttendantId1, data.assignedFlightAttendantId2].filter(faId => faId && faId !== "--UNASSIGNED--") as string[];
+
       const tripToSave: SaveTripInput = {
         tripId: data.tripId,
-        // selectedCustomerId: data.selectedCustomerId, // This seems to be missing in SaveTripInput, but was in FullTripFormData
         clientName: data.clientName,
-        clientEmail: data.clientEmail, // Ensure email is passed, handle optionality in schema if needed
+        clientEmail: data.clientEmail,
         clientPhone: data.clientPhone,
         aircraftId: data.aircraftId || "UNKNOWN_AC", 
-        aircraftLabel: data.aircraftId ? (data as any).aircraftLabel : undefined, // Pass aircraftLabel if it exists on form data
+        aircraftLabel: aircraftLabelForSave,
         legs: data.legs.map(leg => {
           const originTaxi = Number(leg.originTaxiTimeMinutes || 0);
           const destTaxi = Number(leg.destinationTaxiTimeMinutes || 0);
@@ -39,15 +52,15 @@ function NewTripPageContent() {
           };
         }),
         notes: data.notes,
-        status: data.status || "Scheduled", // Use status from form or default
+        status: data.status || "Scheduled",
+        assignedPilotId: data.assignedPilotId,
+        assignedCoPilotId: data.assignedCoPilotId,
+        assignedFlightAttendantIds: flightAttendantIds,
       };
       
-      // If selectedCustomerId exists in form data and should be part of SaveTripInput, add it.
-      // This depends on the exact definition of SaveTripInput. For now, assuming it's not strictly part of it.
       if (data.selectedCustomerId) {
-        (tripToSave as any).customerId = data.selectedCustomerId; // Casting if customerId is the correct field name
+        (tripToSave as any).customerId = data.selectedCustomerId;
       }
-
 
       try {
         const savedTrip = await saveTrip(tripToSave);
