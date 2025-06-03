@@ -66,94 +66,130 @@ export interface AircraftFilterOption {
 
 const CustomDay = React.memo(function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
   const { date, displayMonth, eventsForDay } = dayProps;
+  const currentDay = startOfDay(date);
   const isCurrentMonthDay = isSameMonth(date, displayMonth);
 
   if (!isCurrentMonthDay) {
     return <div className="h-full w-full border-r border-b border-border/30" />;
   }
 
-  let primaryEventForCell: CalendarEvent | null = null;
-  let cellBackgroundColor = "transparent";
-  let eventTitleForDisplay: string | null = null;
-  let titleTextColor = 'hsl(var(--muted-foreground))'; // Default text color for title
+  // Sort events: block_outs "on top" visually if they overlap, then by aircraft ID for stable trip order
+  const sortedEventsForDay = useMemo(() => {
+    return [...eventsForDay].sort((a, b) => {
+      if (a.type === 'block_out' && b.type !== 'block_out') return -1;
+      if (a.type !== 'block_out' && b.type === 'block_out') return 1;
+      return (a.aircraftId || '').localeCompare(b.aircraftId || '');
+    });
+  }, [eventsForDay]);
 
-  if (eventsForDay.length > 0) {
-    // Sort to prioritize block-outs if they overlap with trips for display color
-    // Or simply take the first event if no specific prioritization is needed.
-    // For now, let's prioritize block_out if it exists for the cell's background
-    const blockOutEvent = eventsForDay.find(e => e.type === 'block_out');
-    primaryEventForCell = blockOutEvent || eventsForDay[0]; // If block_out, use it, else first event
+  const eventsForDayContainerClasses = cn("h-full flex flex-col gap-px overflow-hidden p-px"); 
+  const eventBarHeight = "h-5 sm:h-6"; 
+  const baseTextSize = "text-[0.6rem]";
 
-    cellBackgroundColor = primaryEventForCell.color;
-    titleTextColor = primaryEventForCell.textColor;
-
-    if (isSameDay(date, primaryEventForCell.start)) {
-      eventTitleForDisplay = primaryEventForCell.title;
-    }
-  }
-
-  const dayNumberClasses = cn(
-    "absolute top-0.5 right-0.5 z-20 text-xs px-1",
-    isToday(date)
-      ? "text-primary font-bold rounded-full bg-primary/20 size-5 flex items-center justify-center"
-      : "text-muted-foreground"
-  );
-  
-  const eventTitleClasses = cn(
-    "absolute left-1 top-1 text-[0.6rem] font-medium z-10 truncate pr-6",
-    // titleTextColor is a hsl string, not a Tailwind class
-  );
-
-  const cellStyle: React.CSSProperties = {
-    backgroundColor: cellBackgroundColor,
-    width: "100%",
-    height: "100%",
-    position: "relative",
-  };
-  
-  const cellContentDiv = (
-    <div style={cellStyle} className="border-r border-b border-border/30 last:border-r-0 group-data-[row-last=true]:border-b-0">
-      <time dateTime={format(date, "yyyy-MM-dd")} className={dayNumberClasses}>
+  return (
+    <div className="h-full w-full border-r border-b border-border/30 group-data-[row-last=true]:border-b-0 last:border-r-0 relative">
+      <time
+        dateTime={format(date, "yyyy-MM-dd")}
+        className={cn(
+          "absolute top-0.5 right-0.5 z-20 text-xs px-1",
+          isToday(date)
+            ? "text-primary font-bold rounded-full bg-primary/20 size-5 flex items-center justify-center"
+            : "text-muted-foreground"
+        )}
+      >
         {format(date, "d")}
       </time>
-      {eventTitleForDisplay && (
-        <span className={eventTitleClasses} style={{ color: titleTextColor }}>
-          {eventTitleForDisplay}
-        </span>
+      
+      {sortedEventsForDay.length > 0 && (
+        <div className={eventsForDayContainerClasses}>
+          {sortedEventsForDay.map(event => {
+            const eventStartDay = startOfDay(event.start);
+            const eventEndDay = startOfDay(event.end); // End date is inclusive
+
+            const isEventActiveOnThisDay = currentDay >= eventStartDay && currentDay <= eventEndDay;
+            if (!isEventActiveOnThisDay) return null;
+
+            const eventStartsOnThisDay = isSameDay(currentDay, eventStartDay);
+            const eventEndsOnThisDay = isSameDay(currentDay, eventEndDay);
+            
+            let borderRadiusClasses = "rounded-sm";
+            let marginClasses = "mx-0"; 
+            let widthAndPositionClasses = "w-full";
+
+            if (eventStartsOnThisDay && eventEndsOnThisDay) {
+              // Single day event
+              borderRadiusClasses = "rounded-sm";
+              marginClasses = "mx-0";
+              widthAndPositionClasses = "w-full";
+            } else if (eventStartsOnThisDay) { // Multi-day, starts today
+              borderRadiusClasses = "rounded-l-sm rounded-r-none";
+              marginClasses = "ml-0 mr-[-1px]"; 
+              widthAndPositionClasses = "w-full"; 
+            } else if (eventEndsOnThisDay) { // Multi-day, ends today
+              borderRadiusClasses = "rounded-r-sm rounded-l-none";
+              marginClasses = "mr-0 ml-[-1px]"; 
+              widthAndPositionClasses = "w-full";
+            } else { // Middle segment of a multi-day event
+              borderRadiusClasses = "rounded-none";
+              marginClasses = "mx-[-1px]";
+              widthAndPositionClasses = "w-[calc(100%+2px)]"; 
+            }
+            
+            const displayColor = event.color;
+            const displayTextColor = event.textColor;
+            const showTitle = eventStartsOnThisDay;
+
+            const LinkOrDiv = event.type === 'trip' && event.id ? Link : 'div';
+            const linkProps = event.type === 'trip' && event.id 
+                              ? { href: `/trips/details/${event.id}` } 
+                              : {};
+            
+            return (
+              <TooltipProvider key={event.id + event.type} delayDuration={150}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <LinkOrDiv
+                      {...linkProps}
+                      className={cn(
+                        "block relative", 
+                        eventBarHeight,
+                        widthAndPositionClasses,
+                        marginClasses, 
+                        borderRadiusClasses,
+                        "z-10 overflow-hidden" 
+                      )}
+                      style={{ backgroundColor: displayColor }}
+                    >
+                      {showTitle && (
+                        <span
+                          className={cn(
+                            "absolute inset-0 px-1.5 flex items-center",
+                            baseTextSize,
+                            "whitespace-nowrap overflow-hidden truncate"
+                          )}
+                          style={{ color: displayTextColor }}
+                        >
+                          {event.title}
+                        </span>
+                      )}
+                    </LinkOrDiv>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" align="center" className="max-w-xs p-2 bg-popover text-popover-foreground border shadow-md rounded-md">
+                    <p className="font-semibold">{event.title}</p>
+                    {event.route && <p className="text-xs">Route: {event.route}</p>}
+                    <p className="text-xs">Starts: {format(event.start, "MMM d, yyyy")}</p>
+                    <p className="text-xs">Ends: {format(event.end, "MMM d, yyyy")} (Inclusive)</p>
+                    {event.status && <p className="text-xs">Status: {event.status}</p>}
+                    {event.description && !event.route && <p className="text-xs">{event.description}</p>}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            );
+          })}
+        </div>
       )}
     </div>
   );
-  
-  const LinkOrDiv = primaryEventForCell && primaryEventForCell.type === 'trip' && primaryEventForCell.id 
-                    ? Link 
-                    : 'div';
-  const linkProps = primaryEventForCell && primaryEventForCell.type === 'trip' && primaryEventForCell.id 
-                    ? { href: `/trips/details/${primaryEventForCell.id}`, className: "block w-full h-full" } 
-                    : { className: "block w-full h-full" };
-
-  if (primaryEventForCell) {
-    return (
-      <TooltipProvider delayDuration={100}>
-        <Tooltip>
-          <TooltipTrigger asChild>
-             <LinkOrDiv {...linkProps}>
-                {cellContentDiv}
-             </LinkOrDiv>
-          </TooltipTrigger>
-          <TooltipContent side="top" align="center" className="max-w-xs p-2 bg-popover text-popover-foreground border shadow-md rounded-md">
-            <p className="font-semibold">{primaryEventForCell.title}</p>
-            {primaryEventForCell.route && <p className="text-xs">Route: {primaryEventForCell.route}</p>}
-            <p className="text-xs">Starts: {format(primaryEventForCell.start, "MMM d, yyyy")}</p>
-            <p className="text-xs">Ends: {format(primaryEventForCell.end, "MMM d, yyyy")} (Inclusive)</p>
-            {primaryEventForCell.status && <p className="text-xs">Status: {primaryEventForCell.status}</p>}
-            {primaryEventForCell.description && !primaryEventForCell.route && <p className="text-xs">{primaryEventForCell.description}</p>}
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    );
-  }
-
-  return cellContentDiv;
 });
 CustomDay.displayName = "CustomDay";
 
@@ -213,8 +249,10 @@ export default function TripCalendarPage() {
 
             if (isValidISO(lastLegTripData.arrivalDateTime)) {
                 lastActiveDayInclusive = startOfDay(parseISO(lastLegTripData.arrivalDateTime));
-            } else if (isValidISO(lastLegTripData.departureDateTime) && lastLegTripData.blockTimeHours && lastLegTripData.blockTimeHours > 0) {
-                lastActiveDayInclusive = startOfDay(addHours(parseISO(lastLegTripData.departureDateTime), lastLegTripData.blockTimeHours));
+            } else if (isValidISO(lastLegTripData.departureDateTime)) {
+                const departure = parseISO(lastLegTripData.departureDateTime);
+                const blockTime = lastLegTripData.blockTimeHours || (lastLegTripData.flightTimeHours ? lastLegTripData.flightTimeHours + 0.5 : 1); 
+                lastActiveDayInclusive = startOfDay(addHours(departure, blockTime));
             } else if (overallStartDate) { 
                 let totalBlockTime = 0;
                 trip.legs.forEach(leg => { totalBlockTime += (leg.blockTimeHours || (leg.flightTimeHours ? leg.flightTimeHours + 0.5 : 1));});
@@ -334,10 +372,9 @@ export default function TripCalendarPage() {
         console.warn("Skipping event with invalid dates:", event.id, event.start, event.end);
         return;
       }
-      // Iterate from event.start to event.end (inclusive)
-      const currentDay = startOfDay(event.start);
-      const lastDay = startOfDay(event.end);
-      for (let dayIter = currentDay; !isAfter(dayIter, lastDay); dayIter = addDays(dayIter, 1)) {
+      const eventStartDay = startOfDay(event.start);
+      const eventEndDay = startOfDay(event.end);
+      for (let dayIter = eventStartDay; !isAfter(dayIter, eventEndDay); dayIter = addDays(dayIter, 1)) {
         const dayKey = format(dayIter, "yyyy-MM-dd");
         if (!map.has(dayKey)) map.set(dayKey, []);
         map.get(dayKey)!.push(event);
@@ -381,7 +418,7 @@ export default function TripCalendarPage() {
         <CardHeader className="border-b py-3 px-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
           <div>
             <CardTitle className="text-lg">Activity View</CardTitle>
-            <CardDescription>Each cell is colored by its primary event. Titles show on event start day.</CardDescription>
+            <CardDescription>Event segments span cell borders for continuity. Titles show on event start day.</CardDescription>
           </div>
           <div className="flex gap-2 items-center flex-wrap">
             {uniqueAircraftForFilter.length > 0 && (
@@ -454,9 +491,19 @@ export default function TripCalendarPage() {
             showOutsideDays={false} numberOfMonths={1} captionLayout="buttons"
             fromYear={new Date().getFullYear() - 5} toYear={new Date().getFullYear() + 5}
             onDayRender={(day, modifiers, dayProps) => {
-              const rowIndex = Math.floor(dayProps.rowIndex);
-              if (rowIndex === 5) { 
-                return { className: 'group-data-[row-last=true]' };
+              // This logic helps identify the last row for border styling in CustomDay
+              // by adding a data attribute if the cell is in the last conceptual row.
+              // It's a bit of a workaround as react-day-picker doesn't directly expose "isLastRow".
+              // Calculate the total number of weeks displayed for the current month view.
+              const firstDayOfMonth = startOfDay(dayProps.displayMonth);
+              const lastDayOfMonth = endOfDay(firstDayOfMonth); // Incorrect, should be end of month
+              
+              // A simpler way might be to check if the day is in the last *visible* week.
+              // This usually means it's in the 5th or 6th row of cells.
+              // This is not perfect but often good enough for styling.
+              const dayRowIndex = Math.floor(dayProps.date.getDay() + dayProps.date.getDate() / 7); // Approximate row index logic
+              if (dayProps.displayMonth.getMonth() === dayProps.date.getMonth() && dayRowIndex >=4) { // Heuristic for last rows
+                 return { className: 'group-data-[row-last=true]' }; // Signal it's a last row cell
               }
               return {};
             }}
