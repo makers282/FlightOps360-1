@@ -1,0 +1,97 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FullCalendar Trip Phases Example</title>
+    <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js'></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        #calendar { max-width: 900px; margin: 0 auto; }
+        /* Basic styling to make event text readable */
+        .fc-event-title {
+            color: white; /* Default, assuming dark backgrounds */
+            font-weight: bold;
+        }
+        /* You might need to adjust text color based on specific event background colors */
+        .fc-event[style*="background-color: orange"],
+        .fc-event[style*="background-color: blue"] {
+            color: white;
+        }
+        .fc-event[style*="background-color: gray"] {
+            color: white; /* Or black if gray is light */
+        }
+    </style>
+</head>
+<body>
+
+    <div id="calendar"></div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const calendarEl = document.getElementById('calendar');
+            
+            const events = [
+              {
+                id: "trip1-scheduled",
+                title: "N630MW – Scheduled",
+                start: "2025-06-15",
+                end:   "2025-06-17",  // paints June 15 & 16
+                color: "orange",
+                allDay: true
+              },
+              {
+                id: "trip1-active",
+                title: "N630MW – Active",
+                start: "2025-06-17",
+                end:   "2025-06-19",  // paints June 17 & 18
+                color: "gray",
+                allDay: true
+              },
+              {
+                id: "trip1-closeout",
+                title: "N630MW – Closeout",
+                start: "2025-06-19",
+                end:   "2025-06-20",  // paints June 19
+                color: "blue",
+                allDay: true
+              },
+              // You can add more events here for other tail numbers
+              // Example for a second aircraft
+              {
+                id: "trip2-scheduled",
+                title: "N123AB – Scheduled",
+                start: "2025-06-20",
+                end:   "2025-06-22", 
+                color: "orange",
+                allDay: true
+              },
+              {
+                id: "trip2-active",
+                title: "N123AB – Active",
+                start: "2025-06-22",
+                end:   "2025-06-24",
+                color: "gray",
+                allDay: true
+              },
+            ];
+
+            const calendar = new FullCalendar.Calendar(calendarEl, {
+                initialView: "dayGridMonth",
+                events: events,
+                eventTextColor: function(info) {
+                    // A simple way to ensure text contrast
+                    // You might need a more sophisticated approach based on your actual colors
+                    let bgColor = info.event.backgroundColor || info.event.borderColor || 'blue'; // default to blue
+                    if (bgColor === 'orange' || bgColor === 'gray' || bgColor === 'blue') return 'white';
+                    return 'black'; // default for other colors
+                }
+            });
+
+            calendar.render();
+        });
+    </script>
+
+</body>
+</html>
