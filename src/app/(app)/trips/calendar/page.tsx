@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react'; // Added useCallback
 import { PageHeader } from '@/components/page-header';
 import { Calendar as CalendarIconLucide, Plane, Loader2 } from 'lucide-react';
 import { Calendar as ShadcnCalendar } from "@/components/ui/calendar";
@@ -369,3 +369,4 @@ export default function TripCalendarPage() {
     </>
   );
 }
+
