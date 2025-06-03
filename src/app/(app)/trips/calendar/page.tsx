@@ -29,28 +29,26 @@ import {
 } from "@/components/ui/tooltip";
 
 const PHASE_COLORS = {
-  DEFAULT_TRIP: { color: 'bg-sky-500',    textColor: 'text-white' }, 
-  BLOCK_OUT: { color: 'bg-slate-700', textColor: 'text-slate-100' },
+  DEFAULT_TRIP: { color: 'hsl(var(--primary))',    textColor: 'hsl(var(--primary-foreground))' }, 
+  BLOCK_OUT: { color: 'hsl(var(--muted))', textColor: 'hsl(var(--muted-foreground))' }, 
 };
 
 const AIRCRAFT_EVENT_COLORS = [
-  { color: 'bg-cyan-500', textColor: 'text-white' },    // N1327J
-  { color: 'bg-green-500', textColor: 'text-white' },   // N630MW, N89TB
-  { color: 'bg-slate-800', textColor: 'text-white' }, // N907DK (darker than block_out)
-  { color: 'bg-teal-500', textColor: 'text-white' },
-  { color: 'bg-emerald-500', textColor: 'text-white' },
-  { color: 'bg-lime-500', textColor: 'text-black' },
-  { color: 'bg-amber-500', textColor: 'text-black' },
-  { color: 'bg-pink-500', textColor: 'text-white' },
-  { color: 'bg-purple-500', textColor: 'text-white' },
-  { color: 'bg-indigo-500', textColor: 'text-white' },
+  { color: 'hsl(200 69% 73%)', textColor: 'hsl(208 60% 20%)' }, // Soft Sky Blue (primary)
+  { color: 'hsl(145 63% 49%)', textColor: 'hsl(145 60% 15%)' }, // Green
+  { color: 'hsl(30 80% 60%)', textColor: 'hsl(30 60% 15%)' },  // Orange/Amber
+  { color: 'hsl(240 60% 65%)', textColor: 'hsl(240 60% 15%)' }, // Indigo
+  { color: 'hsl(0 72% 51%)', textColor: 'hsl(0 60% 95%)' },    // Red
+  { color: 'hsl(170 60% 50%)', textColor: 'hsl(170 60% 15%)' }, // Teal
+  { color: 'hsl(320 60% 60%)', textColor: 'hsl(320 60% 15%)' }, // Pink
+  { color: 'hsl(270 50% 60%)', textColor: 'hsl(270 60% 15%)' }, // Purple
 ];
 
 interface CalendarEvent {
   id: string;
   title: string;
-  start: Date;
-  end: Date; // INCLUSIVE end date
+  start: Date; // Inclusive start date
+  end: Date;   // Inclusive end date
   type: 'trip' | 'block_out';
   aircraftId?: string;
   aircraftLabel?: string;
@@ -71,134 +69,92 @@ const CustomDay = React.memo(function CustomDay(dayProps: DayProps & { eventsFor
   const isCurrentMonthDay = isSameMonth(date, displayMonth);
 
   if (!isCurrentMonthDay) {
-    return <div className="h-full w-full" />;
+    return <div className="h-full w-full border-r border-b border-border/30" />;
   }
 
-  const dayEventsSorted = useMemo(() => {
-    return eventsForDay.sort((a, b) => {
-        if (a.type === 'block_out' && b.type !== 'block_out') return -1;
-        if (a.type !== 'block_out' && b.type === 'block_out') return 1;
-        return a.start.getTime() - b.start.getTime();
-    });
-  }, [eventsForDay]);
+  let primaryEventForCell: CalendarEvent | null = null;
+  let cellBackgroundColor = "transparent";
+  let eventTitleForDisplay: string | null = null;
+  let titleTextColor = 'hsl(var(--muted-foreground))'; // Default text color for title
 
-  const dayNumberSectionClasses = cn("flex justify-end p-0.5 h-6 items-start");
-  // The gap-px here is for separating *different stacked events*
-  const eventsForDayContainerClasses = cn("h-full flex flex-col gap-px"); 
-  const eventBarHeight = "h-5 sm:h-6"; 
-  const baseTextSize = "text-[0.6rem]";
+  if (eventsForDay.length > 0) {
+    // Sort to prioritize block-outs if they overlap with trips for display color
+    // Or simply take the first event if no specific prioritization is needed.
+    // For now, let's prioritize block_out if it exists for the cell's background
+    const blockOutEvent = eventsForDay.find(e => e.type === 'block_out');
+    primaryEventForCell = blockOutEvent || eventsForDay[0]; // If block_out, use it, else first event
 
-  return (
-    <div className="h-full w-full flex flex-col">
-      <div className={dayNumberSectionClasses}>
-        <time
-          dateTime={format(date, "yyyy-MM-dd")}
-          className={cn(
-            "text-xs",
-            isToday(date)
-              ? "text-primary font-bold rounded-full bg-primary/10 size-5 flex items-center justify-center"
-              : "px-1"
-          )}
-        >
-          {format(date, "d")}
-        </time>
-      </div>
+    cellBackgroundColor = primaryEventForCell.color;
+    titleTextColor = primaryEventForCell.textColor;
 
-      {dayEventsSorted.length > 0 && (
-        <div className={eventsForDayContainerClasses}>
-          {dayEventsSorted.map(event => {
-            const mapKey = `${event.id}-${format(date, "yyyy-MM-dd")}`;
-            const displayColor = event.color;
-            const displayTextColor = event.textColor;
-            
-            const eventStartsOnThisDay = isSameDay(date, event.start);
-            const eventEndsOnThisDay = isSameDay(date, event.end); // event.end is INCLUSIVE
+    if (isSameDay(date, primaryEventForCell.start)) {
+      eventTitleForDisplay = primaryEventForCell.title;
+    }
+  }
 
-            let titleToRender = '\u00A0'; // Non-breaking space for height consistency
-            if (eventStartsOnThisDay) {
-                titleToRender = event.title;
-            }
-            
-            let borderRadiusClasses = "rounded-sm";
-            let marginClasses = "mx-0"; // Default: no horizontal bleed
+  const dayNumberClasses = cn(
+    "absolute top-0.5 right-0.5 z-20 text-xs px-1",
+    isToday(date)
+      ? "text-primary font-bold rounded-full bg-primary/20 size-5 flex items-center justify-center"
+      : "text-muted-foreground"
+  );
+  
+  const eventTitleClasses = cn(
+    "absolute left-1 top-1 text-[0.6rem] font-medium z-10 truncate pr-6",
+    // titleTextColor is a hsl string, not a Tailwind class
+  );
 
-            if (eventStartsOnThisDay && eventEndsOnThisDay) {
-                // Single day event
-                borderRadiusClasses = "rounded-sm";
-                // marginClasses remains "mx-0"
-            } else if (eventStartsOnThisDay) {
-                // Multi-day, starts today
-                borderRadiusClasses = "rounded-l-sm rounded-r-none";
-                marginClasses = "ml-0 mr-[-1px]"; // Bleed right
-            } else if (eventEndsOnThisDay) {
-                // Multi-day, ends today
-                borderRadiusClasses = "rounded-r-sm rounded-l-none";
-                marginClasses = "mr-0 ml-[-1px]"; // Bleed left
-            } else { 
-                // Middle segment (started before this day, ends after this day)
-                borderRadiusClasses = "rounded-none";
-                marginClasses = "mx-[-1px]"; // Bleed both sides
-            }
-            
-            const EventLinkOrDiv = event.type === 'trip' && event.id ? Link : 'div';
-            const hrefProp = event.type === 'trip' && event.id ? { href: `/trips/details/${event.id}` } : {};
-            const tooltipText = event.title;
-
-            const eventBarClasses = cn(
-                "block w-full", 
-                eventBarHeight,
-                "flex items-center overflow-hidden whitespace-nowrap",
-                "relative z-10", // z-index to paint over cell borders
-                displayColor, 
-                displayTextColor,
-                borderRadiusClasses,
-                marginClasses
-            );
-
-            return (
-              <TooltipProvider key={mapKey} delayDuration={100}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <EventLinkOrDiv
-                      {...hrefProp}
-                      className={eventBarClasses}
-                    >
-                      <span className={cn("w-full overflow-hidden whitespace-nowrap px-0.5 sm:px-1 truncate", baseTextSize)}>
-                        {titleToRender}
-                      </span>
-                    </EventLinkOrDiv>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" align="center" className="max-w-xs p-2 bg-popover text-popover-foreground border shadow-md rounded-md">
-                    <p className="font-semibold">{tooltipText}</p>
-                    {event.route && <p className="text-xs">Route: {event.route}</p>}
-                    <p className="text-xs">Starts: {format(event.start, "MMM d, HH:mm")}</p>
-                    <p className="text-xs">Ends: {format(event.end, "MMM d, HH:mm")} (Inclusive)</p>
-                    {event.status && <p className="text-xs">Status: {event.status}</p>}
-                    {event.description && !event.route && <p className="text-xs">{event.description}</p>}
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            );
-          })}
-        </div>
+  const cellStyle: React.CSSProperties = {
+    backgroundColor: cellBackgroundColor,
+    width: "100%",
+    height: "100%",
+    position: "relative",
+  };
+  
+  const cellContentDiv = (
+    <div style={cellStyle} className="border-r border-b border-border/30 last:border-r-0 group-data-[row-last=true]:border-b-0">
+      <time dateTime={format(date, "yyyy-MM-dd")} className={dayNumberClasses}>
+        {format(date, "d")}
+      </time>
+      {eventTitleForDisplay && (
+        <span className={eventTitleClasses} style={{ color: titleTextColor }}>
+          {eventTitleForDisplay}
+        </span>
       )}
     </div>
   );
-}, (prevProps, nextProps) => {
-    // Memoization check
-    return isSameDay(prevProps.date, nextProps.date) &&
-           prevProps.displayMonth.getTime() === nextProps.displayMonth.getTime() &&
-           prevProps.eventsForDay.length === nextProps.eventsForDay.length &&
-           prevProps.eventsForDay.every((event, index) => {
-               const nextEvent = nextProps.eventsForDay[index];
-               if (!nextEvent) return false;
-               return event.id === nextEvent.id &&
-                      event.start.getTime() === nextEvent.start.getTime() &&
-                      event.end.getTime() === nextEvent.end.getTime() &&
-                      event.title === nextEvent.title &&
-                      event.color === nextEvent.color;
-           });
-}));
+  
+  const LinkOrDiv = primaryEventForCell && primaryEventForCell.type === 'trip' && primaryEventForCell.id 
+                    ? Link 
+                    : 'div';
+  const linkProps = primaryEventForCell && primaryEventForCell.type === 'trip' && primaryEventForCell.id 
+                    ? { href: `/trips/details/${primaryEventForCell.id}`, className: "block w-full h-full" } 
+                    : { className: "block w-full h-full" };
+
+  if (primaryEventForCell) {
+    return (
+      <TooltipProvider delayDuration={100}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+             <LinkOrDiv {...linkProps}>
+                {cellContentDiv}
+             </LinkOrDiv>
+          </TooltipTrigger>
+          <TooltipContent side="top" align="center" className="max-w-xs p-2 bg-popover text-popover-foreground border shadow-md rounded-md">
+            <p className="font-semibold">{primaryEventForCell.title}</p>
+            {primaryEventForCell.route && <p className="text-xs">Route: {primaryEventForCell.route}</p>}
+            <p className="text-xs">Starts: {format(primaryEventForCell.start, "MMM d, yyyy")}</p>
+            <p className="text-xs">Ends: {format(primaryEventForCell.end, "MMM d, yyyy")} (Inclusive)</p>
+            {primaryEventForCell.status && <p className="text-xs">Status: {primaryEventForCell.status}</p>}
+            {primaryEventForCell.description && !primaryEventForCell.route && <p className="text-xs">{primaryEventForCell.description}</p>}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  }
+
+  return cellContentDiv;
+});
 CustomDay.displayName = "CustomDay";
 
 
@@ -281,7 +237,7 @@ export default function TripCalendarPage() {
 
           return {
             id: trip.id, title: `${aircraftDisplayLabel} - ${trip.tripId}`, 
-            start: overallStartDate, end: lastActiveDayInclusive, // end is inclusive
+            start: overallStartDate, end: lastActiveDayInclusive, 
             type: 'trip',
             aircraftId: aircraftIdentifier, aircraftLabel: aircraftDisplayLabel,
             route: route, 
@@ -379,14 +335,12 @@ export default function TripCalendarPage() {
         return;
       }
       // Iterate from event.start to event.end (inclusive)
-      for (let dayIter = startOfDay(event.start); !isAfter(dayIter, startOfDay(event.end)); dayIter = addDays(dayIter, 1)) {
+      const currentDay = startOfDay(event.start);
+      const lastDay = startOfDay(event.end);
+      for (let dayIter = currentDay; !isAfter(dayIter, lastDay); dayIter = addDays(dayIter, 1)) {
         const dayKey = format(dayIter, "yyyy-MM-dd");
         if (!map.has(dayKey)) map.set(dayKey, []);
-        const dayEvents = map.get(dayKey)!;
-        // Prevent duplicate event segments on the same day if data processing was imperfect
-        if (!dayEvents.find(e => e.id === event.id && e.type === event.type)) { 
-           dayEvents.push(event);
-        }
+        map.get(dayKey)!.push(event);
       }
     });
     return map;
@@ -427,7 +381,7 @@ export default function TripCalendarPage() {
         <CardHeader className="border-b py-3 px-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
           <div>
             <CardTitle className="text-lg">Activity View</CardTitle>
-            <CardDescription>Trip colors by aircraft. Dark gray for block-outs. Titles show on event start.</CardDescription>
+            <CardDescription>Each cell is colored by its primary event. Titles show on event start day.</CardDescription>
           </div>
           <div className="flex gap-2 items-center flex-wrap">
             {uniqueAircraftForFilter.length > 0 && (
@@ -486,17 +440,26 @@ export default function TripCalendarPage() {
             mode="single" month={currentMonth} onMonthChange={setCurrentMonth}
             className="w-full rounded-md bg-card"
             classNames={{
-                table: "w-full border-collapse table-fixed", month: "w-full", head_row: "border-b border-border/50 flex",
-                head_cell: cn("text-muted-foreground align-middle text-center font-normal text-[0.65rem] sm:text-xs py-1.5 border-r border-b border-border/30 last:border-r-0 w-[calc(100%/7)]"),
-                row: "flex w-full",
-                cell: cn("p-0 m-0 text-left align-top relative h-24 min-h-[6rem] sm:h-28 sm:min-h-[7rem] md:h-32 md:min-h-[8rem] lg:h-36 lg:min-h-[9rem] xl:h-40 xl:min-h-[10rem] border-r border-b border-border/30 w-[calc(100%/7)]"),
+                table: "w-full border-collapse table-fixed", month: "w-full",
+                head_row: "border-b border-border/50 flex",
+                head_cell: cn("text-muted-foreground align-middle text-center font-normal text-[0.65rem] sm:text-xs py-1.5 border-r border-border/30 last:border-r-0 w-[calc(100%/7)]"),
+                row: "flex w-full group", 
+                cell: cn("p-0 m-0 text-left align-top relative h-24 min-h-[6rem] sm:h-28 sm:min-h-[7rem] md:h-32 md:min-h-[8rem] lg:h-36 lg:min-h-[9rem] xl:h-40 xl:min-h-[10rem] w-[calc(100%/7)] last:border-r-0 group-data-[row-last=true]:border-b-0"),
                 day_disabled: "opacity-50 pointer-events-none", caption: "flex justify-center items-center py-2.5 relative gap-x-1 px-2",
                 caption_label: "text-sm font-medium px-2", nav_button: cn(buttonVariants({ variant: "outline" }), "h-7 w-7 bg-transparent p-0 opacity-80 hover:opacity-100"),
                 nav_button_previous: "absolute left-1", nav_button_next: "absolute right-1",
+                row_last: "group-data-[row-last=true]",
             }}
             components={{ Day: (dayProps) => <CustomDay {...dayProps} eventsForDay={eventsByDay.get(format(startOfDay(dayProps.date), "yyyy-MM-dd")) || []} /> }}
             showOutsideDays={false} numberOfMonths={1} captionLayout="buttons"
             fromYear={new Date().getFullYear() - 5} toYear={new Date().getFullYear() + 5}
+            onDayRender={(day, modifiers, dayProps) => {
+              const rowIndex = Math.floor(dayProps.rowIndex);
+              if (rowIndex === 5) { 
+                return { className: 'group-data-[row-last=true]' };
+              }
+              return {};
+            }}
           />
         </CardContent>
       </Card>
@@ -510,4 +473,3 @@ export default function TripCalendarPage() {
     </>
   );
 }
-
