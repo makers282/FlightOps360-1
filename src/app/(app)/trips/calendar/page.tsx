@@ -21,7 +21,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Label } from "@/components/ui/label";
 import { CreateBlockOutEventModal, type BlockOutFormData } from './components/create-block-out-event-modal';
-import { fetchAircraftBlockOuts, saveAircraftBlockOut, type AircraftBlockOut } from '@/ai/flows/manage-aircraft-block-outs-flow'; // Import block out flows
+import { fetchAircraftBlockOuts, saveAircraftBlockOut, type AircraftBlockOut } from '@/ai/flows/manage-aircraft-block-outs-flow'; 
 
 interface CalendarEvent {
   id: string;
@@ -56,7 +56,7 @@ const AIRCRAFT_COLORS_PALETTE = [
   { color: 'bg-orange-500', textColor: 'text-black' },
 ];
 const DEFAULT_AIRCRAFT_COLOR = { color: 'bg-gray-400', textColor: 'text-white' };
-const BLOCK_OUT_EVENT_COLOR = { color: 'bg-slate-600', textColor: 'text-slate-100' }; // Distinct color for block-outs
+const BLOCK_OUT_EVENT_COLOR = { color: 'bg-slate-600', textColor: 'text-slate-100' }; 
 
 function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
   const { date, displayMonth, eventsForDay } = dayProps;
@@ -71,8 +71,7 @@ function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
   }, [eventsForDay]);
 
   const dayNumberSectionClasses = cn("flex justify-end p-0.5 h-6 items-start");
-
-  const eventsForDayContainerClasses = cn("flex-1 flex flex-col gap-px");
+  const eventsForDayContainerClasses = cn("flex-1 flex flex-col gap-px overflow-hidden"); // Added overflow-hidden
 
   return (
     <div className="h-full w-full flex flex-col">
@@ -104,23 +103,19 @@ function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
             
             let borderRadiusClasses = "rounded-sm";
             let marginClasses = "";
-            let zIndexClass = "";
 
             if (eventStartsInThisCell && eventEndsAfterCell) {
                 borderRadiusClasses = "rounded-l-sm rounded-r-none";
                 marginClasses = "mr-[-1px]"; 
-                zIndexClass = "relative z-10";
             } else if (eventStartedBeforeCell && eventEndsInThisCell) {
                 borderRadiusClasses = "rounded-r-sm rounded-l-none";
                 marginClasses = "ml-[-1px]";
-                zIndexClass = "relative z-10";
             } else if (eventStartedBeforeCell && eventEndsAfterCell) {
                 borderRadiusClasses = "rounded-none";
                 marginClasses = "mx-[-1px]";
-                zIndexClass = "relative z-10";
             }
             
-            const displayTitle = eventStartsInThisCell || event.type === 'block_out'; // Ensure block_out titles show even if starting prior
+            const displayTitle = eventStartsInThisCell || event.type === 'block_out' || (eventStartedBeforeCell && isToday(date)); // show title if starts today, is blockout, or starts before and current cell is today
             const showPaddingForText = displayTitle;
             const eventDisplayTitle = event.type === 'block_out' 
               ? `${event.aircraftLabel || 'UNK'}: ${event.title}`
@@ -128,7 +123,10 @@ function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
             const eventLink = event.type === 'trip' ? `/trips/details/${event.id}` : undefined;
 
             const EventContent = () => (
-                 <div className={cn("h-full w-full text-[0.55rem] sm:text-[0.6rem] flex items-center hover:opacity-90", event.color, event.textColor, borderRadiusClasses)}>
+                 <div className={cn(
+                    "h-full w-full text-[0.55rem] sm:text-[0.6rem] flex items-center hover:opacity-90 relative", // Added relative
+                    event.color, event.textColor, borderRadiusClasses, marginClasses // marginClasses moved here
+                  )}>
                     <span className={cn(
                         "w-full overflow-hidden whitespace-nowrap truncate",
                         showPaddingForText ? "px-0.5 sm:px-1" : ""
@@ -145,12 +143,12 @@ function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
                     {eventLink ? (
                         <Link 
                             href={eventLink} 
-                            className={cn("block focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-5 sm:h-6", marginClasses, zIndexClass)}
+                            className={cn("block focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-5 sm:h-6 relative")} // Outer wrapper is relative for positioning context
                         >
                            <EventContent />
                         </Link>
                     ) : (
-                        <div className={cn("block focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-5 sm:h-6", marginClasses, zIndexClass)}>
+                        <div className={cn("block focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-5 sm:h-6 relative")}> {/* Outer wrapper is relative */}
                              <EventContent />
                         </div>
                     )}
@@ -212,7 +210,6 @@ export default function TripCalendarPage() {
             fetchAircraftBlockOuts(),
         ]);
 
-        // Process trips
         const aircraftSetForFilter = new Map<string, string>();
         const tripCalendarEvents: CalendarEvent[] = fetchedTrips.map(trip => {
           let startDate: Date | null = null;
@@ -238,9 +235,9 @@ export default function TripCalendarPage() {
             }
           }
           
-          if (!startDate) startDate = new Date();
-          if (!endDate || !isValid(endDate) || isBefore(endDate, startDate)) endDate = addHours(startDate, 2);
-          if (isSameDay(startDate, endDate) && isBefore(endDate,startDate)) endDate = addHours(startDate, 2);
+          if (!startDate) startDate = new Date(); // Fallback if no valid start date
+          if (!endDate || !isValid(endDate) || isBefore(endDate, startDate)) endDate = addHours(startDate, 2); // Fallback end date
+          if (isSameDay(startDate, endDate) && isBefore(endDate,startDate)) endDate = addHours(startDate, 2); // Ensure end is after start on same day
           
           const aircraftIdentifier = trip.aircraftId || 'UNKNOWN_AIRCRAFT';
           const aircraftDisplayLabel = trip.aircraftLabel || trip.aircraftId || 'Unknown Aircraft';
@@ -258,7 +255,6 @@ export default function TripCalendarPage() {
           };
         }).filter(event => event.start && event.end && isValid(event.start) && isValid(event.end));
         
-        // Process block-outs
         const blockOutCalendarEvents: CalendarEvent[] = fetchedBlockOuts.map(blockOut => {
             const aircraftDisplayLabel = blockOut.aircraftLabel || blockOut.aircraftId;
              if (blockOut.aircraftId && !aircraftSetForFilter.has(blockOut.aircraftId)) {
@@ -281,7 +277,6 @@ export default function TripCalendarPage() {
         setRawEvents([...tripCalendarEvents, ...blockOutCalendarEvents]);
         setUniqueAircraftForFilter(Array.from(aircraftSetForFilter.entries()).map(([id, label]) => ({ id, label })).sort((a,b) => a.label.localeCompare(b.label)));
 
-        // Process complete fleet for block out modal
         const fleetOptions = completeFleet
             .filter(ac => ac.id && ac.tailNumber && ac.model)
             .map(ac => ({ id: ac.id, label: `${ac.tailNumber} - ${ac.model}` }));
@@ -310,22 +305,21 @@ export default function TripCalendarPage() {
     }
 
     const blockOutToSave = {
-      // id will be generated by Firestore if not provided, or handled by flow if needed for updates
       aircraftId: data.aircraftId,
       aircraftLabel: selectedAircraft.label,
       title: data.title,
-      startDate: format(data.startDate, "yyyy-MM-dd"), // Convert Date to ISO string
-      endDate: format(data.endDate, "yyyy-MM-dd"),     // Convert Date to ISO string
+      startDate: format(data.startDate, "yyyy-MM-dd"), 
+      endDate: format(data.endDate, "yyyy-MM-dd"),     
     };
 
     try {
       await saveAircraftBlockOut(blockOutToSave);
       toast({
         title: "Aircraft Block-Out Saved",
-        description: `${selectedAircraft.label} blocked from ${format(data.startDate, "PPP")} to ${format(data.endDate, "PPP")} has been saved to Firestore.`,
+        description: `${selectedAircraft.label} blocked from ${format(data.startDate, "PPP")} to ${format(data.endDate, "PPP")} has been saved.`,
         variant: "default"
       });
-      await loadInitialData(); // Reload all data to reflect the new block-out
+      await loadInitialData(); 
       setIsBlockOutModalOpen(false);
     } catch (error) {
       console.error("Failed to save block-out event:", error);
@@ -350,6 +344,7 @@ export default function TripCalendarPage() {
         const dayKey = format(currentDayIter, "yyyy-MM-dd");
         if (!map.has(dayKey)) map.set(dayKey, []);
         const dayEvents = map.get(dayKey)!;
+        // Ensure event is added only once per day to the list for that day
         if (!dayEvents.find(e => e.id === event.id)) dayEvents.push(event);
         currentDayIter = addDays(currentDayIter, 1);
       }
@@ -468,7 +463,7 @@ export default function TripCalendarPage() {
       <CreateBlockOutEventModal
         isOpen={isBlockOutModalOpen}
         setIsOpen={setIsBlockOutModalOpen}
-        onSave={handleSaveBlockOut} // This will now save to Firestore
+        onSave={handleSaveBlockOut} 
         aircraftOptions={allFleetAircraftOptions} 
         isLoadingAircraft={isLoadingFleetForModal}
       />
