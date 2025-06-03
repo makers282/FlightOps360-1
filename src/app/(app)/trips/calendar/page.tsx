@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardDescription, CardTitle } from '@/com
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import Link from 'next/link';
 import { cn } from "@/lib/utils";
-import { format, isSameDay, parseISO, startOfDay, endOfDay, isToday, addHours, isValid, addDays, isBefore, isAfter } from 'date-fns';
+import { format, isSameDay, parseISO, startOfDay, endOfDay, isToday, addHours, isValid, addDays, isBefore, isAfter, isSameMonth } from 'date-fns';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { fetchTrips, type Trip, type TripStatus } from '@/ai/flows/manage-trips-flow';
@@ -44,25 +44,25 @@ export interface AircraftFilterOption {
 }
 
 const AIRCRAFT_COLORS_PALETTE = [
-  { color: 'bg-sky-500', textColor: 'text-white' },
-  { color: 'bg-emerald-500', textColor: 'text-white' },
-  { color: 'bg-amber-500', textColor: 'text-black' },
-  { color: 'bg-rose-500', textColor: 'text-white' },
-  { color: 'bg-violet-500', textColor: 'text-white' },
-  { color: 'bg-lime-500', textColor: 'text-black' },
-  { color: 'bg-cyan-500', textColor: 'text-black' },
-  { color: 'bg-pink-500', textColor: 'text-white' },
-  { color: 'bg-teal-500', textColor: 'text-white' },
-  { color: 'bg-orange-500', textColor: 'text-black' },
+  { color: 'bg-sky-500', textColor: 'text-white' }, // Sky Blue
+  { color: 'bg-emerald-500', textColor: 'text-white' }, // Emerald Green
+  { color: 'bg-amber-500', textColor: 'text-black' }, // Amber/Orange
+  { color: 'bg-rose-500', textColor: 'text-white' }, // Rose/Red
+  { color: 'bg-violet-500', textColor: 'text-white' }, // Violet/Purple
+  { color: 'bg-lime-500', textColor: 'text-black' },   // Lime Green
+  { color: 'bg-cyan-500', textColor: 'text-black' },   // Cyan
+  { color: 'bg-pink-500', textColor: 'text-white' },  // Pink
+  { color: 'bg-teal-500', textColor: 'text-white' },  // Teal
+  { color: 'bg-orange-500', textColor: 'text-black' }, // Orange
 ];
 const DEFAULT_AIRCRAFT_COLOR = { color: 'bg-gray-400', textColor: 'text-white' };
 const BLOCK_OUT_EVENT_COLOR = { color: 'bg-slate-600', textColor: 'text-slate-100' }; 
 
 function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
   const { date, displayMonth, eventsForDay } = dayProps;
-  const isCurrentMonth = date.getMonth() === displayMonth.getMonth();
+  const isCurrentMonthDay = isSameMonth(date, displayMonth);
 
-  if (!isCurrentMonth) {
+  if (!isCurrentMonthDay) {
     return <div className="h-full w-full" />;
   }
 
@@ -71,7 +71,7 @@ function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
   }, [eventsForDay]);
 
   const dayNumberSectionClasses = cn("flex justify-end p-0.5 h-6 items-start");
-  const eventsForDayContainerClasses = cn("flex-1 flex flex-col gap-px overflow-hidden");
+  const eventsForDayContainerClasses = cn("h-full flex flex-col gap-px overflow-hidden pt-1"); // Added pt-1 for a little space after day number
 
   return (
     <div className="h-full w-full flex flex-col">
@@ -115,25 +115,20 @@ function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
                 marginClasses = "mx-[-1px]";
             }
             
-            let displayTitle = false;
-            if (event.type === 'block_out') {
-              displayTitle = eventStartsInThisCell;
-            } else { // For trips and other types
-              displayTitle = eventStartsInThisCell || (eventStartedBeforeCell && isToday(date));
-            }
-
-            const eventDisplayTitle = displayTitle
-              ? (event.type === 'block_out' 
-                ? `${event.aircraftLabel || 'UNK'}: ${event.title}`
-                : `${event.aircraftLabel || 'UNK'}: ${event.title}`)
-              : '\u00A0'; // Non-breaking space to maintain height if no title
+            const displayTitleText = eventStartsInThisCell
+                ? (event.type === 'block_out'
+                    ? `${event.aircraftLabel || 'UNK'}: ${event.title}`
+                    : `${event.aircraftLabel || 'UNK'}: ${event.title}`) // For trips, event.title is trip.tripId
+                : null; 
+            
+            const eventDisplayTitle = displayTitleText ? displayTitleText : '\u00A0'; // Non-breaking space
+            const showPaddingForText = !!displayTitleText;
               
-            const showPaddingForText = displayTitle;
             const eventLink = event.type === 'trip' ? `/trips/details/${event.id}` : undefined;
 
             const EventBarContent = () => (
               <div className={cn(
-                "h-full w-full text-[0.55rem] sm:text-[0.6rem] flex items-center hover:opacity-90",
+                "h-full w-full text-[0.55rem] sm:text-[0.6rem] flex items-center hover:opacity-90 relative z-[1]", 
                 event.color, event.textColor, borderRadiusClasses, marginClasses
               )}>
                 <span className={cn(
@@ -144,23 +139,22 @@ function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
                 </span>
               </div>
             );
+            
+            const EventBarWrapper = ({ children }: { children: React.ReactNode }) => {
+                const commonProps = {
+                  className: cn("block focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-5 sm:h-6"),
+                };
+                if (eventLink) {
+                  return <Link href={eventLink} {...commonProps}>{children}</Link>;
+                }
+                return <div {...commonProps}>{children}</div>;
+            };
 
             return (
               <TooltipProvider key={mapKey} delayDuration={100}>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    {eventLink ? (
-                        <Link 
-                            href={eventLink} 
-                            className={cn("block focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-5 sm:h-6")}
-                        >
-                           <EventBarContent />
-                        </Link>
-                    ) : (
-                        <div className={cn("block focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-5 sm:h-6")}>
-                             <EventBarContent />
-                        </div>
-                    )}
+                    <EventBarWrapper><EventBarContent /></EventBarWrapper>
                   </TooltipTrigger>
                   <TooltipContent side="top" align="center" className="max-w-xs p-2 bg-popover text-popover-foreground border shadow-md rounded-md text-xs">
                     <p className="font-semibold">{event.type === 'block_out' ? `${event.aircraftLabel || 'UNK'}: ${event.title}` : `${event.aircraftLabel || 'UNK'}: ${event.title}`} {event.status && event.type === 'trip' && <span className="text-muted-foreground">({event.status})</span>}</p>
@@ -236,17 +230,17 @@ export default function TripCalendarPage() {
             
             if (lastLeg.arrivalDateTime && isValidISO(lastLeg.arrivalDateTime)) endDate = parseISO(lastLeg.arrivalDateTime);
             else if (lastLegDeparture && lastLeg.blockTimeHours && lastLeg.blockTimeHours > 0) endDate = addHours(lastLegDeparture, lastLeg.blockTimeHours);
-            else if (startDate && lastLeg.blockTimeHours && lastLeg.blockTimeHours > 0) endDate = addHours(startDate, lastLeg.blockTimeHours);
-            else if (startDate) {
+            else if (startDate && lastLeg.blockTimeHours && lastLeg.blockTimeHours > 0) endDate = addHours(startDate, lastLeg.blockTimeHours); // Use first leg start + block for end if no arrival
+            else if (startDate) { // Fallback if block time is also missing, or if only one leg with no block time
               let totalBlockTimeForEndDate = 0;
               trip.legs.forEach(leg => { totalBlockTimeForEndDate += (leg.blockTimeHours || (leg.flightTimeHours ? leg.flightTimeHours + 0.5 : 1)); });
-              endDate = addHours(startDate, totalBlockTimeForEndDate > 0 ? totalBlockTimeForEndDate : 2);
+              endDate = addHours(startDate, totalBlockTimeForEndDate > 0 ? totalBlockTimeForEndDate : 2); // Ensure at least a 2-hour block if no other data
             }
           }
           
-          if (!startDate) startDate = new Date(); // Fallback if no valid start date
-          if (!endDate || !isValid(endDate) || isBefore(endDate, startDate)) endDate = addHours(startDate, 2); // Fallback end date
-          if (isSameDay(startDate, endDate) && isBefore(endDate,startDate)) endDate = addHours(startDate, 2); // Ensure end is after start on same day
+          if (!startDate) startDate = new Date(); 
+          if (!endDate || !isValid(endDate) || isBefore(endDate, startDate)) endDate = addHours(startDate, 2); 
+          if (isSameDay(startDate, endDate) && isBefore(endDate,startDate)) endDate = addHours(startDate, 2); 
           
           const aircraftIdentifier = trip.aircraftId || 'UNKNOWN_AIRCRAFT';
           const aircraftDisplayLabel = trip.aircraftLabel || trip.aircraftId || 'Unknown Aircraft';
@@ -314,6 +308,8 @@ export default function TripCalendarPage() {
     }
 
     const blockOutToSave = {
+      // id field is not part of SaveAircraftBlockOutInput, Firestore generates it.
+      // If an ID is needed for an update, it would be passed differently.
       aircraftId: data.aircraftId,
       aircraftLabel: selectedAircraft.label,
       title: data.title,
@@ -322,10 +318,12 @@ export default function TripCalendarPage() {
     };
 
     try {
-      await saveAircraftBlockOut(blockOutToSave);
+      // Assuming saveAircraftBlockOut takes SaveAircraftBlockOutInput
+      // and returns the saved AircraftBlockOut (which includes the Firestore-generated ID)
+      await saveAircraftBlockOut(blockOutToSave as any); // Cast as any if types mismatch slightly on id
       toast({
         title: "Aircraft Block-Out Saved",
-        description: `${selectedAircraft.label} blocked from ${format(data.startDate, "PPP")} to ${format(data.endDate, "PPP")} has been saved.`,
+        description: `${selectedAircraft.label} blocked from ${format(data.startDate, "PPP")} to ${format(data.endDate, "PPP")} has been saved to Firestore.`,
         variant: "default"
       });
       await loadInitialData(); 
@@ -345,6 +343,7 @@ export default function TripCalendarPage() {
     const map = new Map<string, CalendarEvent[]>();
     filteredEvents.forEach(event => {
       if (!event.start || !event.end || !isValid(event.start) || !isValid(event.end)) {
+        console.warn("Skipping event with invalid dates:", event);
         return;
       }
       let currentDayIter = startOfDay(event.start);
@@ -353,7 +352,6 @@ export default function TripCalendarPage() {
         const dayKey = format(currentDayIter, "yyyy-MM-dd");
         if (!map.has(dayKey)) map.set(dayKey, []);
         const dayEvents = map.get(dayKey)!;
-        // Ensure event is added only once per day to the list for that day
         if (!dayEvents.find(e => e.id === event.id)) dayEvents.push(event);
         currentDayIter = addDays(currentDayIter, 1);
       }
@@ -396,14 +394,14 @@ export default function TripCalendarPage() {
         <CardHeader className="border-b py-3 px-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
           <div>
             <CardTitle className="text-lg">Activity View</CardTitle>
-            <CardDescription>Trip colors represent different aircraft. Grey blocks are other scheduled unavailability.</CardDescription>
+            <CardDescription>Trip colors represent different aircraft. Grey bars are block-outs/maintenance.</CardDescription>
           </div>
-          <div className="flex gap-2 items-center">
+          <div className="flex gap-2 items-center flex-wrap">
             {uniqueAircraftForFilter.length > 0 && (
               <Popover>
                 <PopoverTrigger asChild>
                   <Button variant="outline" size="sm">
-                    <FilterIcon className="mr-2 h-4 w-4" /> Filter Trips ({activeAircraftFilters.length > 0 ? `${activeAircraftFilters.length} selected` : 'All'})
+                    <FilterIcon className="mr-2 h-4 w-4" /> Filter Aircraft ({activeAircraftFilters.length > 0 ? `${activeAircraftFilters.length} selected` : 'All'})
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-64 p-0" align="end">
