@@ -77,7 +77,7 @@ const CustomDay = React.memo(function CustomDay(dayProps: DayProps & { eventsFor
   }, [eventsForDay]);
 
   const dayNumberSectionClasses = cn("flex justify-end p-0.5 h-6 items-start");
-  const eventsForDayContainerClasses = cn("h-full flex flex-col"); // Removed pt-1
+  const eventsForDayContainerClasses = cn("h-full flex flex-col"); 
 
   return (
     <div className="h-full w-full flex flex-col">
@@ -104,30 +104,42 @@ const CustomDay = React.memo(function CustomDay(dayProps: DayProps & { eventsFor
             const displayTextColor = event.textColor;
             
             const eventStartsOnThisDay = isSameDay(event.start, date);
-            const eventLastPaintedDay = startOfDay(addDays(event.end, -1));
+            const eventLastPaintedDay = startOfDay(addDays(event.end, -1)); // The actual last day the event is on
             const eventEndsOnThisDay = isSameDay(eventLastPaintedDay, date);
             
             const eventStartedBeforeThisDay = isBefore(event.start, startOfDay(date));
             const eventEndsAfterThisDay = isAfter(eventLastPaintedDay, endOfDay(date));
 
-            let titleToRender = '\u00A0'; // Default to non-breaking space
-            
-            if (eventStartsOnThisDay) {
-              titleToRender = event.title;
-            }
-            
-            let borderRadiusClasses = "rounded-sm"; 
-            let marginClasses = "mx-0"; 
+            let eventDisplayTitle = event.title;
+            let showTitleForThisSegment = false;
 
-            if (eventStartsOnThisDay && eventEndsAfterThisDay) { 
-              borderRadiusClasses = "rounded-l-sm";
-              marginClasses = "ml-0 mr-[-2px]"; // Increased negative margin
-            } else if (eventStartedBeforeThisDay && eventEndsOnThisDay) { 
-              borderRadiusClasses = "rounded-r-sm";
-              marginClasses = "mr-0 ml-[-2px]"; // Increased negative margin
-            } else if (eventStartedBeforeThisDay && eventEndsAfterThisDay) { 
-              borderRadiusClasses = "rounded-none"; 
-              marginClasses = "mx-[-2px]"; // Increased negative margin
+            if (eventStartsOnThisDay) {
+                showTitleForThisSegment = true;
+            }
+
+            const titleToRender = showTitleForThisSegment ? eventDisplayTitle : '\u00A0';
+            
+            let borderRadiusClasses = "rounded-sm";
+            let widthAndPositionClasses = "w-full"; 
+            let marginClasses = "mx-0 my-0"; // Default vertical margin
+
+            if (eventStartsOnThisDay && eventEndsOnThisDay) {
+                // Single day event - full rounding, no bleed needed beyond vertical
+                marginClasses = "mx-0 my-[-1px]";
+            } else if (eventStartsOnThisDay) { // Multi-day, starts today
+                borderRadiusClasses = "rounded-l-sm";
+                widthAndPositionClasses = "w-[calc(100%+1px)]";
+                marginClasses = "ml-0 mr-[-1px] my-[-1px]"; // Bleed right and vertically
+            } else if (eventEndsOnThisDay) { // Multi-day, ends today
+                borderRadiusClasses = "rounded-r-sm";
+                widthAndPositionClasses = "w-[calc(100%+1px)]";
+                marginClasses = "mr-0 ml-[-1px] my-[-1px]"; // Bleed left and vertically
+            } else if (eventStartedBeforeThisDay && eventEndsAfterThisDay) { // Middle segment of a multi-day event
+                borderRadiusClasses = "rounded-none";
+                widthAndPositionClasses = "w-[calc(100%+2px)]"; 
+                marginClasses = "mx-[-1px] my-[-1px]"; // Bleed both sides and vertically
+            } else { // Should not happen if start/end logic is correct, but fallback for safety
+                marginClasses = "mx-0 my-[-1px]";
             }
             
             const EventLinkOrDiv = event.type === 'trip' && event.id ? Link : 'div';
@@ -141,20 +153,17 @@ const CustomDay = React.memo(function CustomDay(dayProps: DayProps & { eventsFor
                     <EventLinkOrDiv
                       {...hrefProp}
                       className={cn(
-                        "block h-5 sm:h-6 text-[0.55rem] sm:text-[0.6rem] flex items-center relative",
+                        "block h-[calc(100%+2px)] text-[0.55rem] sm:text-[0.6rem] flex items-center relative", // Adjusted height
                         displayColor, displayTextColor,
                         borderRadiusClasses,
-                        marginClasses,
+                        widthAndPositionClasses, 
+                        marginClasses, 
                         "z-10" 
                       )}
                     >
-                      {eventStartsOnThisDay ? (
-                        <span className={cn("w-full overflow-hidden whitespace-nowrap px-0.5 sm:px-1 truncate")}>
-                          {titleToRender}
-                        </span>
-                      ) : (
-                        <span className="w-full px-0.5 sm:px-1">&nbsp;</span>
-                      )}
+                      <span className={cn("w-full overflow-hidden whitespace-nowrap px-0.5 sm:px-1 truncate")}>
+                        {titleToRender}
+                      </span>
                     </EventLinkOrDiv>
                   </TooltipTrigger>
                   <TooltipContent side="top" align="center" className="max-w-xs p-2 bg-popover text-popover-foreground border shadow-md rounded-md">
@@ -234,9 +243,8 @@ export default function TripCalendarPage() {
         
         const tripCalendarEvents: CalendarEvent[] = fetchedTrips.map(trip => {
           let overallStartDate: Date | null = null;
-          let overallEndDateExclusive: Date | null = null; 
+          let lastActiveDay: Date | null = null; 
           let route = "N/A";
-          let lastActiveDay: Date | null = null;
 
           if (trip.legs && trip.legs.length > 0) {
             const firstLeg = trip.legs[0];
@@ -259,7 +267,7 @@ export default function TripCalendarPage() {
           if (!lastActiveDay || !isValid(lastActiveDay) || isBefore(lastActiveDay, overallStartDate)) {
              lastActiveDay = overallStartDate; 
           }
-          overallEndDateExclusive = startOfDay(addDays(lastActiveDay, 1)); 
+          const overallEndDateExclusive = startOfDay(addDays(lastActiveDay, 1)); // Exclusive end date
           
           const aircraftIdentifier = trip.aircraftId || 'UNKNOWN_AIRCRAFT';
           const aircraftDisplayLabel = trip.aircraftLabel || trip.aircraftId || 'Unknown Aircraft';
@@ -287,7 +295,7 @@ export default function TripCalendarPage() {
             }
             const blockOutStartDate = startOfDay(parseISO(blockOut.startDate));
             const blockOutEndDateInclusive = startOfDay(parseISO(blockOut.endDate));
-            const blockOutEndDateExclusive = startOfDay(addDays(blockOutEndDateInclusive, 1)); 
+            const blockOutEndDateExclusive = startOfDay(addDays(blockOutEndDateInclusive, 1)); // Exclusive end date
 
             return {
                 id: blockOut.id,
