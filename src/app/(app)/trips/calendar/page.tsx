@@ -9,7 +9,7 @@ import type { DayProps } from "react-day-picker";
 import { Card, CardContent, CardHeader, CardDescription, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
 import { cn } from "@/lib/utils";
-import { format, isSameDay, parseISO, startOfDay, endOfDay, isToday, addHours, isValid, addDays, isBefore, isAfter, isSameMonth } from 'date-fns';
+import { format, isSameDay, parseISO, startOfDay, endOfDay, isToday, addHours, isValid, addDays, isBefore, isAfter, isSameMonth, differenceInCalendarDays } from 'date-fns';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Skeleton } from "@/components/ui/skeleton";
 import { fetchTrips, type Trip, type TripStatus } from '@/ai/flows/manage-trips-flow';
@@ -21,6 +21,13 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Label } from "@/components/ui/label";
 import { CreateBlockOutEventModal, type BlockOutFormData } from './components/create-block-out-event-modal';
 import { fetchAircraftBlockOuts, saveAircraftBlockOut, type AircraftBlockOut } from '@/ai/flows/manage-aircraft-block-outs-flow';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+
 
 interface CalendarEvent {
   id: string;
@@ -70,7 +77,7 @@ function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
   }, [eventsForDay]);
 
   const dayNumberSectionClasses = cn("flex justify-end p-0.5 h-6 items-start");
-  const eventsForDayContainerClasses = cn("h-full flex flex-col gap-px pt-1"); // Removed overflow-hidden
+  const eventsForDayContainerClasses = cn("h-full flex flex-col gap-px pt-1");
 
   return (
     <div className="h-full w-full flex flex-col">
@@ -92,40 +99,64 @@ function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
         <div className={eventsForDayContainerClasses}>
           {dayEvents.map(event => {
             const mapKey = `${event.id}-${format(date, "yyyy-MM-dd")}`;
+            
             const eventStartsInThisCell = isSameDay(event.start, date);
+            const eventEndsInThisCell = isSameDay(event.end, date);
+            const eventStartedBeforeCell = isBefore(event.start, startOfDay(date));
+            const eventEndsAfterCell = isAfter(event.end, endOfDay(date));
 
-            // Explicitly log the inputs to titleToRender calculation
-            const titleToRender = eventStartsInThisCell
-              ? `${event.aircraftLabel || 'UNK AC'}: ${event.title || event.id}`
-              : '\u00A0'; // Non-breaking space for subsequent segments
+            let widthAndPositionClasses = "w-full left-0";
+            let borderRadiusClasses = "rounded-sm";
 
-            // **** DETAILED CONSOLE LOG ****
-            console.log(
-              `CustomDay LOG: CellDate=${format(date, "yyyy-MM-dd")}, EventID=${event.id}, Event.start=${format(event.start, "yyyy-MM-dd HH:mm")}, eventStartsInThisCell=${eventStartsInThisCell}, RENDERING_TITLE='${titleToRender === '\u00A0' ? 'NBSP_PLACEHOLDER' : titleToRender}'`
-            );
+            if (eventStartedBeforeCell && eventEndsAfterCell) { // Middle of a multi-day event
+              widthAndPositionClasses = "w-[calc(100%+2px)] left-[-1px]";
+              borderRadiusClasses = "";
+            } else if (eventStartsInThisCell && eventEndsAfterCell) { // Starts in this cell, continues
+              widthAndPositionClasses = "w-[calc(100%+1px)] left-0";
+              borderRadiusClasses = "rounded-l-sm";
+            } else if (eventStartedBeforeCell && eventEndsInThisCell) { // Started before, ends in this cell
+              widthAndPositionClasses = "w-[calc(100%+1px)] left-[-1px]";
+              borderRadiusClasses = "rounded-r-sm";
+            }
+            // Single day events or first/last day of multi-day use default "rounded-sm"
 
             const EventLinkOrDiv = event.type === 'trip' && event.id ? Link : 'div';
-            const commonProps = {
-              className: cn(
-                "block h-5 sm:h-6 text-[0.55rem] sm:text-[0.6rem] flex items-center relative", // Base styling
-                event.color, event.textColor,
-                "w-full rounded-sm", // Simplified styling for focusing on title
-                "z-10" 
-              ),
-              ...(event.type === 'trip' && event.id && { href: `/trips/details/${event.id}` }),
-            };
+            
+            const fullTitleText = `${event.aircraftLabel || 'UNK AC'}: ${event.title || event.id}`;
 
             return (
-              <EventLinkOrDiv key={mapKey} {...commonProps}>
-                <span
-                  className={cn(
-                    "w-full overflow-hidden whitespace-nowrap px-0.5 sm:px-1",
-                    titleToRender !== '\u00A0' && "truncate" // Apply truncate only if there's actual text
-                  )}
-                >
-                  {titleToRender}
-                </span>
-              </EventLinkOrDiv>
+              <TooltipProvider key={mapKey} delayDuration={100}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <EventLinkOrDiv
+                      href={event.type === 'trip' && event.id ? `/trips/details/${event.id}` : undefined}
+                      className={cn(
+                        "block h-5 sm:h-6 text-[0.55rem] sm:text-[0.6rem] flex items-center relative",
+                        event.color, event.textColor,
+                        borderRadiusClasses,
+                        widthAndPositionClasses,
+                        "z-10" // Ensure it's above cell borders
+                      )}
+                    >
+                      {eventStartsInThisCell ? (
+                        <span key={`${event.id}-title-segment`} className="w-full overflow-hidden whitespace-nowrap px-0.5 sm:px-1 truncate">
+                          {fullTitleText}
+                        </span>
+                      ) : (
+                        <span key={`${event.id}-nbsp-segment`} className="w-full px-0.5 sm:px-1">{'\u00A0'}</span>
+                      )}
+                    </EventLinkOrDiv>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" align="center" className="max-w-xs p-2 bg-popover text-popover-foreground border shadow-md rounded-md">
+                    <p className="font-semibold">{fullTitleText}</p>
+                    {event.route && <p className="text-xs">Route: {event.route}</p>}
+                    <p className="text-xs">Starts: {format(event.start, "MMM d, HH:mm")}</p>
+                    <p className="text-xs">Ends: {format(event.end, "MMM d, HH:mm")}</p>
+                    {event.status && <p className="text-xs">Status: {event.status}</p>}
+                    {event.description && !event.route && <p className="text-xs">{event.description}</p>}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             );
           })}
         </div>
@@ -133,6 +164,7 @@ function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
     </div>
   );
 }
+
 
 export default function TripCalendarPage() {
   const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
@@ -198,9 +230,10 @@ export default function TripCalendarPage() {
             }
           }
 
-          if (!startDate) startDate = new Date();
-          if (!endDate || !isValid(endDate) || isBefore(endDate, startDate)) endDate = addHours(startDate, 2);
+          if (!startDate) startDate = new Date(); // Fallback if no valid date
+          if (!endDate || !isValid(endDate) || isBefore(endDate, startDate)) endDate = addHours(startDate, 2); // Ensure end is after start
           if (isSameDay(startDate, endDate) && isBefore(endDate,startDate)) endDate = addHours(startDate, 2);
+
 
           const aircraftIdentifier = trip.aircraftId || 'UNKNOWN_AIRCRAFT';
           const aircraftDisplayLabel = trip.aircraftLabel || trip.aircraftId || 'Unknown Aircraft';
@@ -226,8 +259,8 @@ export default function TripCalendarPage() {
             return {
                 id: blockOut.id,
                 title: blockOut.title,
-                start: startOfDay(parseISO(blockOut.startDate)),
-                end: endOfDay(parseISO(blockOut.endDate)),
+                start: startOfDay(parseISO(blockOut.startDate)), // Ensure start of day
+                end: endOfDay(parseISO(blockOut.endDate)),       // Ensure end of day
                 type: 'block_out',
                 aircraftId: blockOut.aircraftId,
                 aircraftLabel: aircraftDisplayLabel,
@@ -268,21 +301,22 @@ export default function TripCalendarPage() {
     }
 
     const blockOutToSave = {
+      // id: will be generated by Firestore or flow if not provided for new events
       aircraftId: data.aircraftId,
       aircraftLabel: selectedAircraft.label,
       title: data.title,
-      startDate: format(data.startDate, "yyyy-MM-dd"),
-      endDate: format(data.endDate, "yyyy-MM-dd"),
+      startDate: format(data.startDate, "yyyy-MM-dd"), // Store as ISO string
+      endDate: format(data.endDate, "yyyy-MM-dd"),     // Store as ISO string
     };
 
     try {
-      await saveAircraftBlockOut(blockOutToSave as any);
+      await saveAircraftBlockOut(blockOutToSave as any); // Cast as any to match expected input if ID is optional
       toast({
         title: "Aircraft Block-Out Saved",
         description: `${selectedAircraft.label} blocked from ${format(data.startDate, "PPP")} to ${format(data.endDate, "PPP")} has been saved to Firestore.`,
         variant: "default"
       });
-      await loadInitialData();
+      await loadInitialData(); // Reload all events
       setIsBlockOutModalOpen(false);
     } catch (error) {
       console.error("Failed to save block-out event:", error);
@@ -299,14 +333,16 @@ export default function TripCalendarPage() {
     const map = new Map<string, CalendarEvent[]>();
     filteredEvents.forEach(event => {
       if (!event.start || !event.end || !isValid(event.start) || !isValid(event.end)) {
+        // console.warn("Skipping event with invalid dates:", event);
         return;
       }
       let currentDayIter = startOfDay(event.start);
-      const eventEndBoundary = endOfDay(event.end);
+      const eventEndBoundary = endOfDay(event.end); 
       while (currentDayIter <= eventEndBoundary) {
         const dayKey = format(currentDayIter, "yyyy-MM-dd");
         if (!map.has(dayKey)) map.set(dayKey, []);
         const dayEvents = map.get(dayKey)!;
+        // Add event only if it's not already there for that day (prevents duplicates from multi-day processing)
         if (!dayEvents.find(e => e.id === event.id)) dayEvents.push(event);
         currentDayIter = addDays(currentDayIter, 1);
       }
@@ -411,7 +447,7 @@ export default function TripCalendarPage() {
                 table: "w-full border-collapse table-fixed", month: "w-full", head_row: "border-b border-border/50 flex",
                 head_cell: cn("text-muted-foreground align-middle text-center font-normal text-[0.65rem] sm:text-xs py-1.5 border-r border-b border-border/30 last:border-r-0 w-[calc(100%/7)]"),
                 row: "flex w-full",
-                cell: cn("p-0 m-0 text-left align-top relative h-24 min-h-[6rem] sm:h-28 sm:min-h-[7rem] md:h-32 md:min-h-[8rem] lg:h-36 lg:min-h-[9rem] xl:h-40 xl:min-h-[10rem] border-r border-b border-border/30 w-[calc(100%/7)]"),
+                cell: cn("p-0 m-0 text-left align-top relative h-24 min-h-[6rem] sm:h-28 sm:min-h-[7rem] md:h-32 md:min-h-[8rem] lg:h-36 lg:min-h-[9rem] xl:h-40 xl:min-h-[10rem] border-r border-b border-border/30 w-[calc(100%/7)]"), // Removed overflow-hidden
                 day_disabled: "opacity-50 pointer-events-none", caption: "flex justify-center items-center py-2.5 relative gap-x-1 px-2",
                 caption_label: "text-sm font-medium px-2", nav_button: cn(buttonVariants({ variant: "outline" }), "h-7 w-7 bg-transparent p-0 opacity-80 hover:opacity-100"),
                 nav_button_previous: "absolute left-1", nav_button_next: "absolute right-1",
@@ -432,4 +468,3 @@ export default function TripCalendarPage() {
     </>
   );
 }
-
