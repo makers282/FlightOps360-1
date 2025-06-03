@@ -30,15 +30,14 @@ import {
 
 const PHASE_COLORS = {
   SCHEDULED: { color: 'bg-orange-500', textColor: 'text-white' },
-  ACTIVE:    { color: 'bg-gray-600',   textColor: 'text-white' }, // Darker gray for better contrast
+  ACTIVE:    { color: 'bg-gray-600',   textColor: 'text-white' },
   CLOSEOUT:  { color: 'bg-blue-500',   textColor: 'text-white' },
-  // For regular trips that don't have these explicit phases, or for block-outs
-  DEFAULT_TRIP: { color: 'bg-sky-500',    textColor: 'text-white' }, // Default for single-phase trips
-  BLOCK_OUT: { color: 'bg-slate-700', textColor: 'text-slate-100' }, // Distinct color for block-outs
+  DEFAULT_TRIP: { color: 'bg-sky-500',    textColor: 'text-white' },
+  BLOCK_OUT: { color: 'bg-slate-700', textColor: 'text-slate-100' },
 };
 
 interface DailyPhase {
-  phaseName: string;
+  phaseName: keyof typeof PHASE_COLORS; // Ensures phaseName is one of our defined keys
   displayTitle: string;
   color: string;
   textColor: string;
@@ -46,32 +45,30 @@ interface DailyPhase {
 
 interface CalendarEvent {
   id: string;
-  title: string; // Base title (e.g., Trip ID or Block Out reason)
+  title: string;
   start: Date;
   end: Date;
-  type: 'trip' | 'block_out'; // Removed 'maintenance' for now as it's not implemented
+  type: 'trip' | 'block_out';
   aircraftId?: string;
   aircraftLabel?: string;
   route?: string;
-  color: string; // Default/fallback color
-  textColor: string; // Default/fallback text color
+  color: string;
+  textColor: string;
   description?: string;
-  status?: TripStatus; // Overall trip status
+  status?: TripStatus;
   extendedProps?: {
-    dailyPhaseInfo?: Map<string, DailyPhase>; // Key: "YYYY-MM-DD"
+    dailyPhaseInfo?: Map<string, DailyPhase>;
   };
 }
-
 
 export interface AircraftFilterOption {
   id: string;
   label: string;
 }
 
-// Used if a specific aircraft doesn't have a color assigned from the palette yet
 const DEFAULT_AIRCRAFT_COLOR_FALLBACK = { color: 'bg-gray-400', textColor: 'text-white' };
 
-function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
+const CustomDay = React.memo(function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
   const { date, displayMonth, eventsForDay } = dayProps;
   const isCurrentMonthDay = isSameMonth(date, displayMonth);
 
@@ -106,36 +103,53 @@ function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
         <div className={eventsForDayContainerClasses}>
           {dayEvents.map(event => {
             const mapKey = `${event.id}-${format(date, "yyyy-MM-dd")}`;
-            const eventStartsInThisCell = isSameDay(event.start, date);
-            const eventEndsInThisCell = isSameDay(event.end, date);
-            const eventStartedBeforeCell = isBefore(event.start, startOfDay(date));
-            const eventEndsAfterCell = isAfter(event.end, endOfDay(date));
-
             const dayKey = format(date, "yyyy-MM-dd");
+            
             const phaseInfoForDay = event.extendedProps?.dailyPhaseInfo?.get(dayKey);
 
             const displayColor = phaseInfoForDay?.color || event.color;
             const displayTextColor = phaseInfoForDay?.textColor || event.textColor;
-            
-            // Title display logic: Show only on the absolute first day of the event.
-            const titleToRender = eventStartsInThisCell 
-              ? (phaseInfoForDay?.displayTitle || event.title)
-              : '\u00A0'; // Non-breaking space for subsequent segments
+            const baseTitleForSegment = phaseInfoForDay?.displayTitle || event.title;
 
-            let widthAndPositionClasses = "w-full left-0";
-            let borderRadiusClasses = "rounded-sm";
+            const isOverallEventStartInCell = isSameDay(event.start, date);
+            let showTitleForThisSegment = false;
 
-            if (eventStartedBeforeCell && eventEndsAfterCell) { // Middle segment
-              widthAndPositionClasses = "w-[calc(100%+2px)] left-[-1px]";
-              borderRadiusClasses = "";
-            } else if (eventStartsInThisCell && eventEndsAfterCell) { // Starts here, continues
-              widthAndPositionClasses = "w-[calc(100%+1px)] left-0";
-              borderRadiusClasses = "rounded-l-sm";
-            } else if (eventStartedBeforeCell && eventEndsInThisCell) { // Started before, ends here
-              widthAndPositionClasses = "w-[calc(100%+1px)] left-[-1px]";
-              borderRadiusClasses = "rounded-r-sm";
+            if (phaseInfoForDay) { // Phased event (trip)
+                if (isOverallEventStartInCell) {
+                    showTitleForThisSegment = true;
+                } else {
+                    const prevDate = addDays(date, -1);
+                    const prevDayKey = format(prevDate, "yyyy-MM-dd");
+                    const phaseInfoForPrevDayOfThisEvent = event.extendedProps?.dailyPhaseInfo?.get(prevDayKey);
+                    if (!phaseInfoForPrevDayOfThisEvent || phaseInfoForPrevDayOfThisEvent.phaseName !== phaseInfoForDay.phaseName) {
+                        showTitleForThisSegment = true;
+                    }
+                }
+            } else { // Non-phased event (e.g., block-out)
+                showTitleForThisSegment = isOverallEventStartInCell;
             }
-            // Single day event uses default w-full, rounded-sm
+            
+            const titleToRender = showTitleForThisSegment ? baseTitleForSegment : '\u00A0';
+
+            // TEMPORARY LOGGING - Remove after diagnosis
+            // console.log(`CustomDay LOG: CellDate=${format(date, "yyyy-MM-dd")}, EventID=${event.id}, Event.start=${format(event.start, "yyyy-MM-dd HH:mm")}, eventOverallStartsInCell=${isOverallEventStartInCell}, showTitleForThisSegment=${showTitleForThisSegment}, phaseInfoForDay.phaseName=${phaseInfoForDay?.phaseName}, BaseTitle='${baseTitleForSegment}', FINAL_TITLE_TO_RENDER='${titleToRender === '\u00A0' ? 'NBSP_PLACEHOLDER' : titleToRender}'`);
+
+
+            const eventStartsForBorderRadius = isSameDay(event.start, date);
+            const eventEndsForBorderRadius = isSameDay(event.end, date);
+            const eventStartedBeforeForBorderRadius = isBefore(event.start, startOfDay(date));
+            const eventEndsAfterForBorderRadius = isAfter(event.end, endOfDay(date));
+
+            let borderRadiusClasses = "rounded-sm";
+            if (eventStartsForBorderRadius && eventEndsAfterForBorderRadius) borderRadiusClasses = "rounded-l-sm";
+            else if (eventStartedBeforeForBorderRadius && eventEndsForBorderRadius) borderRadiusClasses = "rounded-r-sm";
+            else if (eventStartedBeforeForBorderRadius && eventEndsAfterForBorderRadius) borderRadiusClasses = "";
+
+            let marginClasses = "";
+            if (eventStartedBeforeForBorderRadius && eventEndsAfterForBorderRadius) marginClasses = "mx-[-1px]"; // Middle segment
+            else if (eventStartsForBorderRadius && eventEndsAfterForBorderRadius) marginClasses = "ml-0 mr-[-1px]"; // Starts here, continues
+            else if (eventStartedBeforeForBorderRadius && eventEndsForBorderRadius) marginClasses = "mr-0 ml-[-1px]"; // Started before, ends here
+            // Single-day event uses default no margin adjustment for this logic
 
             const EventLinkOrDiv = event.type === 'trip' && event.id ? Link : 'div';
             const hrefProp = event.type === 'trip' && event.id ? { href: `/trips/details/${event.id}` } : {};
@@ -152,16 +166,18 @@ function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
                         "block h-5 sm:h-6 text-[0.55rem] sm:text-[0.6rem] flex items-center relative",
                         displayColor, displayTextColor,
                         borderRadiusClasses,
-                        widthAndPositionClasses,
+                        marginClasses, // Use negative margins for overlap
                         "z-10" 
                       )}
                     >
-                      {/* Render span only if there's actual text to show, or it's the first segment */}
-                      {(eventStartsInThisCell || titleToRender.trim() !== '') && (
-                          <span className={cn("w-full overflow-hidden whitespace-nowrap px-0.5 sm:px-1", titleToRender.trim() === '' ? '' : 'truncate')}>
-                            {titleToRender}
-                          </span>
-                      )}
+                      <span
+                        className={cn(
+                            "w-full overflow-hidden whitespace-nowrap px-0.5 sm:px-1",
+                            showTitleForThisSegment && "truncate" // Only truncate if there's an actual title
+                        )}
+                      >
+                        {titleToRender}
+                      </span>
                     </EventLinkOrDiv>
                   </TooltipTrigger>
                   <TooltipContent side="top" align="center" className="max-w-xs p-2 bg-popover text-popover-foreground border shadow-md rounded-md">
@@ -180,7 +196,33 @@ function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
       )}
     </div>
   );
-}
+}, (prevProps, nextProps) => {
+    return isSameDay(prevProps.date, nextProps.date) &&
+           prevProps.displayMonth.getTime() === nextProps.displayMonth.getTime() &&
+           prevProps.eventsForDay.length === nextProps.eventsForDay.length &&
+           prevProps.eventsForDay.every((event, index) => {
+               const nextEvent = nextProps.eventsForDay[index];
+               return event.id === nextEvent.id &&
+                      event.start.getTime() === nextEvent.start.getTime() &&
+                      event.end.getTime() === nextEvent.end.getTime() &&
+                      event.title === nextEvent.title &&
+                      event.color === nextEvent.color &&
+                      // Deep compare dailyPhaseInfo map if it exists
+                      (event.extendedProps?.dailyPhaseInfo === nextEvent.extendedProps?.dailyPhaseInfo ||
+                        (event.extendedProps?.dailyPhaseInfo && nextEvent.extendedProps?.dailyPhaseInfo &&
+                         (() => {
+                            if (event.extendedProps.dailyPhaseInfo.size !== nextEvent.extendedProps.dailyPhaseInfo.size) return false;
+                            for (const [key, value] of event.extendedProps.dailyPhaseInfo) {
+                                const nextValue = nextEvent.extendedProps.dailyPhaseInfo.get(key);
+                                if (!nextValue || value.phaseName !== nextValue.phaseName || value.displayTitle !== nextValue.displayTitle) return false;
+                            }
+                            return true;
+                         })()
+                        )
+                      )
+           });
+}));
+CustomDay.displayName = "CustomDay";
 
 
 export default function TripCalendarPage() {
@@ -199,8 +241,7 @@ export default function TripCalendarPage() {
 
   const getAircraftColor = useCallback((aircraftId: string) => {
     if (!aircraftColorMap.has(aircraftId)) {
-      const colorIndex = aircraftColorMap.size % PHASE_COLORS.DEFAULT_TRIP.color.length; // Use a palette size if needed
-      aircraftColorMap.set(aircraftId, PHASE_COLORS.DEFAULT_TRIP); // Default to a single trip color for now
+      aircraftColorMap.set(aircraftId, PHASE_COLORS.DEFAULT_TRIP);
     }
     return aircraftColorMap.get(aircraftId) || DEFAULT_AIRCRAFT_COLOR_FALLBACK;
   }, [aircraftColorMap]);
@@ -250,37 +291,39 @@ export default function TripCalendarPage() {
             }
           }
 
-          if (!overallStartDate) overallStartDate = new Date(); 
+          if (!overallStartDate || !isValid(overallStartDate)) overallStartDate = new Date(); 
           if (!overallEndDate || !isValid(overallEndDate) || isBefore(overallEndDate, overallStartDate)) overallEndDate = addHours(overallStartDate, 2);
           if (isSameDay(overallStartDate, overallEndDate) && isBefore(overallEndDate, overallStartDate)) overallEndDate = addHours(overallStartDate, 2);
 
-          // Simulate Phases and populate dailyPhaseInfo
-          if (overallStartDate && overallEndDate && isValid(overallStartDate) && isValid(overallEndDate)) {
-            const daysOfTrip = eachDayOfInterval({ start: overallStartDate, end: overallEndDate });
+          if (isValid(overallStartDate) && isValid(overallEndDate)) {
+            const daysOfTrip = eachDayOfInterval({ start: startOfDay(overallStartDate), end: startOfDay(overallEndDate) });
             const totalDays = daysOfTrip.length;
-            let phase: keyof typeof PHASE_COLORS = 'DEFAULT_TRIP'; // Default phase
+            
+            let phase: keyof typeof PHASE_COLORS = 'DEFAULT_TRIP';
+            let currentPhaseDisplayString: string = trip.status || "Active";
 
             daysOfTrip.forEach((day, index) => {
               const dayKey = format(day, "yyyy-MM-dd");
-              let currentPhaseName = trip.status || "Scheduled"; // Use trip status as default phase name
 
-              // Phase simulation logic (can be made more sophisticated)
               if (totalDays >= 3) {
-                if (index < Math.floor(totalDays / 3)) { phase = 'SCHEDULED'; currentPhaseName = 'Scheduled'; }
-                else if (index < Math.floor(totalDays * 2 / 3)) { phase = 'ACTIVE'; currentPhaseName = 'Active'; }
-                else { phase = 'CLOSEOUT'; currentPhaseName = 'Closeout'; }
+                if (index < Math.floor(totalDays / 3)) { phase = 'SCHEDULED'; currentPhaseDisplayString = 'Scheduled'; }
+                else if (index < Math.floor(totalDays * 2 / 3)) { phase = 'ACTIVE'; currentPhaseDisplayString = 'Active'; }
+                else { phase = 'CLOSEOUT'; currentPhaseDisplayString = 'Closeout'; }
               } else if (totalDays === 2) {
-                if (index === 0) { phase = 'SCHEDULED'; currentPhaseName = 'Scheduled';}
-                else { phase = 'ACTIVE'; currentPhaseName = 'Active'; }
+                if (index === 0) { phase = 'SCHEDULED'; currentPhaseDisplayString = 'Scheduled';}
+                else { phase = 'ACTIVE'; currentPhaseDisplayString = 'Active'; }
               } else if (totalDays === 1) {
                  phase = trip.status === 'Scheduled' ? 'SCHEDULED' : (trip.status === 'En Route' ? 'ACTIVE' : (trip.status === 'Completed' || trip.status === 'Awaiting Closeout' ? 'CLOSEOUT' : 'DEFAULT_TRIP'));
-                 currentPhaseName = trip.status || "Active";
+                 if (phase === 'SCHEDULED') currentPhaseDisplayString = 'Scheduled';
+                 else if (phase === 'ACTIVE') currentPhaseDisplayString = 'Active';
+                 else if (phase === 'CLOSEOUT') currentPhaseDisplayString = 'Closeout';
+                 else currentPhaseDisplayString = trip.status || 'Trip Event';
               }
               
               const phaseStyle = PHASE_COLORS[phase] || PHASE_COLORS.DEFAULT_TRIP;
               dailyPhaseInfo.set(dayKey, {
-                phaseName: currentPhaseName,
-                displayTitle: `${trip.aircraftLabel || trip.aircraftId} - ${trip.tripId} - ${currentPhaseName}`,
+                phaseName: phase,
+                displayTitle: `${trip.aircraftLabel || trip.aircraftId} - ${trip.tripId} - ${currentPhaseDisplayString}`,
                 color: phaseStyle.color,
                 textColor: phaseStyle.textColor,
               });
@@ -293,14 +336,14 @@ export default function TripCalendarPage() {
             aircraftSetForFilter.set(aircraftIdentifier, aircraftDisplayLabel);
           }
           
-          // Fallback color for the event if no daily phase info applies (shouldn't happen for trips now)
-          const defaultPhaseColor = PHASE_COLORS.DEFAULT_TRIP;
+          const acColor = getAircraftColor(aircraftIdentifier);
 
           return {
-            id: trip.id, title: trip.tripId, start: overallStartDate, end: overallEndDate, type: 'trip',
+            id: trip.id, title: `${trip.aircraftLabel || trip.aircraftId} - ${trip.tripId}`, 
+            start: overallStartDate, end: overallEndDate, type: 'trip',
             aircraftId: aircraftIdentifier, aircraftLabel: aircraftDisplayLabel,
             route: route, 
-            color: defaultPhaseColor.color, textColor: defaultPhaseColor.textColor, // Fallback
+            color: acColor.color, textColor: acColor.textColor,
             description: `Trip for ${trip.clientName}. Overall Status: ${trip.status}.`,
             status: trip.status,
             extendedProps: { dailyPhaseInfo }
@@ -314,7 +357,7 @@ export default function TripCalendarPage() {
             }
             return {
                 id: blockOut.id,
-                title: `${aircraftDisplayLabel}: ${blockOut.title}`, // Ensure aircraft label is in title
+                title: `${aircraftDisplayLabel}: ${blockOut.title}`,
                 start: startOfDay(parseISO(blockOut.startDate)),
                 end: endOfDay(parseISO(blockOut.endDate)),      
                 type: 'block_out',
@@ -341,7 +384,7 @@ export default function TripCalendarPage() {
         setIsLoadingData(false);
         setIsLoadingFleetForModal(false);
     }
-  }, [toast]);
+  }, [toast, getAircraftColor]);
 
 
   useEffect(() => {
@@ -396,7 +439,10 @@ export default function TripCalendarPage() {
         const dayKey = format(currentDayIter, "yyyy-MM-dd");
         if (!map.has(dayKey)) map.set(dayKey, []);
         const dayEvents = map.get(dayKey)!;
-        if (!dayEvents.find(e => e.id === event.id)) dayEvents.push(event);
+        // Avoid duplicate references if an event is already processed for this day from another source (shouldn't happen with current logic)
+        if (!dayEvents.find(e => e.id === event.id && e.extendedProps?.dailyPhaseInfo === event.extendedProps?.dailyPhaseInfo)) {
+           dayEvents.push(event);
+        }
         currentDayIter = addDays(currentDayIter, 1);
       }
     });
@@ -522,4 +568,3 @@ export default function TripCalendarPage() {
   );
 }
 
-    
