@@ -71,7 +71,7 @@ function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
   }, [eventsForDay]);
 
   const dayNumberSectionClasses = cn("flex justify-end p-0.5 h-6 items-start");
-  const eventsForDayContainerClasses = cn("flex-1 flex flex-col gap-px overflow-hidden"); // Added overflow-hidden
+  const eventsForDayContainerClasses = cn("flex-1 flex flex-col gap-px overflow-hidden");
 
   return (
     <div className="h-full w-full flex flex-col">
@@ -115,25 +115,34 @@ function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
                 marginClasses = "mx-[-1px]";
             }
             
-            const displayTitle = eventStartsInThisCell || event.type === 'block_out' || (eventStartedBeforeCell && isToday(date)); // show title if starts today, is blockout, or starts before and current cell is today
+            let displayTitle = false;
+            if (event.type === 'block_out') {
+              displayTitle = eventStartsInThisCell;
+            } else { // For trips and other types
+              displayTitle = eventStartsInThisCell || (eventStartedBeforeCell && isToday(date));
+            }
+
+            const eventDisplayTitle = displayTitle
+              ? (event.type === 'block_out' 
+                ? `${event.aircraftLabel || 'UNK'}: ${event.title}`
+                : `${event.aircraftLabel || 'UNK'}: ${event.title}`)
+              : '\u00A0'; // Non-breaking space to maintain height if no title
+              
             const showPaddingForText = displayTitle;
-            const eventDisplayTitle = event.type === 'block_out' 
-              ? `${event.aircraftLabel || 'UNK'}: ${event.title}`
-              : `${event.aircraftLabel || 'UNK'}: ${event.title}`;
             const eventLink = event.type === 'trip' ? `/trips/details/${event.id}` : undefined;
 
-            const EventContent = () => (
-                 <div className={cn(
-                    "h-full w-full text-[0.55rem] sm:text-[0.6rem] flex items-center hover:opacity-90 relative", // Added relative
-                    event.color, event.textColor, borderRadiusClasses, marginClasses // marginClasses moved here
-                  )}>
-                    <span className={cn(
-                        "w-full overflow-hidden whitespace-nowrap truncate",
-                        showPaddingForText ? "px-0.5 sm:px-1" : ""
-                    )}>
-                      {displayTitle ? eventDisplayTitle : <>&nbsp;</>}
-                    </span>
-                  </div>
+            const EventBarContent = () => (
+              <div className={cn(
+                "h-full w-full text-[0.55rem] sm:text-[0.6rem] flex items-center hover:opacity-90",
+                event.color, event.textColor, borderRadiusClasses, marginClasses
+              )}>
+                <span className={cn(
+                    "w-full overflow-hidden whitespace-nowrap truncate",
+                    showPaddingForText ? "px-0.5 sm:px-1" : ""
+                )}>
+                  {eventDisplayTitle}
+                </span>
+              </div>
             );
 
             return (
@@ -143,18 +152,18 @@ function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
                     {eventLink ? (
                         <Link 
                             href={eventLink} 
-                            className={cn("block focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-5 sm:h-6 relative")} // Outer wrapper is relative for positioning context
+                            className={cn("block focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-5 sm:h-6")}
                         >
-                           <EventContent />
+                           <EventBarContent />
                         </Link>
                     ) : (
-                        <div className={cn("block focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-5 sm:h-6 relative")}> {/* Outer wrapper is relative */}
-                             <EventContent />
+                        <div className={cn("block focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-5 sm:h-6")}>
+                             <EventBarContent />
                         </div>
                     )}
                   </TooltipTrigger>
                   <TooltipContent side="top" align="center" className="max-w-xs p-2 bg-popover text-popover-foreground border shadow-md rounded-md text-xs">
-                    <p className="font-semibold">{eventDisplayTitle} {event.status && event.type === 'trip' && <span className="text-muted-foreground">({event.status})</span>}</p>
+                    <p className="font-semibold">{event.type === 'block_out' ? `${event.aircraftLabel || 'UNK'}: ${event.title}` : `${event.aircraftLabel || 'UNK'}: ${event.title}`} {event.status && event.type === 'trip' && <span className="text-muted-foreground">({event.status})</span>}</p>
                     {event.route && event.type === 'trip' && <p>Route: {event.route}</p>}
                     <p className="text-muted-foreground">
                       {format(event.start, 'MMM d, H:mm zz')} - {format(event.end, 'MMM d, H:mm zz')}
