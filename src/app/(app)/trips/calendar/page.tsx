@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/tooltip";
 
 const PHASE_COLORS = {
-  DEFAULT_TRIP: { color: 'bg-sky-500',    textColor: 'text-white' },
+  DEFAULT_TRIP: { color: 'bg-sky-500',    textColor: 'text-white' }, // Fallback/Default if no aircraft match
   BLOCK_OUT: { color: 'bg-slate-700', textColor: 'text-slate-100' },
 };
 
@@ -57,6 +57,7 @@ interface CalendarEvent {
   textColor: string; 
   description?: string;
   status?: TripStatus;
+  // extendedProps.dailyPhaseInfo is removed as per latest requirement.
 }
 
 export interface AircraftFilterOption {
@@ -73,11 +74,18 @@ const CustomDay = React.memo(function CustomDay(dayProps: DayProps & { eventsFor
   }
 
   const dayEventsSorted = useMemo(() => {
-    return eventsForDay.sort((a, b) => a.start.getTime() - b.start.getTime());
+    return eventsForDay.sort((a, b) => {
+        // Primary sort: block_out events first
+        if (a.type === 'block_out' && b.type !== 'block_out') return -1;
+        if (a.type !== 'block_out' && b.type === 'block_out') return 1;
+        // Secondary sort: by start time
+        return a.start.getTime() - b.start.getTime();
+    });
   }, [eventsForDay]);
 
   const dayNumberSectionClasses = cn("flex justify-end p-0.5 h-6 items-start");
   const eventsForDayContainerClasses = cn("h-full flex flex-col"); 
+  const baseTextSize = "text-[0.6rem]";
 
   return (
     <div className="h-full w-full flex flex-col">
@@ -102,49 +110,49 @@ const CustomDay = React.memo(function CustomDay(dayProps: DayProps & { eventsFor
             
             const displayColor = event.color;
             const displayTextColor = event.textColor;
+            const eventDisplayTitle = event.title;
             
             const eventStartsOnThisDay = isSameDay(event.start, date);
-            const eventLastPaintedDay = startOfDay(addDays(event.end, -1)); // The actual last day the event is on
+            const eventLastPaintedDay = startOfDay(addDays(event.end, -1));
             const eventEndsOnThisDay = isSameDay(eventLastPaintedDay, date);
             
-            const eventStartedBeforeThisDay = isBefore(event.start, startOfDay(date));
-            const eventEndsAfterThisDay = isAfter(eventLastPaintedDay, endOfDay(date));
-
-            let eventDisplayTitle = event.title;
-            let showTitleForThisSegment = false;
-
+            let titleToRender = '\u00A0'; // Default to non-breaking space
             if (eventStartsOnThisDay) {
-                showTitleForThisSegment = true;
+                titleToRender = eventDisplayTitle;
             }
-
-            const titleToRender = showTitleForThisSegment ? eventDisplayTitle : '\u00A0';
             
             let borderRadiusClasses = "rounded-sm";
-            let widthAndPositionClasses = "w-full"; 
-            let marginClasses = "mx-0 my-0"; // Default vertical margin
+            let marginClasses = "mx-0 my-[-1px]"; // Default includes vertical bleed
 
             if (eventStartsOnThisDay && eventEndsOnThisDay) {
-                // Single day event - full rounding, no bleed needed beyond vertical
+                // Single day event
+                borderRadiusClasses = "rounded-sm";
                 marginClasses = "mx-0 my-[-1px]";
             } else if (eventStartsOnThisDay) { // Multi-day, starts today
-                borderRadiusClasses = "rounded-l-sm";
-                widthAndPositionClasses = "w-[calc(100%+1px)]";
-                marginClasses = "ml-0 mr-[-1px] my-[-1px]"; // Bleed right and vertically
+                borderRadiusClasses = "rounded-l-sm rounded-r-none";
+                marginClasses = "ml-0 mr-[-1px] my-[-1px]";
             } else if (eventEndsOnThisDay) { // Multi-day, ends today
-                borderRadiusClasses = "rounded-r-sm";
-                widthAndPositionClasses = "w-[calc(100%+1px)]";
-                marginClasses = "mr-0 ml-[-1px] my-[-1px]"; // Bleed left and vertically
-            } else if (eventStartedBeforeThisDay && eventEndsAfterThisDay) { // Middle segment of a multi-day event
+                borderRadiusClasses = "rounded-r-sm rounded-l-none";
+                marginClasses = "mr-0 ml-[-1px] my-[-1px]";
+            } else { // Middle segment
                 borderRadiusClasses = "rounded-none";
-                widthAndPositionClasses = "w-[calc(100%+2px)]"; 
-                marginClasses = "mx-[-1px] my-[-1px]"; // Bleed both sides and vertically
-            } else { // Should not happen if start/end logic is correct, but fallback for safety
-                marginClasses = "mx-0 my-[-1px]";
+                marginClasses = "mx-[-1px] my-[-1px]";
             }
             
             const EventLinkOrDiv = event.type === 'trip' && event.id ? Link : 'div';
             const hrefProp = event.type === 'trip' && event.id ? { href: `/trips/details/${event.id}` } : {};
             const tooltipText = event.title;
+
+            const eventBarClasses = cn(
+                "block w-full h-full", // Fill available slot height, full width
+                baseTextSize,
+                "flex items-center overflow-hidden whitespace-nowrap",
+                "relative z-10", // Stacking
+                displayColor, 
+                displayTextColor,
+                borderRadiusClasses, 
+                marginClasses
+            );
 
             return (
               <TooltipProvider key={mapKey} delayDuration={100}>
@@ -152,14 +160,7 @@ const CustomDay = React.memo(function CustomDay(dayProps: DayProps & { eventsFor
                   <TooltipTrigger asChild>
                     <EventLinkOrDiv
                       {...hrefProp}
-                      className={cn(
-                        "block h-[calc(100%+2px)] text-[0.55rem] sm:text-[0.6rem] flex items-center relative", // Adjusted height
-                        displayColor, displayTextColor,
-                        borderRadiusClasses,
-                        widthAndPositionClasses, 
-                        marginClasses, 
-                        "z-10" 
-                      )}
+                      className={eventBarClasses}
                     >
                       <span className={cn("w-full overflow-hidden whitespace-nowrap px-0.5 sm:px-1 truncate")}>
                         {titleToRender}
@@ -258,7 +259,7 @@ export default function TripCalendarPage() {
                 lastActiveDay = startOfDay(addHours(parseISO(lastLegTripData.departureDateTime), lastLegTripData.blockTimeHours));
             } else if (overallStartDate) { 
                 let totalBlockTime = 0;
-                trip.legs.forEach(leg => { totalBlockTime += (leg.blockTimeHours || (leg.flightTimeHours ? leg.flightTimeHours + 0.5 : 1));});
+                trip.legs.forEach(leg => { totalBlockTime += (leg.blockTimeHours || (leg.flightTimeHours ? leg.flightTimeHours + 0.5 : 1));}); // fallback if blocktime not present
                 lastActiveDay = startOfDay(addHours(overallStartDate, totalBlockTime > 0 ? totalBlockTime : 2)); 
             }
           }
@@ -267,7 +268,7 @@ export default function TripCalendarPage() {
           if (!lastActiveDay || !isValid(lastActiveDay) || isBefore(lastActiveDay, overallStartDate)) {
              lastActiveDay = overallStartDate; 
           }
-          const overallEndDateExclusive = startOfDay(addDays(lastActiveDay, 1)); // Exclusive end date
+          const overallEndDateExclusive = startOfDay(addDays(lastActiveDay, 1));
           
           const aircraftIdentifier = trip.aircraftId || 'UNKNOWN_AIRCRAFT';
           const aircraftDisplayLabel = trip.aircraftLabel || trip.aircraftId || 'Unknown Aircraft';
@@ -295,7 +296,7 @@ export default function TripCalendarPage() {
             }
             const blockOutStartDate = startOfDay(parseISO(blockOut.startDate));
             const blockOutEndDateInclusive = startOfDay(parseISO(blockOut.endDate));
-            const blockOutEndDateExclusive = startOfDay(addDays(blockOutEndDateInclusive, 1)); // Exclusive end date
+            const blockOutEndDateExclusive = startOfDay(addDays(blockOutEndDateInclusive, 1));
 
             return {
                 id: blockOut.id,
