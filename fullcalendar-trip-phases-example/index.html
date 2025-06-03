@@ -27,35 +27,35 @@
             
             const events = [
               {
-                id: "trip123", // Consistent with prompt
-                title: "N630MW – PA-31T2 – TRP-275", // Consistent with prompt
+                id: "trip123", 
+                title: "N630MW – PA-31T2 – TRP-275", 
                 start: "2025-06-15",
-                end:   "2025-06-20",  // Paints June 15, 16, 17, 18, 19
+                end:   "2025-06-20",  // exclusive: paints June 15→19
                 allDay: true,
-                backgroundColor: "#FF9900" // Orange
+                backgroundColor: "#FF9900" 
               },
               {
-                id: "trip456", // Consistent with prompt
-                title: "N907DK – Cessna 525 – Owner Trip", // Consistent with prompt
+                id: "trip456", 
+                title: "N907DK – Cessna 525 – Owner Trip", 
                 start: "2025-06-16",
-                end:   "2025-06-21",  // Paints June 16, 17, 18, 19, 20
+                end:   "2025-06-21",  // exclusive: paints June 16→20
                 allDay: true,
-                backgroundColor: "#336699" // Dark Blue
+                backgroundColor: "#336699" 
               },
               {
-                id: "trip789", // Consistent with prompt
-                title: "N1327J – Cessna 525 – TRP-999", // Consistent with prompt
+                id: "trip789", 
+                title: "N1327J – Cessna 525 – TRP-999", 
                 start: "2025-06-11",
-                end:   "2025-06-15",  // Paints June 11, 12, 13, 14
+                end:   "2025-06-15",  // exclusive: paints June 11→14
                 allDay: true,
-                backgroundColor: "#33CCFF" // Light Blue
+                backgroundColor: "#33CCFF" 
               }
             ];
 
             const calendar = new FullCalendar.Calendar(calendarEl, {
                 initialView: "dayGridMonth",
                 events: events
-                // Removed the eventTextColor JavaScript function
+                // Removed any custom eventTextColor JavaScript function
             });
 
             calendar.render();
