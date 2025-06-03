@@ -14,13 +14,14 @@ import { format, isSameDay, parseISO, startOfDay, endOfDay, isToday, addHours, i
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { fetchTrips, type Trip, type TripStatus } from '@/ai/flows/manage-trips-flow';
-import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow'; // Import for full fleet
+import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
 import { useToast } from '@/hooks/use-toast';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Label } from "@/components/ui/label";
 import { CreateBlockOutEventModal, type BlockOutFormData } from './components/create-block-out-event-modal';
+import { fetchAircraftBlockOuts, saveAircraftBlockOut, type AircraftBlockOut } from '@/ai/flows/manage-aircraft-block-outs-flow'; // Import block out flows
 
 interface CalendarEvent {
   id: string;
@@ -55,7 +56,7 @@ const AIRCRAFT_COLORS_PALETTE = [
   { color: 'bg-orange-500', textColor: 'text-black' },
 ];
 const DEFAULT_AIRCRAFT_COLOR = { color: 'bg-gray-400', textColor: 'text-white' };
-const BLOCK_OUT_EVENT_COLOR = { color: 'bg-slate-600', textColor: 'text-slate-100' };
+const BLOCK_OUT_EVENT_COLOR = { color: 'bg-slate-600', textColor: 'text-slate-100' }; // Distinct color for block-outs
 
 function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
   const { date, displayMonth, eventsForDay } = dayProps;
@@ -119,7 +120,7 @@ function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
                 zIndexClass = "relative z-10";
             }
             
-            const displayTitle = eventStartsInThisCell || event.type === 'block_out';
+            const displayTitle = eventStartsInThisCell || event.type === 'block_out'; // Ensure block_out titles show even if starting prior
             const showPaddingForText = displayTitle;
             const eventDisplayTitle = event.type === 'block_out' 
               ? `${event.aircraftLabel || 'UNK'}: ${event.title}`
@@ -176,12 +177,12 @@ export default function TripCalendarPage() {
   const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
   const [isClientReady, setIsClientReady] = useState(false);
   const [rawEvents, setRawEvents] = useState<CalendarEvent[]>([]);
-  const [isLoadingTrips, setIsLoadingTrips] = useState(true);
-  const [isLoadingFleetForModal, setIsLoadingFleetForModal] = useState(true); // Dedicated loading state
+  const [isLoadingData, setIsLoadingData] = useState(true);
   const { toast } = useToast();
 
   const [uniqueAircraftForFilter, setUniqueAircraftForFilter] = useState<AircraftFilterOption[]>([]);
-  const [allFleetAircraftOptions, setAllFleetAircraftOptions] = useState<AircraftFilterOption[]>([]); // For block-out modal
+  const [allFleetAircraftOptions, setAllFleetAircraftOptions] = useState<AircraftFilterOption[]>([]);
+  const [isLoadingFleetForModal, setIsLoadingFleetForModal] = useState(true);
   const [activeAircraftFilters, setActiveAircraftFilters] = useState<string[]>([]);
 
   const aircraftColorMap = useMemo(() => new Map<string, { color: string, textColor: string }>(), []);
@@ -196,120 +197,141 @@ export default function TripCalendarPage() {
 
   const [isBlockOutModalOpen, setIsBlockOutModalOpen] = useState(false);
 
-  const handleSaveBlockOut = (data: BlockOutFormData) => {
-    const selectedAircraft = allFleetAircraftOptions.find(ac => ac.id === data.aircraftId);
-    const newEvent: CalendarEvent = {
-      id: `block-${Date.now()}`,
-      title: data.title,
-      start: startOfDay(data.startDate),
-      end: endOfDay(data.endDate),
-      type: 'block_out',
-      aircraftId: data.aircraftId,
-      aircraftLabel: selectedAircraft?.label || data.aircraftId,
-      color: BLOCK_OUT_EVENT_COLOR.color,
-      textColor: BLOCK_OUT_EVENT_COLOR.textColor,
-      description: `Aircraft ${selectedAircraft?.label || data.aircraftId} blocked out: ${data.title}`,
-    };
-    setRawEvents(prev => [...prev, newEvent]);
-    toast({
-      title: "Aircraft Blocked Out",
-      description: `${selectedAircraft?.label || data.aircraftId} blocked from ${format(data.startDate, "PPP")} to ${format(data.endDate, "PPP")}. (Client-side only)`,
-      variant: "default"
-    });
-  };
-
   const isValidISO = (dateString?: string): boolean => {
     if (!dateString) return false;
     return isValid(parseISO(dateString));
   };
 
+  const loadInitialData = useCallback(async () => {
+    setIsLoadingData(true);
+    setIsLoadingFleetForModal(true);
+    try {
+        const [fetchedTrips, completeFleet, fetchedBlockOuts] = await Promise.all([
+            fetchTrips(),
+            fetchFleetAircraft(),
+            fetchAircraftBlockOuts(),
+        ]);
+
+        // Process trips
+        const aircraftSetForFilter = new Map<string, string>();
+        const tripCalendarEvents: CalendarEvent[] = fetchedTrips.map(trip => {
+          let startDate: Date | null = null;
+          let endDate: Date | null = null;
+          let route = "N/A";
+
+          if (trip.legs && trip.legs.length > 0) {
+            const firstLeg = trip.legs[0];
+            const lastLeg = trip.legs[trip.legs.length - 1];
+            route = `${firstLeg.origin || 'UNK'} -> ${lastLeg.destination || 'UNK'}`;
+            if (firstLeg.departureDateTime && isValidISO(firstLeg.departureDateTime)) startDate = parseISO(firstLeg.departureDateTime);
+            
+            let lastLegDeparture: Date | null = null;
+            if (lastLeg.departureDateTime && isValidISO(lastLeg.departureDateTime)) lastLegDeparture = parseISO(lastLeg.departureDateTime);
+            
+            if (lastLeg.arrivalDateTime && isValidISO(lastLeg.arrivalDateTime)) endDate = parseISO(lastLeg.arrivalDateTime);
+            else if (lastLegDeparture && lastLeg.blockTimeHours && lastLeg.blockTimeHours > 0) endDate = addHours(lastLegDeparture, lastLeg.blockTimeHours);
+            else if (startDate && lastLeg.blockTimeHours && lastLeg.blockTimeHours > 0) endDate = addHours(startDate, lastLeg.blockTimeHours);
+            else if (startDate) {
+              let totalBlockTimeForEndDate = 0;
+              trip.legs.forEach(leg => { totalBlockTimeForEndDate += (leg.blockTimeHours || (leg.flightTimeHours ? leg.flightTimeHours + 0.5 : 1)); });
+              endDate = addHours(startDate, totalBlockTimeForEndDate > 0 ? totalBlockTimeForEndDate : 2);
+            }
+          }
+          
+          if (!startDate) startDate = new Date();
+          if (!endDate || !isValid(endDate) || isBefore(endDate, startDate)) endDate = addHours(startDate, 2);
+          if (isSameDay(startDate, endDate) && isBefore(endDate,startDate)) endDate = addHours(startDate, 2);
+          
+          const aircraftIdentifier = trip.aircraftId || 'UNKNOWN_AIRCRAFT';
+          const aircraftDisplayLabel = trip.aircraftLabel || trip.aircraftId || 'Unknown Aircraft';
+          if (aircraftIdentifier !== 'UNKNOWN_AIRCRAFT' && !aircraftSetForFilter.has(aircraftIdentifier)) {
+            aircraftSetForFilter.set(aircraftIdentifier, aircraftDisplayLabel);
+          }
+          const { color, textColor } = getAircraftColor(aircraftIdentifier);
+
+          return {
+            id: trip.id, title: trip.tripId, start: startDate, end: endDate, type: 'trip',
+            aircraftId: aircraftIdentifier, aircraftLabel: aircraftDisplayLabel,
+            route: route, color, textColor,
+            description: `Trip for ${trip.clientName} on ${aircraftDisplayLabel}. Status: ${trip.status}.`,
+            status: trip.status
+          };
+        }).filter(event => event.start && event.end && isValid(event.start) && isValid(event.end));
+        
+        // Process block-outs
+        const blockOutCalendarEvents: CalendarEvent[] = fetchedBlockOuts.map(blockOut => {
+            const aircraftDisplayLabel = blockOut.aircraftLabel || blockOut.aircraftId;
+             if (blockOut.aircraftId && !aircraftSetForFilter.has(blockOut.aircraftId)) {
+                aircraftSetForFilter.set(blockOut.aircraftId, aircraftDisplayLabel);
+            }
+            return {
+                id: blockOut.id,
+                title: blockOut.title,
+                start: startOfDay(parseISO(blockOut.startDate)),
+                end: endOfDay(parseISO(blockOut.endDate)),
+                type: 'block_out',
+                aircraftId: blockOut.aircraftId,
+                aircraftLabel: aircraftDisplayLabel,
+                color: BLOCK_OUT_EVENT_COLOR.color,
+                textColor: BLOCK_OUT_EVENT_COLOR.textColor,
+                description: `Aircraft ${aircraftDisplayLabel} blocked out: ${blockOut.title}`
+            };
+        });
+
+        setRawEvents([...tripCalendarEvents, ...blockOutCalendarEvents]);
+        setUniqueAircraftForFilter(Array.from(aircraftSetForFilter.entries()).map(([id, label]) => ({ id, label })).sort((a,b) => a.label.localeCompare(b.label)));
+
+        // Process complete fleet for block out modal
+        const fleetOptions = completeFleet
+            .filter(ac => ac.id && ac.tailNumber && ac.model)
+            .map(ac => ({ id: ac.id, label: `${ac.tailNumber} - ${ac.model}` }));
+        setAllFleetAircraftOptions(fleetOptions.sort((a, b) => a.label.localeCompare(b.label)));
+
+    } catch (error) {
+        console.error("Failed to load initial data for calendar:", error);
+        toast({ title: "Error Loading Data", description: (error instanceof Error ? error.message : "Failed to fetch trip or fleet data."), variant: "destructive"});
+    } finally {
+        setIsLoadingData(false);
+        setIsLoadingFleetForModal(false);
+    }
+  }, [toast, getAircraftColor]);
+
+
   useEffect(() => {
     setIsClientReady(true);
-    let isMounted = true;
+    loadInitialData();
+  }, [loadInitialData]);
+  
+  const handleSaveBlockOut = async (data: BlockOutFormData) => {
+    const selectedAircraft = allFleetAircraftOptions.find(ac => ac.id === data.aircraftId);
+    if (!selectedAircraft) {
+      toast({ title: "Error", description: "Selected aircraft not found.", variant: "destructive" });
+      return;
+    }
 
-    const loadInitialData = async () => {
-        setIsLoadingTrips(true);
-        setIsLoadingFleetForModal(true);
-        try {
-            const [fetchedTrips, completeFleet] = await Promise.all([
-                fetchTrips(),
-                fetchFleetAircraft()
-            ]);
-
-            if (!isMounted) return;
-
-            // Process trips
-            const aircraftSetForFilter = new Map<string, string>();
-            const calendarEvents: CalendarEvent[] = fetchedTrips.map(trip => {
-              let startDate: Date | null = null;
-              let endDate: Date | null = null;
-              let route = "N/A";
-
-              if (trip.legs && trip.legs.length > 0) {
-                const firstLeg = trip.legs[0];
-                const lastLeg = trip.legs[trip.legs.length - 1];
-                route = `${firstLeg.origin || 'UNK'} -> ${lastLeg.destination || 'UNK'}`;
-                if (firstLeg.departureDateTime && isValidISO(firstLeg.departureDateTime)) startDate = parseISO(firstLeg.departureDateTime);
-                
-                let lastLegDeparture: Date | null = null;
-                if (lastLeg.departureDateTime && isValidISO(lastLeg.departureDateTime)) lastLegDeparture = parseISO(lastLeg.departureDateTime);
-                
-                if (lastLeg.arrivalDateTime && isValidISO(lastLeg.arrivalDateTime)) endDate = parseISO(lastLeg.arrivalDateTime);
-                else if (lastLegDeparture && lastLeg.blockTimeHours && lastLeg.blockTimeHours > 0) endDate = addHours(lastLegDeparture, lastLeg.blockTimeHours);
-                else if (startDate && lastLeg.blockTimeHours && lastLeg.blockTimeHours > 0) endDate = addHours(startDate, lastLeg.blockTimeHours);
-                else if (startDate) {
-                  let totalBlockTimeForEndDate = 0;
-                  trip.legs.forEach(leg => { totalBlockTimeForEndDate += (leg.blockTimeHours || (leg.flightTimeHours ? leg.flightTimeHours + 0.5 : 1)); });
-                  endDate = addHours(startDate, totalBlockTimeForEndDate > 0 ? totalBlockTimeForEndDate : 2);
-                }
-              }
-              
-              if (!startDate) startDate = new Date();
-              if (!endDate || !isValid(endDate) || isBefore(endDate, startDate)) endDate = addHours(startDate, 2);
-              if (isSameDay(startDate, endDate) && isBefore(endDate,startDate)) endDate = addHours(startDate, 2);
-              
-              const aircraftIdentifier = trip.aircraftId || 'UNKNOWN_AIRCRAFT';
-              const aircraftDisplayLabel = trip.aircraftLabel || trip.aircraftId || 'Unknown Aircraft';
-              if (aircraftIdentifier !== 'UNKNOWN_AIRCRAFT' && !aircraftSetForFilter.has(aircraftIdentifier)) {
-                aircraftSetForFilter.set(aircraftIdentifier, aircraftDisplayLabel);
-              }
-              const { color, textColor } = getAircraftColor(aircraftIdentifier);
-
-              return {
-                id: trip.id, title: trip.tripId, start: startDate, end: endDate, type: 'trip',
-                aircraftId: aircraftIdentifier, aircraftLabel: aircraftDisplayLabel,
-                route: route, color, textColor,
-                description: `Trip for ${trip.clientName} on ${aircraftDisplayLabel}. Status: ${trip.status}.`,
-                status: trip.status
-              };
-            }).filter(event => event.start && event.end && isValid(event.start) && isValid(event.end));
-            
-            setRawEvents(calendarEvents);
-            setUniqueAircraftForFilter(Array.from(aircraftSetForFilter.entries()).map(([id, label]) => ({ id, label })).sort((a,b) => a.label.localeCompare(b.label)));
-
-            // Process complete fleet for block out modal
-            const fleetOptions = completeFleet
-                .filter(ac => ac.id && ac.tailNumber && ac.model) // Ensure essential fields
-                .map(ac => ({ id: ac.id, label: `${ac.tailNumber} - ${ac.model}` }));
-            setAllFleetAircraftOptions(fleetOptions.sort((a, b) => a.label.localeCompare(b.label)));
-
-        } catch (error) {
-            if (isMounted) {
-                console.error("Failed to load initial data for calendar:", error);
-                toast({ title: "Error Loading Data", description: (error instanceof Error ? error.message : "Failed to fetch trip or fleet data."), variant: "destructive"});
-            }
-        } finally {
-            if (isMounted) {
-                setIsLoadingTrips(false);
-                setIsLoadingFleetForModal(false);
-            }
-        }
+    const blockOutToSave = {
+      // id will be generated by Firestore if not provided, or handled by flow if needed for updates
+      aircraftId: data.aircraftId,
+      aircraftLabel: selectedAircraft.label,
+      title: data.title,
+      startDate: format(data.startDate, "yyyy-MM-dd"), // Convert Date to ISO string
+      endDate: format(data.endDate, "yyyy-MM-dd"),     // Convert Date to ISO string
     };
 
-    loadInitialData();
-
-    return () => { isMounted = false; };
-  }, [toast, getAircraftColor]);
+    try {
+      await saveAircraftBlockOut(blockOutToSave);
+      toast({
+        title: "Aircraft Block-Out Saved",
+        description: `${selectedAircraft.label} blocked from ${format(data.startDate, "PPP")} to ${format(data.endDate, "PPP")} has been saved to Firestore.`,
+        variant: "default"
+      });
+      await loadInitialData(); // Reload all data to reflect the new block-out
+      setIsBlockOutModalOpen(false);
+    } catch (error) {
+      console.error("Failed to save block-out event:", error);
+      toast({ title: "Error Saving Block-Out", description: (error instanceof Error ? error.message : "Could not save to Firestore."), variant: "destructive" });
+    }
+  };
   
   const filteredEvents = useMemo(() => {
     if (activeAircraftFilters.length === 0) return rawEvents;
@@ -349,7 +371,7 @@ export default function TripCalendarPage() {
     }
   };
 
-  if (!isClientReady || (isLoadingTrips && isLoadingFleetForModal)) {
+  if (!isClientReady || isLoadingData) {
     return (
       <>
         <PageHeader title="Trip & Maintenance Calendar" description="Visual overview of scheduled trips and maintenance events." icon={CalendarIconLucide} />
@@ -382,7 +404,7 @@ export default function TripCalendarPage() {
                 </PopoverTrigger>
                 <PopoverContent className="w-64 p-0" align="end">
                   <div className="p-4 border-b">
-                    <h4 className="font-medium text-sm">Filter Trips by Aircraft</h4>
+                    <h4 className="font-medium text-sm">Filter Events by Aircraft</h4>
                   </div>
                   <ScrollArea className="h-[200px] p-4">
                     <div className="space-y-2">
@@ -393,7 +415,7 @@ export default function TripCalendarPage() {
                           onCheckedChange={(checked) => handleSelectAllAircraftFilter(Boolean(checked))}
                         />
                         <Label htmlFor="filter-all-trip-aircraft" className="font-medium text-sm">
-                          All Aircraft (in trips)
+                          All Aircraft
                         </Label>
                       </div>
                       {uniqueAircraftForFilter.map(aircraft => (
@@ -413,8 +435,9 @@ export default function TripCalendarPage() {
                 </PopoverContent>
               </Popover>
             )}
-             <Button variant="outline" size="sm" onClick={() => setIsBlockOutModalOpen(true)}>
-              <Lock className="mr-2 h-4 w-4" /> Schedule Block Out
+             <Button variant="outline" size="sm" onClick={() => setIsBlockOutModalOpen(true)} disabled={isLoadingFleetForModal}>
+              {isLoadingFleetForModal ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Lock className="mr-2 h-4 w-4" />}
+              Schedule Block Out
             </Button>
             <Button asChild size="sm">
               <Link href="/trips/new">
@@ -445,11 +468,10 @@ export default function TripCalendarPage() {
       <CreateBlockOutEventModal
         isOpen={isBlockOutModalOpen}
         setIsOpen={setIsBlockOutModalOpen}
-        onSave={handleSaveBlockOut}
+        onSave={handleSaveBlockOut} // This will now save to Firestore
         aircraftOptions={allFleetAircraftOptions} 
         isLoadingAircraft={isLoadingFleetForModal}
       />
     </>
   );
 }
-
