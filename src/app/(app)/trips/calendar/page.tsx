@@ -9,7 +9,7 @@ import type { DayProps } from "react-day-picker";
 import { Card, CardContent, CardHeader, CardDescription, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
 import { cn } from "@/lib/utils";
-import { format, isSameDay, parseISO, startOfDay, endOfDay, isToday, addHours, isValid, addDays, isBefore, isAfter, isSameMonth, differenceInCalendarDays } from 'date-fns';
+import { format, isSameDay, parseISO, startOfDay, endOfDay, isToday, addHours, isValid, addDays, isBefore, isAfter, isSameMonth, differenceInCalendarDays, eachDayOfInterval } from 'date-fns';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Skeleton } from "@/components/ui/skeleton";
 import { fetchTrips, type Trip, type TripStatus } from '@/ai/flows/manage-trips-flow';
@@ -28,41 +28,48 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
+const PHASE_COLORS = {
+  SCHEDULED: { color: 'bg-orange-500', textColor: 'text-white' },
+  ACTIVE:    { color: 'bg-gray-600',   textColor: 'text-white' }, // Darker gray for better contrast
+  CLOSEOUT:  { color: 'bg-blue-500',   textColor: 'text-white' },
+  // For regular trips that don't have these explicit phases, or for block-outs
+  DEFAULT_TRIP: { color: 'bg-sky-500',    textColor: 'text-white' }, // Default for single-phase trips
+  BLOCK_OUT: { color: 'bg-slate-700', textColor: 'text-slate-100' }, // Distinct color for block-outs
+};
+
+interface DailyPhase {
+  phaseName: string;
+  displayTitle: string;
+  color: string;
+  textColor: string;
+}
 
 interface CalendarEvent {
   id: string;
-  title: string;
+  title: string; // Base title (e.g., Trip ID or Block Out reason)
   start: Date;
   end: Date;
-  type: 'trip' | 'maintenance' | 'block_out';
+  type: 'trip' | 'block_out'; // Removed 'maintenance' for now as it's not implemented
   aircraftId?: string;
   aircraftLabel?: string;
   route?: string;
-  color: string;
-  textColor: string;
+  color: string; // Default/fallback color
+  textColor: string; // Default/fallback text color
   description?: string;
-  status?: TripStatus;
+  status?: TripStatus; // Overall trip status
+  extendedProps?: {
+    dailyPhaseInfo?: Map<string, DailyPhase>; // Key: "YYYY-MM-DD"
+  };
 }
+
 
 export interface AircraftFilterOption {
   id: string;
   label: string;
 }
 
-const AIRCRAFT_COLORS_PALETTE = [
-  { color: 'bg-sky-500', textColor: 'text-white' },
-  { color: 'bg-emerald-500', textColor: 'text-white' },
-  { color: 'bg-amber-500', textColor: 'text-black' },
-  { color: 'bg-rose-500', textColor: 'text-white' },
-  { color: 'bg-violet-500', textColor: 'text-white' },
-  { color: 'bg-lime-500', textColor: 'text-black' },
-  { color: 'bg-cyan-500', textColor: 'text-black' },
-  { color: 'bg-pink-500', textColor: 'text-white' },
-  { color: 'bg-teal-500', textColor: 'text-white' },
-  { color: 'bg-orange-500', textColor: 'text-black' },
-];
-const DEFAULT_AIRCRAFT_COLOR = { color: 'bg-gray-400', textColor: 'text-white' };
-const BLOCK_OUT_EVENT_COLOR = { color: 'bg-slate-600', textColor: 'text-slate-100' };
+// Used if a specific aircraft doesn't have a color assigned from the palette yet
+const DEFAULT_AIRCRAFT_COLOR_FALLBACK = { color: 'bg-gray-400', textColor: 'text-white' };
 
 function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
   const { date, displayMonth, eventsForDay } = dayProps;
@@ -77,7 +84,7 @@ function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
   }, [eventsForDay]);
 
   const dayNumberSectionClasses = cn("flex justify-end p-0.5 h-6 items-start");
-  const eventsForDayContainerClasses = cn("h-full flex flex-col gap-px pt-1");
+  const eventsForDayContainerClasses = cn("h-full flex flex-col gap-px pt-1"); // No overflow-hidden
 
   return (
     <div className="h-full w-full flex flex-col">
@@ -99,56 +106,66 @@ function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
         <div className={eventsForDayContainerClasses}>
           {dayEvents.map(event => {
             const mapKey = `${event.id}-${format(date, "yyyy-MM-dd")}`;
-            
             const eventStartsInThisCell = isSameDay(event.start, date);
             const eventEndsInThisCell = isSameDay(event.end, date);
             const eventStartedBeforeCell = isBefore(event.start, startOfDay(date));
             const eventEndsAfterCell = isAfter(event.end, endOfDay(date));
 
+            const dayKey = format(date, "yyyy-MM-dd");
+            const phaseInfoForDay = event.extendedProps?.dailyPhaseInfo?.get(dayKey);
+
+            const displayColor = phaseInfoForDay?.color || event.color;
+            const displayTextColor = phaseInfoForDay?.textColor || event.textColor;
+            
+            // Title display logic: Show only on the absolute first day of the event.
+            const titleToRender = eventStartsInThisCell 
+              ? (phaseInfoForDay?.displayTitle || event.title)
+              : '\u00A0'; // Non-breaking space for subsequent segments
+
             let widthAndPositionClasses = "w-full left-0";
             let borderRadiusClasses = "rounded-sm";
 
-            if (eventStartedBeforeCell && eventEndsAfterCell) { // Middle of a multi-day event
+            if (eventStartedBeforeCell && eventEndsAfterCell) { // Middle segment
               widthAndPositionClasses = "w-[calc(100%+2px)] left-[-1px]";
               borderRadiusClasses = "";
-            } else if (eventStartsInThisCell && eventEndsAfterCell) { // Starts in this cell, continues
+            } else if (eventStartsInThisCell && eventEndsAfterCell) { // Starts here, continues
               widthAndPositionClasses = "w-[calc(100%+1px)] left-0";
               borderRadiusClasses = "rounded-l-sm";
-            } else if (eventStartedBeforeCell && eventEndsInThisCell) { // Started before, ends in this cell
+            } else if (eventStartedBeforeCell && eventEndsInThisCell) { // Started before, ends here
               widthAndPositionClasses = "w-[calc(100%+1px)] left-[-1px]";
               borderRadiusClasses = "rounded-r-sm";
             }
-            // Single day events or first/last day of multi-day use default "rounded-sm"
+            // Single day event uses default w-full, rounded-sm
 
             const EventLinkOrDiv = event.type === 'trip' && event.id ? Link : 'div';
+            const hrefProp = event.type === 'trip' && event.id ? { href: `/trips/details/${event.id}` } : {};
             
-            const fullTitleText = `${event.aircraftLabel || 'UNK AC'}: ${event.title || event.id}`;
+            const tooltipText = phaseInfoForDay?.displayTitle || event.title;
 
             return (
               <TooltipProvider key={mapKey} delayDuration={100}>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <EventLinkOrDiv
-                      href={event.type === 'trip' && event.id ? `/trips/details/${event.id}` : undefined}
+                      {...hrefProp}
                       className={cn(
                         "block h-5 sm:h-6 text-[0.55rem] sm:text-[0.6rem] flex items-center relative",
-                        event.color, event.textColor,
+                        displayColor, displayTextColor,
                         borderRadiusClasses,
                         widthAndPositionClasses,
-                        "z-10" // Ensure it's above cell borders
+                        "z-10" 
                       )}
                     >
-                      {eventStartsInThisCell ? (
-                        <span key={`${event.id}-title-segment`} className="w-full overflow-hidden whitespace-nowrap px-0.5 sm:px-1 truncate">
-                          {fullTitleText}
-                        </span>
-                      ) : (
-                        <span key={`${event.id}-nbsp-segment`} className="w-full px-0.5 sm:px-1">{'\u00A0'}</span>
+                      {/* Render span only if there's actual text to show, or it's the first segment */}
+                      {(eventStartsInThisCell || titleToRender.trim() !== '') && (
+                          <span className={cn("w-full overflow-hidden whitespace-nowrap px-0.5 sm:px-1", titleToRender.trim() === '' ? '' : 'truncate')}>
+                            {titleToRender}
+                          </span>
                       )}
                     </EventLinkOrDiv>
                   </TooltipTrigger>
                   <TooltipContent side="top" align="center" className="max-w-xs p-2 bg-popover text-popover-foreground border shadow-md rounded-md">
-                    <p className="font-semibold">{fullTitleText}</p>
+                    <p className="font-semibold">{tooltipText}</p>
                     {event.route && <p className="text-xs">Route: {event.route}</p>}
                     <p className="text-xs">Starts: {format(event.start, "MMM d, HH:mm")}</p>
                     <p className="text-xs">Ends: {format(event.end, "MMM d, HH:mm")}</p>
@@ -177,16 +194,17 @@ export default function TripCalendarPage() {
   const [allFleetAircraftOptions, setAllFleetAircraftOptions] = useState<AircraftFilterOption[]>([]);
   const [isLoadingFleetForModal, setIsLoadingFleetForModal] = useState(true);
   const [activeAircraftFilters, setActiveAircraftFilters] = useState<string[]>([]);
-
+  
   const aircraftColorMap = useMemo(() => new Map<string, { color: string, textColor: string }>(), []);
 
   const getAircraftColor = useCallback((aircraftId: string) => {
     if (!aircraftColorMap.has(aircraftId)) {
-      const colorIndex = aircraftColorMap.size % AIRCRAFT_COLORS_PALETTE.length;
-      aircraftColorMap.set(aircraftId, AIRCRAFT_COLORS_PALETTE[colorIndex]);
+      const colorIndex = aircraftColorMap.size % PHASE_COLORS.DEFAULT_TRIP.color.length; // Use a palette size if needed
+      aircraftColorMap.set(aircraftId, PHASE_COLORS.DEFAULT_TRIP); // Default to a single trip color for now
     }
-    return aircraftColorMap.get(aircraftId) || DEFAULT_AIRCRAFT_COLOR;
+    return aircraftColorMap.get(aircraftId) || DEFAULT_AIRCRAFT_COLOR_FALLBACK;
   }, [aircraftColorMap]);
+
 
   const [isBlockOutModalOpen, setIsBlockOutModalOpen] = useState(false);
 
@@ -206,48 +224,86 @@ export default function TripCalendarPage() {
         ]);
 
         const aircraftSetForFilter = new Map<string, string>();
+        
         const tripCalendarEvents: CalendarEvent[] = fetchedTrips.map(trip => {
-          let startDate: Date | null = null;
-          let endDate: Date | null = null;
+          let overallStartDate: Date | null = null;
+          let overallEndDate: Date | null = null;
           let route = "N/A";
+          const dailyPhaseInfo = new Map<string, DailyPhase>();
 
           if (trip.legs && trip.legs.length > 0) {
             const firstLeg = trip.legs[0];
             const lastLeg = trip.legs[trip.legs.length - 1];
             route = `${firstLeg.origin || 'UNK'} -> ${lastLeg.destination || 'UNK'}`;
-            if (firstLeg.departureDateTime && isValidISO(firstLeg.departureDateTime)) startDate = parseISO(firstLeg.departureDateTime);
+            if (isValidISO(firstLeg.departureDateTime)) overallStartDate = parseISO(firstLeg.departureDateTime);
 
             let lastLegDeparture: Date | null = null;
-            if (lastLeg.departureDateTime && isValidISO(lastLeg.departureDateTime)) lastLegDeparture = parseISO(lastLeg.departureDateTime);
+            if (isValidISO(lastLeg.departureDateTime)) lastLegDeparture = parseISO(lastLeg.departureDateTime);
 
-            if (lastLeg.arrivalDateTime && isValidISO(lastLeg.arrivalDateTime)) endDate = parseISO(lastLeg.arrivalDateTime);
-            else if (lastLegDeparture && lastLeg.blockTimeHours && lastLeg.blockTimeHours > 0) endDate = addHours(lastLegDeparture, lastLeg.blockTimeHours);
-            else if (startDate && lastLeg.blockTimeHours && lastLeg.blockTimeHours > 0) endDate = addHours(startDate, lastLeg.blockTimeHours);
-            else if (startDate) {
+            if (isValidISO(lastLeg.arrivalDateTime)) overallEndDate = parseISO(lastLeg.arrivalDateTime);
+            else if (lastLegDeparture && lastLeg.blockTimeHours && lastLeg.blockTimeHours > 0) overallEndDate = addHours(lastLegDeparture, lastLeg.blockTimeHours);
+            else if (overallStartDate && lastLeg.blockTimeHours && lastLeg.blockTimeHours > 0) overallEndDate = addHours(overallStartDate, lastLeg.blockTimeHours);
+            else if (overallStartDate) {
               let totalBlockTimeForEndDate = 0;
               trip.legs.forEach(leg => { totalBlockTimeForEndDate += (leg.blockTimeHours || (leg.flightTimeHours ? leg.flightTimeHours + 0.5 : 1)); });
-              endDate = addHours(startDate, totalBlockTimeForEndDate > 0 ? totalBlockTimeForEndDate : 2);
+              overallEndDate = addHours(overallStartDate, totalBlockTimeForEndDate > 0 ? totalBlockTimeForEndDate : 2);
             }
           }
 
-          if (!startDate) startDate = new Date(); // Fallback if no valid date
-          if (!endDate || !isValid(endDate) || isBefore(endDate, startDate)) endDate = addHours(startDate, 2); // Ensure end is after start
-          if (isSameDay(startDate, endDate) && isBefore(endDate,startDate)) endDate = addHours(startDate, 2);
+          if (!overallStartDate) overallStartDate = new Date(); 
+          if (!overallEndDate || !isValid(overallEndDate) || isBefore(overallEndDate, overallStartDate)) overallEndDate = addHours(overallStartDate, 2);
+          if (isSameDay(overallStartDate, overallEndDate) && isBefore(overallEndDate, overallStartDate)) overallEndDate = addHours(overallStartDate, 2);
 
+          // Simulate Phases and populate dailyPhaseInfo
+          if (overallStartDate && overallEndDate && isValid(overallStartDate) && isValid(overallEndDate)) {
+            const daysOfTrip = eachDayOfInterval({ start: overallStartDate, end: overallEndDate });
+            const totalDays = daysOfTrip.length;
+            let phase: keyof typeof PHASE_COLORS = 'DEFAULT_TRIP'; // Default phase
+
+            daysOfTrip.forEach((day, index) => {
+              const dayKey = format(day, "yyyy-MM-dd");
+              let currentPhaseName = trip.status || "Scheduled"; // Use trip status as default phase name
+
+              // Phase simulation logic (can be made more sophisticated)
+              if (totalDays >= 3) {
+                if (index < Math.floor(totalDays / 3)) { phase = 'SCHEDULED'; currentPhaseName = 'Scheduled'; }
+                else if (index < Math.floor(totalDays * 2 / 3)) { phase = 'ACTIVE'; currentPhaseName = 'Active'; }
+                else { phase = 'CLOSEOUT'; currentPhaseName = 'Closeout'; }
+              } else if (totalDays === 2) {
+                if (index === 0) { phase = 'SCHEDULED'; currentPhaseName = 'Scheduled';}
+                else { phase = 'ACTIVE'; currentPhaseName = 'Active'; }
+              } else if (totalDays === 1) {
+                 phase = trip.status === 'Scheduled' ? 'SCHEDULED' : (trip.status === 'En Route' ? 'ACTIVE' : (trip.status === 'Completed' || trip.status === 'Awaiting Closeout' ? 'CLOSEOUT' : 'DEFAULT_TRIP'));
+                 currentPhaseName = trip.status || "Active";
+              }
+              
+              const phaseStyle = PHASE_COLORS[phase] || PHASE_COLORS.DEFAULT_TRIP;
+              dailyPhaseInfo.set(dayKey, {
+                phaseName: currentPhaseName,
+                displayTitle: `${trip.aircraftLabel || trip.aircraftId} - ${trip.tripId} - ${currentPhaseName}`,
+                color: phaseStyle.color,
+                textColor: phaseStyle.textColor,
+              });
+            });
+          }
 
           const aircraftIdentifier = trip.aircraftId || 'UNKNOWN_AIRCRAFT';
           const aircraftDisplayLabel = trip.aircraftLabel || trip.aircraftId || 'Unknown Aircraft';
           if (aircraftIdentifier !== 'UNKNOWN_AIRCRAFT' && !aircraftSetForFilter.has(aircraftIdentifier)) {
             aircraftSetForFilter.set(aircraftIdentifier, aircraftDisplayLabel);
           }
-          const { color, textColor } = getAircraftColor(aircraftIdentifier);
+          
+          // Fallback color for the event if no daily phase info applies (shouldn't happen for trips now)
+          const defaultPhaseColor = PHASE_COLORS.DEFAULT_TRIP;
 
           return {
-            id: trip.id, title: trip.tripId, start: startDate, end: endDate, type: 'trip',
+            id: trip.id, title: trip.tripId, start: overallStartDate, end: overallEndDate, type: 'trip',
             aircraftId: aircraftIdentifier, aircraftLabel: aircraftDisplayLabel,
-            route: route, color, textColor,
-            description: `Trip for ${trip.clientName} on ${aircraftDisplayLabel}. Status: ${trip.status}.`,
-            status: trip.status
+            route: route, 
+            color: defaultPhaseColor.color, textColor: defaultPhaseColor.textColor, // Fallback
+            description: `Trip for ${trip.clientName}. Overall Status: ${trip.status}.`,
+            status: trip.status,
+            extendedProps: { dailyPhaseInfo }
           };
         }).filter(event => event.start && event.end && isValid(event.start) && isValid(event.end));
 
@@ -258,15 +314,15 @@ export default function TripCalendarPage() {
             }
             return {
                 id: blockOut.id,
-                title: blockOut.title,
-                start: startOfDay(parseISO(blockOut.startDate)), // Ensure start of day
-                end: endOfDay(parseISO(blockOut.endDate)),       // Ensure end of day
+                title: `${aircraftDisplayLabel}: ${blockOut.title}`, // Ensure aircraft label is in title
+                start: startOfDay(parseISO(blockOut.startDate)),
+                end: endOfDay(parseISO(blockOut.endDate)),      
                 type: 'block_out',
                 aircraftId: blockOut.aircraftId,
                 aircraftLabel: aircraftDisplayLabel,
-                color: BLOCK_OUT_EVENT_COLOR.color,
-                textColor: BLOCK_OUT_EVENT_COLOR.textColor,
-                description: `Aircraft ${aircraftDisplayLabel} blocked out: ${blockOut.title}`
+                color: PHASE_COLORS.BLOCK_OUT.color,
+                textColor: PHASE_COLORS.BLOCK_OUT.textColor,
+                description: `Aircraft ${aircraftDisplayLabel} blocked: ${blockOut.title}`
             };
         });
 
@@ -285,7 +341,7 @@ export default function TripCalendarPage() {
         setIsLoadingData(false);
         setIsLoadingFleetForModal(false);
     }
-  }, [toast, getAircraftColor]);
+  }, [toast]);
 
 
   useEffect(() => {
@@ -301,22 +357,21 @@ export default function TripCalendarPage() {
     }
 
     const blockOutToSave = {
-      // id: will be generated by Firestore or flow if not provided for new events
       aircraftId: data.aircraftId,
       aircraftLabel: selectedAircraft.label,
       title: data.title,
-      startDate: format(data.startDate, "yyyy-MM-dd"), // Store as ISO string
-      endDate: format(data.endDate, "yyyy-MM-dd"),     // Store as ISO string
+      startDate: format(data.startDate, "yyyy-MM-dd"), 
+      endDate: format(data.endDate, "yyyy-MM-dd"),     
     };
 
     try {
-      await saveAircraftBlockOut(blockOutToSave as any); // Cast as any to match expected input if ID is optional
+      await saveAircraftBlockOut(blockOutToSave as any); 
       toast({
         title: "Aircraft Block-Out Saved",
         description: `${selectedAircraft.label} blocked from ${format(data.startDate, "PPP")} to ${format(data.endDate, "PPP")} has been saved to Firestore.`,
         variant: "default"
       });
-      await loadInitialData(); // Reload all events
+      await loadInitialData(); 
       setIsBlockOutModalOpen(false);
     } catch (error) {
       console.error("Failed to save block-out event:", error);
@@ -333,7 +388,6 @@ export default function TripCalendarPage() {
     const map = new Map<string, CalendarEvent[]>();
     filteredEvents.forEach(event => {
       if (!event.start || !event.end || !isValid(event.start) || !isValid(event.end)) {
-        // console.warn("Skipping event with invalid dates:", event);
         return;
       }
       let currentDayIter = startOfDay(event.start);
@@ -342,7 +396,6 @@ export default function TripCalendarPage() {
         const dayKey = format(currentDayIter, "yyyy-MM-dd");
         if (!map.has(dayKey)) map.set(dayKey, []);
         const dayEvents = map.get(dayKey)!;
-        // Add event only if it's not already there for that day (prevents duplicates from multi-day processing)
         if (!dayEvents.find(e => e.id === event.id)) dayEvents.push(event);
         currentDayIter = addDays(currentDayIter, 1);
       }
@@ -385,7 +438,7 @@ export default function TripCalendarPage() {
         <CardHeader className="border-b py-3 px-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
           <div>
             <CardTitle className="text-lg">Activity View</CardTitle>
-            <CardDescription>Trip colors represent different aircraft. Grey bars are block-outs/maintenance.</CardDescription>
+            <CardDescription>Trip colors indicate different phases or types. Grey bars are block-outs.</CardDescription>
           </div>
           <div className="flex gap-2 items-center flex-wrap">
             {uniqueAircraftForFilter.length > 0 && (
@@ -447,7 +500,7 @@ export default function TripCalendarPage() {
                 table: "w-full border-collapse table-fixed", month: "w-full", head_row: "border-b border-border/50 flex",
                 head_cell: cn("text-muted-foreground align-middle text-center font-normal text-[0.65rem] sm:text-xs py-1.5 border-r border-b border-border/30 last:border-r-0 w-[calc(100%/7)]"),
                 row: "flex w-full",
-                cell: cn("p-0 m-0 text-left align-top relative h-24 min-h-[6rem] sm:h-28 sm:min-h-[7rem] md:h-32 md:min-h-[8rem] lg:h-36 lg:min-h-[9rem] xl:h-40 xl:min-h-[10rem] border-r border-b border-border/30 w-[calc(100%/7)]"), // Removed overflow-hidden
+                cell: cn("p-0 m-0 text-left align-top relative h-24 min-h-[6rem] sm:h-28 sm:min-h-[7rem] md:h-32 md:min-h-[8rem] lg:h-36 lg:min-h-[9rem] xl:h-40 xl:min-h-[10rem] border-r border-b border-border/30 w-[calc(100%/7)]"),
                 day_disabled: "opacity-50 pointer-events-none", caption: "flex justify-center items-center py-2.5 relative gap-x-1 px-2",
                 caption_label: "text-sm font-medium px-2", nav_button: cn(buttonVariants({ variant: "outline" }), "h-7 w-7 bg-transparent p-0 opacity-80 hover:opacity-100"),
                 nav_button_previous: "absolute left-1", nav_button_next: "absolute right-1",
@@ -468,3 +521,5 @@ export default function TripCalendarPage() {
     </>
   );
 }
+
+    
