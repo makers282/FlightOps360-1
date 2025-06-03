@@ -7,12 +7,11 @@ import { Calendar as CalendarIconLucide, Plane, Loader2, Filter as FilterIcon, P
 import { Calendar as ShadcnCalendar } from "@/components/ui/calendar";
 import type { DayProps } from "react-day-picker";
 import { Card, CardContent, CardHeader, CardDescription, CardTitle } from '@/components/ui/card';
-// import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"; // Temporarily removed
 import Link from 'next/link';
 import { cn } from "@/lib/utils";
 import { format, isSameDay, parseISO, startOfDay, endOfDay, isToday, addHours, isValid, addDays, isBefore, isAfter, isSameMonth } from 'date-fns';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from "@/components/ui/skeleton";
 import { fetchTrips, type Trip, type TripStatus } from '@/ai/flows/manage-trips-flow';
 import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
 import { useToast } from '@/hooks/use-toast';
@@ -71,7 +70,7 @@ function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
   }, [eventsForDay]);
 
   const dayNumberSectionClasses = cn("flex justify-end p-0.5 h-6 items-start");
-  const eventsForDayContainerClasses = cn("h-full flex flex-col gap-px pt-1"); 
+  const eventsForDayContainerClasses = cn("h-full flex flex-col gap-px pt-1");
 
   return (
     <div className="h-full w-full flex flex-col">
@@ -94,86 +93,53 @@ function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
           {dayEvents.map(event => {
             const mapKey = `${event.id}-${format(date, "yyyy-MM-dd")}`;
             
-            // Debugging logs
-            console.log(`CustomDay for date: ${format(date, "yyyy-MM-dd")}, Event ID: ${event.id}, Event Start: ${format(event.start, "yyyy-MM-dd HH:mm")}, Event End: ${format(event.end, "yyyy-MM-dd HH:mm")}, Title: ${event.title}`);
-            
             const eventStartsInThisCell = isSameDay(event.start, date);
             const eventEndsInThisCell = isSameDay(event.end, date);
             const eventStartedBeforeCell = isBefore(event.start, startOfDay(date));
-            const eventEndsAfterCell = isAfter(event.end, startOfDay(date));
-
-            console.log(`eventStartsInThisCell: ${eventStartsInThisCell}, eventEndsInThisCell: ${eventEndsInThisCell}, eventStartedBeforeCell: ${eventStartedBeforeCell}, eventEndsAfterCell: ${eventEndsAfterCell}`);
+            const eventEndsAfterCell = isAfter(event.end, endOfDay(date)); // Use endOfDay for more robust multi-day check
 
             const eventDisplayTitle = eventStartsInThisCell
                 ? `${event.aircraftLabel || 'UNK'}: ${event.title || event.id}`
-                : '\u00A0'; 
-
-            let borderRadiusClasses = "rounded-sm";
-            if (eventStartedBeforeCell && !eventEndsInThisCell) { // Starts before, continues past
-                borderRadiusClasses = "rounded-none";
-            } else if (eventStartsInThisCell && eventEndsAfterCell) { // Starts in cell, continues past
-                borderRadiusClasses = "rounded-l-sm rounded-r-none";
-            } else if (eventStartedBeforeCell && eventEndsInThisCell) { // Started before, ends in cell
-                borderRadiusClasses = "rounded-r-sm rounded-l-none";
-            }
-            // else: single day event or fully contained within a cell remains rounded-sm
+                : '\u00A0';
 
             let widthAndPositionClasses = "w-full left-0";
-            if (eventStartedBeforeCell && eventEndsAfterCell) { // Middle segment
+            if (eventStartedBeforeCell && eventEndsAfterCell) { 
                 widthAndPositionClasses = "w-[calc(100%+2px)] left-[-1px]";
-            } else if (eventStartsInThisCell && eventEndsAfterCell) { // Starts in cell, continues
+            } else if (eventStartsInThisCell && eventEndsAfterCell) { 
                 widthAndPositionClasses = "w-[calc(100%+1px)] left-0";
-            } else if (eventStartedBeforeCell && eventEndsInThisCell) { // Started before, ends in cell
+            } else if (eventStartedBeforeCell && eventEndsInThisCell) { 
                 widthAndPositionClasses = "w-[calc(100%+1px)] left-[-1px]";
             }
             
-            const eventLink = event.type === 'trip' ? `/trips/details/${event.id}` : undefined;
+            let borderRadiusClasses = "rounded-sm";
+            if (eventStartedBeforeCell && eventEndsAfterCell) {
+                borderRadiusClasses = "rounded-none";
+            } else if (eventStartsInThisCell && eventEndsAfterCell) {
+                borderRadiusClasses = "rounded-l-sm rounded-r-none";
+            } else if (eventStartedBeforeCell && eventEndsInThisCell) {
+                borderRadiusClasses = "rounded-r-sm rounded-l-none";
+            }
+            
+            const EventLinkOrDiv = event.type === 'trip' && event.id ? Link : 'div';
+            const commonProps = {
+              className: cn(
+                "block h-5 sm:h-6 text-[0.55rem] sm:text-[0.6rem] flex items-center relative z-10", // Added z-10
+                event.color, event.textColor, borderRadiusClasses, widthAndPositionClasses
+              ),
+              ...(event.type === 'trip' && event.id && { href: `/trips/details/${event.id}` }),
+            };
 
-            const EventBarContent = () => (
-              <div
-                className={cn(
-                  "h-full text-[0.55rem] sm:text-[0.6rem] flex items-center hover:opacity-90 relative z-10", 
-                  event.color, event.textColor, borderRadiusClasses, widthAndPositionClasses
-                )}
-              >
+            return (
+              <EventLinkOrDiv key={mapKey} {...commonProps}>
                 <span
                   className={cn(
-                    "w-full overflow-hidden whitespace-nowrap truncate px-0.5 sm:px-1" 
+                    "w-full overflow-hidden whitespace-nowrap px-0.5 sm:px-1",
+                    eventDisplayTitle !== '\u00A0' && "truncate" // Conditionally apply truncate
                   )}
                 >
                   {eventDisplayTitle}
                 </span>
-              </div>
-            );
-            
-            const EventBarWrapper = ({ children }: { children: React.ReactNode }) => {
-                const commonProps = {
-                  className: cn("block focus:outline-none focus-visible:ring-1 focus-visible:ring-ring h-5 sm:h-6 relative"),
-                };
-                if (eventLink) {
-                  return <Link href={eventLink} {...commonProps}>{children}</Link>;
-                }
-                return <div {...commonProps}>{children}</div>;
-            };
-
-            return (
-              // <TooltipProvider key={mapKey} delayDuration={100}>  // Temporarily removed
-              //   <Tooltip>
-              //     <TooltipTrigger asChild>
-                    <EventBarWrapper key={mapKey}>
-                        <EventBarContent />
-                    </EventBarWrapper>
-              //     </TooltipTrigger>
-              //     <TooltipContent side="top" align="center" className="max-w-xs p-2 bg-popover text-popover-foreground border shadow-md rounded-md text-xs">
-              //       <p className="font-semibold">{`${event.aircraftLabel || 'UNK'}: ${event.title}`} {event.status && event.type === 'trip' && <span className="text-muted-foreground">({event.status})</span>}</p>
-              //       {event.route && event.type === 'trip' && <p>Route: {event.route}</p>}
-              //       <p className="text-muted-foreground">
-              //         {format(event.start, 'MMM d, H:mm zz')} - {format(event.end, 'MMM d, H:mm zz')}
-              //       </p>
-              //       {event.description && <p className="mt-1">{event.description}</p>}
-              //     </TooltipContent>
-              //   </Tooltip>
-              // </TooltipProvider> // Temporarily removed
+              </EventLinkOrDiv>
             );
           })}
         </div>
@@ -347,7 +313,6 @@ export default function TripCalendarPage() {
     const map = new Map<string, CalendarEvent[]>();
     filteredEvents.forEach(event => {
       if (!event.start || !event.end || !isValid(event.start) || !isValid(event.end)) {
-        console.warn("Skipping event with invalid dates:", event);
         return;
       }
       let currentDayIter = startOfDay(event.start);
@@ -481,3 +446,5 @@ export default function TripCalendarPage() {
     </>
   );
 }
+
+    
