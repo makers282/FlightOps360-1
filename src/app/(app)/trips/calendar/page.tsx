@@ -80,17 +80,18 @@ const CustomDay = React.memo(function CustomDay(dayProps: DayProps & { eventsFor
       return (a.aircraftId || '').localeCompare(b.aircraftId || '');
     });
   }, [eventsForDay]);
-
-  const eventsForDayContainerClasses = cn("h-full flex flex-col gap-px p-px overflow-y-auto"); 
-  const eventBarHeight = "h-5 sm:h-6"; 
-  const baseTextSize = "text-[0.6rem] sm:text-[0.7rem]";
+  
+  const eventBarHeight = "h-5 sm:h-[22px]"; 
+  const baseTextSize = "text-[0.6rem] sm:text-[0.65rem]";
 
   return (
-    <div className="h-full w-full border-r border-b border-border/30 group-data-[row-last=true]:border-b-0 last:border-r-0 relative">
+    // Added pt-5 to reserve space for the day number at the top
+    <div className="h-full w-full border-r border-b border-border/30 group-data-[row-last=true]:border-b-0 last:border-r-0 relative pt-5"> 
       <time
         dateTime={format(date, "yyyy-MM-dd")}
         className={cn(
-          "absolute top-0.5 right-0.5 z-20 text-xs px-1",
+          // Positioned absolutely, z-index ensures it's above event bars
+          "absolute top-0.5 right-0.5 z-20 text-xs px-1", 
           isToday(date)
             ? "text-primary font-bold rounded-full bg-primary/20 size-5 flex items-center justify-center"
             : "text-muted-foreground"
@@ -100,7 +101,8 @@ const CustomDay = React.memo(function CustomDay(dayProps: DayProps & { eventsFor
       </time>
       
       {sortedEventsForDay.length > 0 && (
-        <div className={eventsForDayContainerClasses}>
+         // Container for event bars, positioned absolutely at the bottom of the cell
+         <div className="absolute bottom-[2px] left-0 right-0 flex flex-col gap-px px-px">
           {sortedEventsForDay.map(event => {
             const eventStartDay = startOfDay(event.start);
             const eventEndDay = startOfDay(event.end); 
@@ -112,13 +114,23 @@ const CustomDay = React.memo(function CustomDay(dayProps: DayProps & { eventsFor
             const isEndDay = isSameDay(currentDay, eventEndDay);
             const isSingleDayEvent = isStartDay && isEndDay;
 
+            let marginClasses = "";
             let borderRadiusClasses = "rounded-none";
+            let widthClasses = "w-full"; // Default width, middle segments will override
+
             if (isSingleDayEvent) {
               borderRadiusClasses = "rounded-sm";
+              marginClasses = "mx-0"; // No horizontal bleed
             } else if (isStartDay) {
-              borderRadiusClasses = "rounded-l-sm";
+              borderRadiusClasses = "rounded-l-sm rounded-r-none";
+              marginClasses = "ml-0 mr-[-1px]"; // Bleed right
             } else if (isEndDay) {
-              borderRadiusClasses = "rounded-r-sm";
+              borderRadiusClasses = "rounded-r-sm rounded-l-none";
+              marginClasses = "mr-0 ml-[-1px]"; // Bleed left
+            } else { // Middle segment
+              borderRadiusClasses = "rounded-none";
+              marginClasses = "mx-[-1px]"; // Bleed both sides
+              widthClasses = "w-[calc(100%+2px)]"; // Expand to cover cell borders
             }
             
             const displayColor = event.color;
@@ -131,14 +143,16 @@ const CustomDay = React.memo(function CustomDay(dayProps: DayProps & { eventsFor
                               : {};
             
             return (
-              <TooltipProvider key={event.id + event.type} delayDuration={150}>
+              <TooltipProvider key={event.id + event.type + format(date, 'yyyy-MM-dd')} delayDuration={150}>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <LinkOrDiv
                       {...linkProps}
                       className={cn(
-                        "block relative w-full", 
+                        "block relative z-10", // z-10 to be above cell background but below day number
                         eventBarHeight,
+                        widthClasses,
+                        marginClasses,
                         borderRadiusClasses,
                         "overflow-hidden" 
                       )}
@@ -147,7 +161,8 @@ const CustomDay = React.memo(function CustomDay(dayProps: DayProps & { eventsFor
                       {showTitle && (
                         <span
                           className={cn(
-                            "absolute inset-0 px-1.5 flex items-center",
+                            // Title positioned absolutely within the event bar
+                            "absolute inset-0 px-1.5 flex items-center", 
                             baseTextSize,
                             "whitespace-nowrap overflow-hidden truncate"
                           )}
@@ -161,8 +176,8 @@ const CustomDay = React.memo(function CustomDay(dayProps: DayProps & { eventsFor
                   <TooltipContent side="top" align="center" className="max-w-xs p-2 bg-popover text-popover-foreground border shadow-md rounded-md">
                     <p className="font-semibold">{event.title}</p>
                     {event.route && <p className="text-xs">Route: {event.route}</p>}
-                    <p className="text-xs">Starts: {format(event.start, "MMM d, yyyy")}</p>
-                    <p className="text-xs">Ends: {format(event.end, "MMM d, yyyy")} (Inclusive)</p>
+                    <p className="text-xs">Starts: {format(event.start, "PPP")}</p>
+                    <p className="text-xs">Ends: {format(event.end, "PPP")}</p>
                     {event.status && <p className="text-xs">Status: {event.status}</p>}
                     {event.description && !event.route && <p className="text-xs">{event.description}</p>}
                   </TooltipContent>
@@ -402,7 +417,7 @@ export default function TripCalendarPage() {
         <CardHeader className="border-b py-3 px-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
           <div>
             <CardTitle className="text-lg">Activity View</CardTitle>
-            <CardDescription>Daily event segments with rounded caps at start/end of event. Grid lines visible.</CardDescription>
+            <CardDescription>Daily event segments. Grid lines visible. Day numbers at top.</CardDescription>
           </div>
           <div className="flex gap-2 items-center flex-wrap">
             {uniqueAircraftForFilter.length > 0 && (
@@ -494,3 +509,4 @@ export default function TripCalendarPage() {
     </>
   );
 }
+
