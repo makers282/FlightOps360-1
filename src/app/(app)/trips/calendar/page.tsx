@@ -30,19 +30,20 @@ interface CalendarEvent {
   status?: TripStatus;
 }
 
+const AIRCRAFT_COLORS_PALETTE = [
+  { color: 'bg-sky-500', textColor: 'text-white' },
+  { color: 'bg-emerald-500', textColor: 'text-white' },
+  { color: 'bg-amber-500', textColor: 'text-black' },
+  { color: 'bg-rose-500', textColor: 'text-white' },
+  { color: 'bg-violet-500', textColor: 'text-white' },
+  { color: 'bg-lime-500', textColor: 'text-black' },
+  { color: 'bg-cyan-500', textColor: 'text-black' },
+  { color: 'bg-pink-500', textColor: 'text-white' },
+  { color: 'bg-teal-500', textColor: 'text-white' },
+  { color: 'bg-orange-500', textColor: 'text-black' },
+];
+const DEFAULT_AIRCRAFT_COLOR = { color: 'bg-gray-400', textColor: 'text-white' };
 
-const getTripEventColor = (status?: TripStatus): { color: string, textColor: string } => {
-  switch (status?.toLowerCase()) {
-    case 'scheduled': return { color: 'bg-blue-500', textColor: 'text-white' };
-    case 'confirmed': return { color: 'bg-green-600', textColor: 'text-white' };
-    case 'en route': return { color: 'bg-indigo-600', textColor: 'text-white' };
-    case 'completed': return { color: 'bg-gray-500', textColor: 'text-white' };
-    case 'cancelled':
-    case 'diverted':
-      return { color: 'bg-red-600', textColor: 'text-white' };
-    default: return { color: 'bg-sky-600', textColor: 'text-white' };
-  }
-};
 
 function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
   const { date, displayMonth, eventsForDay } = dayProps;
@@ -61,7 +62,7 @@ function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
   );
 
   const eventsForDayContainerClasses = cn(
-    "flex-1 flex flex-col gap-px", // Removed overflow-hidden and p-px
+    "flex-1 flex flex-col gap-px",
   );
 
   return (
@@ -92,25 +93,24 @@ function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
             const eventStartedBeforeCell = isBefore(event.start, currentCellDayStart);
             const eventEndsAfterCell = isAfter(event.end, currentCellDayEnd);
             
-            let borderRadiusClasses = "rounded-sm"; // Default for single-day event in cell
+            let borderRadiusClasses = "rounded-sm";
             let marginClasses = "";
             let zIndexClass = "";
 
-            if (eventStartsInThisCell && eventEndsAfterCell) { // Starts in this cell, continues
+            if (eventStartsInThisCell && eventEndsAfterCell) {
                 borderRadiusClasses = "rounded-l-sm rounded-r-none";
                 marginClasses = "mr-[-1px]"; 
                 zIndexClass = "relative z-10";
-            } else if (eventStartedBeforeCell && eventEndsInThisCell) { // Started before, ends in this cell
+            } else if (eventStartedBeforeCell && eventEndsInThisCell) {
                 borderRadiusClasses = "rounded-r-sm rounded-l-none";
                 marginClasses = "ml-[-1px]";
                 zIndexClass = "relative z-10";
-            } else if (eventStartedBeforeCell && eventEndsAfterCell) { // Middle segment
+            } else if (eventStartedBeforeCell && eventEndsAfterCell) {
                 borderRadiusClasses = "rounded-none";
                 marginClasses = "mx-[-1px]";
                 zIndexClass = "relative z-10";
             }
-            // If eventStartsInThisCell && eventEndsInThisCell, default 'rounded-sm' and no marginClasses apply.
-
+            
             const displayTitle = eventStartsInThisCell;
             const showPaddingForText = displayTitle;
 
@@ -131,13 +131,13 @@ function CustomDay(dayProps: DayProps & { eventsForDay: CalendarEvent[] }) {
                             "w-full overflow-hidden whitespace-nowrap truncate",
                             showPaddingForText ? "px-0.5 sm:px-1" : ""
                         )}>
-                          {displayTitle ? event.title : <>&nbsp;</>}
+                          {displayTitle ? `${event.aircraft || 'UNK'}: ${event.title}` : <>&nbsp;</>}
                         </span>
                       </div>
                     </Link>
                   </TooltipTrigger>
                   <TooltipContent side="top" align="center" className="max-w-xs p-2 bg-popover text-popover-foreground border shadow-md rounded-md text-xs">
-                    <p className="font-semibold">{event.title} {event.status && <span className="text-muted-foreground">({event.status})</span>}</p>
+                    <p className="font-semibold">{event.aircraft || 'Unknown Aircraft'}: {event.title} {event.status && <span className="text-muted-foreground">({event.status})</span>}</p>
                     {event.route && <p>Route: {event.route}</p>}
                     <p className="text-muted-foreground">
                       {format(event.start, 'MMM d, H:mm zz')} - {format(event.end, 'MMM d, H:mm zz')}
@@ -161,12 +161,28 @@ export default function TripCalendarPage() {
   const [isLoadingTrips, setIsLoadingTrips] = useState(true);
   const { toast } = useToast();
 
+  const aircraftColorMap = useMemo(() => new Map<string, { color: string, textColor: string }>(), []);
+  let nextColorIndex = 0;
+
+  const getAircraftColor = useCallback((aircraftId: string) => {
+    if (!aircraftColorMap.has(aircraftId)) {
+      aircraftColorMap.set(aircraftId, AIRCRAFT_COLORS_PALETTE[nextColorIndex % AIRCRAFT_COLORS_PALETTE.length]);
+      nextColorIndex++;
+    }
+    return aircraftColorMap.get(aircraftId) || DEFAULT_AIRCRAFT_COLOR;
+  }, [aircraftColorMap, nextColorIndex]);
+
+
   useEffect(() => {
     setIsClientReady(true);
     const loadTrips = async () => {
       setIsLoadingTrips(true);
       try {
         const fetchedTrips = await fetchTrips();
+        // Reset color assignment for each load to ensure consistency if data changes
+        aircraftColorMap.clear();
+        nextColorIndex = 0;
+
         const calendarEvents: CalendarEvent[] = fetchedTrips.map(trip => {
           let startDate: Date | null = null;
           let endDate: Date | null = null;
@@ -190,35 +206,30 @@ export default function TripCalendarPage() {
               endDate = parseISO(lastLeg.arrivalDateTime);
             } else if (lastLegDeparture && lastLeg.blockTimeHours && lastLeg.blockTimeHours > 0) {
               endDate = addHours(lastLegDeparture, lastLeg.blockTimeHours);
-            } else if (startDate && lastLeg.blockTimeHours && lastLeg.blockTimeHours > 0) { // Fallback if last leg arrival is missing but block time exists
+            } else if (startDate && lastLeg.blockTimeHours && lastLeg.blockTimeHours > 0) {
               endDate = addHours(startDate, lastLeg.blockTimeHours); 
-            } else if (startDate) { // Broader fallback using total block time if available
+            } else if (startDate) { 
               let totalBlockTimeForEndDate = 0;
               trip.legs.forEach(leg => {
                 totalBlockTimeForEndDate += (leg.blockTimeHours || (leg.flightTimeHours ? leg.flightTimeHours + 0.5 : 1));
               });
-              endDate = addHours(startDate, totalBlockTimeForEndDate > 0 ? totalBlockTimeForEndDate : 2); // Default to 2 hours if no block time
+              endDate = addHours(startDate, totalBlockTimeForEndDate > 0 ? totalBlockTimeForEndDate : 2);
             }
           }
 
           if (!startDate) {
             startDate = new Date(); 
-            console.warn(`Trip ${trip.id} missing valid start date for first leg, defaulting to now.`);
           }
           
           if (!endDate || !isValid(endDate) || isBefore(endDate, startDate)) {
-             // Ensure end date is valid and after start date, default to 2 hours after start if not.
-             console.warn(`Trip ${trip.id} had invalid or missing end date. Defaulting to 2 hours after start.`);
              endDate = addHours(startDate, 2);
           }
-           // Specific check for events that might end up on the same day but with end time before start time after calculations
           if (isSameDay(startDate, endDate) && isBefore(endDate, startDate)) {
-            console.warn(`Trip ${trip.id} end time was before start time on the same day. Adjusting to 2 hours after start.`);
             endDate = addHours(startDate, 2);
           }
-
-
-          const { color, textColor } = getTripEventColor(trip.status);
+          
+          const aircraftIdentifier = trip.aircraftId || 'UNKNOWN_AIRCRAFT';
+          const { color, textColor } = getAircraftColor(aircraftIdentifier);
 
           return {
             id: trip.id,
@@ -233,7 +244,7 @@ export default function TripCalendarPage() {
             description: `Trip for ${trip.clientName} on ${trip.aircraftLabel || trip.aircraftId}. Status: ${trip.status}.`,
             status: trip.status
           };
-        }).filter(event => event.start && event.end && isValid(event.start) && isValid(event.end)); // Final filter for valid events
+        }).filter(event => event.start && event.end && isValid(event.start) && isValid(event.end));
         setAllEvents(calendarEvents);
       } catch (error) {
         console.error("Failed to load trips for calendar:", error);
@@ -243,7 +254,7 @@ export default function TripCalendarPage() {
       }
     };
     loadTrips();
-  }, [toast]);
+  }, [toast, getAircraftColor, aircraftColorMap]); // Added getAircraftColor & aircraftColorMap to dependencies
 
   const isValidISO = (dateString?: string): boolean => {
     if (!dateString) return false;
@@ -266,7 +277,7 @@ export default function TripCalendarPage() {
         }
 
         const dayEvents = map.get(dayKey)!;
-        if (!dayEvents.find(e => e.id === event.id)) { // Add event only once per day
+        if (!dayEvents.find(e => e.id === event.id)) {
             dayEvents.push(event);
         }
         currentDayIter = addDays(currentDayIter, 1);
@@ -309,7 +320,7 @@ export default function TripCalendarPage() {
       <Card className="shadow-xl border-border/50">
         <CardHeader className="border-b py-3 px-4">
           <CardDescription>
-            Displaying trips from Firestore. Maintenance events will be added later.
+            Displaying trips from Firestore. Different colors represent different aircraft.
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
@@ -358,4 +369,3 @@ export default function TripCalendarPage() {
     </>
   );
 }
-
