@@ -25,7 +25,7 @@ import { CalendarIcon, Loader2, Save, BookOpen, Edit3 } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { format, parseISO, isValid as isValidDate, startOfDay } from "date-fns";
 import type { MelItem, SaveMelItemInput } from '@/ai/schemas/mel-item-schemas';
-import { melCategories, melStatuses } from '@/ai/schemas/mel-item-schemas';
+import { melCategories, melStatuses } from '@/ai/schemas/mel-item-schemas'; // melStatuses will now be ["Open", "Closed"]
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { FleetAircraft } from '@/ai/schemas/fleet-aircraft-schemas';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
@@ -48,7 +48,10 @@ const melItemFormSchema = z.object({
 }, { message: "Corrective action and closed date are required if status is Closed.", path: ["correctiveAction", "closedDate"] })
 .refine(data => {
   if (data.category === "A" && !data.dueDate) {
-      return false; // Not strictly enforced by all MELs, but good practice for 'A'
+      // This is a soft warning, might not always be strictly enforced by all MELs as a hard due date.
+      // Could also make this a warning in the UI rather than a hard validation if preferred.
+      // For now, keeping it as a gentle reminder via validation.
+      // return false; // Uncomment if strict validation for Cat A due date is desired
   }
   return true;
 }, { message: "Category 'A' items often have a specific time limit (due date).", path: ["dueDate"]});

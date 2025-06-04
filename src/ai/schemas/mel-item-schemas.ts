@@ -7,7 +7,7 @@ import { z } from 'zod';
 export const melCategories = ["A", "B", "C", "D"] as const;
 export type MelCategory = typeof melCategories[number];
 
-export const melStatuses = ["Open", "Closed", "Deferred"] as const;
+export const melStatuses = ["Open", "Closed"] as const; // Simplified
 export type MelStatus = typeof melStatuses[number];
 
 export const MelItemSchema = z.object({
@@ -60,3 +60,4 @@ export const DeleteMelItemOutputSchema = z.object({
   success: z.boolean(),
   melItemId: z.string(),
 });
+
