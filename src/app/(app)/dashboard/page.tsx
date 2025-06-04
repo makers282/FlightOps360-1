@@ -2,6 +2,7 @@
 "use client"; 
 
 import React, { useState, useEffect } from 'react'; 
+import Link from 'next/link'; // Import Link
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -243,7 +244,19 @@ export default function DashboardPage() {
             ) : dashboardTrips.length === 0 ? ( <p className="text-muted-foreground text-center py-5">No trips to display.</p> ) : (
             <Table>
               <TableHeader><TableRow><TableHead>Trip ID</TableHead><TableHead>Route</TableHead><TableHead>Aircraft</TableHead><TableHead>Status</TableHead><TableHead>Departure (First Leg)</TableHead></TableRow></TableHeader>
-              <TableBody>{dashboardTrips.map((trip) => (<TableRow key={trip.id}><TableCell className="font-medium">{trip.tripId || trip.id}</TableCell><TableCell>{getRouteDisplay(trip.legs)}</TableCell><TableCell>{trip.aircraftLabel || trip.aircraftId}</TableCell><TableCell><Badge variant={getStatusBadgeVariant(trip.status)}>{trip.status}</Badge></TableCell><TableCell>{formatDate(trip.legs?.[0]?.departureDateTime)}</TableCell></TableRow>))}</TableBody>
+              <TableBody>{dashboardTrips.map((trip) => (
+                <TableRow key={trip.id}>
+                  <TableCell className="font-medium">
+                    <Link href={`/trips/details/${trip.id}`} className="text-primary hover:underline">
+                      {trip.tripId || trip.id}
+                    </Link>
+                  </TableCell>
+                  <TableCell>{getRouteDisplay(trip.legs)}</TableCell>
+                  <TableCell>{trip.aircraftLabel || trip.aircraftId}</TableCell>
+                  <TableCell><Badge variant={getStatusBadgeVariant(trip.status)}>{trip.status}</Badge></TableCell>
+                  <TableCell>{formatDate(trip.legs?.[0]?.departureDateTime)}</TableCell>
+                </TableRow>
+              ))}</TableBody>
             </Table>
             )}
           </CardContent>
