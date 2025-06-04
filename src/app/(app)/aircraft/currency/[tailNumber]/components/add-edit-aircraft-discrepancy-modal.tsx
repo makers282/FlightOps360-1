@@ -312,7 +312,9 @@ export function AddEditAircraftDiscrepancyModal({
                             <FormField control={form.control} name="correctedByCertNumber" render={({ field }) => (<FormItem><FormLabel>Corrected By Cert # (Optional)</FormLabel><FormControl><Input placeholder="e.g., A&P 7654321" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>)} />
                         </div>
                          {statusWatch === 'Closed' && (!currentFormValues.correctiveAction || !currentFormValues.dateCorrected || !currentFormValues.correctedBy) && (
-                            <p className="text-xs text-destructive">For 'Closed' status, Corrective Action, Date Corrected, and Corrected By are typically required.</p>
+                            <p className="text-xs text-destructive p-2 rounded-md border border-destructive/50 bg-destructive/10">
+                                For 'Closed' status, "Corrective Action Taken", "Date Corrected", and "Corrected By" are required fields.
+                            </p>
                         )}
                     </CardContent>
                 </Card>
@@ -333,3 +335,4 @@ export function AddEditAircraftDiscrepancyModal({
     </Dialog>
   );
 }
+
