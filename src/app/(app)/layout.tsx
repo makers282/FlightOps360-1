@@ -1,4 +1,5 @@
 
+
 "use client"; // Mark as client component for usePathname
 
 import React from 'react';
@@ -254,8 +255,8 @@ export default function AppLayout({ children }: PropsWithChildren) {
                 <SidebarMenuSubButton href="/settings/roles" isActive={pathname === '/settings/roles'}>
                   <Users /> User Roles
                 </SidebarMenuSubButton>
-                <SidebarMenuSubButton href="/settings/quote-config" tooltip="Aircraft Hourly Rates" isActive={pathname === '/settings/quote-config'}>
-                  <DollarSign /> Aircraft Hourly Rates
+                <SidebarMenuSubButton href="/settings/quote-config" tooltip="Pricing Configuration" isActive={pathname === '/settings/quote-config'}>
+                  <DollarSign /> Pricing Configuration
                 </SidebarMenuSubButton>
                  <SidebarMenuSubButton href="/settings/aircraft-performance" isActive={pathname === '/settings/aircraft-performance'}>
                   <PlaneTakeoff /> Aircraft Performance
@@ -304,3 +305,4 @@ export default function AppLayout({ children }: PropsWithChildren) {
   );
 }
 
+    

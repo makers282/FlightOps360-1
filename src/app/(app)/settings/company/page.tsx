@@ -90,16 +90,6 @@ export default function CompanySettingsPage() {
   const [showDeleteBulletinConfirm, setShowDeleteBulletinConfirm] = useState(false);
   const [isDeletingBulletin, startDeletingBulletinTransition] = useTransition();
 
-  // State for Service Fees (moved from quote-config)
-  const [currentServiceFeeRates, setCurrentServiceFeeRates] = useState<{ [key: string]: ServiceFeeRate }>({});
-  const [isSavingServiceFee, startSavingServiceFeeTransition] = useTransition();
-  const [showAddServiceForm, setShowAddServiceForm] = useState(false);
-  const [newServiceDisplayDescription, setNewServiceDisplayDescription] = useState('');
-  const [newServiceUnit, setNewServiceUnit] = useState('');
-  const [newServiceBuyRateLocal, setNewServiceBuyRateLocal] = useState('');
-  const [newServiceSellRateLocal, setNewServiceSellRateLocal] = useState('');
-  const [editingServiceKey, setEditingServiceKey] = useState<string | null>(null);
-
 
   const loadFleetData = async () => {
     setIsLoadingFleet(true);
@@ -124,7 +114,6 @@ export default function CompanySettingsPage() {
         setCompanyEmail(profile.companyEmail || '');
         setCompanyPhone(profile.companyPhone || '');
         setCurrentCompanyProfile(profile);
-        setCurrentServiceFeeRates(profile.serviceFeeRates || {}); // Initialize service fees here
       } else {
         // Set default values if profile is null
         setCompanyName("FlightOps360 LLC (Example)");
@@ -140,7 +129,6 @@ export default function CompanySettingsPage() {
             serviceFeeRates: {},
         };
         setCurrentCompanyProfile(defaultProfile);
-        setCurrentServiceFeeRates({});
       }
     } catch (error) {
       console.error("Failed to fetch company profile:", error);
@@ -229,14 +217,25 @@ export default function CompanySettingsPage() {
 
   const handleSaveCompanyInfo = () => {
     startSavingCompanyInfoTransition(async () => {
+      if (!currentCompanyProfile) {
+        toast({ title: "Error", description: "Company profile data not loaded.", variant: "destructive"});
+        return;
+      }
       const profileData: CompanyProfile = {
-        id: 'main', companyName: companyName.trim(), companyAddress: companyAddress.trim(),
-        companyEmail: companyEmail.trim(), companyPhone: companyPhone.trim(),
-        serviceFeeRates: currentServiceFeeRates, // Use the current state of serviceFeeRates
+        ...currentCompanyProfile, // Preserve existing fields like serviceFeeRates
+        companyName: companyName.trim(), 
+        companyAddress: companyAddress.trim(),
+        companyEmail: companyEmail.trim(), 
+        companyPhone: companyPhone.trim(),
       };
-      try { await saveCompanyProfile(profileData);
-        setCurrentCompanyProfile(profileData); // Update local state with saved profile
-        setCurrentServiceFeeRates(profileData.serviceFeeRates || {}); // Ensure service fees are also updated from saved profile
+      try { 
+        const savedProfile = await saveCompanyProfile(profileData);
+        setCurrentCompanyProfile(savedProfile); // Update local state with potentially server-modified data (like timestamps)
+        // Re-set form fields from saved profile to ensure consistency if server modifies data
+        setCompanyName(savedProfile.companyName || '');
+        setCompanyAddress(savedProfile.companyAddress || '');
+        setCompanyEmail(savedProfile.companyEmail || '');
+        setCompanyPhone(savedProfile.companyPhone || '');
         toast({ title: "Success", description: "Company info updated." });
       } catch (error) {
         console.error("Failed to save company info:", error);
@@ -309,136 +308,11 @@ export default function CompanySettingsPage() {
     }
   };
 
-  // Service Fee Management Functions (from quote-config)
-  const handleEditServiceFeeClick = (key: string) => {
-    const serviceToEdit = currentServiceFeeRates[key];
-    if (serviceToEdit) {
-      setEditingServiceKey(key);
-      setNewServiceDisplayDescription(serviceToEdit.displayDescription);
-      setNewServiceUnit(serviceToEdit.unitDescription);
-      setNewServiceBuyRateLocal(String(serviceToEdit.buy));
-      setNewServiceSellRateLocal(String(serviceToEdit.sell));
-      setShowAddServiceForm(true);
-    }
-  };
-  
-  const handleAddOrUpdateServiceFee = () => {
-    let keyToUse: string;
-
-    if (editingServiceKey) {
-        keyToUse = editingServiceKey;
-    } else {
-        if (!newServiceDisplayDescription) {
-            toast({ title: "Missing Fields", description: "Please provide a display description for the service/fee.", variant: "destructive" });
-            return;
-        }
-        keyToUse = newServiceDisplayDescription
-            .trim()
-            .toUpperCase()
-            .replace(/\s+/g, '_') 
-            .replace(/[^A-Z0-9_]/g, ''); 
-
-        if (!keyToUse) {
-             toast({ title: "Invalid Description", description: "Could not generate a valid key from the description. Please use alphanumeric characters.", variant: "destructive" });
-            return;
-        }
-        if (currentServiceFeeRates[keyToUse] && !editingServiceKey) { 
-            toast({ title: "Key Exists", description: `A service/fee with a similar description (key: ${keyToUse}) already exists. Please use a more unique description or edit the existing one.`, variant: "destructive" });
-            return;
-        }
-    }
-
-    if (!newServiceDisplayDescription || !newServiceUnit || !newServiceBuyRateLocal || !newServiceSellRateLocal) {
-        toast({ title: "Missing Fields", description: "Please fill in all fields for the service/fee.", variant: "destructive" });
-        return;
-    }
-    const buyRateNum = parseFloat(newServiceBuyRateLocal);
-    const sellRateNum = parseFloat(newServiceSellRateLocal);
-
-    if (isNaN(buyRateNum) || isNaN(sellRateNum) || buyRateNum < 0 || sellRateNum < 0) {
-        toast({ title: "Invalid Rates", description: "Buy and Sell rates must be valid non-negative numbers.", variant: "destructive" });
-        return;
-    }
-
-    const updatedServiceFeeRates = {
-        ...currentServiceFeeRates,
-        [keyToUse]: { 
-            displayDescription: newServiceDisplayDescription.trim(),
-            buy: buyRateNum, 
-            sell: sellRateNum, 
-            unitDescription: newServiceUnit.trim() 
-        }
-    };
-
-    if (!currentCompanyProfile) { // Changed from companyProfile to currentCompanyProfile
-        toast({ title: "Error", description: "Company profile not loaded.", variant: "destructive"});
-        return;
-    }
-
-    const updatedProfile: CompanyProfile = {
-        ...currentCompanyProfile,
-        serviceFeeRates: updatedServiceFeeRates,
-    };
-    
-    startSavingServiceFeeTransition(async () => { // Changed from startSavingCompanyInfoTransition
-        try {
-            await saveCompanyProfile(updatedProfile);
-            setCurrentServiceFeeRates(updatedServiceFeeRates); 
-            setCurrentCompanyProfile(updatedProfile); // Update the main profile state
-            toast({ title: "Success", description: `Service/Fee ${editingServiceKey ? 'updated' : 'added'} in Firestore.` });
-            handleCancelEditServiceFee();
-        } catch (error) {
-            console.error("Failed to save service/fee rate:", error);
-            toast({ title: "Error Saving Service/Fee", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
-        }
-    });
-  };
-
-  const handleCancelEditServiceFee = () => {
-    setEditingServiceKey(null);
-    setNewServiceDisplayDescription('');
-    setNewServiceUnit('');
-    setNewServiceBuyRateLocal('');
-    setNewServiceSellRateLocal('');
-    setShowAddServiceForm(false);
-  };
-
-  const handleDeleteServiceFee = (keyToDelete: string) => {
-    if (!currentCompanyProfile) {
-        toast({ title: "Error", description: "Company profile not loaded.", variant: "destructive"});
-        return;
-    }
-    
-    const updatedServiceFeeRates = { ...currentServiceFeeRates };
-    delete updatedServiceFeeRates[keyToDelete];
-
-    const updatedProfile: CompanyProfile = {
-        ...currentCompanyProfile,
-        serviceFeeRates: updatedServiceFeeRates,
-    };
-
-    startSavingServiceFeeTransition(async () => { // Changed from startSavingCompanyInfoTransition
-        try {
-            await saveCompanyProfile(updatedProfile);
-            setCurrentServiceFeeRates(updatedServiceFeeRates);
-            setCurrentCompanyProfile(updatedProfile);
-            toast({ title: "Success", description: "Service/Fee deleted from Firestore." });
-            if (editingServiceKey === keyToDelete) {
-              handleCancelEditServiceFee();
-            }
-        } catch (error) {
-            console.error("Failed to delete service/fee rate:", error);
-            toast({ title: "Error Deleting Service/Fee", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
-        }
-    });
-  };
-
-
   return (
     <>
       <PageHeader
         title="Company Settings"
-        description="Manage company information, aircraft fleet, service/fee rates, and company bulletins."
+        description="Manage company information, aircraft fleet, and company bulletins."
         icon={Building2}
       />
       <div className="grid gap-6 md:grid-cols-2">
@@ -581,114 +455,6 @@ export default function CompanySettingsPage() {
         </Card>
       </div>
 
-      {/* Standard Service & Fee Rates Card (Moved from quote-config) */}
-      <Card className="mt-6 shadow-md">
-          <CardHeader>
-             <div className="flex justify-between items-center">
-                <div>
-                    <CardTitle className="flex items-center gap-2"><Percent className="h-5 w-5 text-primary"/> Standard Service &amp; Fee Rates</CardTitle>
-                    <CardDescription>Default buy and sell rates for various services and fees. (Connected to Firestore)</CardDescription>
-                </div>
-                {!showAddServiceForm && (
-                  <Button variant="outline" size="sm" onClick={() => { setEditingServiceKey(null); setShowAddServiceForm(true); setNewServiceDisplayDescription(''); setNewServiceUnit(''); setNewServiceBuyRateLocal(''); setNewServiceSellRateLocal(''); }}>
-                      <PlusCircle className="mr-2 h-4 w-4" /> Add Service/Fee
-                  </Button>
-                )}
-            </div>
-          </CardHeader>
-          <CardContent>
-            {showAddServiceForm && (
-                 <Card className="p-4 mb-4 bg-muted/50 border-dashed">
-                    <CardTitle className="text-lg mb-2">
-                      {editingServiceKey ? `Edit Service/Fee: ${currentServiceFeeRates[editingServiceKey]?.displayDescription || editingServiceKey}` : 'Add New Service/Fee'}
-                    </CardTitle>
-                    <div className="space-y-3">
-                        <div>
-                            <Label htmlFor="newServiceDisplayDescription">Display Description</Label>
-                            <Input id="newServiceDisplayDescription" value={newServiceDisplayDescription} onChange={(e) => setNewServiceDisplayDescription(e.target.value)} placeholder="e.g., International Handling Fee" />
-                            {!editingServiceKey && <p className="text-xs text-muted-foreground">A unique key will be auto-generated from this description.</p>}
-                        </div>
-                        <div>
-                            <Label htmlFor="newServiceUnit">Unit Description</Label>
-                            <Input id="newServiceUnit" value={newServiceUnit} onChange={(e) => setNewServiceUnit(e.target.value)} placeholder="e.g., Per Trip, Per Leg, Per Day" />
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <Label htmlFor="newServiceBuyRateLocal">Buy Rate</Label>
-                                <Input id="newServiceBuyRateLocal" type="number" value={newServiceBuyRateLocal} onChange={(e) => setNewServiceBuyRateLocal(e.target.value)} placeholder="e.g., 200" min="0"/>
-                            </div>
-                            <div>
-                                <Label htmlFor="newServiceSellRateLocal">Sell Rate</Label>
-                                <Input id="newServiceSellRateLocal" type="number" value={newServiceSellRateLocal} onChange={(e) => setNewServiceSellRateLocal(e.target.value)} placeholder="e.g., 250" min="0"/>
-                            </div>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button onClick={handleAddOrUpdateServiceFee} size="sm" disabled={isSavingServiceFee || isLoadingCompanyInfo}>
-                            {isSavingServiceFee ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4"/>}
-                            {editingServiceKey ? 'Update Service/Fee' : 'Save New Service/Fee'}
-                          </Button>
-                          <Button variant="outline" onClick={handleCancelEditServiceFee} size="sm" disabled={isSavingServiceFee}>
-                              <XCircle className="mr-2 h-4 w-4"/>Cancel
-                          </Button>
-                        </div>
-                    </div>
-                 </Card>
-            )}
-            {isLoadingCompanyInfo ? (
-                 <div className="space-y-2 py-4">
-                    <Skeleton className="h-8 w-full" />
-                    <Skeleton className="h-8 w-full" />
-                </div>
-            ) : (
-             <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Service / Fee Description</TableHead>
-                  <TableHead>Unit</TableHead>
-                  <TableHead className="text-right">Default Buy Rate</TableHead>
-                  <TableHead className="text-right">Default Sell Rate</TableHead>
-                  <TableHead className="text-right">Default Margin</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {Object.entries(currentServiceFeeRates).length === 0 && (
-                    <TableRow>
-                        <TableCell colSpan={6} className="text-center text-muted-foreground py-4">No service or fee rates configured yet.</TableCell>
-                    </TableRow>
-                )}
-                {Object.entries(currentServiceFeeRates).map(([key, rates]) => {
-                  const margin = rates.sell - rates.buy;
-                  const marginPercent = rates.buy > 0 && rates.buy !== 0 ? (margin / rates.buy) * 100 : 0;
-                  return (
-                    <TableRow key={key}>
-                      <TableCell className="font-medium">{rates.displayDescription}</TableCell>
-                      <TableCell>{rates.unitDescription}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(rates.buy)}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(rates.sell)}</TableCell>
-                      <TableCell className="text-right">
-                        {formatCurrency(margin)} <span className={margin >= 0 ? 'text-green-600' : 'text-red-600'}>({marginPercent.toFixed(1)}%)</span>
-                      </TableCell>
-                       <TableCell className="text-right">
-                        <Button variant="ghost" size="icon" onClick={() => handleEditServiceFeeClick(key)} className="mr-1 hover:text-primary" disabled={isSavingServiceFee}>
-                            <Edit className="h-4 w-4" />
-                            <span className="sr-only">Edit {rates.displayDescription}</span>
-                        </Button>
-                        <Button variant="ghost" size="icon" onClick={() => handleDeleteServiceFee(key)} className="text-destructive hover:text-destructive" disabled={isSavingServiceFee}>
-                          <Trash2 className="h-4 w-4" />
-                           <span className="sr-only">Delete {rates.displayDescription}</span>
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-            )}
-          </CardContent>
-        </Card>
-
-
       {/* Company Bulletins Management Card */}
       <Card className="mt-6 shadow-md">
         <CardHeader>
@@ -773,3 +539,5 @@ export default function CompanySettingsPage() {
   );
 }
 
+    
+    
