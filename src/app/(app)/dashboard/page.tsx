@@ -7,7 +7,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { List, ListItem } from '@/components/ui/list';
 import { AlertTriangle, Plane, Milestone, FileText, ShieldAlert, Bell, LayoutDashboard, Megaphone, UserCheck, CalendarClock, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
-// Removed Image import
 import { Separator } from '@/components/ui/separator';
 import {
   Table,
@@ -223,7 +222,7 @@ export default function DashboardPage() {
                <div className="flex items-center justify-center py-10"> <Loader2 className="h-6 w-6 animate-spin text-primary" /> <p className="ml-2 text-muted-foreground">Loading trip data...</p> </div>
             ) : dashboardTrips.length === 0 ? ( <p className="text-muted-foreground text-center py-5">No trips to display.</p> ) : (
             <Table>
-              <TableHeader> <TableRow> <TableHead>Trip ID</TableHead> <TableHead>Route</TableHead> <TableHead>Aircraft</TableHead> <TableHead>Status</TableHead> <TableHead>Departure (First Leg)</TableHead> </TableRow> </TableHeader>
+              <TableHeader><TableRow><TableHead>Trip ID</TableHead><TableHead>Route</TableHead><TableHead>Aircraft</TableHead><TableHead>Status</TableHead><TableHead>Departure (First Leg)</TableHead></TableRow></TableHeader>
               <TableBody> {dashboardTrips.map((trip) => ( <TableRow key={trip.id}> <TableCell className="font-medium">{trip.tripId || trip.id}</TableCell> <TableCell>{getRouteDisplay(trip.legs)}</TableCell> <TableCell>{trip.aircraftLabel || trip.aircraftId}</TableCell> <TableCell><Badge variant={getStatusBadgeVariant(trip.status)}>{trip.status}</Badge></TableCell> <TableCell>{formatDate(trip.legs?.[0]?.departureDateTime)}</TableCell> </TableRow> ))} </TableBody>
             </Table>
             )}
@@ -239,7 +238,7 @@ export default function DashboardPage() {
             ) : aircraftList.length === 0 ? ( <p className="text-muted-foreground text-center py-5">No aircraft found in fleet.</p>
             ) : (
                <Table>
-                <TableHeader> <TableRow> <TableHead>Tail Number</TableHead> <TableHead>Model</TableHead> <TableHead>Base</TableHead> <TableHead>Status</TableHead> </TableRow> </TableHeader>
+                <TableHeader><TableRow><TableHead>Tail Number</TableHead><TableHead>Model</TableHead><TableHead>Base</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
                 <TableBody> {aircraftList.map((aircraft) => ( <TableRow key={aircraft.id}> <TableCell className="font-medium">{aircraft.tailNumber}</TableCell> <TableCell>{aircraft.model}</TableCell> <TableCell>{aircraft.baseLocation || 'N/A'}</TableCell> <TableCell> <Badge variant={getStatusBadgeVariant(aircraft.isMaintenanceTracked ? 'Active' : 'Needs Review')}> {aircraft.isMaintenanceTracked ? 'Active' : 'Needs Review'} </Badge> </TableCell> </TableRow> ))} </TableBody>
               </Table>
             )}
