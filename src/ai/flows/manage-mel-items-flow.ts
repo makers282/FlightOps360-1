@@ -114,7 +114,7 @@ const fetchMelItemsForAircraftFlow = ai.defineFlow(
       const q = query(
         melItemsCollectionRef, 
         where("aircraftId", "==", input.aircraftId),
-        orderBy("dateEntered", "desc") // Order by most recently entered
+        orderBy("dateEntered", "desc") // Restored Firestore ordering
       );
       const snapshot = await getDocs(q);
       const melItemsList = snapshot.docs.map(docSnapshot => {
@@ -129,6 +129,7 @@ const fetchMelItemsForAircraftFlow = ai.defineFlow(
           updatedAt: (data.updatedAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
         } as MelItem;
       });
+      // Removed client-side sorting as Firestore will handle it now
       return melItemsList;
     } catch (error) {
       console.error('Error fetching MEL items from Firestore:', error);
