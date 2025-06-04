@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useEffect, useTransition, useCallback, useMemo } from 'react';
@@ -259,7 +260,11 @@ export default function AircraftMaintenanceDetailPage() {
     });
   };
 
-  const handleOpenAddTaskModal = () => { setEditingTaskOriginalId(null); setInitialModalFormData(defaultMaintenanceTaskFormValues); setIsTaskModalOpen(true); };
+  const handleOpenAddTaskModal = () => { 
+    setEditingTaskOriginalId(null); 
+    setInitialModalFormData(defaultMaintenanceTaskFormValues); 
+    setIsTaskModalOpen(true); 
+  };
   const handleOpenEditTaskModal = (taskToEdit: FlowMaintenanceTask) => {
     setEditingTaskOriginalId(taskToEdit.id); 
     const formData: MaintenanceTaskFormData = { itemTitle: taskToEdit.itemTitle, referenceNumber: taskToEdit.referenceNumber || '', partNumber: taskToEdit.partNumber || '', serialNumber: taskToEdit.serialNumber || '', itemType: taskToEdit.itemType, associatedComponent: taskToEdit.associatedComponent || '', details: taskToEdit.details || '', isActive: taskToEdit.isActive, trackType: taskToEdit.trackType, isTripsNotAffected: taskToEdit.isTripsNotAffected || false,  lastCompletedDate: taskToEdit.lastCompletedDate || '',  lastCompletedHours: taskToEdit.lastCompletedHours,  lastCompletedCycles: taskToEdit.lastCompletedCycles,  lastCompletedNotes: taskToEdit.lastCompletedNotes || '',  isHoursDueEnabled: taskToEdit.isHoursDueEnabled || false, hoursDue: taskToEdit.hoursDue, hoursTolerance: taskToEdit.hoursTolerance, alertHoursPrior: taskToEdit.alertHoursPrior, isCyclesDueEnabled: taskToEdit.isCyclesDueEnabled || false, cyclesDue: taskToEdit.cyclesDue, cyclesTolerance: taskToEdit.cyclesTolerance, alertCyclesPrior: taskToEdit.alertCyclesPrior, isDaysDueEnabled: taskToEdit.isDaysDueEnabled || false, daysIntervalType: taskToEdit.daysIntervalType || 'days',  daysDueValue: taskToEdit.daysDueValue || '',  daysTolerance: taskToEdit.daysTolerance, alertDaysPrior: taskToEdit.alertDaysPrior, };
@@ -373,8 +378,8 @@ export default function AircraftMaintenanceDetailPage() {
   };
 
   if (isLoadingAircraft || isLoadingComponentTimes) { return <div className="flex items-center justify-center h-screen"><Loader2 className="h-12 w-12 animate-spin text-primary" /><p className="ml-3 text-lg text-muted-foreground">Loading aircraft details &amp; component times...</p></div>; }
-  if (!tailNumber || !currentAircraft) { return ( <div> <PageHeader title="Aircraft Not Found" icon={Wrench} actions={ <Button asChild variant="outline"> <Link href="/aircraft/currency"><ArrowLeft className="mr-2 h-4 w-4" /> Back to Overview</Link> </Button> } /> <Card> <CardContent className="pt-6"> <p>Aircraft "{tailNumber || 'Unknown'}" not found.</p> </CardContent> </Card> </div> ); }
-  if (!currentAircraft.isMaintenanceTracked) { return ( <div> <PageHeader title={`Data for ${currentAircraft.tailNumber}`} icon={PlaneIcon} actions={ <Button asChild variant="outline"> <Link href="/aircraft/currency"><ArrowLeft className="mr-2 h-4 w-4" /> Back to Overview</Link> </Button> } /> <Card className="mb-6"> <CardHeader><CardTitle>Aircraft Information</CardTitle></CardHeader> <CardContent><p className="text-sm text-muted-foreground">Model: {currentAircraft.model}</p></CardContent> </Card> <Card> <CardContent className="pt-6"> <p>Maintenance tracking not enabled for "{currentAircraft.tailNumber}".</p> </CardContent> </Card> </div> ); }
+  if (!tailNumber || !currentAircraft) { return ( <div> <PageHeader title="Aircraft Not Found" icon={Wrench} actions={ <Button asChild variant="outline"> <Link href="/aircraft/currency"><span><ArrowLeft className="mr-2 h-4 w-4" /> Back to Overview</span></Link> </Button> } /> <Card> <CardContent className="pt-6"> <p>Aircraft "{tailNumber || 'Unknown'}" not found.</p> </CardContent> </Card> </div> ); }
+  if (!currentAircraft.isMaintenanceTracked) { return ( <div> <PageHeader title={`Data for ${currentAircraft.tailNumber}`} icon={PlaneIcon} actions={ <Button asChild variant="outline"> <Link href="/aircraft/currency"><span><ArrowLeft className="mr-2 h-4 w-4" /> Back to Overview</span></Link> </Button> } /> <Card className="mb-6"> <CardHeader><CardTitle>Aircraft Information</CardTitle></CardHeader> <CardContent><p className="text-sm text-muted-foreground">Model: {currentAircraft.model}</p></CardContent> </Card> <Card> <CardContent className="pt-6"> <p>Maintenance tracking not enabled for "{currentAircraft.tailNumber}".</p> </CardContent> </Card> </div> ); }
 
   const pageHeaderTitle = `Maintenance Details for ${currentAircraft.tailNumber}`;
   const pageHeaderDescription = `Tracked items &amp; component status for ${currentAircraft.model} (${currentAircraft.tailNumber}). Component times are loaded from Firestore.`;
@@ -387,24 +392,29 @@ export default function AircraftMaintenanceDetailPage() {
         icon={Wrench} 
         actions={ 
           <div className="flex gap-2"> 
-            <Button asChild variant="outline"> <Link href="/aircraft/currency"><ArrowLeft className="mr-2 h-4 w-4" /> Back to Overview</Link> </Button> 
+            <Button asChild variant="outline"> 
+              <Link href="/aircraft/currency">
+                <span><ArrowLeft className="mr-2 h-4 w-4" /> Back to Overview</span>
+              </Link> 
+            </Button> 
             <Button onClick={handleGenerateWorkOrder} disabled={selectedTaskIds.length === 0 || isGeneratingReport}> {isGeneratingReport ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Printer className="mr-2 h-4 w-4" />} Generate Work Order ({selectedTaskIds.length}) </Button> 
             {/* Temporarily simplified "Add New Task" button */}
             <Button onClick={handleOpenAddTaskModal}><PlusCircle className="mr-2 h-4 w-4" /> Add New Task (Test)</Button>
-            <Dialog open={isTaskModalOpen} onOpenChange={setIsTaskModalOpen}>
-              {/* DialogTrigger is removed from here, the button above will control isTaskModalOpen */}
-              <AddMaintenanceTaskDialogContent 
-                aircraft={currentAircraft} 
-                onSave={handleSaveTask} 
-                onDelete={handleDeleteTask} 
-                initialData={initialModalFormData} 
-                isEditing={!!editingTaskOriginalId} 
-                currentTaskId={editingTaskOriginalId} 
-              />
-            </Dialog>
           </div> 
         } 
       />
+      <Dialog open={isTaskModalOpen} onOpenChange={setIsTaskModalOpen}>
+        {/* The trigger is now the button above, so no DialogTrigger needed here */}
+        <AddMaintenanceTaskDialogContent 
+            aircraft={currentAircraft} 
+            onSave={handleSaveTask} 
+            onDelete={handleDeleteTask} 
+            initialData={initialModalFormData} 
+            isEditing={!!editingTaskOriginalId} 
+            currentTaskId={editingTaskOriginalId} 
+        />
+      </Dialog>
+
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         <Card className="shadow-lg lg:col-span-2">
            <CardHeader className="flex flex-row items-start justify-between"> <div className="flex items-center gap-2"><PlaneIcon className="h-6 w-6 text-primary" /><CardTitle>Current Hours & Cycles</CardTitle></div> {!isEditingComponentTimes ? ( <Button variant="outline" size="icon" onClick={() => setIsEditingComponentTimes(true)} disabled={isSavingComponentTimes}> <Edit className="h-4 w-4" /> <span className="sr-only">Edit Component Times</span> </Button> ) : ( <div className="flex gap-2"> <Button variant="ghost" size="icon" onClick={handleCancelEditComponentTimes} disabled={isSavingComponentTimes}> <XCircle className="h-4 w-4" /><span className="sr-only">Cancel Edit</span> </Button> <Button size="icon" onClick={handleSaveComponentTimes} disabled={isSavingComponentTimes}> {isSavingComponentTimes ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} <span className="sr-only">Save Component Times</span> </Button> </div> )} </CardHeader>
@@ -423,9 +433,9 @@ export default function AircraftMaintenanceDetailPage() {
           <div className="mt-4 flex flex-col sm:flex-row gap-2 items-center"> <div className="relative flex-grow w-full sm:w-auto"> <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /> <Input type="search" placeholder="Search tasks (title, ref, type, component)..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-8 w-full" /> {searchTerm && ( <Button variant="ghost" size="icon" className="absolute right-1 top-1 h-7 w-7" onClick={() => setSearchTerm('')}> <XCircleIcon className="h-4 w-4"/> </Button> )} </div> <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as any)}> <SelectTrigger className="w-full sm:w-[180px]"> <SelectValue placeholder="Filter by status" /> </SelectTrigger> <SelectContent> <SelectItem value="all">All Statuses</SelectItem> <SelectItem value="active">Active Items</SelectItem> <SelectItem value="inactive">Inactive Items</SelectItem> <SelectItem value="dueSoon">Due Soon (Active)</SelectItem> <SelectItem value="overdue">Overdue (Active)</SelectItem> <SelectItem value="gracePeriod">Grace Period (Active)</SelectItem> </SelectContent> </Select> <Select value={componentFilter} onValueChange={setComponentFilter}> <SelectTrigger className="w-full sm:w-[200px]"> <Filter className="h-4 w-4 mr-2 opacity-50" /> <SelectValue placeholder="Filter by component" /> </SelectTrigger> <SelectContent> <SelectItem value="all">All Components</SelectItem> {availableComponentsForFilter.map(comp => ( <SelectItem key={comp} value={comp}>{comp}</SelectItem> ))} </SelectContent> </Select> </div>
         </CardHeader>
         <CardContent> {isLoadingTasks ? ( <div className="flex items-center justify-center py-10"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2 text-muted-foreground">Loading maintenance tasks...</p></div> ) : ( <Table> <TableHeader> <TableRow> <TableHead className="w-10"> <Checkbox checked={selectedTaskIds.length === displayedTasks.length && displayedTasks.length > 0} onCheckedChange={(checked) => handleSelectAllTasks(Boolean(checked))} aria-label="Select all tasks" disabled={displayedTasks.length === 0} /> </TableHead> <TableHead>Ref #</TableHead> <TableHead> <Button variant="ghost" size="sm" onClick={() => requestSort('itemTitle')} className="px-1 -ml-2"> Title {getSortIcon('itemTitle')} </Button> </TableHead> <TableHead>Type</TableHead> <TableHead>Component</TableHead> <TableHead>Frequency</TableHead> <TableHead>Last Done</TableHead> <TableHead>Due At</TableHead> <TableHead> <Button variant="ghost" size="sm" onClick={() => requestSort('toGoNumeric')} className="px-1 -ml-2"> To Go {getSortIcon('toGoNumeric')} </Button> </TableHead> <TableHead className="text-center">Status</TableHead> <TableHead className="text-right">Actions</TableHead> </TableRow> </TableHeader> <TableBody> {displayedTasks.length === 0 && ( <TableRow> <TableCell colSpan={11} className="text-center text-muted-foreground py-10"> No maintenance tasks match your criteria. 
-          <Dialog open={isTaskModalOpen && initialModalFormData === defaultMaintenanceTaskFormValues } onOpenChange={setIsTaskModalOpen}> {/* Only trigger if explicitly for this button */}
+          <Dialog open={isTaskModalOpen && initialModalFormData === defaultMaintenanceTaskFormValues} onOpenChange={(open) => { if (open) handleOpenAddTaskModal(); else setIsTaskModalOpen(false); }}>
             <DialogTrigger asChild>
-              <Button variant="link" className="p-0 ml-1" onClick={handleOpenAddTaskModal}>Add one now?</Button>
+              <Button variant="link" className="p-0 ml-1">Add one now?</Button>
             </DialogTrigger>
             <AddMaintenanceTaskDialogContent aircraft={currentAircraft} onSave={handleSaveTask} onDelete={handleDeleteTask} initialData={initialModalFormData} isEditing={!!editingTaskOriginalId} currentTaskId={editingTaskOriginalId} />
           </Dialog>
@@ -462,7 +472,10 @@ export default function AircraftMaintenanceDetailPage() {
               <TableBody>
                 {aircraftDiscrepancies.map((disc) => (
                   <TableRow key={disc.id} className={disc.status !== "Closed" ? "font-semibold" : "opacity-70"}>
-                    <TableCell className="text-xs">{disc.dateDiscovered && isValid(parseISO(disc.dateDiscovered)) ? format(parseISO(disc.dateDiscovered), 'MM/dd/yy') : '-'}{disc.timeDiscovered ? ` ${disc.timeDiscovered}` : ''}</TableCell>
+                    <TableCell className="text-xs">
+                      {disc.dateDiscovered && isValid(parseISO(disc.dateDiscovered)) ? format(parseISO(disc.dateDiscovered), 'MM/dd/yy') : '-'}
+                      {disc.timeDiscovered ? ` ${disc.timeDiscovered}` : ''}
+                    </TableCell>
                     <TableCell className="max-w-xs truncate" title={disc.description}>{disc.description}</TableCell>
                     <TableCell><Badge variant={disc.status === 'Open' ? 'destructive' : (disc.status === 'Deferred' ? 'secondary' : 'default')}>{disc.status}</Badge></TableCell>
                     <TableCell className="text-xs">{disc.discoveredBy || '-'}</TableCell>
@@ -510,3 +523,4 @@ export default function AircraftMaintenanceDetailPage() {
   );
 }
     
+
