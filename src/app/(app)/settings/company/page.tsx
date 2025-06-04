@@ -187,7 +187,10 @@ export default function CompanySettingsPage() {
       try { await saveFleetAircraft(aircraftData); await loadFleetData(); 
         toast({ title: "Success", description: `Aircraft ${editingAircraftId ? 'updated' : 'added'}.` });
         handleCancelEditAircraft();
-      } catch (error) { /* ... error handling ... */ }
+      } catch (error) { /* ... error handling ... */ 
+        console.error("Failed to save aircraft:", error);
+        toast({ title: "Error", description: `Could not save aircraft. ${error instanceof Error ? error.message : ''}`, variant: "destructive"});
+      }
     });
   }
 
@@ -197,7 +200,10 @@ export default function CompanySettingsPage() {
       try { await deleteFleetAircraft({ aircraftId: aircraftIdToDelete }); await loadFleetData();
         toast({ title: "Success", description: "Aircraft deleted." });
         if (editingAircraftId === aircraftIdToDelete) handleCancelEditAircraft();
-      } catch (error) { /* ... error handling ... */ }
+      } catch (error) { /* ... error handling ... */ 
+          console.error("Failed to delete aircraft:", error);
+          toast({ title: "Error", description: `Could not delete aircraft. ${error instanceof Error ? error.message : ''}`, variant: "destructive"});
+      }
     });
   }
 
@@ -211,7 +217,10 @@ export default function CompanySettingsPage() {
       try { await saveCompanyProfile(profileData); 
         setCurrentCompanyProfile(prev => ({...prev, ...profileData} as CompanyProfile));
         toast({ title: "Success", description: "Company info updated." });
-      } catch (error) { /* ... error handling ... */ }
+      } catch (error) { /* ... error handling ... */ 
+        console.error("Failed to save company info:", error);
+        toast({ title: "Error", description: `Could not save company info. ${error instanceof Error ? error.message : ''}`, variant: "destructive"});
+      }
     });
   }
   const handleEngineDetailsSave = (updatedEngines: EngineDetail[]) => { setCurrentEngineDetailsForForm(updatedEngines); };
@@ -415,7 +424,7 @@ export default function CompanySettingsPage() {
               <>
               <Alert className="mb-4"> <Settings2 className="h-4 w-4" /> <AlertDescription className="text-xs"> Aircraft year and internal notes can be managed on the <Button variant="link" size="sm" className="p-0 h-auto ml-1 text-xs" asChild><Link href="/aircraft/currency">Aircraft Maintenance Currency page</Link></Button>. </AlertDescription> </Alert>
               <Table>
-                <TableHeader> <TableRow> <TableHead>Tail Number</TableHead> <TableHead>Model</TableHead> <TableHead>Maintenance Tracked</TableHead> <TableHead className="text-right">Actions</TableHead> </TableRow> </TableHeader>
+                <TableHeader><TableRow><TableHead>Tail Number</TableHead><TableHead>Model</TableHead><TableHead>Maintenance Tracked</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
                 <TableBody>
                   {fleet.length === 0 && !isLoadingFleet && ( <TableRow> <TableCell colSpan={4} className="text-center text-muted-foreground py-4">No aircraft in fleet.</TableCell> </TableRow> )}
                   {fleet.map((aircraft) => ( <TableRow key={aircraft.id}> <TableCell className="font-medium">{aircraft.tailNumber}</TableCell> <TableCell>{aircraft.model}</TableCell> <TableCell> {aircraft.isMaintenanceTracked ? <CheckSquare className="h-5 w-5 text-green-500" /> : <Square className="h-5 w-5 text-muted-foreground" />} </TableCell> <TableCell className="text-right"> <Button variant="ghost" size="icon" onClick={() => handleEditAircraftClick(aircraft)} className="mr-1 hover:text-primary" disabled={isSavingAircraft || isDeletingAircraft}> <Edit className="h-4 w-4" /> </Button> <Button variant="ghost" size="icon" onClick={() => handleDeleteAircraft(aircraft.id)} className="text-destructive hover:text-destructive" disabled={isSavingAircraft || (isDeletingAircraft && editingAircraftId === aircraft.id) }> {isDeletingAircraft && editingAircraftId === aircraft.id ? <Loader2 className="h-4 w-4 animate-spin"/> : <Trash2 className="h-4 w-4" />} </Button> </TableCell> </TableRow> ))}
