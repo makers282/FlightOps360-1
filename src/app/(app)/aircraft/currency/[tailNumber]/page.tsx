@@ -259,38 +259,43 @@ export default function AircraftMaintenanceDetailPage() {
     });
   };
 
-  const handleOpenAddTaskModal = () => { 
-    setEditingTaskOriginalId(null); 
-    setInitialModalFormData(defaultMaintenanceTaskFormValues); 
-    setIsTaskModalOpen(true); 
-  };
-  const handleOpenEditTaskModal = (taskToEdit: FlowMaintenanceTask) => {
-    setEditingTaskOriginalId(taskToEdit.id); 
-    const formData: MaintenanceTaskFormData = { itemTitle: taskToEdit.itemTitle, referenceNumber: taskToEdit.referenceNumber || '', partNumber: taskToEdit.partNumber || '', serialNumber: taskToEdit.serialNumber || '', itemType: taskToEdit.itemType, associatedComponent: taskToEdit.associatedComponent || '', details: taskToEdit.details || '', isActive: taskToEdit.isActive, trackType: taskToEdit.trackType, isTripsNotAffected: taskToEdit.isTripsNotAffected || false,  lastCompletedDate: taskToEdit.lastCompletedDate || '',  lastCompletedHours: taskToEdit.lastCompletedHours,  lastCompletedCycles: taskToEdit.lastCompletedCycles,  lastCompletedNotes: taskToEdit.lastCompletedNotes || '',  isHoursDueEnabled: taskToEdit.isHoursDueEnabled || false, hoursDue: taskToEdit.hoursDue, hoursTolerance: taskToEdit.hoursTolerance, alertHoursPrior: taskToEdit.alertHoursPrior, isCyclesDueEnabled: taskToEdit.isCyclesDueEnabled || false, cyclesDue: taskToEdit.cyclesDue, cyclesTolerance: taskToEdit.cyclesTolerance, alertCyclesPrior: taskToEdit.alertCyclesPrior, isDaysDueEnabled: taskToEdit.isDaysDueEnabled || false, daysIntervalType: taskToEdit.daysIntervalType || 'days',  daysDueValue: taskToEdit.daysDueValue || '',  daysTolerance: taskToEdit.daysTolerance, alertDaysPrior: taskToEdit.alertDaysPrior, };
-    setInitialModalFormData(formData); setIsTaskModalOpen(true);
-  };
-  const handleSaveTask = async (taskFormData: MaintenanceTaskFormData) => {
+  const handleOpenAddTaskModal = useCallback(() => {
+    setEditingTaskOriginalId(null);
+    setInitialModalFormData(defaultMaintenanceTaskFormValues);
+    setIsTaskModalOpen(true);
+  }, [setEditingTaskOriginalId, setInitialModalFormData, setIsTaskModalOpen]);
+
+  const handleOpenEditTaskModal = useCallback((taskToEdit: FlowMaintenanceTask) => {
+    setEditingTaskOriginalId(taskToEdit.id);
+    const formData: MaintenanceTaskFormData = { itemTitle: taskToEdit.itemTitle, referenceNumber: taskToEdit.referenceNumber || '', partNumber: taskToEdit.partNumber || '', serialNumber: taskToEdit.serialNumber || '', itemType: taskToEdit.itemType, associatedComponent: taskToEdit.associatedComponent || '', details: taskToEdit.details || '', isActive: taskToEdit.isActive, trackType: taskToEdit.trackType, isTripsNotAffected: taskToEdit.isTripsNotAffected || false, lastCompletedDate: taskToEdit.lastCompletedDate || '', lastCompletedHours: taskToEdit.lastCompletedHours, lastCompletedCycles: taskToEdit.lastCompletedCycles, lastCompletedNotes: taskToEdit.lastCompletedNotes || '', isHoursDueEnabled: taskToEdit.isHoursDueEnabled || false, hoursDue: taskToEdit.hoursDue, hoursTolerance: taskToEdit.hoursTolerance, alertHoursPrior: taskToEdit.alertHoursPrior, isCyclesDueEnabled: taskToEdit.isCyclesDueEnabled || false, cyclesDue: taskToEdit.cyclesDue, cyclesTolerance: taskToEdit.cyclesTolerance, alertCyclesPrior: taskToEdit.alertCyclesPrior, isDaysDueEnabled: taskToEdit.isDaysDueEnabled || false, daysIntervalType: taskToEdit.daysIntervalType || 'days', daysDueValue: taskToEdit.daysDueValue || '', daysTolerance: taskToEdit.daysTolerance, alertDaysPrior: taskToEdit.alertDaysPrior, };
+    setInitialModalFormData(formData);
+    setIsTaskModalOpen(true);
+  }, [setEditingTaskOriginalId, setInitialModalFormData, setIsTaskModalOpen]);
+
+  const handleSaveTask = useCallback(async (taskFormData: MaintenanceTaskFormData) => {
     if (!currentAircraft) return;
-    const taskToSave: FlowMaintenanceTask = { ...taskFormData, id: editingTaskOriginalId || `MX-${Date.now()}-${Math.random().toString(16).slice(2)}`,  aircraftId: currentAircraft.id,  };
-    try { await saveMaintenanceTask(taskToSave); toast({ title: editingTaskOriginalId ? "Task Updated" : "New Task Added", description: `Task "${taskToSave.itemTitle}" for ${currentAircraft.tailNumber} saved to Firestore.`, }); await loadMaintenanceTasks(currentAircraft.id); setIsTaskModalOpen(false); setEditingTaskOriginalId(null); setInitialModalFormData(null); } 
+    const taskToSave: FlowMaintenanceTask = { ...taskFormData, id: editingTaskOriginalId || `MX-${Date.now()}-${Math.random().toString(16).slice(2)}`, aircraftId: currentAircraft.id, };
+    try { await saveMaintenanceTask(taskToSave); toast({ title: editingTaskOriginalId ? "Task Updated" : "New Task Added", description: `Task "${taskToSave.itemTitle}" for ${currentAircraft.tailNumber} saved to Firestore.`, }); await loadMaintenanceTasks(currentAircraft.id); setIsTaskModalOpen(false); setEditingTaskOriginalId(null); setInitialModalFormData(null); }
     catch (error) { console.error("Failed to save task:", error); toast({ title: "Error Saving Task", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" }); }
-  };
-  const handleDeleteTask = async (taskId: string) => {
-    if (!currentAircraft) return; 
-    try { await deleteMaintenanceTask({ taskId }); toast({ title: "Task Deleted", description: `Task ID ${taskId} removed from Firestore.` }); await loadMaintenanceTasks(currentAircraft.id); setIsTaskModalOpen(false); } 
+  }, [currentAircraft, editingTaskOriginalId, toast, loadMaintenanceTasks, setIsTaskModalOpen, setEditingTaskOriginalId, setInitialModalFormData]);
+
+  const handleDeleteTask = useCallback(async (taskId: string) => {
+    if (!currentAircraft) return;
+    try { await deleteMaintenanceTask({ taskId }); toast({ title: "Task Deleted", description: `Task ID ${taskId} removed from Firestore.` }); await loadMaintenanceTasks(currentAircraft.id); setIsTaskModalOpen(false); }
     catch (error) { console.error("Failed to delete task:", error); toast({ title: "Error Deleting Task", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" }); }
-  };
+  }, [currentAircraft, toast, loadMaintenanceTasks, setIsTaskModalOpen]);
 
   const handleOpenAddDiscrepancyModal = () => {
     setEditingDiscrepancyId(null); 
     setInitialDiscrepancyModalData(null);
     setIsDiscrepancyModalOpen(true); 
   };
-  const handleOpenEditDiscrepancyModal = (discrepancy: AircraftDiscrepancy) => {
+  const handleOpenEditDiscrepancyModal = useCallback((discrepancy: AircraftDiscrepancy) => {
     setEditingDiscrepancyId(discrepancy.id);
     setInitialDiscrepancyModalData(discrepancy);
     setIsDiscrepancyModalOpen(true);
-  };
+  }, [setEditingDiscrepancyId, setInitialDiscrepancyModalData, setIsDiscrepancyModalOpen]);
+
   const handleSaveDiscrepancy = async (discrepancyFormData: SaveAircraftDiscrepancyInput, originalId?: string) => {
     if (!currentAircraft) return;
     startSavingDiscrepancyTransition(async () => {
@@ -315,16 +320,16 @@ export default function AircraftMaintenanceDetailPage() {
     });
   };
 
-
-  const formatTaskFrequency = (task: FlowMaintenanceTask): string => {
+  const formatTaskFrequency = useCallback((task: FlowMaintenanceTask): string => {
     if (task.trackType === "Dont Alert") return "Not Tracked"; if (task.trackType === "One Time") return "One Time";
     const frequencies = [];
     if (task.isHoursDueEnabled && task.hoursDue) { frequencies.push(`${task.hoursDue.toLocaleString()} hrs`); }
     if (task.isCyclesDueEnabled && task.cyclesDue) { frequencies.push(`${task.cyclesDue.toLocaleString()} cyc`); }
     if (task.isDaysDueEnabled && task.daysDueValue) { const numVal = Number(task.daysDueValue); let unit = ''; switch(task.daysIntervalType) { case 'days': unit = 'days'; break; case 'months_specific_day': case 'months_eom': unit = 'months'; break; case 'years_specific_day': unit = 'years'; break; default: unit = task.daysIntervalType || 'days'; } frequencies.push(`${numVal} ${unit}`); }
     return frequencies.length > 0 ? frequencies.join(' / ') : 'N/A';
-  };
-  const getReleaseStatus = (toGo: { text: string; numeric: number; unit: 'days' | 'hrs' | 'cycles' | 'N/A'; isOverdue: boolean }, task: DisplayMaintenanceItem ): { icon: JSX.Element; colorClass: string; label: string } => {
+  }, []);
+
+  const getReleaseStatus = useCallback((toGo: { text: string; numeric: number; unit: 'days' | 'hrs' | 'cycles' | 'N/A'; isOverdue: boolean }, task: DisplayMaintenanceItem ): { icon: JSX.Element; colorClass: string; label: string } => {
     if (toGo.text.startsWith('N/A (No time for') || toGo.text.startsWith('N/A (No cycles for') || toGo.text.startsWith('N/A (Comp. data missing')) { return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-orange-500', label: 'Missing Comp. Time' }; }
     if (toGo.isOverdue) { let withinGrace = false; const numericOverdueAmount = Math.abs(toGo.numeric); if (toGo.unit === 'days' && typeof task.daysTolerance === 'number' && numericOverdueAmount <= task.daysTolerance) { withinGrace = true; } else if (toGo.unit === 'hrs' && typeof task.hoursTolerance === 'number' && numericOverdueAmount <= task.hoursTolerance) { withinGrace = true; } else if (toGo.unit === 'cycles' && typeof task.cyclesTolerance === 'number' && numericOverdueAmount <= task.cyclesTolerance) { withinGrace = true; } if (withinGrace) { return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-yellow-600 dark:text-yellow-500', label: 'Grace Period' }; } return { icon: <XCircleIcon className="h-5 w-5" />, colorClass: 'text-red-500 dark:text-red-400', label: 'Overdue' }; }
     const daysAlertThreshold = task.alertDaysPrior ?? 30; const hoursAlertThreshold = task.alertHoursPrior ?? 25; const cyclesAlertThreshold = task.alertCyclesPrior ?? 50;
@@ -333,7 +338,7 @@ export default function AircraftMaintenanceDetailPage() {
     if (toGo.unit === 'cycles' && toGo.numeric < cyclesAlertThreshold) return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-yellow-500 dark:text-yellow-400', label: 'Due Soon' };
     if (toGo.text === 'N/A (Not Date/Hr/Cycle)' || toGo.text === 'Invalid Date') return { icon: <InfoIcon className="h-5 w-5" />, colorClass: 'text-gray-400', label: 'Check Due Info' };
     return { icon: <CheckCircle2 className="h-5 w-5" />, colorClass: 'text-green-500 dark:text-green-400', label: 'OK' };
-  };
+  }, []);
 
   const availableComponentsForFilter = useMemo(() => { const uniqueComponents = new Set<string>(); maintenanceTasks.forEach(task => { if (task.associatedComponent && task.associatedComponent.trim() !== "") { uniqueComponents.add(task.associatedComponent.trim()); } else { uniqueComponents.add("Airframe"); } }); return Array.from(uniqueComponents).sort(); }, [maintenanceTasks]);
   
@@ -344,18 +349,22 @@ export default function AircraftMaintenanceDetailPage() {
     if (componentFilter !== 'all') { filtered = filtered.filter(task => (task.associatedComponent || "Airframe") === componentFilter); }
     if (sortConfig !== null) { filtered.sort((a, b) => { let aValue: string | number | undefined; let bValue: string | number | undefined; if (sortConfig.key === 'toGoNumeric') { aValue = a.toGoData?.numeric; bValue = b.toGoData?.numeric; } else { aValue = a[sortConfig.key as keyof DisplayMaintenanceItem] as string | number | undefined; bValue = b[sortConfig.key as keyof DisplayMaintenanceItem] as string | number | undefined; } if (aValue === undefined && bValue === undefined) return 0; if (aValue === undefined) return sortConfig.direction === 'ascending' ? 1 : -1; if (bValue === undefined) return sortConfig.direction === 'ascending' ? -1 : 1; if (typeof aValue === 'string' && typeof bValue === 'string') { const comparison = aValue.toLowerCase().localeCompare(bValue.toLowerCase()); return sortConfig.direction === 'ascending' ? comparison : -comparison; } if (typeof aValue === 'number' && typeof bValue === 'number') { return sortConfig.direction === 'ascending' ? aValue - bValue : bValue - aValue; } return 0; }); }
     return filtered;
-  }, [maintenanceTasks, searchTerm, statusFilter, componentFilter, sortConfig, calculateDisplayFields, editableComponentTimes, isLoadingComponentTimes]);
+  }, [maintenanceTasks, searchTerm, statusFilter, componentFilter, sortConfig, calculateDisplayFields, editableComponentTimes, isLoadingComponentTimes, getReleaseStatus]);
   
+  const handleSelectTask = useCallback((taskId: string, checked: boolean) => {
+    setSelectedTaskIds(prev => checked ? [...prev, taskId] : prev.filter(id => id !== taskId) );
+  }, [setSelectedTaskIds]);
+
   const tableBodyContent = useMemo(() => {
     if (displayedTasks.length === 0) {
-      return (<TableRow><TableCell colSpan={11} className="text-center text-muted-foreground py-10"><div>No maintenance tasks match your criteria.<Dialog open={isTaskModalOpen && initialModalFormData !== null && initialModalFormData.itemTitle === '' && editingTaskOriginalId === null} onOpenChange={(open) => { if (open) handleOpenAddTaskModal(); else setIsTaskModalOpen(false);}}><DialogTrigger asChild><Button variant="link" className="p-0 ml-1">Add one now?</Button></DialogTrigger><AddMaintenanceTaskDialogContent aircraft={currentAircraft} onSave={handleSaveTask} onDelete={handleDeleteTask} initialData={initialModalFormData} isEditing={!!editingTaskOriginalId} currentTaskId={editingTaskOriginalId} /></Dialog></div></TableCell></TableRow>);
+      return (<TableRow><TableCell colSpan={11} className="text-center text-muted-foreground py-10"><div>No maintenance tasks match your criteria.<Button variant="link" className="p-0 ml-1" onClick={handleOpenAddTaskModal}>Add one now?</Button></div></TableCell></TableRow>);
     }
     return displayedTasks.map((item) => { const status = getReleaseStatus(item.toGoData!, item); const frequency = formatTaskFrequency(item); let dueAtDisplay = "N/A"; if (item.dueAtDate && isValid(parse(item.dueAtDate, 'yyyy-MM-dd', new Date()))) { try { dueAtDisplay = format(parse(item.dueAtDate, 'yyyy-MM-dd', new Date()), 'MM/dd/yy'); } catch {} } else if (item.dueAtHours !== undefined) { dueAtDisplay = `${item.dueAtHours.toLocaleString()} hrs`; } else if (item.dueAtCycles !== undefined) { dueAtDisplay = `${item.dueAtCycles.toLocaleString()} cyc`; } let lastDoneDisplay = "N/A"; if (item.lastCompletedDate && isValid(parseISO(item.lastCompletedDate))) { try { lastDoneDisplay = format(parseISO(item.lastCompletedDate), 'MM/dd/yy'); } catch {} } else if (item.lastCompletedHours !== undefined) { lastDoneDisplay = `${item.lastCompletedHours.toLocaleString()} hrs`; } else if (item.lastCompletedCycles !== undefined) { lastDoneDisplay = `${item.lastCompletedCycles.toLocaleString()} cyc`; } return ( <TableRow key={item.id} className={item.isActive ? '' : 'opacity-50 bg-muted/30 hover:bg-muted/40'} data-state={selectedTaskIds.includes(item.id) ? "selected" : ""}><TableCell><Checkbox checked={selectedTaskIds.includes(item.id)} onCheckedChange={(checked) => handleSelectTask(item.id, Boolean(checked))} aria-label={`Select task ${item.itemTitle}`} /></TableCell><TableCell className="text-xs text-muted-foreground">{item.referenceNumber || '-'}</TableCell><TableCell className="font-medium">{item.itemTitle}{!item.isActive && <Badge variant="outline" className="ml-2 text-xs">Inactive</Badge>}</TableCell><TableCell className="text-xs">{item.itemType}</TableCell><TableCell className="text-xs">{item.associatedComponent || 'Airframe'}</TableCell><TableCell className="text-xs">{frequency}</TableCell><TableCell className="text-xs">{lastDoneDisplay}</TableCell><TableCell className="text-xs">{dueAtDisplay}</TableCell><TableCell className={`font-semibold text-xs ${item.toGoData?.isOverdue ? (status.label === 'Grace Period' ? 'text-yellow-600' : 'text-red-600') : (item.toGoData?.unit === 'days' && item.toGoData?.numeric < (item.alertDaysPrior ?? 30)) || (item.toGoData?.unit === 'hrs' && item.toGoData?.numeric < (item.alertHoursPrior ?? 25)) || (item.toGoData?.unit === 'cycles' && item.toGoData?.numeric < (item.alertCyclesPrior ?? 50)) ? 'text-yellow-600' : 'text-green-600'}`}>{item.toGoData?.text}</TableCell><TableCell className="text-center"><div className={`flex flex-col items-center justify-center ${status.colorClass}`}>{status.icon}<span className="text-xs mt-1">{status.label}</span></div></TableCell><TableCell className="text-right"><Button variant="ghost" size="icon" onClick={() => handleOpenEditTaskModal(item)}><Edit3 className="h-4 w-4" /></Button></TableCell></TableRow> ); });
-  }, [displayedTasks, isTaskModalOpen, initialModalFormData, editingTaskOriginalId, currentAircraft, handleOpenAddTaskModal, handleSaveTask, handleDeleteTask, selectedTaskIds, getReleaseStatus, formatTaskFrequency, handleSelectTask, handleOpenEditTaskModal]);
+  }, [displayedTasks, handleOpenAddTaskModal, selectedTaskIds, getReleaseStatus, formatTaskFrequency, handleSelectTask, handleOpenEditTaskModal]);
 
   const requestSort = (key: SortKey) => { let direction: SortDirection = 'ascending'; if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') { direction = 'descending'; } setSortConfig({ key, direction }); };
   const getSortIcon = (key: SortKey) => { if (!sortConfig || sortConfig.key !== key) { return <ArrowUpDown className="ml-2 h-3 w-3 opacity-50" />; } return sortConfig.direction === 'ascending' ? <ArrowUp className="ml-2 h-3 w-3" /> : <ArrowDown className="ml-2 h-3 w-3" />; };
-  const handleSelectTask = (taskId: string, checked: boolean) => { setSelectedTaskIds(prev => checked ? [...prev, taskId] : prev.filter(id => id !== taskId) ); };
+  
   const handleSelectAllTasks = (checked: boolean) => { if (checked) { setSelectedTaskIds(displayedTasks.map(task => task.id)); } else { setSelectedTaskIds([]); } };
   const generateWorkOrderHtml = ( tasksToReport: DisplayMaintenanceItem[], aircraft: FleetAircraft, componentTimes: Array<{ componentName: string; currentTime: number; currentCycles: number }>, companyProfile: CompanyProfile | null ): string => {
     const companyName = companyProfile?.companyName || "FlightOps360"; const companyAddress = companyProfile?.companyAddress || ""; const companyContact = [companyProfile?.companyEmail, companyProfile?.companyPhone].filter(Boolean).join(' | ');
@@ -390,7 +399,6 @@ export default function AircraftMaintenanceDetailPage() {
           <div className="flex gap-2"> 
             <Button asChild variant="outline"><span><Link href="/aircraft/currency"><ArrowLeft className="mr-2 h-4 w-4" /> Back to Overview</Link></span></Button> 
             <Button onClick={handleGenerateWorkOrder} disabled={selectedTaskIds.length === 0 || isGeneratingReport}> {isGeneratingReport ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Printer className="mr-2 h-4 w-4" />} Generate Work Order ({selectedTaskIds.length}) </Button> 
-            {/* Temporarily simplified "Add New Task" button */}
             <Button onClick={handleOpenAddTaskModal}><PlusCircle className="mr-2 h-4 w-4" /> Add New Task</Button>
           </div> 
         } 
@@ -507,9 +515,5 @@ export default function AircraftMaintenanceDetailPage() {
     </div>
   );
 }
-    
-
-
-    
 
     
