@@ -138,22 +138,15 @@ const maintenanceTaskSchema = z.object({
 
 export type MaintenanceTaskFormData = z.infer<typeof maintenanceTaskSchema>;
 
-interface AddMaintenanceTaskDialogContentProps { // Renamed from AddMaintenanceTaskModalProps
+interface AddMaintenanceTaskDialogContentProps {
   aircraft: FleetAircraft | null;
   onSave: (data: MaintenanceTaskFormData) => Promise<void>; 
   onDelete: (taskId: string) => Promise<void>; 
-  // Removed children, isOpen, setIsOpen as they are handled by parent Dialog
   initialData?: Partial<MaintenanceTaskFormData> | null; 
   isEditing?: boolean;
   currentTaskId?: string | null; 
-  // Adding setIsOpen prop back just for the DialogClose button in the footer of DialogContent
-  // This is a common pattern if the modal content itself needs to trigger a close.
-  // Alternatively, the save/delete could also call a prop function from parent that then sets parent's open state.
-  // For now, let's assume the `DialogClose` inside `DialogFooter` works without explicit setIsOpen.
-  // If DialogClose needs explicit control, we might need `onCloseRequest?: () => void;`
 }
 
-// Renamed from AddMaintenanceTaskModal
 export function AddMaintenanceTaskDialogContent({ 
   aircraft, 
   onSave, 
@@ -184,7 +177,6 @@ export function AddMaintenanceTaskDialogContent({
 
 
   useEffect(() => {
-    // Reset form when initialData changes (e.g., when modal is re-opened for edit/add)
     form.reset(initialData ? { ...defaultMaintenanceTaskFormValues, ...initialData } : defaultMaintenanceTaskFormValues);
   }, [initialData, form]);
 
@@ -211,7 +203,6 @@ export function AddMaintenanceTaskDialogContent({
     };
     await onSave(cleanedData); 
     setIsSubmitting(false);
-    // Closing the modal is now handled by the parent component via onSave callback
   };
 
   const handleDeleteConfirm = async () => {
@@ -220,7 +211,6 @@ export function AddMaintenanceTaskDialogContent({
     await onDelete(currentTaskId);
     setIsDeleting(false);
     setShowDeleteConfirm(false);
-    // Closing the modal is now handled by the parent component via onDelete callback
   };
 
   const availableComponents = aircraft?.trackedComponentNames || ['Airframe', 'Engine 1', 'Engine 2', 'APU', 'Propeller 1', 'Landing Gear'];
@@ -503,11 +493,6 @@ export function AddMaintenanceTaskDialogContent({
               <Button type="button" variant="ghost" onClick={() => setShowHistoryAlert(true)} disabled={!isEditing || !hasLastCompletionDetails || isSubmitting || isDeleting}>
                  <History className="mr-2 h-4 w-4" /> View History
               </Button>
-              {/* DialogClose is implicitly handled by DialogContent's X button, or parent Dialog's onOpenChange */}
-              {/* If an explicit close button is needed:
-              <Button type="button" variant="outline" onClick={onCloseRequest} disabled={isSubmitting || isDeleting}>Close</Button> 
-              And parent would need to pass onCloseRequest that calls its setIsOpen(false)
-              */}
               <Button type="submit" disabled={isSubmitting || isDeleting}>
                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {isEditing ? 'Save Changes' : 'Add Task'}
