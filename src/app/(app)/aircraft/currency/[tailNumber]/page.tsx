@@ -21,13 +21,13 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { z } from 'zod';
 import { AddMaintenanceTaskDialogContent, type MaintenanceTaskFormData, defaultMaintenanceTaskFormValues } from './components/add-maintenance-task-modal';
-import { AddEditAircraftDiscrepancyModal, type AircraftDiscrepancyFormData } from './components/add-edit-aircraft-discrepancy-modal';
+import { AddEditAircraftDiscrepancyModal } from './components/add-edit-aircraft-discrepancy-modal';
 import { Dialog } from '@/components/ui/dialog';
 
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
-import { Wrench, PlusCircle, ArrowLeft, PlaneIcon, Edit, Loader2, InfoIcon, Phone, UserCircle, MapPin, Save, XCircle, Edit2, Edit3, AlertTriangle, CheckCircle2, XCircle as XCircleIcon, Search, ArrowUpDown, ArrowDown, ArrowUp, Printer, Filter, Trash2 } from 'lucide-react';
+import { Wrench, PlusCircle, ArrowLeft, PlaneIcon, Edit, Loader2, InfoIcon, Phone, UserCircle, MapPin, Save, XCircle, Edit2, Edit3, AlertTriangle, CheckCircle2, XCircle as XCircleIcon, Search, ArrowUpDown, ArrowDown, ArrowUp, Printer, Filter, List } from 'lucide-react';
 import { format, parse, addDays, isValid, addMonths, addYears, endOfMonth, parseISO, differenceInCalendarDays } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { fetchFleetAircraft, saveFleetAircraft } from '@/ai/flows/manage-fleet-flow';
@@ -78,6 +78,7 @@ interface SortConfig {
   direction: SortDirection;
 }
 
+// Top-level helper functions
 const calculateLocalToGo = (
   item: Pick<DisplayMaintenanceItem, 'dueAtDate' | 'dueAtHours' | 'dueAtCycles' | 'associatedComponent'>,
   currentComponentTimesArray: Array<{ componentName: string; currentTime: number; currentCycles: number }>
@@ -198,12 +199,10 @@ interface MaintenanceTaskRowProps {
   isSelected: boolean;
   onSelectTask: (taskId: string, checked: boolean) => void;
   onEditTask: (task: FlowMaintenanceTask) => void;
-  getLocalReleaseStatusProp: typeof getLocalReleaseStatus;
-  formatTaskFrequencyProp: typeof formatLocalTaskFrequency;
 }
 
 const MaintenanceTaskRow = React.memo(function MaintenanceTaskRow(props: MaintenanceTaskRowProps) {
-  const { task: item, isSelected, onSelectTask, onEditTask, getLocalReleaseStatusProp, formatTaskFrequencyProp } = props;
+  const { task: item, isSelected, onSelectTask, onEditTask } = props;
 
   if (!item || !item.id) {
     console.error("MaintenanceTaskRow received invalid item:", item);
@@ -216,10 +215,10 @@ const MaintenanceTaskRow = React.memo(function MaintenanceTaskRow(props: Mainten
   const associatedComponent = item.associatedComponent || 'Airframe';
 
   const status = item.toGoData
-    ? getLocalReleaseStatusProp(item.toGoData, item)
+    ? getLocalReleaseStatus(item.toGoData, item)
     : { icon: <InfoIcon className="h-5 w-5" />, colorClass: 'text-gray-400', label: 'Calculating...' };
 
-  const frequency = formatTaskFrequencyProp(item);
+  const frequency = formatLocalTaskFrequency(item);
 
   let dueAtDisplay = "N/A";
   if (item.dueAtDate && isValid(parse(item.dueAtDate, 'yyyy-MM-dd', new Date()))) {
@@ -239,25 +238,22 @@ const MaintenanceTaskRow = React.memo(function MaintenanceTaskRow(props: Mainten
     lastDoneDisplay = `${item.lastCompletedCycles.toLocaleString()} cyc`;
   }
 
-  // Determine color class for "To Go" text
-  let toGoColorClass = 'text-green-600'; // Default
   const toGoData = item.toGoData;
   const alertDaysPrior = item.alertDaysPrior ?? 30;
   const alertHoursPrior = item.alertHoursPrior ?? 25;
-  const alertCyclesPrior = item.alertCyclesPrior ?? 50;
-
+  const cyclesAlertThreshold = item.alertCyclesPrior ?? 50;
+  let toGoColorClass = 'text-green-600';
   if (toGoData) {
     if (toGoData.isOverdue) {
       toGoColorClass = status.label === 'Grace Period' ? 'text-yellow-600' : 'text-red-600';
     } else if (
       (toGoData.unit === 'days' && typeof toGoData.numeric === 'number' && toGoData.numeric < alertDaysPrior) ||
       (toGoData.unit === 'hrs' && typeof toGoData.numeric === 'number' && toGoData.numeric < alertHoursPrior) ||
-      (toGoData.unit === 'cycles' && typeof toGoData.numeric === 'number' && toGoData.numeric < alertCyclesPrior)
+      (toGoData.unit === 'cycles' && typeof toGoData.numeric === 'number' && toGoData.numeric < cyclesAlertThreshold)
     ) {
       toGoColorClass = 'text-yellow-600';
     }
   }
-
 
   return (
     <TableRow className={item.isActive ? '' : 'opacity-50 bg-muted/30 hover:bg-muted/40'} data-state={isSelected ? "selected" : ""}>
@@ -275,7 +271,6 @@ const MaintenanceTaskRow = React.memo(function MaintenanceTaskRow(props: Mainten
     </TableRow>
   );
 });
-
 
 export default function AircraftMaintenanceDetailPage() {
   const params = useParams();
@@ -305,14 +300,8 @@ export default function AircraftMaintenanceDetailPage() {
   const [initialModalFormData, setInitialModalFormData] = useState<Partial<MaintenanceTaskFormData> | null>(null);
 
   const [isDiscrepancyModalOpen, setIsDiscrepancyModalOpen] = useState(false);
-  const [editingDiscrepancyId, setEditingDiscrepancyId] = useState<string | null>(null);
-  const [initialDiscrepancyModalData, setInitialDiscrepancyModalData] = useState<AircraftDiscrepancy | null>(null);
   const [isSavingDiscrepancy, startSavingDiscrepancyTransition] = useTransition();
-  const [discrepancyToDelete, setDiscrepancyToDelete] = useState<AircraftDiscrepancy | null>(null);
-  const [showDeleteDiscrepancyConfirm, setShowDeleteDiscrepancyConfirm] = useState(false);
-  const [isDeletingDiscrepancy, startDeletingDiscrepancyTransition] = useTransition();
-
-
+  
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'dueSoon' | 'overdue' | 'gracePeriod'>('all');
   const [componentFilter, setComponentFilter] = useState<string>('all');
@@ -436,41 +425,21 @@ export default function AircraftMaintenanceDetailPage() {
   }, [currentAircraft, toast, loadMaintenanceTasks]);
 
   const handleOpenAddDiscrepancyModal = useCallback(() => {
-    setEditingDiscrepancyId(null);
-    setInitialDiscrepancyModalData(null);
     setIsDiscrepancyModalOpen(true);
   }, []);
-
-  const handleOpenEditDiscrepancyModal = useCallback((discrepancy: AircraftDiscrepancy) => {
-    setEditingDiscrepancyId(discrepancy.id);
-    setInitialDiscrepancyModalData(discrepancy);
-    setIsDiscrepancyModalOpen(true);
-  }, []);
-
+  
   const handleSaveDiscrepancy = async (discrepancyFormData: SaveAircraftDiscrepancyInput, originalId?: string) => {
     if (!currentAircraft) return;
     startSavingDiscrepancyTransition(async () => {
       try {
         await saveAircraftDiscrepancy({ ...discrepancyFormData, id: originalId });
-        toast({ title: editingDiscrepancyId ? "Discrepancy Updated" : "New Discrepancy Added", description: `Discrepancy for ${currentAircraft.tailNumber} saved.` });
+        toast({ title: originalId ? "Discrepancy Updated" : "New Discrepancy Added", description: `Discrepancy for ${currentAircraft.tailNumber} saved.` });
         await loadAircraftDiscrepancies(currentAircraft.id);
-        setIsDiscrepancyModalOpen(false);
+        setIsDiscrepancyModalOpen(false); // Close modal on successful save
       } catch (error) { console.error("Failed to save discrepancy:", error); toast({ title: "Error Saving Discrepancy", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" }); }
     });
   };
-  const confirmDeleteDiscrepancy = (discrepancy: AircraftDiscrepancy) => { setDiscrepancyToDelete(discrepancy); setShowDeleteDiscrepancyConfirm(true); };
-  const executeDeleteDiscrepancy = async () => {
-    if (!discrepancyToDelete || !currentAircraft) return;
-    startDeletingDiscrepancyTransition(async () => {
-      try {
-        await deleteAircraftDiscrepancy({ discrepancyId: discrepancyToDelete.id });
-        toast({ title: "Discrepancy Deleted", description: `Discrepancy ID ${discrepancyToDelete.id} removed.` });
-        await loadAircraftDiscrepancies(currentAircraft.id);
-      } catch (error) { console.error("Failed to delete discrepancy:", error); toast({ title: "Error Deleting Discrepancy", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" }); }
-      finally { setShowDeleteDiscrepancyConfirm(false); setDiscrepancyToDelete(null); }
-    });
-  };
-
+  
   const availableComponentsForFilter = useMemo(() => { const uniqueComponents = new Set<string>(); maintenanceTasks.forEach(task => { if (task.associatedComponent && task.associatedComponent.trim() !== "") { uniqueComponents.add(task.associatedComponent.trim()); } else { uniqueComponents.add("Airframe"); } }); return Array.from(uniqueComponents).sort(); }, [maintenanceTasks]);
 
   const displayedTasks = useMemo(() => {
@@ -495,8 +464,6 @@ export default function AircraftMaintenanceDetailPage() {
         isSelected={selectedTaskIds.includes(item.id)}
         onSelectTask={handleSelectTask}
         onEditTask={handleOpenEditTaskModal}
-        getLocalReleaseStatusProp={getLocalReleaseStatus}
-        formatTaskFrequencyProp={formatLocalTaskFrequency}
       />
     ));
   }, [displayedTasks, selectedTaskIds, handleSelectTask, handleOpenEditTaskModal]);
@@ -517,7 +484,7 @@ export default function AircraftMaintenanceDetailPage() {
     const companyName = companyProfile?.companyName || "FlightOps360"; const companyAddress = companyProfile?.companyAddress || ""; const companyContact = [companyProfile?.companyEmail, companyProfile?.companyPhone].filter(Boolean).join(' | ');
     const aircraftContactName = aircraft.primaryContactName || "N/A"; const aircraftContactPhone = aircraft.primaryContactPhone || "N/A"; const aircraftContactEmail = aircraft.primaryContactEmail || "N/A";
     const companyLogoSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-plane"><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/></svg>`;
-    const tasksHtml = tasksToReport.map(task => { let lastDoneStr = "N/A"; if (task.lastCompletedDate && isValid(parseISO(task.lastCompletedDate))) { try { lastDoneStr = format(parseISO(task.lastCompletedDate), 'MM/dd/yy'); } catch {} } else if (task.lastCompletedHours !== undefined) lastDoneStr = `${task.lastCompletedHours.toLocaleString()} hrs`; else if (task.lastCompletedCycles !== undefined) lastDoneStr = `${task.lastCompletedCycles.toLocaleString()} cyc`; let dueAtStr = "N/A"; if (task.dueAtDate) { try { dueAtStr = format(parse(task.dueAtDate, 'yyyy-MM-dd', new Date()), 'MM/dd/yy'); } catch {} } else if (task.dueAtHours !== undefined) dueAtStr = `${task.dueAtHours.toLocaleString()} hrs`; else if (task.dueAtCycles !== undefined) dueAtStr = `${task.dueAtCycles.toLocaleString()} cyc`; return `<tr><td style="white-space: nowrap;">${task.referenceNumber || '-'}</td><td>${task.itemTitle}</td><td>${task.itemType}</td><td>${task.associatedComponent || 'Airframe'}</td><td>${lastDoneStr}</td><td>${dueAtStr}</td><td>${task.toGoData?.text || 'N/A'}</td><td style="min-width: 200px; max-width: 350px; word-break: break-word; white-space: pre-wrap;">${task.details || '-'}</td><td style="height: 60px; border-bottom: 1px solid #ccc; min-width: 150px;"></td></tr>`; }).join('');
+    const tasksHtml = tasksToReport.map(task => { let lastDoneStr = "N/A"; if (task.lastCompletedDate && isValid(parseISO(task.lastCompletedDate))) { try { lastDoneStr = format(parseISO(task.lastCompletedDate), 'MM/dd/yy'); } catch {} } else if (typeof task.lastCompletedHours === 'number') lastDoneStr = `${task.lastCompletedHours.toLocaleString()} hrs`; else if (typeof task.lastCompletedCycles === 'number') lastDoneStr = `${task.lastCompletedCycles.toLocaleString()} cyc`; let dueAtStr = "N/A"; if (task.dueAtDate) { try { dueAtStr = format(parse(task.dueAtDate, 'yyyy-MM-dd', new Date()), 'MM/dd/yy'); } catch {} } else if (typeof task.dueAtHours === 'number') dueAtStr = `${task.dueAtHours.toLocaleString()} hrs`; else if (typeof task.dueAtCycles === 'number') dueAtStr = `${task.dueAtCycles.toLocaleString()} cyc`; return `<tr><td style="white-space: nowrap;">${task.referenceNumber || '-'}</td><td>${itemTitle || 'Untitled Task'}</td><td>${itemType || 'Other'}</td><td>${associatedComponent || 'Airframe'}</td><td>${lastDoneStr}</td><td>${dueAtStr}</td><td>${task.toGoData?.text || 'N/A'}</td><td style="min-width: 200px; max-width: 350px; word-break: break-word; white-space: pre-wrap;">${task.details || '-'}</td><td style="height: 60px; border-bottom: 1px solid #ccc; min-width: 150px;"></td></tr>`; }).join('');
     return `<html><head><title>Work Order - ${aircraft.tailNumber}</title><style>body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol"; margin: 20px; font-size: 10pt; color: #333; } .header-container { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #007bff; } .company-info h1 { margin: 0; font-size: 20pt; color: #007bff; } .company-info p { margin: 2px 0; font-size: 9pt; } .logo-container { width: 50px; height: 50px; } .report-meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 15px; } .report-info, .aircraft-contact-info, .component-times-info { border: 1px solid #e0e0e0; padding: 12px; border-radius: 6px; background-color: #f9f9f9; } .report-info h2, .aircraft-contact-info h2 { margin-top: 0; font-size: 12pt; color: #333; } .report-info p, .aircraft-contact-info p, .component-times-info p { margin: 4px 0; } .component-times-info strong { font-size: 11pt; display: block; margin-bottom: 8px; } .component-times-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px 15px; } .component-times-grid p { display: flex; justify-content: space-between; border-bottom: 1px dotted #eee; padding-bottom: 3px; margin-bottom: 3px; } .component-times-grid p span:first-child { font-weight: 500; margin-right: 10px; color: #555; } .tasks-section h2 { font-size: 13pt; margin-top: 20px; margin-bottom: 10px; color: #333; border-bottom: 1px solid #ccc; padding-bottom: 5px;} table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 9pt; } th, td { border: 1px solid #ccc; padding: 8px; text-align: left; vertical-align: top; } th { background-color: #e9ecef; color: #495057; font-weight: 600; } td[style*="white-space: nowrap;"] { min-width: 70px; } tr:nth-child(even) { background-color: #f8f9fa; } .signatures { margin-top: 40px; display: flex; justify-content: space-between; page-break-inside: avoid; } .signatures div { width: 45%; } .signatures div p { margin-bottom: 50px; font-size: 10pt; } .print-button-container { text-align: center; margin-top: 30px; margin-bottom: 10px; } .print-button { padding: 10px 20px; background-color: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.1); font-size: 12pt;} .footer-powered-by { text-align: center; font-size: 9pt; color: #777; margin-top: 30px; padding-top: 10px; border-top: 1px solid #eee; } @media print { .print-button-container { display: none; } body { margin: 0.5in; font-size: 9pt; color: #000; } .header-container { border-bottom: 2px solid #007bff; } .company-info h1 { color: #007bff; } .report-info, .aircraft-contact-info, .component-times-info { border: 1px solid #ccc; background-color: #fff; } th { background-color: #f0f0f0 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; } tr:nth-child(even) { background-color: #f8f8f8 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; } table { font-size: 8pt; } th, td { padding: 5px; border: 1px solid #999; } }</style></head><body><div class="header-container"><div class="company-info"><h1>${companyName}</h1><p>${companyAddress}</p><p>${companyContact}</p></div><div class="logo-container">${companyLogoSvg}</div></div><div class="report-meta-grid"><div class="report-info"><h2>Aircraft Details</h2><p><strong>Aircraft:</strong> ${aircraft.tailNumber} (${aircraft.model})</p><p><strong>Serial Number:</strong> ${aircraft.serialNumber || 'N/A'}</p><p><strong>Date Generated:</strong> ${format(new Date(), "PPP HH:mm")}</p></div><div class="aircraft-contact-info"><h2>Aircraft Contact</h2><p><strong>Name:</strong> ${aircraftContactName}</p><p><strong>Phone:</strong> ${aircraftContactPhone}</p><p><strong>Email:</strong> ${aircraftContactEmail}</p><p><strong>Base:</strong> ${aircraft.baseLocation || 'N/A'}</p></div></div><div class="component-times-info"><strong>Current Component Times (as of report generation):</strong><div class="component-times-grid">${componentTimes.map(c => `<p><span>${c.componentName}:</span> <span>${c.currentTime.toLocaleString(undefined, {minimumFractionDigits:1, maximumFractionDigits:1})} hrs / ${c.currentCycles.toLocaleString()} cyc</span></p>`).join('')}</div></div><div class="tasks-section"><h2>Selected Maintenance Tasks</h2><table><thead><tr><th>Ref #</th><th>Task Title</th><th>Type</th><th>Component</th><th>Last Done</th><th>Due At</th><th>To Go</th><th style="width: 30%;">Work Instructions</th><th style="width: 20%;">Work Performed / Notes</th></tr></thead><tbody>${tasksHtml}</tbody></table></div><div class="signatures"><div><p>Shop Signature: _________________________</p><p>Date: ____________</p></div><div><p>Inspector Signature: _________________________</p><p>Date: ____________</p></div></div><div class="print-button-container"><button class="print-button" onclick="window.print()">Print Work Order</button></div><div class="footer-powered-by">Powered by FlightOps360</div></body></html>`;
   };
   const handleGenerateWorkOrder = async () => {
@@ -535,6 +502,7 @@ export default function AircraftMaintenanceDetailPage() {
 
   const pageHeaderTitle = `Maintenance Details for ${currentAircraft.tailNumber}`;
   const pageHeaderDescription = `Tracked items &amp; component status for ${currentAircraft.model} (${currentAircraft.tailNumber}). Component times are loaded from Firestore.`;
+  const openDiscrepancyCount = aircraftDiscrepancies.filter(d => d.status !== "Closed").length;
 
   return (
     <div>
@@ -596,7 +564,12 @@ export default function AircraftMaintenanceDetailPage() {
       <Card className="mt-6 shadow-lg">
         <CardHeader className="flex flex-row items-start justify-between">
           <div>
-            <CardTitle className="flex items-center gap-2"><AlertTriangle className="h-6 w-6 text-destructive" />Aircraft Discrepancies</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-6 w-6 text-destructive" />Aircraft Discrepancies
+              {openDiscrepancyCount > 0 && 
+                <Badge variant="destructive" className="ml-2">{openDiscrepancyCount} Open</Badge>
+              }
+            </CardTitle>
             <CardDescription>Log and track discrepancies for {currentAircraft.tailNumber}.</CardDescription>
           </div>
           <Button onClick={handleOpenAddDiscrepancyModal} disabled={!currentAircraft || isSavingDiscrepancy}>
@@ -606,37 +579,23 @@ export default function AircraftMaintenanceDetailPage() {
         <CardContent>
           {isLoadingDiscrepancies ? (
             <div className="flex items-center justify-center py-10"><Loader2 className="h-8 w-8 animate-spin text-destructive" /><p className="ml-2 text-muted-foreground">Loading discrepancies...</p></div>
-          ) : aircraftDiscrepancies.length === 0 ? (
-             <p className="text-center text-muted-foreground py-6">No discrepancies logged for this aircraft.</p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Discovered By</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {aircraftDiscrepancies.map((disc) => (
-                  <TableRow key={disc.id} className={disc.status !== "Closed" ? "font-semibold" : "opacity-70"}>
-                    <TableCell className="text-xs">
-                      {disc.dateDiscovered && isValid(parseISO(disc.dateDiscovered)) ? format(parseISO(disc.dateDiscovered), 'MM/dd/yy') : '-'}
-                      {disc.timeDiscovered ? ` ${disc.timeDiscovered}` : ''}
-                    </TableCell>
-                    <TableCell className="max-w-xs truncate" title={disc.description}>{disc.description}</TableCell>
-                    <TableCell><Badge variant={disc.status === 'Open' ? 'destructive' : (disc.status === 'Deferred' ? 'secondary' : 'default')}>{disc.status}</Badge></TableCell>
-                    <TableCell className="text-xs">{disc.discoveredBy || '-'}</TableCell>
-                    <TableCell className="text-right">
-                      <Button variant="ghost" size="icon" onClick={() => handleOpenEditDiscrepancyModal(disc)} disabled={isSavingDiscrepancy || isDeletingDiscrepancy}> <Edit3 className="h-4 w-4" /> </Button>
-                      <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => confirmDeleteDiscrepancy(disc)} disabled={isSavingDiscrepancy || isDeletingDiscrepancy || disc.status === "Closed"}> <Trash2 className="h-4 w-4" /> </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                There {openDiscrepancyCount === 1 ? 'is' : 'are'} {openDiscrepancyCount} open {openDiscrepancyCount === 1 ? 'discrepancy' : 'discrepancies'} for this aircraft.
+              </p>
+              <Button 
+                variant="outline" 
+                onClick={() => toast({ title: "Coming Soon!", description: "A dedicated page to view and manage all discrepancies is planned."})}
+                disabled={!currentAircraft}
+                className="w-full sm:w-auto"
+              >
+                <List className="mr-2 h-4 w-4" /> View Full Discrepancy Log (Coming Soon)
+              </Button>
+              {aircraftDiscrepancies.length === 0 && (
+                <p className="text-center text-muted-foreground py-6">No discrepancies logged for this aircraft.</p>
+              )}
+            </div>
           )}
         </CardContent>
       </Card>
@@ -646,31 +605,13 @@ export default function AircraftMaintenanceDetailPage() {
         setIsOpen={setIsDiscrepancyModalOpen}
         onSave={handleSaveDiscrepancy}
         aircraft={currentAircraft}
-        initialData={editingDiscrepancyId ? aircraftDiscrepancies.find(d => d.id === editingDiscrepancyId) : null}
-        isEditing={!!editingDiscrepancyId}
+        initialData={null} // Add modal only for now, edit/delete will be on dedicated page
+        isEditing={false} // Add modal only for now
         isSaving={isSavingDiscrepancy}
       />
-
-       {showDeleteDiscrepancyConfirm && discrepancyToDelete && (
-        <AlertDialogModalContent> {/* Using renamed import */}
-          <AlertDialogModalHeader>
-            <AlertDialogModalTitle>Confirm Deletion</AlertDialogModalTitle>
-            <AlertDialogModalDescription>
-              Are you sure you want to delete discrepancy: "{discrepancyToDelete.description.substring(0,50)}..."? This action cannot be undone.
-            </AlertDialogModalDescription>
-          </AlertDialogModalHeader>
-          <AlertDialogModalFooter>
-            <AlertDialogCancel onClick={() => setShowDeleteDiscrepancyConfirm(false)} disabled={isDeletingDiscrepancy}>Cancel</AlertDialogCancel>
-            <Button variant="destructive" onClick={executeDeleteDiscrepancy} disabled={isDeletingDiscrepancy}>
-              {isDeletingDiscrepancy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Delete Discrepancy
-            </Button>
-          </AlertDialogModalFooter>
-        </AlertDialogModalContent>
-      )}
-
     </div>
   );
 }
+    
 
     
