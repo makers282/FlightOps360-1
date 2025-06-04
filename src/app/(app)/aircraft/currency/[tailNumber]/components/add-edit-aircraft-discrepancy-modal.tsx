@@ -29,7 +29,7 @@ import type { AircraftDiscrepancy, SaveAircraftDiscrepancyInput } from '@/ai/sch
 import { discrepancyStatuses } from '@/ai/schemas/aircraft-discrepancy-schemas';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { FleetAircraft } from '@/ai/schemas/fleet-aircraft-schemas';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'; // Added Card imports
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 
 const discrepancyFormSchema = z.object({
   status: z.enum(discrepancyStatuses).default("Open"),
@@ -70,7 +70,13 @@ const discrepancyFormSchema = z.object({
         return false;
     }
     return true;
-}, { message: "Date corrected is required if status is Closed.", path: ["dateCorrected"]});
+}, { message: "Date corrected is required if status is Closed.", path: ["dateCorrected"]})
+.refine(data => {
+    if (data.status === "Closed" && !data.correctedBy) {
+        return false;
+    }
+    return true;
+}, { message: "Corrected By is required if status is Closed.", path: ["correctedBy"]});
 
 
 export type AircraftDiscrepancyFormData = z.infer<typeof discrepancyFormSchema>;
@@ -186,7 +192,7 @@ export function AddEditAircraftDiscrepancyModal({
     ? "Update the details of this aircraft discrepancy."
     : "Log a new discrepancy for this aircraft. All fields related to correction can be filled later.";
   
-  const currentFormValues = form.getValues(); // For checking conditional display values
+  const currentFormValues = form.getValues(); 
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!isSaving) setIsOpen(open); }}>
@@ -278,8 +284,11 @@ export function AddEditAircraftDiscrepancyModal({
                 <Card className="p-4 border-green-500/50 bg-green-50/30 dark:bg-green-900/20">
                     <CardHeader className="p-0 pb-3">
                         <CardTitle className="text-md text-green-700 dark:text-green-400 flex items-center gap-2">
-                            <ShieldCheck className="h-5 w-5"/> Corrective Action & Sign-Off (Fill when corrected)
+                            <ShieldCheck className="h-5 w-5"/> Corrective Action & Sign-Off
                         </CardTitle>
+                         <ModalDialogDescription className="text-xs text-green-600 dark:text-green-500">
+                            Fill this section when the discrepancy is corrected or to close it out.
+                        </ModalDialogDescription>
                     </CardHeader>
                     <CardContent className="p-0 space-y-4">
                         <FormField control={form.control} name="correctiveAction" render={({ field }) => (<FormItem><FormLabel>Corrective Action Taken</FormLabel><FormControl><Textarea placeholder="e.g., Replaced #2 main tire, torqued B-nut on engine oil line..." {...field} value={field.value || ''} rows={3} /></FormControl><FormMessage /></FormItem>)} />
@@ -300,10 +309,10 @@ export function AddEditAircraftDiscrepancyModal({
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <FormField control={form.control} name="correctedBy" render={({ field }) => (<FormItem><FormLabel>Corrected By</FormLabel><FormControl><Input placeholder="e.g., Maintenance Staff, Cert. Mechanic" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>)} />
-                            <FormField control={form.control} name="correctedByCertNumber" render={({ field }) => (<FormItem><FormLabel>Corrected By Cert #</FormLabel><FormControl><Input placeholder="e.g., A&P 7654321" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>)} />
+                            <FormField control={form.control} name="correctedByCertNumber" render={({ field }) => (<FormItem><FormLabel>Corrected By Cert # (Optional)</FormLabel><FormControl><Input placeholder="e.g., A&P 7654321" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>)} />
                         </div>
                          {statusWatch === 'Closed' && (!currentFormValues.correctiveAction || !currentFormValues.dateCorrected || !currentFormValues.correctedBy) && (
-                            <p className="text-xs text-destructive">For 'Closed' status, Corrective Action, Date Corrected, and Corrected By are usually required.</p>
+                            <p className="text-xs text-destructive">For 'Closed' status, Corrective Action, Date Corrected, and Corrected By are typically required.</p>
                         )}
                     </CardContent>
                 </Card>
