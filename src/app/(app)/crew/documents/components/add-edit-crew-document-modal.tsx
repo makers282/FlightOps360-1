@@ -179,7 +179,7 @@ export function AddEditCrewDocumentModal({
                   render={({ field }) => (
                     <FormItem className="flex flex-col">
                       <FormLabel>Issue Date (Optional)</FormLabel>
-                      <Popover>
+                      <Popover modal={false}> {/* modal={false} for popovers in dialogs */}
                         <PopoverTrigger asChild>
                           <FormControl>
                             <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
@@ -188,7 +188,7 @@ export function AddEditCrewDocumentModal({
                             </Button>
                           </FormControl>
                         </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
+                        <PopoverContent className="w-auto p-0 z-[100]" align="start"> {/* z-index if needed */}
                           <Calendar
                             mode="single"
                             selected={field.value && isValidDate(parseISO(field.value)) ? parseISO(field.value) : undefined}
@@ -207,7 +207,7 @@ export function AddEditCrewDocumentModal({
                   render={({ field }) => (
                     <FormItem className="flex flex-col">
                       <FormLabel>Expiry Date (Optional)</FormLabel>
-                      <Popover>
+                      <Popover modal={false}> {/* modal={false} for popovers in dialogs */}
                         <PopoverTrigger asChild>
                           <FormControl>
                             <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
@@ -216,7 +216,7 @@ export function AddEditCrewDocumentModal({
                             </Button>
                           </FormControl>
                         </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
+                        <PopoverContent className="w-auto p-0 z-[100]" align="start"> {/* z-index if needed */}
                           <Calendar
                             mode="single"
                             selected={field.value && isValidDate(parseISO(field.value)) ? parseISO(field.value) : undefined}
