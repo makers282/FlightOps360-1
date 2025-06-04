@@ -27,6 +27,7 @@ import type { CrewDocument, SaveCrewDocumentInput, CrewDocumentType } from '@/ai
 import { AddEditCrewDocumentModal } from './components/add-edit-crew-document-modal';
 import { ClientOnly } from '@/components/client-only';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Badge } from '@/components/ui/badge'; // Added this import
 
 // Define categories based on document types
 const GENERAL_DOC_TYPES: CrewDocumentType[] = ["License", "Medical", "Passport", "Visa", "Company ID", "Airport ID", "Other"];
@@ -63,9 +64,7 @@ export default function CrewDocumentsPage() {
       setAllCrewMembers(fetchedCrew.filter(cm => cm.id)); 
       setAllCrewDocuments(fetchedDocs);
       
-      if (!selectedCrewMemberId && fetchedCrew.length > 0 && fetchedCrew[0].id) {
-        // setSelectedCrewMemberId(fetchedCrew[0].id); // Let ClientOnly handle initial render
-      }
+      // Removed automatic selection of first crew member here, will rely on ClientOnly for initial render state
     } catch (error) {
       console.error("Failed to load crew or documents:", error);
       toast({ title: "Error Loading Data", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
@@ -233,7 +232,7 @@ export default function CrewDocumentsPage() {
         </div>
       )}
 
-      {!selectedCrewMemberId && !isLoadingCrew && (
+      {!selectedCrewMemberId && !isLoadingCrew && !isLoadingDocuments && (
         <Card className="shadow-sm">
             <CardContent className="pt-6 text-center text-muted-foreground">
                 <User className="mx-auto h-12 w-12 mb-2" />
