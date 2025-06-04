@@ -110,11 +110,11 @@ const fetchAircraftDiscrepanciesFlow = ai.defineFlow(
   async (input) => {
     try {
       const discrepanciesCollectionRef = collection(db, DISCREPANCIES_COLLECTION);
+      // Simplified query: filter by aircraftId and order ONLY by dateDiscovered
       const q = query(
         discrepanciesCollectionRef, 
         where("aircraftId", "==", input.aircraftId),
-        orderBy("dateDiscovered", "desc"), // Show newest first
-        orderBy("createdAt", "desc")      // Secondary sort by creation time
+        orderBy("dateDiscovered", "desc") // Show newest first
       );
       const snapshot = await getDocs(q);
       const discrepanciesList = snapshot.docs.map(docSnapshot => {
