@@ -22,8 +22,8 @@ import interactionPlugin from '@fullcalendar/interaction'; // For future interac
 import resourcePlugin from '@fullcalendar/resource'; // Import the main resource plugin
 
 // Removed: import '@fullcalendar/core/main.css'; 
-import '@fullcalendar/daygrid/main.css'; // Corrected path
-import '@fullcalendar/resource-timeline/main.css'; // Corrected path
+// Removed: import '@fullcalendar/daygrid/main.css'; // Corrected path
+// Removed: import '@fullcalendar/resource-timeline/main.css'; // Corrected path
 
 
 import { fetchTrips, type Trip } from '@/ai/flows/manage-trips-flow';
