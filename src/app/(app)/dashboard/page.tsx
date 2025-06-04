@@ -99,6 +99,9 @@ export default function DashboardPage() {
   const [selectedBulletin, setSelectedBulletin] = useState<Bulletin | null>(null);
   const [isBulletinModalOpen, setIsBulletinModalOpen] = useState(false);
 
+  const [isBulletinAccordionOpen, setIsBulletinAccordionOpen] = useState(true);
+  const [isTripAccordionOpen, setIsTripAccordionOpen] = useState(true);
+
 
   useEffect(() => {
     let isMounted = true; 
@@ -182,12 +185,24 @@ export default function DashboardPage() {
       <PageHeader title="Dashboard" description="Real-time overview of flight operations." icon={LayoutDashboard} />
       
       <Card className="mb-6 shadow-md border-primary/50">
-        <Accordion type="single" collapsible defaultValue="bulletin-board-item" className="w-full">
+        <Accordion 
+          type="single" 
+          collapsible 
+          value={isBulletinAccordionOpen ? "bulletin-board-item" : ""}
+          onValueChange={(value) => setIsBulletinAccordionOpen(value === "bulletin-board-item")}
+          className="w-full"
+        >
           <AccordionItem value="bulletin-board-item" className="border-b-0">
             <CardHeader className="p-0">
-              <AccordionTrigger className="flex flex-1 items-center justify-between p-4 hover:no-underline">
-                <div className="text-left">
-                    <CardTitle className="flex items-center gap-2"><Megaphone className="h-5 w-5 text-primary" /> Company Bulletin Board</CardTitle>
+              <AccordionTrigger className="flex w-full items-center justify-between p-4 hover:no-underline">
+                <div className="text-left flex-grow">
+                    <div className="flex items-center gap-2">
+                      <Megaphone className="h-5 w-5 text-primary" />
+                      <CardTitle>Company Bulletin Board</CardTitle>
+                      {!isBulletinAccordionOpen && bulletins.length > 0 && (
+                        <Badge variant="secondary" className="ml-2">{bulletins.length}</Badge>
+                      )}
+                    </div>
                     <CardDescription className="mt-1">Latest news and announcements from Firestore.</CardDescription>
                 </div>
               </AccordionTrigger>
@@ -234,12 +249,24 @@ export default function DashboardPage() {
       </Card>
 
       <Card className="md:col-span-2 lg:col-span-3 mb-6 shadow-md">
-        <Accordion type="single" collapsible defaultValue="trip-status-item" className="w-full">
+        <Accordion 
+          type="single" 
+          collapsible 
+          value={isTripAccordionOpen ? "trip-status-item" : ""}
+          onValueChange={(value) => setIsTripAccordionOpen(value === "trip-status-item")}
+          className="w-full"
+        >
             <AccordionItem value="trip-status-item">
                 <CardHeader className="p-0">
-                    <AccordionTrigger className="flex flex-1 items-center justify-between p-4 hover:no-underline">
-                        <div className="text-left">
-                            <CardTitle className="flex items-center gap-2"><Milestone className="h-5 w-5 text-primary" />Trip Status</CardTitle>
+                    <AccordionTrigger className="flex w-full items-center justify-between p-4 hover:no-underline">
+                        <div className="text-left flex-grow">
+                            <div className="flex items-center gap-2">
+                              <Milestone className="h-5 w-5 text-primary" />
+                              <CardTitle>Trip Status</CardTitle>
+                              {!isTripAccordionOpen && dashboardTrips.length > 0 && (
+                                <Badge variant="secondary" className="ml-2">{dashboardTrips.length}</Badge>
+                              )}
+                            </div>
                             <CardDescription className="mt-1">Overview of recent and upcoming trips.</CardDescription>
                         </div>
                     </AccordionTrigger>
@@ -341,3 +368,4 @@ export default function DashboardPage() {
     </>
   );
 }
+
