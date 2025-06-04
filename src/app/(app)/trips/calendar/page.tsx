@@ -19,8 +19,9 @@ import FullCalendar from '@fullcalendar/react';
 import resourceTimelinePlugin from '@fullcalendar/resource-timeline';
 import dayGridPlugin from '@fullcalendar/daygrid'; // For dayGridMonth view
 import interactionPlugin from '@fullcalendar/interaction'; // For future interactions
+import resourcePlugin from '@fullcalendar/resource'; // Import the main resource plugin
 
-import '@fullcalendar/core/main.css'; // Corrected path for v5/v6
+// Removed: import '@fullcalendar/core/main.css'; 
 import '@fullcalendar/daygrid/main.css'; // Corrected path
 import '@fullcalendar/resource-timeline/main.css'; // Corrected path
 
@@ -312,7 +313,7 @@ export default function TripCalendarPage() {
         <CardContent className="p-2">
           {isClientReady && (
             <FullCalendar
-              plugins={[resourceTimelinePlugin, dayGridPlugin, interactionPlugin]}
+              plugins={[resourceTimelinePlugin, dayGridPlugin, interactionPlugin, resourcePlugin]}
               initialView="resourceTimelineWeek"
               schedulerLicenseKey="GPL-My-Project-Is-Open-Source" // Required for resource views in v5+
               headerToolbar={{
