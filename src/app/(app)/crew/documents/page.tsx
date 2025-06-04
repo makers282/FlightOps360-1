@@ -4,7 +4,7 @@
 import React, { useState, useMemo, useEffect, useTransition } from 'react';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { FolderArchive, UploadCloud, Edit3, Trash2, Search, FileText, Loader2, CalendarDays, User } from 'lucide-react';
+import { FolderArchive, UploadCloud, Edit3, Trash2, Search, FileText, Loader2, CalendarDays, User, ClipboardCheck } from 'lucide-react'; // Added ClipboardCheck
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
@@ -27,7 +27,7 @@ import type { CrewDocument, SaveCrewDocumentInput, CrewDocumentType } from '@/ai
 import { AddEditCrewDocumentModal } from './components/add-edit-crew-document-modal';
 import { ClientOnly } from '@/components/client-only';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Badge } from '@/components/ui/badge'; // Added this import
+import { Badge } from '@/components/ui/badge';
 
 // Define categories based on document types
 const GENERAL_DOC_TYPES: CrewDocumentType[] = ["License", "Medical", "Passport", "Visa", "Company ID", "Airport ID", "Other"];
@@ -64,7 +64,6 @@ export default function CrewDocumentsPage() {
       setAllCrewMembers(fetchedCrew.filter(cm => cm.id)); 
       setAllCrewDocuments(fetchedDocs);
       
-      // Removed automatic selection of first crew member here, will rely on ClientOnly for initial render state
     } catch (error) {
       console.error("Failed to load crew or documents:", error);
       toast({ title: "Error Loading Data", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
@@ -273,7 +272,23 @@ export default function CrewDocumentsPage() {
             </Card>
           </div>
 
-          <div className="lg:col-span-1">
+          <div className="lg:col-span-1 space-y-6"> {/* Added space-y-6 here for consistent spacing */}
+            <Card className="shadow-md">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                    <ClipboardCheck className="h-5 w-5 text-primary"/>
+                    Checking Currency
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground mb-3">
+                  This section is for checking various operational currency items for the selected crew member.
+                </p>
+                <Button variant="outline" className="w-full" disabled>
+                  View Currency Details
+                </Button>
+              </CardContent>
+            </Card>
             <Card className="shadow-md">
               <CardHeader>
                 <CardTitle>Archived Documents</CardTitle>

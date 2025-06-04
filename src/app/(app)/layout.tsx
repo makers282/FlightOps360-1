@@ -30,7 +30,6 @@ import {
   PlaneTakeoff,
   Building2,
   Wrench, 
-  ClipboardCheck, 
   BarChartBig, 
   DollarSign, 
   Package, 
@@ -230,13 +229,6 @@ export default function AppLayout({ children }: PropsWithChildren) {
               <SidebarMenuButton href="/frat" tooltip="FRAT Integration" isActive={pathname === '/frat'}>
                 <ShieldAlert />
                 FRAT Integration
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-
-            <SidebarMenuItem>
-              <SidebarMenuButton href="/checking-currency" tooltip="Checking Currency" isActive={pathname === '/checking-currency'}>
-                <ClipboardCheck />
-                Checking Currency
               </SidebarMenuButton>
             </SidebarMenuItem>
 
