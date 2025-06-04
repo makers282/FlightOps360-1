@@ -29,7 +29,7 @@ import { bulletinTypes } from '@/ai/schemas/bulletin-schemas';
 const bulletinFormSchema = z.object({
   title: z.string().min(3, "Title must be at least 3 characters long."),
   message: z.string().min(10, "Message must be at least 10 characters long."),
-  type: z.enum(bulletinTypes).default("info"),
+  type: z.enum(bulletinTypes).default("General"),
   isActive: z.boolean().default(true),
 });
 
@@ -58,7 +58,7 @@ export function AddEditBulletinModal({
     defaultValues: {
       title: '',
       message: '',
-      type: "info",
+      type: "General",
       isActive: true,
     },
   });
@@ -69,14 +69,14 @@ export function AddEditBulletinModal({
         form.reset({
           title: initialData.title,
           message: initialData.message,
-          type: initialData.type || "info",
+          type: initialData.type || "General",
           isActive: initialData.isActive,
         });
       } else {
         form.reset({
           title: '',
           message: '',
-          type: "info",
+          type: "General",
           isActive: true,
         });
       }
@@ -130,7 +130,7 @@ export function AddEditBulletinModal({
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl><SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger></FormControl>
                       <SelectContent>
-                        {bulletinTypes.map(type => (<SelectItem key={type} value={type} className="capitalize">{type.charAt(0).toUpperCase() + type.slice(1)}</SelectItem>))}
+                        {bulletinTypes.map(type => (<SelectItem key={type} value={type} className="capitalize">{type}</SelectItem>))}
                       </SelectContent>
                     </Select>
                     <FormMessage />

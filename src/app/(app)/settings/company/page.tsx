@@ -11,12 +11,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Building2, Plane, PlusCircle, Trash2, Save, XCircle, Loader2, Edit, CheckSquare, Square, Info, Settings2, Cog, Wind, Megaphone, CalendarDays, UserX } from 'lucide-react'; // Added Megaphone
+import { Building2, Plane, PlusCircle, Trash2, Save, XCircle, Loader2, Edit, CheckSquare, Square, Info, Settings2, Cog, Wind, Megaphone, CalendarDays, UserX } from 'lucide-react'; 
 import { useToast } from '@/hooks/use-toast';
 import { fetchFleetAircraft, saveFleetAircraft, deleteFleetAircraft } from '@/ai/flows/manage-fleet-flow';
 import type { FleetAircraft, SaveFleetAircraftInput, EngineDetail, PropellerDetail } from '@/ai/schemas/fleet-aircraft-schemas';
 import { fetchCompanyProfile, saveCompanyProfile, type CompanyProfile } from '@/ai/flows/manage-company-profile-flow'; 
-import { fetchBulletins, saveBulletin, deleteBulletin, type Bulletin, type SaveBulletinInput } from '@/ai/flows/manage-bulletins-flow'; // Bulletin imports
+import { fetchBulletins, saveBulletin, deleteBulletin, type Bulletin, type SaveBulletinInput, type BulletinType } from '@/ai/schemas/bulletin-schemas'; // Bulletin imports
 import { AddEditBulletinModal } from './components/add-edit-bulletin-modal'; // Bulletin modal import
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton'; 
@@ -149,6 +149,7 @@ export default function CompanySettingsPage() {
     loadFleetData();
     loadCompanyProfileData();
     loadBulletinsData();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); 
 
   const resetAircraftFormFields = () => {
@@ -170,8 +171,8 @@ export default function CompanySettingsPage() {
     setShowAddAircraftForm(true);
   };
   
-  const handleAddOrUpdateAircraft = () => { /* ... (aircraft save logic remains the same) ... */ 
-    if (!newTailNumber || !newModel) { /* ... validation ... */ return; }
+  const handleAddOrUpdateAircraft = () => { 
+    if (!newTailNumber || !newModel) { toast({title: "Missing Fields", description: "Tail number and model are required.", variant: "destructive"}); return; }
     const parsedTrackedComponentNames = newTrackedComponentNamesStr.split(',').map(name => name.trim()).filter(name => name.length > 0);
     const aircraftData: SaveFleetAircraftInput = {
       id: editingAircraftId || newTailNumber.toUpperCase().replace(/\s+/g, ''), tailNumber: newTailNumber.toUpperCase().trim(),
@@ -187,7 +188,7 @@ export default function CompanySettingsPage() {
       try { await saveFleetAircraft(aircraftData); await loadFleetData(); 
         toast({ title: "Success", description: `Aircraft ${editingAircraftId ? 'updated' : 'added'}.` });
         handleCancelEditAircraft();
-      } catch (error) { /* ... error handling ... */ 
+      } catch (error) { 
         console.error("Failed to save aircraft:", error);
         toast({ title: "Error", description: `Could not save aircraft. ${error instanceof Error ? error.message : ''}`, variant: "destructive"});
       }
@@ -195,19 +196,19 @@ export default function CompanySettingsPage() {
   }
 
   const handleCancelEditAircraft = () => { setEditingAircraftId(null); resetAircraftFormFields(); setShowAddAircraftForm(false); };
-  const handleDeleteAircraft = (aircraftIdToDelete: string) => { /* ... (aircraft delete logic remains the same) ... */ 
+  const handleDeleteAircraft = (aircraftIdToDelete: string) => { 
     startDeletingAircraftTransition(async () => {
       try { await deleteFleetAircraft({ aircraftId: aircraftIdToDelete }); await loadFleetData();
         toast({ title: "Success", description: "Aircraft deleted." });
         if (editingAircraftId === aircraftIdToDelete) handleCancelEditAircraft();
-      } catch (error) { /* ... error handling ... */ 
+      } catch (error) { 
           console.error("Failed to delete aircraft:", error);
           toast({ title: "Error", description: `Could not delete aircraft. ${error instanceof Error ? error.message : ''}`, variant: "destructive"});
       }
     });
   }
 
-  const handleSaveCompanyInfo = () => { /* ... (company info save logic remains the same) ... */ 
+  const handleSaveCompanyInfo = () => { 
     startSavingCompanyInfoTransition(async () => {
       const profileData: CompanyProfile = {
         id: 'main', companyName: companyName.trim(), companyAddress: companyAddress.trim(),
@@ -217,7 +218,7 @@ export default function CompanySettingsPage() {
       try { await saveCompanyProfile(profileData); 
         setCurrentCompanyProfile(prev => ({...prev, ...profileData} as CompanyProfile));
         toast({ title: "Success", description: "Company info updated." });
-      } catch (error) { /* ... error handling ... */ 
+      } catch (error) { 
         console.error("Failed to save company info:", error);
         toast({ title: "Error", description: `Could not save company info. ${error instanceof Error ? error.message : ''}`, variant: "destructive"});
       }
@@ -280,11 +281,11 @@ export default function CompanySettingsPage() {
     });
   };
 
-  const getBulletinTypeBadgeVariant = (type: Bulletin['type']): "default" | "destructive" | "outline" => {
+  const getBulletinTypeBadgeVariant = (type: BulletinType): "default" | "destructive" | "secondary" => {
     switch (type) {
-      case 'critical': return 'destructive';
-      case 'warning': return 'outline';
-      default: return 'default';
+      case 'Urgent': return 'destructive';
+      case 'Important': return 'secondary';
+      default: return 'default'; // General
     }
   };
 
@@ -296,7 +297,7 @@ export default function CompanySettingsPage() {
         icon={Building2}
       />
       <div className="grid gap-6 md:grid-cols-2">
-        {/* Company Information Card ... (remains the same) */}
+        {/* Company Information Card */}
         <Card className="shadow-md">
           <CardHeader>
             <CardTitle>Company Information</CardTitle>
@@ -343,7 +344,7 @@ export default function CompanySettingsPage() {
           </CardContent>
         </Card>
 
-        {/* Manage Aircraft Fleet Card ... (remains the same) */}
+        {/* Manage Aircraft Fleet Card */}
         <Card className="shadow-md">
           <CardHeader>
             <div className="flex justify-between items-center">
@@ -365,7 +366,6 @@ export default function CompanySettingsPage() {
                   {editingAircraftId ? `Edit Aircraft: ${fleet.find(ac => ac.id === editingAircraftId)?.tailNumber || editingAircraftId}` : 'Add New Aircraft'}
                 </CardTitle>
                 <div className="space-y-3">
-                  {/* Aircraft form fields ... (existing code) ... */}
                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
                       <Label htmlFor="newTailNumber">Tail Number (ID)</Label>

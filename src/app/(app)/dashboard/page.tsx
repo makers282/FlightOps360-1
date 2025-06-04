@@ -6,7 +6,7 @@ import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { List, ListItem } from '@/components/ui/list';
-import { AlertTriangle, Plane, Milestone, FileText, ShieldAlert, Bell, LayoutDashboard, Megaphone, UserCheck, CalendarClock, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
+import { AlertTriangle, Plane, Milestone, FileText, ShieldAlert, Bell, LayoutDashboard, Megaphone, UserCheck, CalendarClock, AlertCircle, CheckCircle2, Loader2, ExternalLink } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import {
   Table,
@@ -17,14 +17,26 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogCancel,
+} from "@/components/ui/alert-dialog";
+import { Button } from '@/components/ui/button';
+import { ScrollArea } from '@/components/ui/scroll-area';
+
 import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow'; 
 import { fetchTrips, type Trip, type TripStatus } from '@/ai/flows/manage-trips-flow';
-import { fetchBulletins, type Bulletin } from '@/ai/flows/manage-bulletins-flow'; // Import bulletin flow
+import { fetchBulletins, type Bulletin, type BulletinType } from '@/ai/flows/manage-bulletins-flow'; 
 import { useToast } from '@/hooks/use-toast'; 
 import { format, parseISO, isValid } from 'date-fns';
 
 
-const crewAlertData = [ // This remains static for now
+const crewAlertData = [ 
   { id: 'CAL001', type: 'training' as 'training' | 'certification' | 'document', severity: 'warning' as 'info' | 'warning' | 'critical', title: 'Recurrency Due Soon', message: 'Capt. Ava Williams - Recurrency training due in 15 days.', icon: CalendarClock },
   { id: 'CAL002', type: 'certification' as 'training' | 'certification' | 'document', severity: 'critical' as 'info' | 'warning' | 'critical', title: 'Medical Expired', message: 'FO Ben Carter - Medical certificate expired yesterday.', icon: AlertCircle },
   { id: 'CAL003', type: 'document' as 'training' | 'certification' | 'document', severity: 'info' as 'info' | 'warning' | 'critical', title: 'Passport Updated', message: 'FA Chloe Davis - Passport updated in system.', icon: CheckCircle2 },
@@ -57,16 +69,11 @@ const getStatusBadgeVariant = (status?: TripStatus | 'Active' | 'Needs Review'):
   }
 };
 
-const getBulletinBadgeVariant = (type: Bulletin['type']) => {
+const getBulletinTypeBadgeVariant = (type: BulletinType): "default" | "destructive" | "secondary" => {
   switch (type) {
-    case 'info':
-      return 'default';
-    case 'warning':
-      return 'outline';
-    case 'critical':
-      return 'destructive';
-    default:
-      return 'default';
+    case 'Urgent': return 'destructive';
+    case 'Important': return 'secondary';
+    default: return 'default'; // General
   }
 };
 
@@ -84,9 +91,13 @@ export default function DashboardPage() {
   const [isLoadingAircraft, setIsLoadingAircraft] = useState(true);
   const [dashboardTrips, setDashboardTrips] = useState<Trip[]>([]);
   const [isLoadingTrips, setIsLoadingTrips] = useState(true);
-  const [bulletins, setBulletins] = useState<Bulletin[]>([]); // State for dynamic bulletins
-  const [isLoadingBulletins, setIsLoadingBulletins] = useState(true); // Loading state for bulletins
+  const [bulletins, setBulletins] = useState<Bulletin[]>([]); 
+  const [isLoadingBulletins, setIsLoadingBulletins] = useState(true); 
   const { toast } = useToast();
+
+  const [selectedBulletin, setSelectedBulletin] = useState<Bulletin | null>(null);
+  const [isBulletinModalOpen, setIsBulletinModalOpen] = useState(false);
+
 
   useEffect(() => {
     let isMounted = true; 
@@ -120,11 +131,10 @@ export default function DashboardPage() {
       try {
         const fetchedBulletins = await fetchBulletins();
         if (isMounted) {
-          // Filter for active bulletins and sort by publishedAt (most recent first), take top 3-5 for dashboard
           const activeAndSorted = fetchedBulletins
             .filter(b => b.isActive)
             .sort((a, b) => parseISO(b.publishedAt).getTime() - parseISO(a.publishedAt).getTime())
-            .slice(0, 5); // Show up to 5 active bulletins
+            .slice(0, 5); 
           setBulletins(activeAndSorted);
         }
       } catch (error) {
@@ -143,19 +153,24 @@ export default function DashboardPage() {
 
     loadAircraft();
     loadTrips();
-    loadBulletins(); // Load dynamic bulletins
+    loadBulletins(); 
 
     return () => { isMounted = false; };
   }, [toast]);
 
-  const getRouteDisplay = (legs: Trip['legs']) => { /* ... (remains the same) ... */ 
+  const handleBulletinClick = (bulletin: Bulletin) => {
+    setSelectedBulletin(bulletin);
+    setIsBulletinModalOpen(true);
+  };
+
+  const getRouteDisplay = (legs: Trip['legs']) => { 
     if (!legs || legs.length === 0) return 'N/A';
     const origin = legs[0].origin || 'UNK';
     const destination = legs[legs.length - 1].destination || 'UNK';
     return `${origin} -> ${destination}`;
   };
 
-  const formatDate = (dateString?: string) => { /* ... (remains the same) ... */ 
+  const formatDate = (dateString?: string) => { 
     if (!dateString) return 'N/A';
     try { const date = parseISO(dateString); return isValid(date) ? format(date, 'MM/dd HH:mm zz') : 'Invalid Date'; } 
     catch (e) { return 'Invalid Date Format'; }
@@ -189,16 +204,22 @@ export default function DashboardPage() {
                   <List>
                     {bulletins.map((item, index) => (
                       <React.Fragment key={item.id}>
-                        <ListItem className="flex flex-col sm:flex-row justify-between items-start sm:items-center py-3">
+                        <ListItem
+                          className="flex flex-col sm:flex-row justify-between items-start sm:items-center py-3 cursor-pointer hover:bg-muted/50 rounded-md px-2 -mx-2"
+                          onClick={() => handleBulletinClick(item)}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleBulletinClick(item);}}
+                        >
                           <div className="flex-1 mb-2 sm:mb-0">
                             <p className="font-semibold">{item.title} 
                               <span className="text-xs text-muted-foreground font-normal ml-2">
                                 - {item.publishedAt && isValid(parseISO(item.publishedAt)) ? format(parseISO(item.publishedAt), 'MMM d, yyyy HH:mm') : 'N/A'}
                               </span>
                             </p>
-                            <p className="text-sm text-muted-foreground whitespace-pre-wrap">{item.message}</p>
+                            <p className="text-sm text-muted-foreground truncate max-w-prose">{item.message}</p>
                           </div>
-                          <Badge variant={getBulletinBadgeVariant(item.type)} className="capitalize">{item.type}</Badge>
+                          <Badge variant={getBulletinTypeBadgeVariant(item.type)} className="capitalize">{item.type}</Badge>
                         </ListItem>
                         {index < bulletins.length - 1 && <Separator />}
                       </React.Fragment>
@@ -211,7 +232,6 @@ export default function DashboardPage() {
         </Accordion>
       </Card>
 
-      {/* Trip Status Card ... (remains the same) ... */}
       <Card className="md:col-span-2 lg:col-span-3 mb-6">
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><Milestone className="h-5 w-5 text-primary" />Trip Status</CardTitle>
@@ -230,7 +250,6 @@ export default function DashboardPage() {
         </Card>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {/* Aircraft Status Card ... (remains the same) ... */}
         <Card className="lg:col-span-2">
           <CardHeader> <CardTitle className="flex items-center gap-2"><Plane className="h-5 w-5 text-primary" />Aircraft Status</CardTitle> <CardDescription>Current status of all operational aircraft.</CardDescription> </CardHeader>
           <CardContent>
@@ -245,22 +264,43 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
         
-        {/* Crew Alerts Card ... (remains the same with static data) ... */}
         <Card>
           <CardHeader> <CardTitle className="flex items-center gap-2"><UserCheck className="h-5 w-5 text-primary" />Crew Alerts</CardTitle> <CardDescription>Important crew notifications. (Static Data)</CardDescription> </CardHeader>
-          <CardContent> <List> {crewAlertData.map((alert, index) => ( <React.Fragment key={alert.id}> <ListItem className="flex items-start gap-3 py-2"> {getAlertIcon(alert)} <div className="flex-1"> <p className="font-medium text-sm">{alert.title}</p> <p className="text-xs text-muted-foreground">{alert.message}</p> </div> <Badge variant={getBulletinBadgeVariant(alert.severity)} className="capitalize text-xs">{alert.severity}</Badge> </ListItem> {index < crewAlertData.length - 1 && <Separator />} </React.Fragment> ))} {crewAlertData.length === 0 && ( <p className="text-sm text-muted-foreground text-center py-4">No crew alerts.</p> )} </List> </CardContent>
+          <CardContent> <List> {crewAlertData.map((alert, index) => ( <React.Fragment key={alert.id}> <ListItem className="flex items-start gap-3 py-2"> {getAlertIcon(alert)} <div className="flex-1"> <p className="font-medium text-sm">{alert.title}</p> <p className="text-xs text-muted-foreground">{alert.message}</p> </div> <Badge variant={getBulletinTypeBadgeVariant(alert.severity as BulletinType)} className="capitalize text-xs">{alert.severity}</Badge> </ListItem> {index < crewAlertData.length - 1 && <Separator />} </React.Fragment> ))} {crewAlertData.length === 0 && ( <p className="text-sm text-muted-foreground text-center py-4">No crew alerts.</p> )} </List> </CardContent>
         </Card>
         
-        {/* Active System Alerts Card ... (remains the same with static data) ... */}
         <Card>
           <CardHeader> <CardTitle className="flex items-center gap-2"><AlertTriangle className="h-5 w-5 text-destructive" />Active System Alerts</CardTitle> <CardDescription>Critical system notifications. (Static Data)</CardDescription> </CardHeader>
           <CardContent> <List> <ListItem className="flex justify-between items-center"> <div> <p className="font-medium">N789EF Maintenance Due</p> <p className="text-sm text-muted-foreground">Scheduled A-Check approaching.</p> </div> <Badge variant="destructive">High</Badge> </ListItem> <Separator className="my-2" /> <ListItem className="flex justify-between items-center"> <div> <p className="font-medium">TRP-004 Weather Alert</p> <p className="text-sm text-muted-foreground">Thunderstorms forecasted for KDEN.</p> </div> <Badge variant="outline">Medium</Badge> </ListItem> </List> </CardContent>
         </Card>
 
-        {/* Document Hub & FRAT Cards ... (remain the same) ... */}
         <Card> <CardHeader> <CardTitle className="flex items-center gap-2"><FileText className="h-5 w-5 text-primary" />Document Hub</CardTitle> <CardDescription>(Static Link)</CardDescription> </CardHeader> <CardContent> <p className="text-sm text-muted-foreground">Access flight and compliance documents.</p> </CardContent> </Card>
         <Card> <CardHeader> <CardTitle className="flex items-center gap-2"><ShieldAlert className="h-5 w-5 text-primary" />FRAT</CardTitle> <CardDescription>(Static Link)</CardDescription> </CardHeader> <CardContent> <p className="text-sm text-muted-foreground">Flight Risk Assessment Tool status.</p> </CardContent> </Card>
       </div>
+
+      {selectedBulletin && (
+        <AlertDialog open={isBulletinModalOpen} onOpenChange={setIsBulletinModalOpen}>
+          <AlertDialogContent className="sm:max-w-lg">
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2">
+                <Badge variant={getBulletinTypeBadgeVariant(selectedBulletin.type)} className="capitalize text-xs mr-2">{selectedBulletin.type}</Badge>
+                {selectedBulletin.title}
+              </AlertDialogTitle>
+              <AlertDialogDescription className="text-xs text-muted-foreground pt-1">
+                Published: {selectedBulletin.publishedAt && isValid(parseISO(selectedBulletin.publishedAt)) ? format(parseISO(selectedBulletin.publishedAt), 'PPP HH:mm') : 'N/A'}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <ScrollArea className="max-h-[60vh] mt-2">
+                <div className="whitespace-pre-wrap p-1 text-sm">
+                    {selectedBulletin.message}
+                </div>
+            </ScrollArea>
+            <AlertDialogFooter className="mt-4">
+              <AlertDialogCancel onClick={() => setIsBulletinModalOpen(false)}>Close</AlertDialogCancel>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </>
   );
 }

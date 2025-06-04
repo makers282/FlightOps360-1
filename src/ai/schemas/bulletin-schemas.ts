@@ -4,14 +4,14 @@
  */
 import { z } from 'zod';
 
-export const bulletinTypes = ["info", "warning", "critical"] as const;
+export const bulletinTypes = ["General", "Important", "Urgent"] as const;
 export type BulletinType = typeof bulletinTypes[number];
 
 export const BulletinSchema = z.object({
   id: z.string().describe("Unique Firestore document ID for the bulletin."),
   title: z.string().min(3, "Title must be at least 3 characters long."),
   message: z.string().min(10, "Message must be at least 10 characters long."),
-  type: z.enum(bulletinTypes).default("info"),
+  type: z.enum(bulletinTypes).default("General"),
   isActive: z.boolean().default(true).describe("Indicates if the bulletin is currently active/visible."),
   publishedAt: z.string().describe("ISO string format, server-generated timestamp of when it was published or last updated."),
   createdAt: z.string().describe("ISO string format, server-generated timestamp."),
@@ -45,3 +45,4 @@ export const DeleteBulletinOutputSchema = z.object({
   success: z.boolean(),
   bulletinId: z.string(),
 });
+
