@@ -23,11 +23,12 @@ import { z } from 'zod';
 import { AddMaintenanceTaskDialogContent, type MaintenanceTaskFormData, defaultMaintenanceTaskFormValues } from './components/add-maintenance-task-modal';
 import { AddEditAircraftDiscrepancyModal } from './components/add-edit-aircraft-discrepancy-modal';
 import { Dialog } from '@/components/ui/dialog';
-
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-import { Wrench, PlusCircle, ArrowLeft, PlaneIcon, Edit, Loader2, InfoIcon, Phone, UserCircle, MapPin, Save, XCircle, Edit2, Edit3, AlertTriangle, CheckCircle2, XCircle as XCircleIcon, Search, ArrowUpDown, ArrowDown, ArrowUp, Printer, Filter, List } from 'lucide-react';
+import { Wrench, PlusCircle, ArrowLeft, PlaneIcon, Edit, Loader2, InfoIcon, Phone, UserCircle, MapPin, Save, XCircle, Edit2, Edit3, AlertTriangle, CheckCircle2, XCircle as XCircleIcon, Search, ArrowUpDown, ArrowDown, ArrowUp, Printer, Filter, List, BookOpen, Hammer, FileWarning } from 'lucide-react';
 import { format, parse, addDays, isValid, addMonths, addYears, endOfMonth, parseISO, differenceInCalendarDays } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { fetchFleetAircraft, saveFleetAircraft } from '@/ai/flows/manage-fleet-flow';
@@ -102,11 +103,11 @@ const calculateLocalToGo = (
     return { text: 'N/A (Comp. data missing)', numeric: Infinity, unit: 'N/A', isOverdue: false };
   }
 
-  if (item.dueAtHours != null && currentRelevantTime !== undefined) {
+  if (typeof currentRelevantTime === 'number' && item.dueAtHours != null) {
     const hoursRemaining = parseFloat((item.dueAtHours - currentRelevantTime).toFixed(1));
     return { text: `${hoursRemaining.toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1})} hrs (from ${componentNameToUse})`, numeric: hoursRemaining, unit: 'hrs', isOverdue: hoursRemaining < 0 };
   }
-  if (item.dueAtCycles != null && currentRelevantCycles !== undefined) {
+  if (typeof currentRelevantCycles === 'number' && item.dueAtCycles != null) {
     const cyclesRemaining = item.dueAtCycles - currentRelevantCycles;
     return { text: `${cyclesRemaining.toLocaleString()} cycles (from ${componentNameToUse})`, numeric: cyclesRemaining, unit: 'cycles', isOverdue: cyclesRemaining < 0 };
   }
@@ -134,12 +135,12 @@ const calculateLocalDisplayFields = (
         }
       }
     }
-    if (task.isHoursDueEnabled && task.hoursDue) { dueAtHours = actualLastCompletedHours + Number(task.hoursDue); }
-    if (task.isCyclesDueEnabled && task.cyclesDue) { dueAtCycles = actualLastCompletedCycles + Number(task.cyclesDue); }
+    if (task.isHoursDueEnabled && typeof task.hoursDue === 'number') { dueAtHours = actualLastCompletedHours + Number(task.hoursDue); }
+    if (task.isCyclesDueEnabled && typeof task.cyclesDue === 'number') { dueAtCycles = actualLastCompletedCycles + Number(task.cyclesDue); }
   } else if (task.trackType === "One Time") {
     if (task.isDaysDueEnabled && task.daysDueValue && isValid(parseISO(task.daysDueValue))) { dueAtDate = task.daysDueValue; }
-    if (task.isHoursDueEnabled && task.hoursDue) dueAtHours = Number(task.hoursDue);
-    if (task.isCyclesDueEnabled && task.cyclesDue) dueAtCycles = Number(task.cyclesDue);
+    if (task.isHoursDueEnabled && typeof task.hoursDue === 'number') dueAtHours = Number(task.hoursDue);
+    if (task.isCyclesDueEnabled && typeof task.cyclesDue === 'number') dueAtCycles = Number(task.cyclesDue);
   }
   const toGoData = calculateLocalToGo({ ...task, dueAtDate, dueAtHours, dueAtCycles }, currentComponentTimesArray);
   return { ...task, dueAtDate, dueAtHours, dueAtCycles, toGoData };
@@ -149,8 +150,8 @@ const formatLocalTaskFrequency = (task: FlowMaintenanceTask): string => {
   if (task.trackType === "Dont Alert") return "Not Tracked";
   if (task.trackType === "One Time") return "One Time";
   const frequencies = [];
-  if (task.isHoursDueEnabled && task.hoursDue) { frequencies.push(`${task.hoursDue.toLocaleString()} hrs`); }
-  if (task.isCyclesDueEnabled && task.cyclesDue) { frequencies.push(`${task.cyclesDue.toLocaleString()} cyc`); }
+  if (task.isHoursDueEnabled && typeof task.hoursDue === 'number') { frequencies.push(`${task.hoursDue.toLocaleString()} hrs`); }
+  if (task.isCyclesDueEnabled && typeof task.cyclesDue === 'number') { frequencies.push(`${task.cyclesDue.toLocaleString()} cyc`); }
   if (task.isDaysDueEnabled && task.daysDueValue) {
     const numVal = Number(task.daysDueValue);
     let unit = '';
@@ -214,10 +215,7 @@ const MaintenanceTaskRow = React.memo(function MaintenanceTaskRow(props: Mainten
   const itemType = item.itemType || "Other";
   const associatedComponent = item.associatedComponent || 'Airframe';
 
-  const status = item.toGoData
-    ? getLocalReleaseStatus(item.toGoData, item)
-    : { icon: <InfoIcon className="h-5 w-5" />, colorClass: 'text-gray-400', label: 'Calculating...' };
-
+  const status = getLocalReleaseStatus(item.toGoData, item);
   const frequency = formatLocalTaskFrequency(item);
 
   let dueAtDisplay = "N/A";
@@ -402,14 +400,14 @@ export default function AircraftMaintenanceDetailPage() {
     setEditingTaskOriginalId(null);
     setInitialModalFormData(defaultMaintenanceTaskFormValues);
     setIsTaskModalOpen(true);
-  }, [setEditingTaskOriginalId, setInitialModalFormData, setIsTaskModalOpen]);
+  }, []);
 
   const handleOpenEditTaskModal = useCallback((taskToEdit: FlowMaintenanceTask) => {
     setEditingTaskOriginalId(taskToEdit.id);
     const formData: MaintenanceTaskFormData = { itemTitle: taskToEdit.itemTitle, referenceNumber: taskToEdit.referenceNumber || '', partNumber: taskToEdit.partNumber || '', serialNumber: taskToEdit.serialNumber || '', itemType: taskToEdit.itemType, associatedComponent: taskToEdit.associatedComponent || '', details: taskToEdit.details || '', isActive: taskToEdit.isActive, trackType: taskToEdit.trackType, isTripsNotAffected: taskToEdit.isTripsNotAffected || false, lastCompletedDate: taskToEdit.lastCompletedDate || '', lastCompletedHours: taskToEdit.lastCompletedHours, lastCompletedCycles: taskToEdit.lastCompletedCycles, lastCompletedNotes: taskToEdit.lastCompletedNotes || '', isHoursDueEnabled: taskToEdit.isHoursDueEnabled || false, hoursDue: taskToEdit.hoursDue, hoursTolerance: taskToEdit.hoursTolerance, alertHoursPrior: taskToEdit.alertHoursPrior, isCyclesDueEnabled: taskToEdit.isCyclesDueEnabled || false, cyclesDue: taskToEdit.cyclesDue, cyclesTolerance: taskToEdit.cyclesTolerance, alertCyclesPrior: taskToEdit.alertCyclesPrior, isDaysDueEnabled: taskToEdit.isDaysDueEnabled || false, daysIntervalType: taskToEdit.daysIntervalType || 'days', daysDueValue: taskToEdit.daysDueValue || '', daysTolerance: taskToEdit.daysTolerance, alertDaysPrior: taskToEdit.alertDaysPrior, };
     setInitialModalFormData(formData);
     setIsTaskModalOpen(true);
-  }, [setEditingTaskOriginalId, setInitialModalFormData, setIsTaskModalOpen]);
+  }, []);
 
   const handleSaveTask = useCallback(async (taskFormData: MaintenanceTaskFormData) => {
     if (!currentAircraft) return;
@@ -435,7 +433,7 @@ export default function AircraftMaintenanceDetailPage() {
         await saveAircraftDiscrepancy({ ...discrepancyFormData, id: originalId });
         toast({ title: originalId ? "Discrepancy Updated" : "New Discrepancy Added", description: `Discrepancy for ${currentAircraft.tailNumber} saved.` });
         await loadAircraftDiscrepancies(currentAircraft.id);
-        setIsDiscrepancyModalOpen(false); // Close modal on successful save
+        setIsDiscrepancyModalOpen(false);
       } catch (error) { console.error("Failed to save discrepancy:", error); toast({ title: "Error Saving Discrepancy", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" }); }
     });
   };
@@ -484,7 +482,7 @@ export default function AircraftMaintenanceDetailPage() {
     const companyName = companyProfile?.companyName || "FlightOps360"; const companyAddress = companyProfile?.companyAddress || ""; const companyContact = [companyProfile?.companyEmail, companyProfile?.companyPhone].filter(Boolean).join(' | ');
     const aircraftContactName = aircraft.primaryContactName || "N/A"; const aircraftContactPhone = aircraft.primaryContactPhone || "N/A"; const aircraftContactEmail = aircraft.primaryContactEmail || "N/A";
     const companyLogoSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-plane"><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/></svg>`;
-    const tasksHtml = tasksToReport.map(task => { let lastDoneStr = "N/A"; if (task.lastCompletedDate && isValid(parseISO(task.lastCompletedDate))) { try { lastDoneStr = format(parseISO(task.lastCompletedDate), 'MM/dd/yy'); } catch {} } else if (typeof task.lastCompletedHours === 'number') lastDoneStr = `${task.lastCompletedHours.toLocaleString()} hrs`; else if (typeof task.lastCompletedCycles === 'number') lastDoneStr = `${task.lastCompletedCycles.toLocaleString()} cyc`; let dueAtStr = "N/A"; if (task.dueAtDate) { try { dueAtStr = format(parse(task.dueAtDate, 'yyyy-MM-dd', new Date()), 'MM/dd/yy'); } catch {} } else if (typeof task.dueAtHours === 'number') dueAtStr = `${task.dueAtHours.toLocaleString()} hrs`; else if (typeof task.dueAtCycles === 'number') dueAtStr = `${task.dueAtCycles.toLocaleString()} cyc`; return `<tr><td style="white-space: nowrap;">${task.referenceNumber || '-'}</td><td>${itemTitle || 'Untitled Task'}</td><td>${itemType || 'Other'}</td><td>${associatedComponent || 'Airframe'}</td><td>${lastDoneStr}</td><td>${dueAtStr}</td><td>${task.toGoData?.text || 'N/A'}</td><td style="min-width: 200px; max-width: 350px; word-break: break-word; white-space: pre-wrap;">${task.details || '-'}</td><td style="height: 60px; border-bottom: 1px solid #ccc; min-width: 150px;"></td></tr>`; }).join('');
+    const tasksHtml = tasksToReport.map(task => { let lastDoneStr = "N/A"; if (task.lastCompletedDate && isValid(parseISO(task.lastCompletedDate))) { try { lastDoneStr = format(parseISO(task.lastCompletedDate), 'MM/dd/yy'); } catch {} } else if (typeof task.lastCompletedHours === 'number') lastDoneStr = `${task.lastCompletedHours.toLocaleString()} hrs`; else if (typeof task.lastCompletedCycles === 'number') lastDoneStr = `${task.lastCompletedCycles.toLocaleString()} cyc`; let dueAtStr = "N/A"; if (task.dueAtDate) { try { dueAtStr = format(parse(task.dueAtDate, 'yyyy-MM-dd', new Date()), 'MM/dd/yy'); } catch {} } else if (typeof task.dueAtHours === 'number') dueAtStr = `${task.dueAtHours.toLocaleString()} hrs`; else if (typeof task.dueAtCycles === 'number') dueAtStr = `${task.dueAtCycles.toLocaleString()} cyc`; return `<tr><td style="white-space: nowrap;">${task.referenceNumber || '-'}</td><td>${task.itemTitle || 'Untitled Task'}</td><td>${task.itemType || 'Other'}</td><td>${task.associatedComponent || 'Airframe'}</td><td>${lastDoneStr}</td><td>${dueAtStr}</td><td>${task.toGoData?.text || 'N/A'}</td><td style="min-width: 200px; max-width: 350px; word-break: break-word; white-space: pre-wrap;">${task.details || '-'}</td><td style="height: 60px; border-bottom: 1px solid #ccc; min-width: 150px;"></td></tr>`; }).join('');
     return `<html><head><title>Work Order - ${aircraft.tailNumber}</title><style>body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol"; margin: 20px; font-size: 10pt; color: #333; } .header-container { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #007bff; } .company-info h1 { margin: 0; font-size: 20pt; color: #007bff; } .company-info p { margin: 2px 0; font-size: 9pt; } .logo-container { width: 50px; height: 50px; } .report-meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 15px; } .report-info, .aircraft-contact-info, .component-times-info { border: 1px solid #e0e0e0; padding: 12px; border-radius: 6px; background-color: #f9f9f9; } .report-info h2, .aircraft-contact-info h2 { margin-top: 0; font-size: 12pt; color: #333; } .report-info p, .aircraft-contact-info p, .component-times-info p { margin: 4px 0; } .component-times-info strong { font-size: 11pt; display: block; margin-bottom: 8px; } .component-times-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px 15px; } .component-times-grid p { display: flex; justify-content: space-between; border-bottom: 1px dotted #eee; padding-bottom: 3px; margin-bottom: 3px; } .component-times-grid p span:first-child { font-weight: 500; margin-right: 10px; color: #555; } .tasks-section h2 { font-size: 13pt; margin-top: 20px; margin-bottom: 10px; color: #333; border-bottom: 1px solid #ccc; padding-bottom: 5px;} table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 9pt; } th, td { border: 1px solid #ccc; padding: 8px; text-align: left; vertical-align: top; } th { background-color: #e9ecef; color: #495057; font-weight: 600; } td[style*="white-space: nowrap;"] { min-width: 70px; } tr:nth-child(even) { background-color: #f8f9fa; } .signatures { margin-top: 40px; display: flex; justify-content: space-between; page-break-inside: avoid; } .signatures div { width: 45%; } .signatures div p { margin-bottom: 50px; font-size: 10pt; } .print-button-container { text-align: center; margin-top: 30px; margin-bottom: 10px; } .print-button { padding: 10px 20px; background-color: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.1); font-size: 12pt;} .footer-powered-by { text-align: center; font-size: 9pt; color: #777; margin-top: 30px; padding-top: 10px; border-top: 1px solid #eee; } @media print { .print-button-container { display: none; } body { margin: 0.5in; font-size: 9pt; color: #000; } .header-container { border-bottom: 2px solid #007bff; } .company-info h1 { color: #007bff; } .report-info, .aircraft-contact-info, .component-times-info { border: 1px solid #ccc; background-color: #fff; } th { background-color: #f0f0f0 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; } tr:nth-child(even) { background-color: #f8f8f8 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; } table { font-size: 8pt; } th, td { padding: 5px; border: 1px solid #999; } }</style></head><body><div class="header-container"><div class="company-info"><h1>${companyName}</h1><p>${companyAddress}</p><p>${companyContact}</p></div><div class="logo-container">${companyLogoSvg}</div></div><div class="report-meta-grid"><div class="report-info"><h2>Aircraft Details</h2><p><strong>Aircraft:</strong> ${aircraft.tailNumber} (${aircraft.model})</p><p><strong>Serial Number:</strong> ${aircraft.serialNumber || 'N/A'}</p><p><strong>Date Generated:</strong> ${format(new Date(), "PPP HH:mm")}</p></div><div class="aircraft-contact-info"><h2>Aircraft Contact</h2><p><strong>Name:</strong> ${aircraftContactName}</p><p><strong>Phone:</strong> ${aircraftContactPhone}</p><p><strong>Email:</strong> ${aircraftContactEmail}</p><p><strong>Base:</strong> ${aircraft.baseLocation || 'N/A'}</p></div></div><div class="component-times-info"><strong>Current Component Times (as of report generation):</strong><div class="component-times-grid">${componentTimes.map(c => `<p><span>${c.componentName}:</span> <span>${c.currentTime.toLocaleString(undefined, {minimumFractionDigits:1, maximumFractionDigits:1})} hrs / ${c.currentCycles.toLocaleString()} cyc</span></p>`).join('')}</div></div><div class="tasks-section"><h2>Selected Maintenance Tasks</h2><table><thead><tr><th>Ref #</th><th>Task Title</th><th>Type</th><th>Component</th><th>Last Done</th><th>Due At</th><th>To Go</th><th style="width: 30%;">Work Instructions</th><th style="width: 20%;">Work Performed / Notes</th></tr></thead><tbody>${tasksHtml}</tbody></table></div><div class="signatures"><div><p>Shop Signature: _________________________</p><p>Date: ____________</p></div><div><p>Inspector Signature: _________________________</p><p>Date: ____________</p></div></div><div class="print-button-container"><button class="print-button" onclick="window.print()">Print Work Order</button></div><div class="footer-powered-by">Powered by FlightOps360</div></body></html>`;
   };
   const handleGenerateWorkOrder = async () => {
@@ -551,6 +549,86 @@ export default function AircraftMaintenanceDetailPage() {
       </div>
 
       <Card className="mt-6 shadow-lg">
+        <Accordion type="single" collapsible defaultValue="discrepancies-item" className="w-full">
+          <AccordionItem value="aircraft-status-logs-item">
+            <AccordionTrigger className="px-6 py-4 hover:no-underline">
+              <div className="flex items-center gap-2">
+                <BookOpen className="h-6 w-6 text-primary" />
+                <CardTitle className="text-xl">Aircraft Status &amp; Logs</CardTitle>
+                {openDiscrepancyCount > 0 && <Badge variant="destructive" className="ml-2">{openDiscrepancyCount} Open</Badge>}
+              </div>
+            </AccordionTrigger>
+            <AccordionContent className="pt-0">
+              <Tabs defaultValue="discrepancies" className="w-full px-6 pb-4">
+                <TabsList className="mb-4 grid w-full grid-cols-3">
+                  <TabsTrigger value="discrepancies">Discrepancies ({openDiscrepancyCount})</TabsTrigger>
+                  <TabsTrigger value="mels">MELs (0)</TabsTrigger>
+                  <TabsTrigger value="damageLog">Damage Log (0)</TabsTrigger>
+                </TabsList>
+                <TabsContent value="discrepancies">
+                  <CardDescription className="mb-3">Log and track discrepancies for {currentAircraft.tailNumber}.</CardDescription>
+                  <div className="space-y-3">
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <Button onClick={handleOpenAddDiscrepancyModal} disabled={!currentAircraft || isSavingDiscrepancy} className="w-full sm:w-auto">
+                        <PlusCircle className="mr-2 h-4 w-4" /> Add New Discrepancy
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        onClick={() => toast({ title: "Coming Soon!", description: "A dedicated page to view and manage all discrepancies is planned."})}
+                        disabled={!currentAircraft}
+                        className="w-full sm:w-auto"
+                      >
+                        <List className="mr-2 h-4 w-4" /> View Full Discrepancy Log (Coming Soon)
+                      </Button>
+                    </div>
+                    {isLoadingDiscrepancies ? (
+                        <div className="flex items-center justify-center py-6"><Loader2 className="h-6 w-6 animate-spin text-destructive" /><p className="ml-2 text-muted-foreground">Loading discrepancies...</p></div>
+                    ) : (
+                        aircraftDiscrepancies.length === 0 ? (
+                        <p className="text-center text-muted-foreground py-4">No discrepancies logged for this aircraft.</p>
+                        ) : (
+                           <p className="text-sm text-muted-foreground">
+                            Displaying summary. Full log view coming soon. Currently showing {aircraftDiscrepancies.filter(d => d.status !== "Closed").length} open discrepancy/ies.
+                          </p>
+                        )
+                    )}
+                  </div>
+                </TabsContent>
+                <TabsContent value="mels">
+                  <CardDescription className="mb-3">Manage Minimum Equipment List items for {currentAircraft.tailNumber}.</CardDescription>
+                  <div className="space-y-3 text-center py-4">
+                    <p className="text-muted-foreground">MEL information will be available here soon.</p>
+                     <div className="flex flex-col sm:flex-row gap-2 justify-center">
+                        <Button variant="secondary" onClick={() => toast({ title: "Coming Soon!", description: "Functionality to add MEL items is planned."})} className="w-full sm:w-auto">
+                          <PlusCircle className="mr-2 h-4 w-4" /> Add New MEL Item (Coming Soon)
+                        </Button>
+                        <Button variant="outline" onClick={() => toast({ title: "Coming Soon!", description: "A dedicated page for full MEL log viewing is planned."})} className="w-full sm:w-auto">
+                          <List className="mr-2 h-4 w-4" /> View Full MEL Log (Coming Soon)
+                        </Button>
+                    </div>
+                  </div>
+                </TabsContent>
+                <TabsContent value="damageLog">
+                  <CardDescription className="mb-3">Track and manage any reported damage for {currentAircraft.tailNumber}.</CardDescription>
+                   <div className="space-y-3 text-center py-4">
+                    <p className="text-muted-foreground">Damage Log information will be available here soon.</p>
+                     <div className="flex flex-col sm:flex-row gap-2 justify-center">
+                        <Button variant="secondary" onClick={() => toast({ title: "Coming Soon!", description: "Functionality to add damage reports is planned."})} className="w-full sm:w-auto">
+                          <FileWarning className="mr-2 h-4 w-4" /> Add New Damage Report (Coming Soon)
+                        </Button>
+                        <Button variant="outline" onClick={() => toast({ title: "Coming Soon!", description: "A dedicated page for full damage log viewing is planned."})} className="w-full sm:w-auto">
+                          <List className="mr-2 h-4 w-4" /> View Full Damage Log (Coming Soon)
+                        </Button>
+                    </div>
+                  </div>
+                </TabsContent>
+              </Tabs>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
+      </Card>
+
+      <Card className="mt-6 shadow-lg">
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><Wrench className="h-6 w-6 text-primary" />Maintenance Items</CardTitle>
           <CardDescription> Overview of scheduled and upcoming maintenance tasks for {currentAircraft.tailNumber}. Calculated "To Go" is based on the values in "Current Hours &amp; Cycles" above. </CardDescription>
@@ -560,58 +638,20 @@ export default function AircraftMaintenanceDetailPage() {
         </CardContent>
       </Card>
 
-      {/* Discrepancies Section */}
-      <Card className="mt-6 shadow-lg">
-        <CardHeader className="flex flex-row items-start justify-between">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-6 w-6 text-destructive" />Aircraft Discrepancies
-              {openDiscrepancyCount > 0 && 
-                <Badge variant="destructive" className="ml-2">{openDiscrepancyCount} Open</Badge>
-              }
-            </CardTitle>
-            <CardDescription>Log and track discrepancies for {currentAircraft.tailNumber}.</CardDescription>
-          </div>
-          <Button onClick={handleOpenAddDiscrepancyModal} disabled={!currentAircraft || isSavingDiscrepancy}>
-            <PlusCircle className="mr-2 h-4 w-4" /> Add New Discrepancy
-          </Button>
-        </CardHeader>
-        <CardContent>
-          {isLoadingDiscrepancies ? (
-            <div className="flex items-center justify-center py-10"><Loader2 className="h-8 w-8 animate-spin text-destructive" /><p className="ml-2 text-muted-foreground">Loading discrepancies...</p></div>
-          ) : (
-            <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                There {openDiscrepancyCount === 1 ? 'is' : 'are'} {openDiscrepancyCount} open {openDiscrepancyCount === 1 ? 'discrepancy' : 'discrepancies'} for this aircraft.
-              </p>
-              <Button 
-                variant="outline" 
-                onClick={() => toast({ title: "Coming Soon!", description: "A dedicated page to view and manage all discrepancies is planned."})}
-                disabled={!currentAircraft}
-                className="w-full sm:w-auto"
-              >
-                <List className="mr-2 h-4 w-4" /> View Full Discrepancy Log (Coming Soon)
-              </Button>
-              {aircraftDiscrepancies.length === 0 && (
-                <p className="text-center text-muted-foreground py-6">No discrepancies logged for this aircraft.</p>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
       <AddEditAircraftDiscrepancyModal
         isOpen={isDiscrepancyModalOpen}
         setIsOpen={setIsDiscrepancyModalOpen}
         onSave={handleSaveDiscrepancy}
         aircraft={currentAircraft}
-        initialData={null} // Add modal only for now, edit/delete will be on dedicated page
-        isEditing={false} // Add modal only for now
+        initialData={null}
+        isEditing={false} 
         isSaving={isSavingDiscrepancy}
       />
     </div>
   );
 }
+    
+
     
 
     
