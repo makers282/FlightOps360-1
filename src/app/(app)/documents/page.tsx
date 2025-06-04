@@ -1,36 +1,39 @@
+
 import { PageHeader } from '@/components/page-header';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { FileText, UploadCloud, Search } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { FileText, UploadCloud, Search, Library } from 'lucide-react'; // Changed icon to Library
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import Image from 'next/image';
 
-export default function DocumentsPage() {
+export default function CompanyDocumentsPage() { // Renamed component
   const documents = [
-    { name: "Flight Manual A320 Rev 12.pdf", type: "Manual", size: "15.2 MB", lastModified: "2024-07-15", dataAiHint: "document manual" },
-    { name: "Compliance Checklist Q3-2024.docx", type: "Checklist", size: "1.5 MB", lastModified: "2024-07-01", dataAiHint: "checklist form" },
-    { name: "Aircraft N123AB Registration.pdf", type: "Legal", size: "850 KB", lastModified: "2024-06-20", dataAiHint: "certificate legal" },
-    { name: "FRAT Form Template.pdf", type: "Template", size: "300 KB", lastModified: "2024-05-10", dataAiHint: "form template" },
+    { name: "Flight Operations Manual Rev 12.pdf", type: "Manual", size: "15.2 MB", lastModified: "2024-07-15", dataAiHint: "document manual" },
+    { name: "Safety Management System Q3-2024.docx", type: "Compliance", size: "1.5 MB", lastModified: "2024-07-01", dataAiHint: "checklist form" },
+    { name: "Company AOC Certificate.pdf", type: "Legal", size: "850 KB", lastModified: "2024-06-20", dataAiHint: "certificate legal" },
+    { name: "FRAT Form Template Rev 2.pdf", type: "Template", size: "300 KB", lastModified: "2024-05-10", dataAiHint: "form template" },
+    { name: "Emergency Response Plan.pdf", type: "Procedure", size: "2.1 MB", lastModified: "2024-08-01", dataAiHint: "safety plan" },
   ];
 
   return (
     <>
       <PageHeader 
-        title="Document Hub" 
-        description="Manage and access all relevant flight operations and compliance documents."
-        icon={FileText}
+        title="Company Document Hub" // Updated title
+        description="Manage and access all company-wide operational manuals, compliance documents, policies, and templates." // Updated description
+        icon={Library} // Changed icon
         actions={
           <Button>
-            <UploadCloud className="mr-2 h-4 w-4" /> Upload Document
+            <UploadCloud className="mr-2 h-4 w-4" /> Upload Company Document
           </Button>
         }
       />
       <Card className="shadow-lg">
         <CardHeader>
-          <CardTitle>All Documents</CardTitle>
+          <CardTitle>Company Documents</CardTitle> {/* Updated title */}
+          <CardDescription>Central repository for all official company documentation.</CardDescription> {/* Updated description */}
           <div className="mt-2 relative">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Search documents..." className="pl-8 w-full sm:w-1/3" />
+            <Input placeholder="Search company documents..." className="pl-8 w-full sm:w-1/3" />
           </div>
         </CardHeader>
         <CardContent>
@@ -45,7 +48,7 @@ export default function DocumentsPage() {
                 </CardHeader>
                 <CardContent className="p-4 pt-0 flex-grow">
                   <Image 
-                    src={`https://placehold.co/300x200.png?text=${doc.type}`} 
+                    src={`https://placehold.co/300x200.png?text=${doc.type.replace(/\s/g, '+')}`} 
                     alt={doc.name} 
                     width={300} 
                     height={200} 
@@ -64,9 +67,9 @@ export default function DocumentsPage() {
           </div>
           {documents.length === 0 && (
             <div className="text-center py-10">
-              <FileText className="mx-auto h-12 w-12 text-muted-foreground" />
-              <h3 className="mt-2 text-sm font-medium text-foreground">No documents found</h3>
-              <p className="mt-1 text-sm text-muted-foreground">Get started by uploading a document.</p>
+              <Library className="mx-auto h-12 w-12 text-muted-foreground" /> {/* Changed icon */}
+              <h3 className="mt-2 text-sm font-medium text-foreground">No company documents found</h3>
+              <p className="mt-1 text-sm text-muted-foreground">Get started by uploading a company document.</p>
             </div>
           )}
         </CardContent>

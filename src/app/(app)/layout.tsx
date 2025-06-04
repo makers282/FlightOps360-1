@@ -25,17 +25,18 @@ import {
   ShieldAlert,
   Users, 
   UsersRound, 
-  FileArchive,
+  FileArchive as QuoteFileArchiveIcon, // Renamed to avoid conflict with FolderArchive
   SlidersHorizontal,
   PlaneTakeoff,
   Building2,
   Wrench, 
   ClipboardCheck,
-  BarChartBig, // New icon for Reports
-  DollarSign, // New icon for Financial Reports
-  Package, // New icon for Load Manifests
-  TrendingUp, // New icon for Operational Analytics
-  Users2, // Icon for Crew Roster
+  BarChartBig, 
+  DollarSign, 
+  Package, 
+  TrendingUp, 
+  Users2, 
+  BookOpenCheck, // New icon for Aircraft Documents
 } from 'lucide-react';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -126,7 +127,7 @@ export default function AppLayout({ children }: PropsWithChildren) {
                   New Quote
                 </SidebarMenuSubButton>
                  <SidebarMenuSubButton href="/quotes" tooltip="All Quotes" isActive={pathname === '/quotes' && pathname !== '/quotes/new'}>
-                  <FileArchive />
+                  <QuoteFileArchiveIcon />
                   All Quotes
                 </SidebarMenuSubButton>
                 <SidebarMenuSubButton href="/optimal-route" tooltip="Optimal Route Planning" isActive={pathname === '/optimal-route'}>
@@ -145,6 +146,10 @@ export default function AppLayout({ children }: PropsWithChildren) {
                 <SidebarMenuSubButton href="/aircraft/currency" tooltip="Maintenance Currency" isActive={pathname.startsWith('/aircraft/currency')}>
                   <Wrench /> 
                   Maintenance Currency
+                </SidebarMenuSubButton>
+                <SidebarMenuSubButton href="/aircraft/documents" tooltip="Aircraft Documents" isActive={pathname.startsWith('/aircraft/documents')}>
+                  <BookOpenCheck /> 
+                  Aircraft Documents
                 </SidebarMenuSubButton>
               </SidebarMenuSub>
             </SidebarMenuItem>
@@ -215,9 +220,9 @@ export default function AppLayout({ children }: PropsWithChildren) {
             </SidebarMenuItem>
 
             <SidebarMenuItem>
-              <SidebarMenuButton href="/documents" tooltip="Document Hub" isActive={pathname === '/documents'}>
+              <SidebarMenuButton href="/documents" tooltip="Company Document Hub" isActive={pathname === '/documents'}>
                 <FileText />
-                Document Hub
+                Company Documents
               </SidebarMenuButton>
             </SidebarMenuItem>
 
