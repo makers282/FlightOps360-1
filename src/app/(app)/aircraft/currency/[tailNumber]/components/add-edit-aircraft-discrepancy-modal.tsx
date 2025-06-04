@@ -24,11 +24,12 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { CalendarIcon, Loader2, Save, AlertTriangle, Edit3, ShieldCheck } from 'lucide-react';
 import { cn } from "@/lib/utils";
-import { format, parseISO, isValid as isValidDate, setHours, setMinutes, startOfDay } from "date-fns";
+import { format, parseISO, isValid as isValidDate, startOfDay } from "date-fns";
 import type { AircraftDiscrepancy, SaveAircraftDiscrepancyInput } from '@/ai/schemas/aircraft-discrepancy-schemas';
 import { discrepancyStatuses } from '@/ai/schemas/aircraft-discrepancy-schemas';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { FleetAircraft } from '@/ai/schemas/fleet-aircraft-schemas';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'; // Added Card imports
 
 const discrepancyFormSchema = z.object({
   status: z.enum(discrepancyStatuses).default("Open"),
@@ -74,10 +75,11 @@ const discrepancyFormSchema = z.object({
 
 export type AircraftDiscrepancyFormData = z.infer<typeof discrepancyFormSchema>;
 
-export const defaultDiscrepancyFormValues: Partial<AircraftDiscrepancyFormData> = {
+// Static default values (no new Date() here)
+const staticDefaultFormValues: AircraftDiscrepancyFormData = {
   status: "Open",
-  dateDiscovered: startOfDay(new Date()),
-  timeDiscovered: format(new Date(), "HH:mm"),
+  dateDiscovered: new Date(0), // Placeholder, will be overwritten by useEffect
+  timeDiscovered: "00:00",     // Placeholder
   description: "",
   discoveredBy: "",
   discoveredByCertNumber: "",
@@ -115,16 +117,16 @@ export function AddEditAircraftDiscrepancyModal({
 
   const form = useForm<AircraftDiscrepancyFormData>({
     resolver: zodResolver(discrepancyFormSchema),
-    defaultValues: defaultDiscrepancyFormValues,
+    defaultValues: staticDefaultFormValues, // Use static defaults initially
   });
   
   const isDeferredWatch = form.watch("isDeferred");
   const statusWatch = form.watch("status");
 
   useEffect(() => {
-    const today = new Date();
-    const pastLimit = new Date(today);
-    pastLimit.setFullYear(today.getFullYear() - 5); // Allow dates up to 5 years in the past
+    const todayForMinDate = new Date();
+    const pastLimit = new Date(todayForMinDate);
+    pastLimit.setFullYear(todayForMinDate.getFullYear() - 5);
     setMinDateAllowed(pastLimit);
 
     if (isOpen) {
@@ -144,21 +146,24 @@ export function AddEditAircraftDiscrepancyModal({
           correctedBy: initialData.correctedBy || "",
           correctedByCertNumber: initialData.correctedByCertNumber || "",
         });
-      } else {
-        form.reset(defaultDiscrepancyFormValues);
+      } else { // New form
+        form.reset({
+            ...staticDefaultFormValues, // Reset with static, then set dynamic dates
+            dateDiscovered: startOfDay(new Date()), // Set dynamic default client-side
+            timeDiscovered: format(new Date(), "HH:mm"), // Set dynamic default client-side
+        });
       }
     }
-  }, [isOpen, isEditing, initialData, form]);
+  }, [isOpen, isEditing, initialData, form.reset]);
 
   const onSubmit: SubmitHandler<AircraftDiscrepancyFormData> = async (formData) => {
     if (!aircraft?.id) {
-        // This case should ideally be prevented by disabling the "Add Discrepancy" button if aircraft is null
         alert("Aircraft data is missing. Cannot save discrepancy.");
         return;
     }
     const dataToSave: SaveAircraftDiscrepancyInput = {
       aircraftId: aircraft.id,
-      aircraftTailNumber: aircraft.tailNumber, // Denormalize for easier display
+      aircraftTailNumber: aircraft.tailNumber,
       status: formData.status,
       dateDiscovered: format(formData.dateDiscovered, "yyyy-MM-dd"),
       timeDiscovered: formData.timeDiscovered,
@@ -180,6 +185,8 @@ export function AddEditAircraftDiscrepancyModal({
   const modalDescription = isEditing
     ? "Update the details of this aircraft discrepancy."
     : "Log a new discrepancy for this aircraft. All fields related to correction can be filled later.";
+  
+  const currentFormValues = form.getValues(); // For checking conditional display values
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!isSaving) setIsOpen(open); }}>
@@ -224,7 +231,7 @@ export function AddEditAircraftDiscrepancyModal({
                           <FormLabel>Date Discovered</FormLabel>
                           <Popover><PopoverTrigger asChild>
                               <FormControl><Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
-                                  {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
+                                  {field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
                                   <CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl>
                             </PopoverTrigger>
                             <PopoverContent className="w-auto p-0" align="start">
@@ -255,7 +262,7 @@ export function AddEditAircraftDiscrepancyModal({
                             <FormLabel>Deferral Date</FormLabel>
                             <Popover><PopoverTrigger asChild>
                                 <FormControl><Button variant={"outline"} className={cn("w-full md:w-1/2 pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
-                                    {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
+                                    {field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
                                     <CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl>
                                 </PopoverTrigger>
                                 <PopoverContent className="w-auto p-0" align="start">
@@ -282,7 +289,7 @@ export function AddEditAircraftDiscrepancyModal({
                                 <FormLabel>Date Corrected</FormLabel>
                                 <Popover><PopoverTrigger asChild>
                                     <FormControl><Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
-                                        {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
+                                        {field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
                                         <CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl>
                                     </PopoverTrigger>
                                     <PopoverContent className="w-auto p-0" align="start">
@@ -295,7 +302,7 @@ export function AddEditAircraftDiscrepancyModal({
                             <FormField control={form.control} name="correctedBy" render={({ field }) => (<FormItem><FormLabel>Corrected By</FormLabel><FormControl><Input placeholder="e.g., Maintenance Staff, Cert. Mechanic" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>)} />
                             <FormField control={form.control} name="correctedByCertNumber" render={({ field }) => (<FormItem><FormLabel>Corrected By Cert #</FormLabel><FormControl><Input placeholder="e.g., A&P 7654321" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>)} />
                         </div>
-                         {statusWatch === 'Closed' && (!formData.correctiveAction || !formData.dateCorrected || !formData.correctedBy) && (
+                         {statusWatch === 'Closed' && (!currentFormValues.correctiveAction || !currentFormValues.dateCorrected || !currentFormValues.correctedBy) && (
                             <p className="text-xs text-destructive">For 'Closed' status, Corrective Action, Date Corrected, and Corrected By are usually required.</p>
                         )}
                     </CardContent>
@@ -317,4 +324,3 @@ export function AddEditAircraftDiscrepancyModal({
     </Dialog>
   );
 }
-
