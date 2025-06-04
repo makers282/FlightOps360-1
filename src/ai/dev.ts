@@ -22,6 +22,7 @@ import '@/ai/flows/manage-crew-flow.ts'; // Added new crew management flow
 import '@/ai/flows/manage-aircraft-block-outs-flow.ts'; // Added aircraft block-out flow
 import '@/ai/flows/manage-crew-documents-flow.ts'; // Added crew documents flow
 import '@/ai/flows/manage-aircraft-documents-flow.ts'; // Added new aircraft documents flow
+import '@/ai/flows/upload-aircraft-document-flow.ts'; // Added aircraft document upload flow
 
 // Schemas are not Genkit plugins and should not be imported here for registration.
 // They are imported directly by flows or components that use them.

@@ -4,7 +4,7 @@
 import React, { useState, useMemo, useEffect, useTransition } from 'react';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { BookOpenCheck, UploadCloud, Edit3, Trash2, Search, FileText, Loader2, Plane } from 'lucide-react';
+import { BookOpenCheck, UploadCloud, Edit3, Trash2, Search, FileText, Loader2, Plane, Link as LinkIcon, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
@@ -26,6 +26,7 @@ import type { AircraftDocument, SaveAircraftDocumentInput } from '@/ai/schemas/a
 import { AddEditAircraftDocumentModal } from './components/add-edit-aircraft-document-modal';
 import { ClientOnly } from '@/components/client-only';
 import { Skeleton } from '@/components/ui/skeleton';
+import Link from 'next/link'; // For linking to fileUrl
 
 export default function AircraftDocumentsPage() {
   const [allFleetAircraft, setAllFleetAircraft] = useState<Pick<FleetAircraft, 'id' | 'tailNumber' | 'model'>[]>([]);
@@ -94,6 +95,7 @@ export default function AircraftDocumentsPage() {
   const handleSaveDocument = async (data: SaveAircraftDocumentInput, originalDocumentId?: string) => {
     startSavingDocumentTransition(async () => {
       try {
+        // If originalDocumentId is present, it's an edit; otherwise, it's a new document.
         const dataToSave = { ...data, id: originalDocumentId };
         const savedData = await saveAircraftDocument(dataToSave);
         toast({
@@ -143,17 +145,24 @@ export default function AircraftDocumentsPage() {
   };
 
   const DocumentItem = ({ doc }: { doc: AircraftDocument }) => (
-    <div className="flex items-center justify-between py-2 px-3 border-b last:border-b-0 hover:bg-muted/50 transition-colors rounded-sm group">
-      <div className="flex items-center gap-3 flex-1 min-w-0">
-        <FileText className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-        <div className="truncate">
+    <div className="flex items-start justify-between py-3 px-4 border-b last:border-b-0 hover:bg-muted/50 transition-colors rounded-sm group">
+      <div className="flex items-start gap-3 flex-1 min-w-0">
+        <FileText className="h-5 w-5 text-muted-foreground flex-shrink-0 mt-0.5" />
+        <div className="truncate flex-grow">
           <p className="text-sm font-medium text-foreground truncate" title={doc.documentName}>{doc.documentName}</p>
           <p className="text-xs text-muted-foreground">
-            {doc.documentType} - {doc.expiryDate ? `Expires: ${formatDateForDisplay(doc.expiryDate)}` : (doc.issueDate ? `Issued: ${formatDateForDisplay(doc.issueDate)}` : 'Date N/A')}
+            Type: {doc.documentType} | Expires: {formatDateForDisplay(doc.expiryDate)}
           </p>
+          {doc.fileUrl && (
+            <Link href={doc.fileUrl} target="_blank" rel="noopener noreferrer" 
+                  className="text-xs text-primary hover:underline flex items-center gap-1 mt-1">
+              <LinkIcon className="h-3 w-3" /> View/Download Document
+            </Link>
+          )}
+           {!doc.fileUrl && <p className="text-xs text-muted-foreground italic mt-1">No file uploaded.</p>}
         </div>
       </div>
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity flex-shrink-0">
         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleOpenEditModal(doc)}>
           <Edit3 className="h-4 w-4" />
           <span className="sr-only">Edit</span>
@@ -177,7 +186,7 @@ export default function AircraftDocumentsPage() {
         icon={BookOpenCheck}
         actions={
           <Button onClick={handleOpenAddModal} disabled={isLoadingFleet || !selectedAircraftId}>
-            <UploadCloud className="mr-2 h-4 w-4" /> Upload Aircraft Document
+            <UploadCloud className="mr-2 h-4 w-4" /> Add Aircraft Document
           </Button>
         }
       />
@@ -189,6 +198,8 @@ export default function AircraftDocumentsPage() {
             value={selectedAircraftId || ''}
             onValueChange={(value) => setSelectedAircraftId(value === 'NONE' ? undefined : value)}
             disabled={isLoadingFleet}
+            name="aircraftSelectDropdown" // Added name for label association
+            // id="aircraftSelectDropdown" // Ensure id is on SelectTrigger or handled by shadcn
           >
             <SelectTrigger id="aircraftSelectDropdown">
               <SelectValue placeholder={isLoadingFleet ? "Loading aircraft..." : "Select an aircraft"} />
@@ -253,7 +264,7 @@ export default function AircraftDocumentsPage() {
         isSaving={isSavingDocument}
         aircraftList={allFleetAircraft}
         isLoadingAircraft={isLoadingFleet}
-        selectedAircraftIdForNew={selectedAircraftId} // Pass selected aircraft ID to modal
+        selectedAircraftIdForNew={selectedAircraftId}
       />
 
       {showDeleteConfirm && documentToDelete && (
