@@ -4,7 +4,7 @@
 import React, { useState, useMemo, useEffect, useTransition } from 'react';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { FolderArchive, UploadCloud, Edit3, Trash2, Search, FileText, Loader2, CalendarDays, User, ClipboardCheck } from 'lucide-react'; // Added ClipboardCheck
+import { FolderArchive, UploadCloud, Edit3, Trash2, Search, FileText, Loader2, CalendarDays, User, ClipboardCheck, AlertTriangle, CheckCircle2 } from 'lucide-react'; // Added ClipboardCheck
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
@@ -18,7 +18,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
-import { format, parseISO, isValid } from 'date-fns';
+import { format, parseISO, isValid, differenceInDays, isPast, isFuture } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 
 import { fetchCrewMembers, type CrewMember } from '@/ai/flows/manage-crew-flow';
@@ -33,6 +33,47 @@ import { Badge } from '@/components/ui/badge';
 const GENERAL_DOC_TYPES: CrewDocumentType[] = ["License", "Medical", "Passport", "Visa", "Company ID", "Airport ID", "Other"];
 const TRAINING_DOC_TYPES: CrewDocumentType[] = ["Training Certificate", "Type Rating"];
 const CURRENCY_DOC_TYPES: CrewDocumentType[] = ["Recurrency Check", "Proficiency Check", "Line Check", "Medical Clearance for Duty"];
+
+const EXPIRY_WARNING_DAYS = 30; // Warn if expiring within 30 days
+
+type DocumentStatus = "Expired" | "Expiring Soon" | "Valid" | "No Expiry";
+
+const getDocumentStatus = (expiryDateString?: string): DocumentStatus => {
+  if (!expiryDateString) return "No Expiry";
+  try {
+    const expiry = parseISO(expiryDateString);
+    if (!isValid(expiry)) return "No Expiry"; // Or treat as invalid input
+    
+    if (isPast(expiry)) return "Expired";
+    
+    const daysUntilExpiry = differenceInDays(expiry, new Date());
+    if (daysUntilExpiry <= EXPIRY_WARNING_DAYS) return "Expiring Soon";
+    
+    return "Valid";
+  } catch {
+    return "No Expiry"; // If parsing fails
+  }
+};
+
+const getStatusBadgeVariant = (status: DocumentStatus): "default" | "secondary" | "destructive" | "outline" => {
+  switch (status) {
+    case "Expired": return "destructive";
+    case "Expiring Soon": return "secondary"; // Or a custom 'warning' variant if defined
+    case "Valid": return "default";
+    case "No Expiry": return "outline";
+    default: return "outline";
+  }
+};
+
+const getStatusIcon = (status: DocumentStatus) => {
+  switch (status) {
+    case "Expired": return <AlertTriangle className="h-4 w-4 text-destructive" />;
+    case "Expiring Soon": return <AlertTriangle className="h-4 w-4 text-yellow-500" />;
+    case "Valid": return <CheckCircle2 className="h-4 w-4 text-green-500" />;
+    case "No Expiry": return <FileText className="h-4 w-4 text-muted-foreground" />;
+    default: return <FileText className="h-4 w-4 text-muted-foreground" />;
+  }
+};
 
 
 export default function CrewDocumentsPage() {
@@ -159,29 +200,33 @@ export default function CrewDocumentsPage() {
     }
   };
 
-  const DocumentItem = ({ doc }: { doc: CrewDocument }) => (
-    <div className="flex items-center justify-between py-2 px-3 border-b last:border-b-0 hover:bg-muted/50 transition-colors rounded-sm group">
-      <div className="flex items-center gap-2 flex-1 min-w-0">
-        <FileText className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-        <div className="truncate">
-          <p className="text-sm font-medium text-foreground truncate" title={doc.documentName}>{doc.documentName}</p>
-          <p className="text-xs text-muted-foreground">
-            {doc.expiryDate ? `Expires: ${formatDateForDisplay(doc.expiryDate)}` : (doc.issueDate ? `Issued: ${formatDateForDisplay(doc.issueDate)}` : doc.documentType)}
-          </p>
+  const DocumentItem = ({ doc }: { doc: CrewDocument }) => {
+    const status = getDocumentStatus(doc.expiryDate);
+    return (
+      <div className="flex items-center justify-between py-2 px-3 border-b last:border-b-0 hover:bg-muted/50 transition-colors rounded-sm group">
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          {getStatusIcon(status)}
+          <div className="truncate">
+            <p className="text-sm font-medium text-foreground truncate" title={doc.documentName}>{doc.documentName}</p>
+            <p className="text-xs text-muted-foreground">
+              {doc.expiryDate ? `Expires: ${formatDateForDisplay(doc.expiryDate)}` : (doc.issueDate ? `Issued: ${formatDateForDisplay(doc.issueDate)}` : doc.documentType)}
+              <Badge variant={getStatusBadgeVariant(status)} className="ml-2 text-xs px-1.5 py-0">{status}</Badge>
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleOpenEditModal(doc)}>
+            <Edit3 className="h-4 w-4" />
+            <span className="sr-only">Edit</span>
+          </Button>
+          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => handleDeleteClick(doc)}>
+            <Trash2 className="h-4 w-4" />
+            <span className="sr-only">Delete</span>
+          </Button>
         </div>
       </div>
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
-        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleOpenEditModal(doc)}>
-          <Edit3 className="h-4 w-4" />
-          <span className="sr-only">Edit</span>
-        </Button>
-        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => handleDeleteClick(doc)}>
-          <Trash2 className="h-4 w-4" />
-          <span className="sr-only">Delete</span>
-        </Button>
-      </div>
-    </div>
-  );
+    );
+  };
 
   const selectedCrewMember = allCrewMembers.find(cm => cm.id === selectedCrewMemberId);
   const pageTitle = selectedCrewMember ? `Crew Documents: ${selectedCrewMember.firstName} ${selectedCrewMember.lastName}` : "Crew Documents";
