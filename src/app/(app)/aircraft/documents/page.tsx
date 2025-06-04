@@ -4,7 +4,7 @@
 import React, { useState, useMemo, useEffect, useTransition } from 'react';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Library, UploadCloud, Search, FileText, Edit3, Trash2, Loader2, Link as LinkIcon, CalendarDays, Tag, AlertTriangle, CheckCircle2 } from 'lucide-react'; // Added AlertTriangle, CheckCircle2
+import { Library, UploadCloud, Search, FileText, Edit3, Trash2, Loader2, Link as LinkIcon, CalendarDays, Tag, AlertTriangle, CheckCircle2, Plane } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -18,11 +18,14 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
-import { format, parseISO, isValid, differenceInDays, isPast } from 'date-fns'; // Added differenceInDays, isPast
+import { format, parseISO, isValid, differenceInDays, isPast } from 'date-fns';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
-import { fetchCompanyDocuments, saveCompanyDocument, deleteCompanyDocument } from '@/ai/flows/manage-company-documents-flow';
-import type { CompanyDocument, SaveCompanyDocumentInput } from '@/ai/schemas/company-document-schemas';
-import { AddEditCompanyDocumentModal } from './components/add-edit-company-document-modal';
+import { fetchAircraftDocuments, saveAircraftDocument, deleteAircraftDocument } from '@/ai/flows/manage-aircraft-documents-flow';
+import type { AircraftDocument, SaveAircraftDocumentInput, AircraftDocumentType } from '@/ai/schemas/aircraft-document-schemas';
+// aircraftDocumentTypes is already exported from the schema and used in the modal, so it doesn't need to be redefined here.
+import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
+import { AddEditAircraftDocumentModal } from './components/add-edit-aircraft-document-modal';
 import { ClientOnly } from '@/components/client-only'; 
 import { Skeleton } from '@/components/ui/skeleton'; 
 import Link from 'next/link';
@@ -34,7 +37,7 @@ const getDocumentStatus = (expiryDateString?: string): DocumentStatus => {
   if (!expiryDateString) return "No Expiry";
   try {
     const expiry = parseISO(expiryDateString);
-    if (!isValid(expiry)) return "No Expiry";
+    if (!isValid(expiry)) return "No Expiry"; 
     
     if (isPast(expiry)) return "Expired";
     
@@ -68,46 +71,65 @@ const getStatusIcon = (status: DocumentStatus) => {
 };
 
 
-export default function CompanyDocumentsPage() {
-  const [allCompanyDocuments, setAllCompanyDocuments] = useState<CompanyDocument[]>([]);
+export default function AircraftDocumentsPage() {
+  const [allAircraftDocuments, setAllAircraftDocuments] = useState<AircraftDocument[]>([]);
   const [isLoadingDocuments, setIsLoadingDocuments] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const { toast } = useToast();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditingModal, setIsEditingModal] = useState(false);
-  const [currentDocumentToEdit, setCurrentDocumentToEdit] = useState<CompanyDocument | null>(null);
+  const [currentDocumentToEdit, setCurrentDocumentToEdit] = useState<AircraftDocument | null>(null);
   const [isSavingDocument, startSavingDocumentTransition] = useTransition();
   
   const [isDeletingDocument, startDeletingDocumentTransition] = useTransition();
-  const [documentToDelete, setDocumentToDelete] = useState<CompanyDocument | null>(null);
+  const [documentToDelete, setDocumentToDelete] = useState<AircraftDocument | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  const loadCompanyDocuments = async () => {
+  const [fleetForSelect, setFleetForSelect] = useState<Pick<FleetAircraft, 'id' | 'tailNumber' | 'model'>[]>([]);
+  const [isLoadingAircraftForSelect, setIsLoadingAircraftForSelect] = useState(true);
+  const [selectedAircraftFilter, setSelectedAircraftFilter] = useState<string>('all');
+
+
+  const loadPageData = async () => {
     setIsLoadingDocuments(true);
+    setIsLoadingAircraftForSelect(true);
     try {
-      const fetchedDocs = await fetchCompanyDocuments();
-      setAllCompanyDocuments(fetchedDocs);
+      const [fetchedDocs, fetchedFleet] = await Promise.all([
+        fetchAircraftDocuments(),
+        fetchFleetAircraft()
+      ]);
+      setAllAircraftDocuments(fetchedDocs);
+      setFleetForSelect(fetchedFleet.map(ac => ({ id: ac.id, tailNumber: ac.tailNumber, model: ac.model })));
     } catch (error) {
-      console.error("Failed to load company documents:", error);
-      toast({ title: "Error Loading Documents", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
+      console.error("Failed to load aircraft documents or fleet:", error);
+      toast({ title: "Error Loading Data", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
     } finally {
       setIsLoadingDocuments(false);
+      setIsLoadingAircraftForSelect(false);
     }
   };
 
   useEffect(() => {
-    loadCompanyDocuments();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    loadPageData();
   }, []); 
 
-  const filteredDocuments = allCompanyDocuments.filter(doc =>
-    doc.documentName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    doc.documentType.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (doc.description && doc.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (doc.version && doc.version.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (doc.tags && doc.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase())))
-  );
+  const filteredDocuments = useMemo(() => {
+    return allAircraftDocuments.filter(doc => {
+        const matchesAircraft = selectedAircraftFilter === 'all' || doc.aircraftId === selectedAircraftFilter;
+        if (!matchesAircraft) return false;
+
+        if (!searchTerm) return true;
+        const lowerSearchTerm = searchTerm.toLowerCase();
+        return (
+            doc.documentName.toLowerCase().includes(lowerSearchTerm) ||
+            doc.documentType.toLowerCase().includes(lowerSearchTerm) ||
+            (doc.aircraftTailNumber && doc.aircraftTailNumber.toLowerCase().includes(lowerSearchTerm)) ||
+            (doc.notes && doc.notes.toLowerCase().includes(lowerSearchTerm))
+        );
+    });
+  }, [allAircraftDocuments, searchTerm, selectedAircraftFilter]);
+
 
   const handleOpenAddModal = () => {
     setIsEditingModal(false);
@@ -115,31 +137,31 @@ export default function CompanyDocumentsPage() {
     setIsModalOpen(true);
   };
 
-  const handleOpenEditModal = (doc: CompanyDocument) => {
+  const handleOpenEditModal = (doc: AircraftDocument) => {
     setIsEditingModal(true);
     setCurrentDocumentToEdit(doc);
     setIsModalOpen(true);
   };
 
-  const handleSaveDocument = async (data: SaveCompanyDocumentInput, originalDocumentId?: string) => {
+  const handleSaveDocument = async (data: SaveAircraftDocumentInput, originalDocumentId?: string) => {
     startSavingDocumentTransition(async () => {
       try {
         const dataToSave = { ...data, id: originalDocumentId };
-        const savedData = await saveCompanyDocument(dataToSave);
+        const savedData = await saveAircraftDocument(dataToSave);
         toast({
           title: isEditingModal ? "Document Updated" : "Document Added",
-          description: `Company document "${savedData.documentName}" has been successfully ${isEditingModal ? 'updated' : 'saved'}.`,
+          description: `Aircraft document "${savedData.documentName}" has been successfully ${isEditingModal ? 'updated' : 'saved'}.`,
         });
         setIsModalOpen(false);
-        await loadCompanyDocuments(); 
+        await loadPageData(); 
       } catch (error) {
-        console.error("Failed to save company document:", error);
+        console.error("Failed to save aircraft document:", error);
         toast({ title: "Error Saving Document", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
       }
     });
   };
 
-  const handleDeleteClick = (doc: CompanyDocument) => {
+  const handleDeleteClick = (doc: AircraftDocument) => {
     setDocumentToDelete(doc);
     setShowDeleteConfirm(true);
   };
@@ -148,11 +170,11 @@ export default function CompanyDocumentsPage() {
     if (!documentToDelete) return;
     startDeletingDocumentTransition(async () => {
       try {
-        await deleteCompanyDocument({ documentId: documentToDelete.id });
+        await deleteAircraftDocument({ documentId: documentToDelete.id });
         toast({ title: "Document Deleted", description: `Document "${documentToDelete.documentName}" has been removed.` });
         setShowDeleteConfirm(false);
         setDocumentToDelete(null);
-        await loadCompanyDocuments(); 
+        await loadPageData(); 
       } catch (error) {
         console.error("Failed to delete document:", error);
         toast({ title: "Error Deleting Document", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
@@ -172,9 +194,8 @@ export default function CompanyDocumentsPage() {
     }
   };
 
-  const DocumentListItem = ({ doc }: { doc: CompanyDocument }) => {
-    const status = getDocumentStatus(doc.effectiveDate); // Assuming effectiveDate acts like an expiry for this context or should be reviewDate
-                                                        // If reviewDate is more appropriate for status, use doc.reviewDate
+  const DocumentListItem = ({ doc }: { doc: AircraftDocument }) => {
+    const status = getDocumentStatus(doc.expiryDate); 
     return (
       <div className="flex flex-col sm:flex-row items-start justify-between py-3 px-4 border-b last:border-b-0 hover:bg-muted/50 transition-colors rounded-sm group">
         <div className="flex items-start gap-3 flex-1 min-w-0 mb-2 sm:mb-0">
@@ -182,15 +203,13 @@ export default function CompanyDocumentsPage() {
           <div className="truncate flex-grow">
             <p className="text-sm font-semibold text-foreground truncate" title={doc.documentName}>{doc.documentName}</p>
             <p className="text-xs text-muted-foreground">
-              Type: {doc.documentType} | Version: {doc.version || '-'} | Effective: {formatDateForDisplay(doc.effectiveDate)}
+              Type: {doc.documentType} | For: {doc.aircraftTailNumber || doc.aircraftId}
                <Badge variant={getStatusBadgeVariant(status)} className="ml-2 text-xs px-1.5 py-0">{status}</Badge>
             </p>
-            {doc.description && <p className="text-xs text-muted-foreground mt-0.5 truncate" title={doc.description}>{doc.description}</p>}
-            {doc.tags && doc.tags.length > 0 && (
-              <div className="mt-1 flex flex-wrap gap-1">
-                {doc.tags.map(tag => <Badge key={tag} variant="secondary" className="text-xs px-1.5 py-0">{tag}</Badge>)}
-              </div>
-            )}
+            <p className="text-xs text-muted-foreground mt-0.5">
+                Expires: {formatDateForDisplay(doc.expiryDate)}
+                {doc.notes && <span className="truncate" title={doc.notes}> | Notes: {doc.notes.substring(0,30)}{doc.notes.length > 30 ? '...' : ''}</span>}
+            </p>
           </div>
         </div>
         <div className="flex items-center gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity flex-shrink-0 self-start sm:self-center">
@@ -218,41 +237,52 @@ export default function CompanyDocumentsPage() {
   return (
     <>
       <PageHeader 
-        title="Company Document Hub"
-        description="Manage and access all company-wide operational manuals, compliance documents, policies, and templates."
-        icon={Library}
+        title="Aircraft Document Management"
+        description="Manage and track all aircraft-specific documents like registration, airworthiness, and insurance."
+        icon={Plane}
         actions={
-          <Button onClick={handleOpenAddModal} disabled={isLoadingDocuments}>
-            <UploadCloud className="mr-2 h-4 w-4" /> Upload Company Document
+          <Button onClick={handleOpenAddModal} disabled={isLoadingDocuments || isLoadingAircraftForSelect}>
+            <UploadCloud className="mr-2 h-4 w-4" /> Add Aircraft Document
           </Button>
         }
       />
       
       <Card className="shadow-lg">
         <CardHeader>
-          <CardTitle>All Company Documents</CardTitle>
-          <CardDescription>Central repository for all official company documentation. (File uploads are simulated)</CardDescription>
-          <div className="mt-2 relative">
-            <ClientOnly fallback={<Skeleton className="h-10 pl-8 w-full sm:w-1/2 lg:w-1/3" />}>
-              <> 
+          <CardTitle>All Aircraft Documents</CardTitle>
+          <CardDescription>Central repository for aircraft documentation. (File uploads are simulated)</CardDescription>
+          <div className="mt-2 flex flex-col sm:flex-row gap-2">
+             <div className="relative flex-grow">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                {isLoadingDocuments ? (
-                  <Skeleton className="h-10 pl-8 w-full sm:w-1/2 lg:w-1/3" />
-                ) : (
-                  <Input 
-                    placeholder="Search documents (name, type, description, tags)..." 
-                    className="pl-8 w-full sm:w-1/2 lg:w-1/3" 
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    disabled={allCompanyDocuments.length === 0 && !searchTerm} 
-                  />
-                )}
-              </>
-            </ClientOnly>
+                <Input 
+                  placeholder="Search documents (name, type, tail#, notes)..." 
+                  className="pl-8 w-full" 
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  disabled={isLoadingDocuments || (allAircraftDocuments.length === 0 && !searchTerm)}
+                />
+              </div>
+              <Select
+                value={selectedAircraftFilter}
+                onValueChange={setSelectedAircraftFilter}
+                disabled={isLoadingAircraftForSelect || isLoadingDocuments}
+              >
+                <SelectTrigger className="w-full sm:w-[250px]">
+                  <SelectValue placeholder={isLoadingAircraftForSelect ? "Loading aircraft..." : "Filter by Aircraft"} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Aircraft</SelectItem>
+                  {fleetForSelect.map(ac => (
+                    <SelectItem key={ac.id} value={ac.id}>
+                      {ac.tailNumber} - {ac.model}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          {isLoadingDocuments && allCompanyDocuments.length === 0 ? ( 
+          {isLoadingDocuments && allAircraftDocuments.length === 0 ? ( 
             <div className="space-y-2 p-4">
                 <Skeleton className="h-10 w-full" />
                 <Skeleton className="h-10 w-full" />
@@ -260,7 +290,7 @@ export default function CompanyDocumentsPage() {
             </div>
           ) : filteredDocuments.length === 0 ? (
             <p className="p-4 text-center text-sm text-muted-foreground">
-              {searchTerm ? "No documents match your search." : "No company documents found. Upload one to get started."}
+              {searchTerm || selectedAircraftFilter !== 'all' ? "No documents match your criteria." : "No aircraft documents found. Add one to get started."}
             </p>
           ) : (
             filteredDocuments.map(doc => <DocumentListItem key={doc.id} doc={doc} />)
@@ -268,13 +298,16 @@ export default function CompanyDocumentsPage() {
         </CardContent>
       </Card>
 
-      <AddEditCompanyDocumentModal
+      <AddEditAircraftDocumentModal
         isOpen={isModalOpen}
         setIsOpen={setIsModalOpen}
         onSave={handleSaveDocument}
         initialData={currentDocumentToEdit}
         isEditing={isEditingModal}
         isSaving={isSavingDocument}
+        aircraftList={fleetForSelect}
+        isLoadingAircraft={isLoadingAircraftForSelect}
+        selectedAircraftIdForNew={selectedAircraftFilter === 'all' ? undefined : selectedAircraftFilter}
       />
 
       {showDeleteConfirm && documentToDelete && (
@@ -283,7 +316,7 @@ export default function CompanyDocumentsPage() {
             <AlertDialogHeader>
               <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
               <AlertDialogDescription>
-                Are you sure you want to delete the document "{documentToDelete.documentName}"? This action cannot be undone.
+                Are you sure you want to delete the document "{documentToDelete.documentName}" for aircraft {documentToDelete.aircraftTailNumber || documentToDelete.aircraftId}? This action cannot be undone.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
