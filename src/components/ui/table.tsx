@@ -12,9 +12,7 @@ const Table = React.forwardRef<
       ref={ref}
       className={cn("w-full caption-bottom text-sm", className)}
       {...restProps}
-    >
-      {children}
-    </table>
+    >{children}</table>
   </div>
 ))
 Table.displayName = "Table"
@@ -67,9 +65,7 @@ const TableRow = React.forwardRef<
       className
     )}
     {...restProps}
-  >
-    {children}
-  </tr>
+  >{children}</tr>
 ))
 TableRow.displayName = "TableRow"
 
