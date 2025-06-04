@@ -207,9 +207,54 @@ export function AddEditAircraftDocumentModal({
         <ScrollArea className="max-h-[70vh] pr-5">
           <Form {...form}>
             <form id="aircraft-document-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-2">
-              <FormField control={form.control} name="aircraftId" render={({ field }) => ( <FormItem> <FormLabel>Aircraft</FormLabel> <Select onValueChange={field.onChange} value={field.value} disabled={isLoadingAircraft || isEditing}> <FormControl> <SelectTrigger> <SelectValue placeholder={isLoadingAircraft ? "Loading aircraft..." : "Select aircraft"} /> </SelectTrigger> </FormControl> <SelectContent> {!isLoadingAircraft && aircraftList.map(ac => ( <SelectItem key={ac.id} value={ac.id}> {ac.tailNumber} - {ac.model} </SelectItem> ))} </SelectContent> </Select> {isEditing && <FormDescription className="text-xs">Aircraft cannot be changed for an existing document.</FormDescription>} <FormMessage /> </FormItem> )} />
+              <FormField
+                control={form.control}
+                name="aircraftId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Aircraft</FormLabel>
+                    <FormControl>
+                      <Select
+                        onValueChange={field.onChange}
+                        value={field.value}
+                        disabled={isLoadingAircraft || isEditing}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder={isLoadingAircraft ? "Loading aircraft..." : "Select aircraft"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {!isLoadingAircraft && aircraftList.map(ac => (
+                            <SelectItem key={ac.id} value={ac.id}>
+                              {ac.tailNumber} - {ac.model}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FormControl>
+                    {isEditing && <FormDescription className="text-xs">Aircraft cannot be changed for an existing document.</FormDescription>}
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
               <FormField control={form.control} name="documentName" render={({ field }) => (<FormItem><FormLabel>Document Name</FormLabel><FormControl><Input placeholder="e.g., Registration Certificate, Insurance Policy" {...field} /></FormControl><FormMessage /></FormItem>)} />
-              <FormField control={form.control} name="documentType" render={({ field }) => ( <FormItem> <FormLabel>Document Type</FormLabel> <Select onValueChange={field.onChange} value={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Select document type" /></SelectTrigger></FormControl> <SelectContent> {aircraftDocumentTypes.map(type => (<SelectItem key={type} value={type}>{type}</SelectItem>))} </SelectContent> </Select> <FormMessage /> </FormItem> )} />
+              <FormField
+                control={form.control}
+                name="documentType"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Document Type</FormLabel>
+                    <FormControl>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <SelectTrigger><SelectValue placeholder="Select document type" /></SelectTrigger>
+                        <SelectContent>
+                          {aircraftDocumentTypes.map(type => (<SelectItem key={type} value={type}>{type}</SelectItem>))}
+                        </SelectContent>
+                      </Select>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField control={form.control} name="issueDate" render={({ field }) => ( <FormItem className="flex flex-col"> <FormLabel>Issue Date (Optional)</FormLabel> <Popover> <PopoverTrigger asChild> <FormControl> <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}> {field.value && isValidDate(parseISO(field.value)) ? format(parseISO(field.value), "PPP") : <span>Pick a date</span>} <CalendarIcon className="ml-auto h-4 w-4 opacity-50" /> </Button> </FormControl> </PopoverTrigger> <PopoverContent className="w-auto p-0" align="start"> <Calendar mode="single" selected={field.value && isValidDate(parseISO(field.value)) ? parseISO(field.value) : undefined} onSelect={(date) => field.onChange(date ? format(startOfDay(date), 'yyyy-MM-dd') : '')} initialFocus /> </PopoverContent> </Popover> <FormMessage /> </FormItem> )} />
