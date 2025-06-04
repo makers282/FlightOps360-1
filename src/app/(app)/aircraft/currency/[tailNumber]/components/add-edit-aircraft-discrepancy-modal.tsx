@@ -160,7 +160,7 @@ export function AddEditAircraftDiscrepancyModal({
         });
       }
     }
-  }, [isOpen, isEditing, initialData, form.reset]);
+  }, [isOpen, isEditing, initialData, form]);
 
   const onSubmit: SubmitHandler<AircraftDiscrepancyFormData> = async (formData) => {
     if (!aircraft?.id) {
@@ -222,6 +222,11 @@ export function AddEditAircraftDiscrepancyModal({
                         </SelectContent>
                       </Select>
                       <FormMessage />
+                      {statusWatch === 'Closed' && (
+                        <p className="text-sm text-primary mt-2 p-2 bg-primary/10 rounded-md">
+                          Please scroll down to complete the "Corrective Action &amp; Sign-Off" section to close this discrepancy.
+                        </p>
+                      )}
                     </FormItem>
                   )}
                 />
@@ -284,7 +289,7 @@ export function AddEditAircraftDiscrepancyModal({
                 <Card className="p-4 border-green-500/50 bg-green-50/30 dark:bg-green-900/20">
                     <CardHeader className="p-0 pb-3">
                         <CardTitle className="text-md text-green-700 dark:text-green-400 flex items-center gap-2">
-                            <ShieldCheck className="h-5 w-5"/> Corrective Action & Sign-Off
+                            <ShieldCheck className="h-5 w-5"/> Corrective Action &amp; Sign-Off
                         </CardTitle>
                          <ModalDialogDescription className="text-xs text-green-600 dark:text-green-500">
                             Fill this section when the discrepancy is corrected or to close it out.
@@ -335,4 +340,3 @@ export function AddEditAircraftDiscrepancyModal({
     </Dialog>
   );
 }
-
