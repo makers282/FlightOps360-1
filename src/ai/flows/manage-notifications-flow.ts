@@ -54,7 +54,7 @@ const fetchNotificationsFlow = ai.defineFlow(
         console.log("No notifications found in Firestore, returning mock data for UI development.");
         const processedMockNotifications: Notification[] = mockNotificationsData.map((n, index) => ({
             ...n,
-            id: \`mock-\${index + 1}\`,
+            id: `mock-${index + 1}`,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
         }));
@@ -74,7 +74,7 @@ const fetchNotificationsFlow = ai.defineFlow(
       return notificationsList;
     } catch (error) {
       console.error('Error fetching notifications from Firestore:', error);
-      throw new Error(\`Failed to fetch notifications: \${error instanceof Error ? error.message : String(error)}\`);
+      throw new Error(`Failed to fetch notifications: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 );
@@ -110,8 +110,8 @@ const markNotificationReadFlow = ai.defineFlow(
                 updatedAt: (data.updatedAt as Timestamp)?.toDate().toISOString(),
             } as Notification;
         } catch (error) {
-            console.error(\`Error updating notification \${notificationId}:\`, error);
-            throw new Error(\`Failed to update notification: \${error instanceof Error ? error.message : String(error)}\`);
+            console.error(`Error updating notification ${notificationId}:`, error);
+            throw new Error(`Failed to update notification: ${error instanceof Error ? error.message : String(error)}`);
         }
     }
 );
@@ -152,7 +152,7 @@ export async function createNotification(input: SaveNotificationInput): Promise<
             updatedAt: (savedData.updatedAt as Timestamp)?.toDate().toISOString(),
         } as Notification;
     } catch (error) {
-        console.error(\`Error creating notification \${notificationId}:\`, error);
-        throw new Error(\`Failed to create notification: \${error instanceof Error ? error.message : String(error)}\`);
+        console.error(`Error creating notification ${notificationId}:`, error);
+        throw new Error(`Failed to create notification: ${error instanceof Error ? error.message : String(error)}`);
     }
 }
