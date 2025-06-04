@@ -23,13 +23,13 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { CalendarIcon, Loader2, Save, FileText as FileTextIcon, Edit3, UploadCloud, Paperclip, XCircle as RemoveFileIcon } from 'lucide-react';
 import { cn } from "@/lib/utils";
-import { format, parseISO, isValid as isValidDate, startOfDay } from "date-fns";
+import { format, parseISO, isValid as isValidDate } from "date-fns"; // Removed startOfDay
 import type { AircraftDocument, SaveAircraftDocumentInput } from '@/ai/schemas/aircraft-document-schemas';
 import { aircraftDocumentTypes } from '@/ai/schemas/aircraft-document-schemas';
 import type { FleetAircraft } from '@/ai/schemas/fleet-aircraft-schemas';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { uploadAircraftDocument } from '@/ai/flows/upload-aircraft-document-flow'; // Import the new upload flow
-import { useToast } from '@/hooks/use-toast'; // Import useToast
+import { uploadAircraftDocument } from '@/ai/flows/upload-aircraft-document-flow'; 
+import { useToast } from '@/hooks/use-toast'; 
 
 const aircraftDocumentFormSchema = z.object({
   aircraftId: z.string().min(1, "Aircraft selection is required."),
@@ -38,7 +38,7 @@ const aircraftDocumentFormSchema = z.object({
   issueDate: z.string().optional().refine(val => !val || isValidDate(parseISO(val)), { message: "Invalid date format for issue date." }),
   expiryDate: z.string().optional().refine(val => !val || isValidDate(parseISO(val)), { message: "Invalid date format for expiry date." }),
   notes: z.string().optional(),
-  fileUrl: z.string().url().optional(), // Keep track of existing file URL
+  fileUrl: z.string().url().optional(), 
 });
 
 export type AircraftDocumentFormData = z.infer<typeof aircraftDocumentFormSchema>;
@@ -61,15 +61,15 @@ export function AddEditAircraftDocumentModal({
   onSave,
   initialData,
   isEditing,
-  isSaving: isSavingProp, // Renamed to avoid conflict with internal isSavingFile state
+  isSaving: isSavingProp, 
   aircraftList,
   isLoadingAircraft,
   selectedAircraftIdForNew,
 }: AddEditAircraftDocumentModalProps) {
   
-  const { toast } = useToast(); // Initialize toast
+  const { toast } = useToast(); 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [isSavingFile, setIsSavingFile] = useState(false); // For file upload spinner
+  const [isSavingFile, setIsSavingFile] = useState(false); 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const form = useForm<AircraftDocumentFormData>({
@@ -107,25 +107,18 @@ export function AddEditAircraftDocumentModal({
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
       setSelectedFile(event.target.files[0]);
-      form.setValue('fileUrl', undefined); // Clear existing URL if new file is chosen
+      form.setValue('fileUrl', undefined); 
     }
   };
   
   const handleRemoveFile = () => {
     setSelectedFile(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
-    if (isEditing && initialData?.fileUrl) {
-      // If editing and there was an existing file, we might want to clear it
-      // For now, we'll just allow uploading a new one to replace. 
-      // A "Remove existing file" button would be a separate feature.
-      // For simplicity, if a new file is NOT selected, the existing fileUrl will be preserved.
-      // If they want to remove the file entirely, they'd need a separate action or to upload an "empty" file (not ideal).
-    }
   };
 
   const onSubmit: SubmitHandler<AircraftDocumentFormData> = async (formData) => {
-    setIsSavingFile(true); // Show general saving spinner
-    let finalFileUrl = formData.fileUrl; // Keep existing URL if no new file
+    setIsSavingFile(true); 
+    let finalFileUrl = formData.fileUrl; 
 
     if (selectedFile) {
       if (!formData.aircraftId) {
@@ -138,7 +131,7 @@ export function AddEditAircraftDocumentModal({
         reader.readAsDataURL(selectedFile);
         reader.onloadend = async () => {
           const fileDataUri = reader.result as string;
-          const documentIdForUpload = (isEditing && initialData?.id) || `doc_${Date.now()}`; // Generate new ID if not editing
+          const documentIdForUpload = (isEditing && initialData?.id) || `doc_${Date.now()}`; 
           
           toast({ title: "Uploading File...", description: "Please wait while your document is uploaded.", variant: "default" });
           const uploadResult = await uploadAircraftDocument({
@@ -162,7 +155,6 @@ export function AddEditAircraftDocumentModal({
         return;
       }
     } else {
-      // No new file selected, proceed with existing formData.fileUrl (which might be undefined or an existing URL)
       proceedWithSave(formData, finalFileUrl);
     }
   };
@@ -180,10 +172,8 @@ export function AddEditAircraftDocumentModal({
       fileUrl: fileUrlToSave,
     };
     
-    // The onSave prop is expected to be an async function passed from the parent page
-    // which handles calling the actual saveAircraftDocument flow
     await onSave(dataToSave, isEditing && initialData ? initialData.id : undefined);
-    setIsSavingFile(false); // Turn off spinner after parent's save logic completes
+    setIsSavingFile(false); 
   };
 
   const modalTitle = isEditing ? `Edit Document: ${initialData?.documentName || ''}` : 'Add New Aircraft Document';
@@ -276,7 +266,7 @@ export function AddEditAircraftDocumentModal({
                           <Calendar
                             mode="single"
                             selected={field.value && isValidDate(parseISO(field.value)) ? parseISO(field.value) : undefined}
-                            onSelect={(date) => field.onChange(date ? format(startOfDay(date), 'yyyy-MM-dd') : '')}
+                            onSelect={(date) => field.onChange(date ? format(date, 'yyyy-MM-dd') : '')}
                             initialFocus
                           />
                         </PopoverContent>
@@ -304,7 +294,7 @@ export function AddEditAircraftDocumentModal({
                           <Calendar
                             mode="single"
                             selected={field.value && isValidDate(parseISO(field.value)) ? parseISO(field.value) : undefined}
-                            onSelect={(date) => field.onChange(date ? format(startOfDay(date), 'yyyy-MM-dd') : '')}
+                            onSelect={(date) => field.onChange(date ? format(date, 'yyyy-MM-dd') : '')}
                             disabled={(date) => {
                                 const issueDate = form.getValues("issueDate");
                                 return issueDate && isValidDate(parseISO(issueDate)) ? date < parseISO(issueDate) : false;
