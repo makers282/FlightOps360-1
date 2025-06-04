@@ -14,7 +14,7 @@ export const NotificationSchema = z.object({
   message: z.string().min(1, "Notification message is required."),
   timestamp: z.string().datetime({ message: "Timestamp must be a valid ISO date string." }).describe("ISO string format of when the notification was generated or occurred."),
   isRead: z.boolean().default(false).describe("Indicates if the notification has been read by the user."),
-  link: z.string().url().optional().describe("Optional URL to navigate to related content (e.g., a specific trip, document, or maintenance item)."),
+  link: z.string().optional().describe("Optional URL (can be relative path) to navigate to related content (e.g., a specific trip, document, or maintenance item)."),
   userId: z.string().optional().describe("ID of the user this notification is for, if specific. Otherwise, global."),
   createdAt: z.string().datetime().optional().describe("ISO string format, server-generated Firestore timestamp."),
   updatedAt: z.string().datetime().optional().describe("ISO string format, server-generated Firestore timestamp."),
@@ -44,3 +44,4 @@ export type MarkNotificationReadInput = z.infer<typeof MarkNotificationReadInput
 
 // Output for marking a notification as read
 export const MarkNotificationReadOutputSchema = NotificationSchema; // Returns the updated notification
+
