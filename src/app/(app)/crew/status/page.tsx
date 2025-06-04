@@ -1,39 +1,84 @@
 
-import React from 'react';
+"use client";
+
+import React, { useState, useEffect, useMemo } from 'react';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Users, Search } from 'lucide-react'; // Using Users icon for crew status page, added Search
-import { Input } from '@/components/ui/input'; // Added Input
+import { Users, Search, Loader2, AlertTriangle } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { useToast } from '@/hooks/use-toast';
+import { fetchCrewMembers, type CrewMember } from '@/ai/flows/manage-crew-flow';
 
-const crewData = [
-  { id: 'CRW001', name: 'Capt. Ava Williams', role: 'Pilot', status: 'On Duty', assignment: 'FL123 (KMIA)', avatarUrl: 'https://placehold.co/100x100.png', dataAiHint: 'pilot portrait female' },
-  { id: 'CRW002', name: 'FO Ben Carter', role: 'First Officer', status: 'Standby', assignment: 'KHPN Base', avatarUrl: 'https://placehold.co/100x100.png', dataAiHint: 'copilot portrait male' },
-  { id: 'CRW003', name: 'FA Chloe Davis', role: 'Flight Attendant', status: 'Off Duty', assignment: '-', avatarUrl: 'https://placehold.co/100x100.png', dataAiHint: 'attendant portrait female' },
-  { id: 'CRW004', name: 'Eng. Mike Brown', role: 'Engineer', status: 'Maintenance', assignment: 'N789EF Hangar 3', avatarUrl: 'https://placehold.co/100x100.png', dataAiHint: 'engineer man serious' },
-  { id: 'CRW005', name: 'Capt. John Smith', role: 'Pilot', status: 'Available', assignment: 'KTEB Base', avatarUrl: 'https://placehold.co/100x100.png', dataAiHint: 'pilot portrait male' },
-  { id: 'CRW006', name: 'FA Olivia Green', role: 'Flight Attendant', status: 'On Duty', assignment: 'FL456 (KORD)', avatarUrl: 'https://placehold.co/100x100.png', dataAiHint: 'attendant portrait professional' },
-];
+const getStatusBadgeVariant = (isActive: boolean): "default" | "destructive" => {
+  return isActive ? 'default' : 'destructive';
+};
 
-const getStatusBadgeVariant = (status: string) => {
-  switch (status.toLowerCase()) {
-    case 'available':
-    case 'off duty':
-      return 'default'; // Greenish or neutral
-    case 'on duty':
-    case 'en route': // for pilots if different from on duty
-      return 'secondary'; // Blueish or active
-    case 'standby':
-      return 'outline'; // Yellowish or warning
-    case 'maintenance': // for engineers
-       return 'destructive'; // Reddish for unavailable/issue
-    default:
-      return 'default';
-  }
+const getStatusLabel = (isActive: boolean): string => {
+  return isActive ? 'Active' : 'Inactive';
 };
 
 export default function CrewStatusPage() {
+  const [crewList, setCrewList] = useState<CrewMember[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const { toast } = useToast();
+
+  useEffect(() => {
+    const loadCrew = async () => {
+      setIsLoading(true);
+      try {
+        const fetchedCrew = await fetchCrewMembers();
+        setCrewList(fetchedCrew);
+      } catch (error) {
+        console.error("Failed to load crew members:", error);
+        toast({
+          title: "Error Loading Crew",
+          description: error instanceof Error ? error.message : "Could not fetch crew data.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadCrew();
+  }, [toast]);
+
+  const filteredCrewList = useMemo(() => {
+    if (!searchTerm) {
+      return crewList;
+    }
+    const lowerSearchTerm = searchTerm.toLowerCase();
+    return crewList.filter(crew =>
+      `${crew.firstName} ${crew.lastName}`.toLowerCase().includes(lowerSearchTerm) ||
+      crew.role.toLowerCase().includes(lowerSearchTerm) ||
+      (crew.isActive ? "active" : "inactive").includes(lowerSearchTerm) ||
+      (crew.homeBase && crew.homeBase.toLowerCase().includes(lowerSearchTerm))
+    );
+  }, [searchTerm, crewList]);
+
+  const getInitials = (firstName?: string, lastName?: string) => {
+    const first = firstName?.[0] || '';
+    const last = lastName?.[0] || '';
+    return `${first}${last}`.toUpperCase() || 'N/A';
+  };
+  
+  // Placeholder assignment logic for demonstration
+  const getAssignment = (crewId: string) => {
+    const assignments = [
+        "FL123 (KMIA)", "KHPN Base", "-", "N789EF Hangar 3", "KTEB Base", "FL456 (KORD)",
+        "Training Sim", "Vacation", "Medical Leave"
+    ];
+    // Simple pseudo-random assignment based on ID for visual variety
+    let hash = 0;
+    for (let i = 0; i < crewId.length; i++) {
+        hash = crewId.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return assignments[Math.abs(hash) % assignments.length] || "-";
+  }
+
+
   return (
     <>
       <PageHeader 
@@ -44,39 +89,57 @@ export default function CrewStatusPage() {
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle>All Crew Members</CardTitle>
-          <CardDescription>Monitor availability and assignments in real-time.</CardDescription>
+          <CardDescription>Monitor availability and assignments in real-time. (Assignments are illustrative)</CardDescription>
           <div className="mt-4 relative">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input 
-              placeholder="Search crew members (name, role, status)..." 
+              placeholder="Search crew (name, role, status, base)..." 
               className="pl-8 w-full sm:w-1/2 lg:w-1/3" 
-              disabled // Disabled for now, as filtering is not implemented
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              disabled={isLoading && crewList.length === 0}
             />
           </div>
         </CardHeader>
         <CardContent>
-          {crewData.length === 0 ? (
-            <div className="text-center py-10">
-              <Users className="mx-auto h-12 w-12 text-muted-foreground" />
-              <h3 className="mt-2 text-sm font-medium text-foreground">No Crew Data</h3>
-              <p className="mt-1 text-sm text-muted-foreground">No crew members found in the system.</p>
+          {isLoading ? (
+            <div className="flex items-center justify-center py-10">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <p className="ml-2 text-muted-foreground">Loading crew status...</p>
+            </div>
+          ) : !crewList.length ? (
+            <div className="text-center py-10 text-muted-foreground">
+              <Users className="mx-auto h-12 w-12 mb-2" />
+              <p className="text-lg font-medium">No Crew Data Found</p>
+              <p className="text-sm">There are no crew members in the system yet.</p>
+            </div>
+          ) : filteredCrewList.length === 0 && searchTerm ? (
+             <div className="text-center py-10 text-muted-foreground">
+              <Search className="mx-auto h-12 w-12 mb-2" />
+              <p className="text-lg font-medium">No Crew Members Found</p>
+              <p className="text-sm">Your search for "{searchTerm}" did not match any crew members.</p>
             </div>
           ) : (
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {crewData.map((crew) => (
-                <Card key={crew.id} className="hover:shadow-md transition-shadow">
-                  <CardContent className="p-4 flex flex-col items-center text-center">
+              {filteredCrewList.map((crew) => (
+                <Card key={crew.id} className="hover:shadow-md transition-shadow flex flex-col">
+                  <CardContent className="p-4 flex flex-col items-center text-center flex-grow">
                     <Avatar className="h-20 w-20 mb-3">
-                      <AvatarImage src={crew.avatarUrl} alt={crew.name} data-ai-hint={crew.dataAiHint} />
-                      <AvatarFallback>{crew.name.split(' ').map(n => n[0]).join('')}</AvatarFallback>
+                      {/* Placeholder for actual avatar URLs when available */}
+                      <AvatarImage src={`https://placehold.co/100x100.png?text=${getInitials(crew.firstName, crew.lastName)}`} alt={`${crew.firstName} ${crew.lastName}`} data-ai-hint="person portrait professional" />
+                      <AvatarFallback>{getInitials(crew.firstName, crew.lastName)}</AvatarFallback>
                     </Avatar>
-                    <p className="font-semibold text-lg">{crew.name}</p>
+                    <p className="font-semibold text-lg">{crew.firstName} {crew.lastName}</p>
                     <p className="text-sm text-muted-foreground">{crew.role}</p>
-                    <Badge variant={getStatusBadgeVariant(crew.status)} className="mt-2 capitalize">{crew.status}</Badge>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {crew.assignment !== '-' ? `Assignment: ${crew.assignment}` : 'No current assignment'}
+                    <Badge variant={getStatusBadgeVariant(crew.isActive)} className="mt-2 capitalize">{getStatusLabel(crew.isActive)}</Badge>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      {crew.homeBase && `Base: ${crew.homeBase}`}
                     </p>
                   </CardContent>
+                  <div className="border-t p-3 bg-muted/50 text-center">
+                     <p className="text-xs font-medium text-muted-foreground">Current Assignment:</p>
+                     <p className="text-sm text-foreground truncate" title={getAssignment(crew.id)}>{getAssignment(crew.id)}</p>
+                  </div>
                 </Card>
               ))}
             </div>
