@@ -6,7 +6,9 @@ import { z } from 'zod';
 
 export const documentTypes = [
   "License", "Medical", "Passport", "Visa", "Training Certificate", 
-  "Type Rating", "Company ID", "Airport ID", "Other"
+  "Type Rating", "Company ID", "Airport ID", 
+  "Recurrency Check", "Proficiency Check", "Line Check", "Medical Clearance for Duty", // Added currency types
+  "Other"
 ] as const;
 export type CrewDocumentType = typeof documentTypes[number];
 
@@ -48,3 +50,4 @@ export const DeleteCrewDocumentOutputSchema = z.object({
   success: z.boolean(),
   documentId: z.string(),
 });
+

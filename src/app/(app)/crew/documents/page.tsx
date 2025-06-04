@@ -32,6 +32,7 @@ import { Badge } from '@/components/ui/badge';
 // Define categories based on document types
 const GENERAL_DOC_TYPES: CrewDocumentType[] = ["License", "Medical", "Passport", "Visa", "Company ID", "Airport ID", "Other"];
 const TRAINING_DOC_TYPES: CrewDocumentType[] = ["Training Certificate", "Type Rating"];
+const CURRENCY_DOC_TYPES: CrewDocumentType[] = ["Recurrency Check", "Proficiency Check", "Line Check", "Medical Clearance for Duty"];
 
 
 export default function CrewDocumentsPage() {
@@ -89,6 +90,10 @@ export default function CrewDocumentsPage() {
 
   const trainingDocuments = useMemo(() => {
     return documentsForSelectedCrew.filter(doc => TRAINING_DOC_TYPES.includes(doc.documentType));
+  }, [documentsForSelectedCrew]);
+
+  const currencyDocuments = useMemo(() => {
+    return documentsForSelectedCrew.filter(doc => CURRENCY_DOC_TYPES.includes(doc.documentType));
   }, [documentsForSelectedCrew]);
 
   const handleOpenAddModal = () => {
@@ -272,21 +277,21 @@ export default function CrewDocumentsPage() {
             </Card>
           </div>
 
-          <div className="lg:col-span-1 space-y-6"> {/* Added space-y-6 here for consistent spacing */}
+          <div className="lg:col-span-1 space-y-6">
             <Card className="shadow-md">
-              <CardHeader>
+              <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle className="flex items-center gap-2">
                     <ClipboardCheck className="h-5 w-5 text-primary"/>
                     Checking Currency
                 </CardTitle>
+                <Badge variant="secondary">{currencyDocuments.length} Document(s)</Badge>
               </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground mb-3">
-                  This section is for checking various operational currency items for the selected crew member.
-                </p>
-                <Button variant="outline" className="w-full" disabled>
-                  View Currency Details
-                </Button>
+              <CardContent className="p-0">
+                {currencyDocuments.length === 0 ? (
+                  <p className="p-4 text-sm text-muted-foreground">No currency-specific documents found for this crew member.</p>
+                ) : (
+                  currencyDocuments.map(doc => <DocumentItem key={doc.id} doc={doc} />)
+                )}
               </CardContent>
             </Card>
             <Card className="shadow-md">
@@ -339,3 +344,4 @@ export default function CrewDocumentsPage() {
     </>
   );
 }
+
