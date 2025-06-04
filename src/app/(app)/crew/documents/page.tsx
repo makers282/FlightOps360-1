@@ -17,6 +17,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Label } from "@/components/ui/label"; // Added import
 import { format, parseISO, isValid } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 
