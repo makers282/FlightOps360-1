@@ -20,6 +20,7 @@ import {
     DeleteBulletinInputSchema,
     DeleteBulletinOutputSchema,
 } from '@/ai/schemas/bulletin-schemas';
+import { createNotification } from '@/ai/flows/manage-notifications-flow'; // Added import
 
 const BULLETINS_COLLECTION = 'bulletins';
 
@@ -56,6 +57,8 @@ const saveBulletinFlow = ai.defineFlow(
     const bulletinDocRef = doc(db, BULLETINS_COLLECTION, firestoreDocId);
     try {
       const docSnap = await getDoc(bulletinDocRef);
+      const wasActiveBefore = docSnap.exists() ? docSnap.data().isActive === true : false;
+
       const dataToSet = {
         ...bulletinData,
         publishedAt: serverTimestamp(), // Treat publishedAt as "last saved/effective" time
@@ -64,11 +67,31 @@ const saveBulletinFlow = ai.defineFlow(
       };
 
       await setDoc(bulletinDocRef, dataToSet, { merge: true });
-      const savedDoc = await getDoc(bulletinDocRef);
+      const savedDoc = await getDoc(bulletinDocRef); // Re-fetch to get server timestamps resolved
       const savedData = savedDoc.data();
 
       if (!savedData) {
         throw new Error("Failed to retrieve saved bulletin data from Firestore.");
+      }
+
+      const isNowActive = savedData.isActive === true;
+      const shouldCreateNotification = isNowActive && (!docSnap.exists() || !wasActiveBefore);
+
+      if (shouldCreateNotification) {
+        try {
+          await createNotification({
+            type: 'info', 
+            title: `New Bulletin: ${savedData.title}`,
+            message: `A company bulletin titled "${savedData.title}" has been published. Check the dashboard for details.`,
+            timestamp: new Date().toISOString(),
+            isRead: false,
+            link: '/dashboard', 
+          });
+          console.log(`Notification created for bulletin: ${savedData.title}`);
+        } catch (notificationError) {
+          console.error('Failed to create notification for bulletin:', notificationError);
+          // Optionally, rethrow or handle this error more gracefully if notification creation is critical
+        }
       }
 
       return {
@@ -131,3 +154,4 @@ const deleteBulletinFlow = ai.defineFlow(
     }
   }
 );
+
