@@ -17,6 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"; // Added Accordion imports
 import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow'; 
 import { fetchTrips, type Trip, type TripStatus } from '@/ai/flows/manage-trips-flow';
 import { useToast } from '@/hooks/use-toast'; 
@@ -170,26 +171,37 @@ export default function DashboardPage() {
       <PageHeader title="Dashboard" description="Real-time overview of flight operations." icon={LayoutDashboard} />
       
       <Card className="mb-6 shadow-md border-primary/50">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2"><Megaphone className="h-5 w-5 text-primary" /> Company Bulletin Board</CardTitle>
-          <CardDescription>Latest news and announcements for all personnel. (Static Data)</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <List>
-            {bulletinData.map((item, index) => (
-              <React.Fragment key={item.id}>
-                <ListItem className="flex flex-col sm:flex-row justify-between items-start sm:items-center py-3">
-                  <div className="flex-1 mb-2 sm:mb-0">
-                    <p className="font-semibold">{item.title} <span className="text-xs text-muted-foreground font-normal">- {item.date}</span></p>
-                    <p className="text-sm text-muted-foreground">{item.message}</p>
-                  </div>
-                  <Badge variant={getBulletinBadgeVariant(item.type)} className="capitalize">{item.type}</Badge>
-                </ListItem>
-                {index < bulletinData.length - 1 && <Separator />}
-              </React.Fragment>
-            ))}
-          </List>
-        </CardContent>
+        <Accordion type="single" collapsible defaultValue="bulletin-board-item" className="w-full">
+          <AccordionItem value="bulletin-board-item" className="border-b-0">
+            <CardHeader className="p-0">
+              <AccordionTrigger className="flex flex-1 items-center justify-between p-4 hover:no-underline">
+                <div className="text-left">
+                    <CardTitle className="flex items-center gap-2"><Megaphone className="h-5 w-5 text-primary" /> Company Bulletin Board</CardTitle>
+                    <CardDescription className="mt-1">Latest news and announcements for all personnel. (Static Data)</CardDescription>
+                </div>
+                {/* AccordionTrigger will add its own chevron icon */}
+              </AccordionTrigger>
+            </CardHeader>
+            <AccordionContent>
+              <CardContent className="pt-0 pb-4 px-4">
+                <List>
+                  {bulletinData.map((item, index) => (
+                    <React.Fragment key={item.id}>
+                      <ListItem className="flex flex-col sm:flex-row justify-between items-start sm:items-center py-3">
+                        <div className="flex-1 mb-2 sm:mb-0">
+                          <p className="font-semibold">{item.title} <span className="text-xs text-muted-foreground font-normal">- {item.date}</span></p>
+                          <p className="text-sm text-muted-foreground">{item.message}</p>
+                        </div>
+                        <Badge variant={getBulletinBadgeVariant(item.type)} className="capitalize">{item.type}</Badge>
+                      </ListItem>
+                      {index < bulletinData.length - 1 && <Separator />}
+                    </React.Fragment>
+                  ))}
+                </List>
+              </CardContent>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
       </Card>
 
       <Card className="md:col-span-2 lg:col-span-3 mb-6">
@@ -247,27 +259,30 @@ export default function DashboardPage() {
             ) : aircraftList.length === 0 ? (
               <p className="text-muted-foreground text-center py-5">No aircraft found in fleet.</p>
             ) : (
-              <div className="space-y-4">
-                {aircraftList.map((aircraft) => (
-                  <div key={aircraft.id} className="flex items-center gap-4 p-3 rounded-lg hover:bg-muted/50 transition-colors">
-                    <Image 
-                      src={`https://placehold.co/80x53.png`} 
-                      alt={aircraft.model} 
-                      width={80} 
-                      height={53} 
-                      className="rounded-md aspect-video object-cover" 
-                      data-ai-hint={`${aircraft.model.split(' ')[0] || 'jet'} private`}
-                    />
-                    <div className="flex-1">
-                      <p className="font-semibold">{aircraft.tailNumber} <span className="text-sm text-muted-foreground font-normal">- {aircraft.model}</span></p>
-                      <p className="text-sm text-muted-foreground">Base: {aircraft.baseLocation || 'N/A'}</p>
-                    </div>
-                    <Badge variant={getStatusBadgeVariant(aircraft.isMaintenanceTracked ? 'Active' : 'Needs Review')}>
-                      {aircraft.isMaintenanceTracked ? 'Active' : 'Needs Review'}
-                    </Badge>
-                  </div>
-                ))}
-              </div>
+               <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Tail Number</TableHead>
+                    <TableHead>Model</TableHead>
+                    <TableHead>Base</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {aircraftList.map((aircraft) => (
+                    <TableRow key={aircraft.id}>
+                      <TableCell className="font-medium">{aircraft.tailNumber}</TableCell>
+                      <TableCell>{aircraft.model}</TableCell>
+                      <TableCell>{aircraft.baseLocation || 'N/A'}</TableCell>
+                      <TableCell>
+                        <Badge variant={getStatusBadgeVariant(aircraft.isMaintenanceTracked ? 'Active' : 'Needs Review')}>
+                          {aircraft.isMaintenanceTracked ? 'Active' : 'Needs Review'}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             )}
           </CardContent>
         </Card>
