@@ -3,17 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FullCalendar Trip Example</title>
+    <title>FullCalendar ResourceDayGridMonth Example</title>
     <!-- Include FullCalendar’s CSS & JS in your page -->
     <link href="https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.css" rel="stylesheet" />
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.js"></script>
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; }
-        #calendar { max-width: 900px; margin: 0 auto; }
+        #calendar { max-width: 1100px; margin: 0 auto; }
         /* Basic styling to make event text readable */
         .fc-event-title {
             color: white; /* Default, assuming dark backgrounds */
             font-weight: bold;
+            font-size: 0.85em;
+        }
+        .fc-event {
+            border: 1px solid rgba(0,0,0,0.2); /* Add a subtle border to events */
         }
     </style>
 </head>
@@ -25,61 +29,53 @@
       document.addEventListener("DOMContentLoaded", function() {
         const calendarEl = document.getElementById("calendar");
 
-        // ───────────────────────────────────────────────────────────────────────────
-        // STEP 1: Define exactly one event object PER trip, using exclusive 'end' dates.
-        //
-        // If a trip must occupy June 15 through June 19 (inclusive), then set:
-        //   • start: "2025-06-15"
-        //   • end:   "2025-06-20"   ← exclusive, so FullCalendar paints 15→19
-        //
-        // DO NOT use end: "2025-06-19" (that would paint only 15→18 and break on 19).
-        //
-        // Also, make sure there are no leftover or duplicate events for the same aircraft/trip.
-        // Each trip ID should appear exactly once.
-        // ───────────────────────────────────────────────────────────────────────────
+        const resources = [
+          { id: "N630MW", title: "N630MW (PA-31T2)" },
+          { id: "N907DK", title: "N907DK (Citation 525)" },
+          { id: "N1327J", title: "N1327J (Citation 525)" }
+        ];
 
         const events = [
           {
             id: "trip123",
-            title: "N630MW – PA-31T2 – TRP-275",
+            resourceId: "N630MW",
+            title: "TRP-275",
             start: "2025-06-15",
-            end:   "2025-06-20",   // ← exclusive: paints June 15,16,17,18,19
+            end:   "2025-06-20",   // exclusive: paints June 15→19
             allDay: true,
-            backgroundColor: "#FF9900"  // your chosen aircraft color
+            backgroundColor: "#FF9900"
           },
           {
             id: "trip456",
-            title: "N907DK – Cessna Citation 525 – Owner Trip",
+            resourceId: "N907DK",
+            title: "Owner Trip",
             start: "2025-06-16",
-            end:   "2025-06-21",   // ← exclusive: paints June 16,17,18,19,20
+            end:   "2025-06-21",   // exclusive: paints June 16→20
             allDay: true,
             backgroundColor: "#336699"
           },
           {
             id: "trip789",
-            title: "N1327J – Cessna Citation 525 – TRP-999",
+            resourceId: "N1327J",
+            title: "TRP-999",
             start: "2025-06-11",
-            end:   "2025-06-15",   // ← exclusive: paints June 11,12,13,14
+            end:   "2025-06-15",   // exclusive: paints June 11→14
             allDay: true,
             backgroundColor: "#33CCFF"
           }
-          // …add more trip objects here, but no duplicates and no multi-part splits…
         ];
 
-        console.log("Loaded events array:", events);
-
-        // ───────────────────────────────────────────────────────────────────────────
-        // STEP 2: Initialize FullCalendar with only these events.
-        //
-        // Doing this ensures FullCalendar sees exactly one continuous event per trip,
-        // and because each 'end' date is exclusive, the rectangle will span exactly
-        // the intended days with no breaks or stacking.
-        // ───────────────────────────────────────────────────────────────────────────
+        console.log("Loaded resources:", resources);
+        console.log("Loaded events:", events);
 
         const calendar = new FullCalendar.Calendar(calendarEl, {
-          initialView: "dayGridMonth",
+          schedulerLicenseKey: 'GPL-My-Project-Is-Open-Source', // Required for resource views
+          initialView: 'resourceDayGridMonth', // Resource-based month view
+          resources: resources,
           events: events,
-          // (Optional: remove other settings you might have—this is the minimal config.)
+          resourceAreaHeaderContent: 'Aircraft', // Optional: Set a header for the resource column
+          // businessHours: true, // Example: shows business hours
+          // weekends: true, // Example: show weekends
         });
 
         calendar.render();
