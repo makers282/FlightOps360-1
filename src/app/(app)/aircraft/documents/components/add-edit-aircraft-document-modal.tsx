@@ -15,7 +15,7 @@ import {
   DialogFooter,
   DialogClose,
 } from '@/components/ui/dialog';
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -23,7 +23,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { CalendarIcon, Loader2, Save, FileText as FileTextIcon, Edit3, UploadCloud, Paperclip, XCircle as RemoveFileIcon } from 'lucide-react';
 import { cn } from "@/lib/utils";
-import { format, isValid as isValidDate } from "date-fns";
+import { format, isValid as isValidDate } from "date-fns"; // Removed parseISO, startOfDay as they are not used here anymore
 import type { AircraftDocument, SaveAircraftDocumentInput } from '@/ai/schemas/aircraft-document-schemas';
 import { aircraftDocumentTypes } from '@/ai/schemas/aircraft-document-schemas';
 import type { FleetAircraft } from '@/ai/schemas/fleet-aircraft-schemas';
@@ -31,7 +31,6 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { uploadAircraftDocument } from '@/ai/flows/upload-aircraft-document-flow'; 
 import { useToast } from '@/hooks/use-toast'; 
 
-// Form schema uses Date objects for date fields
 const aircraftDocumentFormSchema = z.object({
   aircraftId: z.string().min(1, "Aircraft selection is required."),
   documentName: z.string().min(1, "Document name is required."),
@@ -81,6 +80,9 @@ export function AddEditAircraftDocumentModal({
   const [isSavingFile, setIsSavingFile] = useState(false); 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [isIssueDateOpen, setIsIssueDateOpen] = useState(false);
+  const [isExpiryDateOpen, setIsExpiryDateOpen] = useState(false);
+
   const form = useForm<AircraftDocumentFormData>({
     resolver: zodResolver(aircraftDocumentFormSchema),
     defaultValues: {
@@ -98,8 +100,8 @@ export function AddEditAircraftDocumentModal({
           aircraftId: initialData.aircraftId,
           documentName: initialData.documentName,
           documentType: initialData.documentType || "Other",
-          issueDate: initialData.issueDate ? new Date(initialData.issueDate) : undefined,
-          expiryDate: initialData.expiryDate ? new Date(initialData.expiryDate) : undefined,
+          issueDate: initialData.issueDate && isValidDate(new Date(initialData.issueDate)) ? new Date(initialData.issueDate) : undefined,
+          expiryDate: initialData.expiryDate && isValidDate(new Date(initialData.expiryDate)) ? new Date(initialData.expiryDate) : undefined,
           notes: initialData.notes || '',
           fileUrl: initialData.fileUrl || undefined,
         });
@@ -262,30 +264,33 @@ export function AddEditAircraftDocumentModal({
                   render={({ field }) => (
                     <FormItem className="flex flex-col">
                       <FormLabel>Issue Date (Optional)</FormLabel>
-                      <Popover>
+                      <Popover open={isIssueDateOpen} onOpenChange={setIsIssueDateOpen}>
                         <PopoverTrigger asChild>
-                          <FormControl>
-                            <Button
-                              variant={"outline"}
-                              className={cn(
-                                "w-full pl-3 text-left font-normal",
-                                !field.value && "text-muted-foreground"
-                              )}
-                            >
-                              {field.value ? (
-                                format(field.value, "PPP")
-                              ) : (
-                                <span>Pick a date</span>
-                              )}
-                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                            </Button>
-                          </FormControl>
+                           {/* FormControl removed from here to avoid React.Children.only warning, ref applied directly */}
+                           <Button
+                            ref={field.ref}
+                            variant={"outline"}
+                            className={cn(
+                              "w-full pl-3 text-left font-normal",
+                              !field.value && "text-muted-foreground"
+                            )}
+                          >
+                            {field.value && isValidDate(field.value) ? (
+                              format(field.value, "PPP")
+                            ) : (
+                              <span>Pick a date</span>
+                            )}
+                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                          </Button>
                         </PopoverTrigger>
                         <PopoverContent className="w-auto p-0" align="start">
                           <Calendar
                             mode="single"
                             selected={field.value}
-                            onSelect={field.onChange}
+                            onSelect={(date) => {
+                              field.onChange(date);
+                              setIsIssueDateOpen(false);
+                            }}
                             initialFocus
                           />
                         </PopoverContent>
@@ -300,30 +305,33 @@ export function AddEditAircraftDocumentModal({
                   render={({ field }) => (
                     <FormItem className="flex flex-col">
                       <FormLabel>Expiry Date (Optional)</FormLabel>
-                      <Popover>
+                       <Popover open={isExpiryDateOpen} onOpenChange={setIsExpiryDateOpen}>
                         <PopoverTrigger asChild>
-                          <FormControl>
-                            <Button
-                              variant={"outline"}
-                              className={cn(
-                                "w-full pl-3 text-left font-normal",
-                                !field.value && "text-muted-foreground"
-                              )}
-                            >
-                              {field.value ? (
-                                format(field.value, "PPP")
-                              ) : (
-                                <span>Pick a date</span>
-                              )}
-                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                            </Button>
-                          </FormControl>
+                           {/* FormControl removed from here, ref applied directly */}
+                           <Button
+                            ref={field.ref}
+                            variant={"outline"}
+                            className={cn(
+                              "w-full pl-3 text-left font-normal",
+                              !field.value && "text-muted-foreground"
+                            )}
+                          >
+                            {field.value && isValidDate(field.value) ? (
+                              format(field.value, "PPP")
+                            ) : (
+                              <span>Pick a date</span>
+                            )}
+                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                          </Button>
                         </PopoverTrigger>
                         <PopoverContent className="w-auto p-0" align="start">
                           <Calendar
                             mode="single"
                             selected={field.value}
-                            onSelect={field.onChange}
+                            onSelect={(date) => {
+                              field.onChange(date);
+                              setIsExpiryDateOpen(false);
+                            }}
                             disabled={(date) => {
                                 const issueDateValue = form.getValues("issueDate");
                                 return issueDateValue ? date < issueDateValue : false;
@@ -363,7 +371,7 @@ export function AddEditAircraftDocumentModal({
                 )}
                 {!selectedFile && form.getValues('fileUrl') && (
                     <p className="text-xs text-muted-foreground mt-1">
-                        Current file: <a href={form.getValues('fileUrl')} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline truncate max-w-xs inline-block">{form.getValues('fileUrl')?.split('/').pop()}</a>
+                        Current file: <a href={form.getValues('fileUrl')!} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline truncate max-w-xs inline-block">{form.getValues('fileUrl')?.split('/').pop()}</a>
                     </p>
                 )}
                 <FormDescription className="text-xs">Max file size: 5MB. Allowed types: PDF, DOCX, PNG, JPG.</FormDescription>
@@ -386,3 +394,4 @@ export function AddEditAircraftDocumentModal({
     </Dialog>
   );
 }
+
