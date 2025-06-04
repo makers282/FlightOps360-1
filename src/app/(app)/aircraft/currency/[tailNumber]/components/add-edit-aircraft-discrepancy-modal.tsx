@@ -81,11 +81,10 @@ const discrepancyFormSchema = z.object({
 
 export type AircraftDiscrepancyFormData = z.infer<typeof discrepancyFormSchema>;
 
-// Static default values (no new Date() here)
 const staticDefaultFormValues: AircraftDiscrepancyFormData = {
   status: "Open",
-  dateDiscovered: new Date(0), // Placeholder, will be overwritten by useEffect
-  timeDiscovered: "00:00",     // Placeholder
+  dateDiscovered: new Date(0), 
+  timeDiscovered: "00:00",
   description: "",
   discoveredBy: "",
   discoveredByCertNumber: "",
@@ -123,7 +122,7 @@ export function AddEditAircraftDiscrepancyModal({
 
   const form = useForm<AircraftDiscrepancyFormData>({
     resolver: zodResolver(discrepancyFormSchema),
-    defaultValues: staticDefaultFormValues, // Use static defaults initially
+    defaultValues: staticDefaultFormValues,
   });
   
   const isDeferredWatch = form.watch("isDeferred");
@@ -152,11 +151,11 @@ export function AddEditAircraftDiscrepancyModal({
           correctedBy: initialData.correctedBy || "",
           correctedByCertNumber: initialData.correctedByCertNumber || "",
         });
-      } else { // New form
+      } else { 
         form.reset({
-            ...staticDefaultFormValues, // Reset with static, then set dynamic dates
-            dateDiscovered: startOfDay(new Date()), // Set dynamic default client-side
-            timeDiscovered: format(new Date(), "HH:mm"), // Set dynamic default client-side
+            ...staticDefaultFormValues, 
+            dateDiscovered: startOfDay(new Date()), 
+            timeDiscovered: format(new Date(), "HH:mm"),
         });
       }
     }
@@ -196,7 +195,7 @@ export function AddEditAircraftDiscrepancyModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!isSaving) setIsOpen(open); }}>
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent className="sm:max-w-2xl flex flex-col max-h-[calc(100vh-8rem)]"> {/* Adjusted for robust scrolling */}
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {isEditing ? <Edit3 className="h-6 w-6 text-primary" /> : <AlertTriangle className="h-6 w-6 text-destructive" />}
@@ -205,129 +204,130 @@ export function AddEditAircraftDiscrepancyModal({
           <ModalDialogDescription>{modalDescription}</ModalDialogDescription>
         </DialogHeader>
         
-        <Form {...form}>
-          <form id="aircraft-discrepancy-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-2">
-            <ScrollArea className="max-h-[70vh] pr-5">
-              <div className="space-y-6 p-1">
-                <FormField
-                  control={form.control}
-                  name="status"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Status</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl><SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger></FormControl>
-                        <SelectContent>
-                          {discrepancyStatuses.map(s => (<SelectItem key={s} value={s}>{s}</SelectItem>))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                      {statusWatch === 'Closed' && (
-                        <p className="text-sm text-primary mt-2 p-2 bg-primary/10 rounded-md">
-                          Please scroll down to complete the "Corrective Action &amp; Sign-Off" section to close this discrepancy.
-                        </p>
-                      )}
-                    </FormItem>
-                  )}
-                />
-
-                <Card className="p-4 border-orange-500/50 bg-orange-50/30 dark:bg-orange-900/20">
-                  <CardHeader className="p-0 pb-3">
-                    <CardTitle className="text-md text-orange-700 dark:text-orange-400">Discrepancy Details</CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-0 space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <FormField control={form.control} name="dateDiscovered" render={({ field }) => (
-                        <FormItem className="flex flex-col">
-                          <FormLabel>Date Discovered</FormLabel>
-                          <Popover><PopoverTrigger asChild>
-                              <FormControl><Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
-                                  {field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
-                                  <CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0" align="start">
-                              <Calendar mode="single" selected={field.value} onSelect={(date) => field.onChange(date ? startOfDay(date): undefined)} disabled={(date) => minDateAllowed ? date < minDateAllowed : false} initialFocus /></PopoverContent>
-                          </Popover><FormMessage />
-                        </FormItem>
-                      )} />
-                      <FormField control={form.control} name="timeDiscovered" render={({ field }) => (
-                        <FormItem><FormLabel>Time Discovered (HH:MM Optional)</FormLabel><FormControl><Input type="time" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>
-                      )} />
-                    </div>
-                    <FormField control={form.control} name="description" render={({ field }) => (<FormItem><FormLabel>Description of Discrepancy</FormLabel><FormControl><Textarea placeholder="e.g., Flat spot on #2 main tire, slight oil leak from right engine nacelle." {...field} rows={3} /></FormControl><FormMessage /></FormItem>)} />
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <FormField control={form.control} name="discoveredBy" render={({ field }) => (<FormItem><FormLabel>Discovered By (Optional)</FormLabel><FormControl><Input placeholder="e.g., Capt. Smith, Maintenance" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>)} />
-                      <FormField control={form.control} name="discoveredByCertNumber" render={({ field }) => (<FormItem><FormLabel>Discovered By Cert # (Optional)</FormLabel><FormControl><Input placeholder="e.g., A&P 1234567" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>)} />
-                    </div>
-                    <FormField control={form.control} name="isDeferred" render={({ field }) => (
-                      <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 shadow-sm">
-                        <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl>
-                        <FormLabel className="font-normal">Discrepancy is Deferred (e.g., MEL/NEF)</FormLabel>
+        <div className="flex-1 overflow-hidden"> {/* Wrapper for ScrollArea */}
+          <ScrollArea className="h-full">
+            <Form {...form}>
+              <form id="aircraft-discrepancy-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-2 px-4"> {/* Padding moved to form for ScrollArea */}
+                <div className="space-y-6">
+                  <FormField
+                    control={form.control}
+                    name="status"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Status</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl><SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger></FormControl>
+                          <SelectContent>
+                            {discrepancyStatuses.map(s => (<SelectItem key={s} value={s}>{s}</SelectItem>))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                        {statusWatch === 'Closed' && (
+                          <p className="text-sm text-primary mt-2 p-2 bg-primary/10 rounded-md">
+                            Please scroll down to complete the "Corrective Action &amp; Sign-Off" section to close this discrepancy.
+                          </p>
+                        )}
                       </FormItem>
-                    )} />
-                    {isDeferredWatch && (
-                      <div className="pl-4 border-l-2 border-blue-500 ml-2 space-y-4 py-3">
-                        <FormField control={form.control} name="deferralReference" render={({ field }) => (<FormItem><FormLabel>Deferral Reference (e.g., MEL 25-10-01a)</FormLabel><FormControl><Input placeholder="MEL/NEF/CDL Item #" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>)} />
-                        <FormField control={form.control} name="deferralDate" render={({ field }) => (
-                            <FormItem className="flex flex-col">
-                            <FormLabel>Deferral Date</FormLabel>
-                            <Popover><PopoverTrigger asChild>
-                                <FormControl><Button variant={"outline"} className={cn("w-full md:w-1/2 pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
-                                    {field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
-                                    <CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-auto p-0" align="start">
-                                <Calendar mode="single" selected={field.value} onSelect={(date) => field.onChange(date ? startOfDay(date) : undefined)} disabled={(date) => minDateAllowed ? date < minDateAllowed : false} initialFocus /></PopoverContent>
-                            </Popover><FormMessage />
-                            </FormItem>
-                        )} />
-                      </div>
                     )}
-                  </CardContent>
-                </Card>
-                
-                <Card className="p-4 border-green-500/50 bg-green-50/30 dark:bg-green-900/20">
+                  />
+
+                  <Card className="p-4 border-orange-500/50 bg-orange-50/30 dark:bg-orange-900/20">
                     <CardHeader className="p-0 pb-3">
-                        <CardTitle className="text-md text-green-700 dark:text-green-400 flex items-center gap-2">
-                            <ShieldCheck className="h-5 w-5"/> Corrective Action &amp; Sign-Off
-                        </CardTitle>
-                         <ModalDialogDescription className="text-xs text-green-600 dark:text-green-500">
-                            Fill this section when the discrepancy is corrected or to close it out.
-                        </ModalDialogDescription>
+                      <CardTitle className="text-md text-orange-700 dark:text-orange-400">Discrepancy Details</CardTitle>
                     </CardHeader>
                     <CardContent className="p-0 space-y-4">
-                        <FormField control={form.control} name="correctiveAction" render={({ field }) => (<FormItem><FormLabel>Corrective Action Taken</FormLabel><FormControl><Textarea placeholder="e.g., Replaced #2 main tire, torqued B-nut on engine oil line..." {...field} value={field.value || ''} rows={3} /></FormControl><FormMessage /></FormItem>)} />
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <FormField control={form.control} name="dateCorrected" render={({ field }) => (
-                                <FormItem className="flex flex-col">
-                                <FormLabel>Date Corrected</FormLabel>
-                                <Popover><PopoverTrigger asChild>
-                                    <FormControl><Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
-                                        {field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
-                                        <CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="w-auto p-0" align="start">
-                                    <Calendar mode="single" selected={field.value} onSelect={(date) => field.onChange(date ? startOfDay(date): undefined)} disabled={(date) => minDateAllowed ? date < minDateAllowed : false} initialFocus /></PopoverContent>
-                                </Popover><FormMessage />
-                                </FormItem>
-                            )} />
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <FormField control={form.control} name="dateDiscovered" render={({ field }) => (
+                          <FormItem className="flex flex-col">
+                            <FormLabel>Date Discovered</FormLabel>
+                            <Popover><PopoverTrigger asChild>
+                                <FormControl><Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
+                                    {field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
+                                    <CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-auto p-0" align="start">
+                                <Calendar mode="single" selected={field.value} onSelect={(date) => field.onChange(date ? startOfDay(date): undefined)} disabled={(date) => minDateAllowed ? date < minDateAllowed : false} initialFocus /></PopoverContent>
+                            </Popover><FormMessage />
+                          </FormItem>
+                        )} />
+                        <FormField control={form.control} name="timeDiscovered" render={({ field }) => (
+                          <FormItem><FormLabel>Time Discovered (HH:MM Optional)</FormLabel><FormControl><Input type="time" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>
+                        )} />
+                      </div>
+                      <FormField control={form.control} name="description" render={({ field }) => (<FormItem><FormLabel>Description of Discrepancy</FormLabel><FormControl><Textarea placeholder="e.g., Flat spot on #2 main tire, slight oil leak from right engine nacelle." {...field} rows={3} /></FormControl><FormMessage /></FormItem>)} />
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <FormField control={form.control} name="discoveredBy" render={({ field }) => (<FormItem><FormLabel>Discovered By (Optional)</FormLabel><FormControl><Input placeholder="e.g., Capt. Smith, Maintenance" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>)} />
+                        <FormField control={form.control} name="discoveredByCertNumber" render={({ field }) => (<FormItem><FormLabel>Discovered By Cert # (Optional)</FormLabel><FormControl><Input placeholder="e.g., A&P 1234567" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>)} />
+                      </div>
+                      <FormField control={form.control} name="isDeferred" render={({ field }) => (
+                        <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 shadow-sm">
+                          <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                          <FormLabel className="font-normal">Discrepancy is Deferred (e.g., MEL/NEF)</FormLabel>
+                        </FormItem>
+                      )} />
+                      {isDeferredWatch && (
+                        <div className="pl-4 border-l-2 border-blue-500 ml-2 space-y-4 py-3">
+                          <FormField control={form.control} name="deferralReference" render={({ field }) => (<FormItem><FormLabel>Deferral Reference (e.g., MEL 25-10-01a)</FormLabel><FormControl><Input placeholder="MEL/NEF/CDL Item #" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>)} />
+                          <FormField control={form.control} name="deferralDate" render={({ field }) => (
+                              <FormItem className="flex flex-col">
+                              <FormLabel>Deferral Date</FormLabel>
+                              <Popover><PopoverTrigger asChild>
+                                  <FormControl><Button variant={"outline"} className={cn("w-full md:w-1/2 pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
+                                      {field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
+                                      <CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl>
+                                  </PopoverTrigger>
+                                  <PopoverContent className="w-auto p-0" align="start">
+                                  <Calendar mode="single" selected={field.value} onSelect={(date) => field.onChange(date ? startOfDay(date) : undefined)} disabled={(date) => minDateAllowed ? date < minDateAllowed : false} initialFocus /></PopoverContent>
+                              </Popover><FormMessage />
+                              </FormItem>
+                          )} />
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <FormField control={form.control} name="correctedBy" render={({ field }) => (<FormItem><FormLabel>Corrected By</FormLabel><FormControl><Input placeholder="e.g., Maintenance Staff, Cert. Mechanic" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>)} />
-                            <FormField control={form.control} name="correctedByCertNumber" render={({ field }) => (<FormItem><FormLabel>Corrected By Cert # (Optional)</FormLabel><FormControl><Input placeholder="e.g., A&P 7654321" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>)} />
-                        </div>
-                         {statusWatch === 'Closed' && (!currentFormValues.correctiveAction || !currentFormValues.dateCorrected || !currentFormValues.correctedBy) && (
-                            <p className="text-xs text-destructive p-2 rounded-md border border-destructive/50 bg-destructive/10">
-                                For 'Closed' status, "Corrective Action Taken", "Date Corrected", and "Corrected By" are required fields.
-                            </p>
-                        )}
+                      )}
                     </CardContent>
-                </Card>
-
-              </div>
-            </ScrollArea>
-          </form>
-        </Form>
+                  </Card>
+                  
+                  <Card className="p-4 border-green-500/50 bg-green-50/30 dark:bg-green-900/20">
+                      <CardHeader className="p-0 pb-3">
+                          <CardTitle className="text-md text-green-700 dark:text-green-400 flex items-center gap-2">
+                              <ShieldCheck className="h-5 w-5"/> Corrective Action &amp; Sign-Off
+                          </CardTitle>
+                           <ModalDialogDescription className="text-xs text-green-600 dark:text-green-500">
+                              Fill this section when the discrepancy is corrected or to close it out.
+                          </ModalDialogDescription>
+                      </CardHeader>
+                      <CardContent className="p-0 space-y-4">
+                          <FormField control={form.control} name="correctiveAction" render={({ field }) => (<FormItem><FormLabel>Corrective Action Taken</FormLabel><FormControl><Textarea placeholder="e.g., Replaced #2 main tire, torqued B-nut on engine oil line..." {...field} value={field.value || ''} rows={3} /></FormControl><FormMessage /></FormItem>)} />
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <FormField control={form.control} name="dateCorrected" render={({ field }) => (
+                                  <FormItem className="flex flex-col">
+                                  <FormLabel>Date Corrected</FormLabel>
+                                  <Popover><PopoverTrigger asChild>
+                                      <FormControl><Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
+                                          {field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
+                                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl>
+                                      </PopoverTrigger>
+                                      <PopoverContent className="w-auto p-0" align="start">
+                                      <Calendar mode="single" selected={field.value} onSelect={(date) => field.onChange(date ? startOfDay(date): undefined)} disabled={(date) => minDateAllowed ? date < minDateAllowed : false} initialFocus /></PopoverContent>
+                                  </Popover><FormMessage />
+                                  </FormItem>
+                              )} />
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <FormField control={form.control} name="correctedBy" render={({ field }) => (<FormItem><FormLabel>Corrected By</FormLabel><FormControl><Input placeholder="e.g., Maintenance Staff, Cert. Mechanic" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>)} />
+                              <FormField control={form.control} name="correctedByCertNumber" render={({ field }) => (<FormItem><FormLabel>Corrected By Cert # (Optional)</FormLabel><FormControl><Input placeholder="e.g., A&P 7654321" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>)} />
+                          </div>
+                           {statusWatch === 'Closed' && (!currentFormValues.correctiveAction || !currentFormValues.dateCorrected || !currentFormValues.correctedBy) && (
+                              <p className="text-xs text-destructive p-2 rounded-md border border-destructive/50 bg-destructive/10">
+                                  For 'Closed' status, "Corrective Action Taken", "Date Corrected", and "Corrected By" are required fields.
+                              </p>
+                          )}
+                      </CardContent>
+                  </Card>
+                </div>
+              </form>
+            </Form>
+          </ScrollArea>
+        </div>
         
         <DialogFooter className="pt-4 border-t mt-2">
           <DialogClose asChild><Button type="button" variant="outline" disabled={isSaving}>Cancel</Button></DialogClose>
