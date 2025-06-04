@@ -23,7 +23,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { CalendarIcon, Loader2, Save, FileText as FileTextIcon, Edit3, UploadCloud, Paperclip, XCircle as RemoveFileIcon } from 'lucide-react';
 import { cn } from "@/lib/utils";
-import { format, parseISO, isValid as isValidDate } from "date-fns"; // Removed startOfDay
+import { format, isValid as isValidDate } from "date-fns";
 import type { AircraftDocument, SaveAircraftDocumentInput } from '@/ai/schemas/aircraft-document-schemas';
 import { aircraftDocumentTypes } from '@/ai/schemas/aircraft-document-schemas';
 import type { FleetAircraft } from '@/ai/schemas/fleet-aircraft-schemas';
@@ -31,14 +31,23 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { uploadAircraftDocument } from '@/ai/flows/upload-aircraft-document-flow'; 
 import { useToast } from '@/hooks/use-toast'; 
 
+// Form schema uses Date objects for date fields
 const aircraftDocumentFormSchema = z.object({
   aircraftId: z.string().min(1, "Aircraft selection is required."),
   documentName: z.string().min(1, "Document name is required."),
   documentType: z.enum(aircraftDocumentTypes, { required_error: "Document type is required."}),
-  issueDate: z.string().optional().refine(val => !val || isValidDate(parseISO(val)), { message: "Invalid date format for issue date." }),
-  expiryDate: z.string().optional().refine(val => !val || isValidDate(parseISO(val)), { message: "Invalid date format for expiry date." }),
+  issueDate: z.date().optional(),
+  expiryDate: z.date().optional(),
   notes: z.string().optional(),
   fileUrl: z.string().url().optional(), 
+}).refine(data => {
+  if (data.issueDate && data.expiryDate) {
+    return data.expiryDate >= data.issueDate;
+  }
+  return true;
+}, {
+  message: "Expiry date cannot be before issue date.",
+  path: ["expiryDate"],
 });
 
 export type AircraftDocumentFormData = z.infer<typeof aircraftDocumentFormSchema>;
@@ -76,7 +85,7 @@ export function AddEditAircraftDocumentModal({
     resolver: zodResolver(aircraftDocumentFormSchema),
     defaultValues: {
       aircraftId: '', documentName: '', documentType: "Other",
-      issueDate: '', expiryDate: '', notes: '', fileUrl: undefined,
+      issueDate: undefined, expiryDate: undefined, notes: '', fileUrl: undefined,
     },
   });
 
@@ -89,8 +98,8 @@ export function AddEditAircraftDocumentModal({
           aircraftId: initialData.aircraftId,
           documentName: initialData.documentName,
           documentType: initialData.documentType || "Other",
-          issueDate: initialData.issueDate || '',
-          expiryDate: initialData.expiryDate || '',
+          issueDate: initialData.issueDate ? new Date(initialData.issueDate) : undefined,
+          expiryDate: initialData.expiryDate ? new Date(initialData.expiryDate) : undefined,
           notes: initialData.notes || '',
           fileUrl: initialData.fileUrl || undefined,
         });
@@ -98,7 +107,7 @@ export function AddEditAircraftDocumentModal({
         form.reset({
           aircraftId: selectedAircraftIdForNew || '',
           documentName: '', documentType: "Other",
-          issueDate: '', expiryDate: '', notes: '', fileUrl: undefined,
+          issueDate: undefined, expiryDate: undefined, notes: '', fileUrl: undefined,
         });
       }
     }
@@ -166,8 +175,8 @@ export function AddEditAircraftDocumentModal({
       documentName: formData.documentName,
       documentType: formData.documentType,
       aircraftTailNumber: selectedAircraft ? selectedAircraft.tailNumber : 'Unknown Aircraft',
-      issueDate: formData.issueDate || undefined,
-      expiryDate: formData.expiryDate || undefined,
+      issueDate: formData.issueDate ? format(formData.issueDate, 'yyyy-MM-dd') : undefined,
+      expiryDate: formData.expiryDate ? format(formData.expiryDate, 'yyyy-MM-dd') : undefined,
       notes: formData.notes || undefined,
       fileUrl: fileUrlToSave,
     };
@@ -256,8 +265,18 @@ export function AddEditAircraftDocumentModal({
                       <Popover>
                         <PopoverTrigger asChild>
                           <FormControl>
-                            <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
-                              {field.value && isValidDate(parseISO(field.value)) ? format(parseISO(field.value), "PPP") : <span>Pick a date</span>}
+                            <Button
+                              variant={"outline"}
+                              className={cn(
+                                "w-full pl-3 text-left font-normal",
+                                !field.value && "text-muted-foreground"
+                              )}
+                            >
+                              {field.value ? (
+                                format(field.value, "PPP")
+                              ) : (
+                                <span>Pick a date</span>
+                              )}
                               <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
                             </Button>
                           </FormControl>
@@ -265,8 +284,8 @@ export function AddEditAircraftDocumentModal({
                         <PopoverContent className="w-auto p-0" align="start">
                           <Calendar
                             mode="single"
-                            selected={field.value && isValidDate(parseISO(field.value)) ? parseISO(field.value) : undefined}
-                            onSelect={(date) => field.onChange(date ? format(date, 'yyyy-MM-dd') : '')}
+                            selected={field.value}
+                            onSelect={field.onChange}
                             initialFocus
                           />
                         </PopoverContent>
@@ -284,8 +303,18 @@ export function AddEditAircraftDocumentModal({
                       <Popover>
                         <PopoverTrigger asChild>
                           <FormControl>
-                            <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
-                              {field.value && isValidDate(parseISO(field.value)) ? format(parseISO(field.value), "PPP") : <span>Pick a date</span>}
+                            <Button
+                              variant={"outline"}
+                              className={cn(
+                                "w-full pl-3 text-left font-normal",
+                                !field.value && "text-muted-foreground"
+                              )}
+                            >
+                              {field.value ? (
+                                format(field.value, "PPP")
+                              ) : (
+                                <span>Pick a date</span>
+                              )}
                               <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
                             </Button>
                           </FormControl>
@@ -293,11 +322,11 @@ export function AddEditAircraftDocumentModal({
                         <PopoverContent className="w-auto p-0" align="start">
                           <Calendar
                             mode="single"
-                            selected={field.value && isValidDate(parseISO(field.value)) ? parseISO(field.value) : undefined}
-                            onSelect={(date) => field.onChange(date ? format(date, 'yyyy-MM-dd') : '')}
+                            selected={field.value}
+                            onSelect={field.onChange}
                             disabled={(date) => {
-                                const issueDate = form.getValues("issueDate");
-                                return issueDate && isValidDate(parseISO(issueDate)) ? date < parseISO(issueDate) : false;
+                                const issueDateValue = form.getValues("issueDate");
+                                return issueDateValue ? date < issueDateValue : false;
                             }}
                             initialFocus
                           />
@@ -357,5 +386,3 @@ export function AddEditAircraftDocumentModal({
     </Dialog>
   );
 }
-
-    
