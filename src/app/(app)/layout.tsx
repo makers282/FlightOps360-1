@@ -30,7 +30,7 @@ import {
   PlaneTakeoff,
   Building2,
   Wrench, 
-  ClipboardCheck,
+  ClipboardCheck, 
   BarChartBig, 
   DollarSign, 
   Package, 
