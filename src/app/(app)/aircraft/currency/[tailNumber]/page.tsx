@@ -78,6 +78,121 @@ interface SortConfig {
   direction: SortDirection;
 }
 
+// Moved helper functions outside the component
+const calculateLocalToGo = (
+  item: Pick<DisplayMaintenanceItem, 'dueAtDate' | 'dueAtHours' | 'dueAtCycles' | 'associatedComponent'>,
+  currentComponentTimesArray: Array<{ componentName: string; currentTime: number; currentCycles: number }>
+): { text: string; numeric: number; unit: 'days' | 'hrs' | 'cycles' | 'N/A'; isOverdue: boolean } => {
+  const now = new Date();
+  if (item.dueAtDate && isValid(parse(item.dueAtDate, 'yyyy-MM-dd', new Date()))) {
+    const dueDate = parse(item.dueAtDate, 'yyyy-MM-dd', new Date());
+    const daysRemaining = differenceInCalendarDays(dueDate, now);
+    return { text: `${daysRemaining} days`, numeric: daysRemaining, unit: 'days', isOverdue: daysRemaining < 0 };
+  }
+  let currentRelevantTime: number | undefined = undefined, currentRelevantCycles: number | undefined = undefined;
+  const componentNameToUse = (item.associatedComponent && item.associatedComponent.trim() !== "") ? item.associatedComponent.trim() : "Airframe";
+  const timesForComponent = currentComponentTimesArray.find(c => c.componentName.trim() === componentNameToUse);
+
+  if (timesForComponent) {
+    currentRelevantTime = timesForComponent.currentTime;
+    currentRelevantCycles = timesForComponent.currentCycles;
+  } else {
+    if (item.dueAtHours != null) return { text: `N/A (No time for ${componentNameToUse})`, numeric: Infinity, unit: 'hrs', isOverdue: false };
+    if (item.dueAtCycles != null) return { text: `N/A (No cycles for ${componentNameToUse})`, numeric: Infinity, unit: 'cycles', isOverdue: false };
+    return { text: 'N/A (Comp. data missing)', numeric: Infinity, unit: 'N/A', isOverdue: false };
+  }
+
+  if (item.dueAtHours != null && currentRelevantTime !== undefined) {
+    const hoursRemaining = parseFloat((item.dueAtHours - currentRelevantTime).toFixed(1));
+    return { text: `${hoursRemaining.toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1})} hrs (from ${componentNameToUse})`, numeric: hoursRemaining, unit: 'hrs', isOverdue: hoursRemaining < 0 };
+  }
+  if (item.dueAtCycles != null && currentRelevantCycles !== undefined) {
+    const cyclesRemaining = item.dueAtCycles - currentRelevantCycles;
+    return { text: `${cyclesRemaining.toLocaleString()} cycles (from ${componentNameToUse})`, numeric: cyclesRemaining, unit: 'cycles', isOverdue: cyclesRemaining < 0 };
+  }
+  return { text: 'N/A (Not Date/Hr/Cycle)', numeric: Infinity, unit: 'N/A', isOverdue: false };
+};
+
+const calculateLocalDisplayFields = (
+  task: FlowMaintenanceTask,
+  currentComponentTimesArray: Array<{ componentName: string; currentTime: number; currentCycles: number }>,
+  localCalculateToGoFn: typeof calculateLocalToGo // Pass the function as an argument
+): DisplayMaintenanceItem => {
+  let dueAtDate: string | undefined = undefined, dueAtHours: number | undefined = undefined, dueAtCycles: number | undefined = undefined;
+  const actualLastCompletedDateObj = task.lastCompletedDate && isValid(parseISO(task.lastCompletedDate)) ? parseISO(task.lastCompletedDate) : new Date();
+  const actualLastCompletedHours = Number(task.lastCompletedHours || 0);
+  const actualLastCompletedCycles = Number(task.lastCompletedCycles || 0);
+
+  if (task.trackType === "Interval") {
+    if (task.isDaysDueEnabled && task.daysDueValue && task.daysIntervalType) {
+      const intervalValue = Number(task.daysDueValue);
+      if (!isNaN(intervalValue) && intervalValue > 0) {
+        switch (task.daysIntervalType) {
+          case 'days': dueAtDate = format(addDays(actualLastCompletedDateObj, intervalValue), 'yyyy-MM-dd'); break;
+          case 'months_specific_day': dueAtDate = format(addMonths(actualLastCompletedDateObj, intervalValue), 'yyyy-MM-dd'); break;
+          case 'months_eom': dueAtDate = format(endOfMonth(addMonths(actualLastCompletedDateObj, intervalValue)), 'yyyy-MM-dd'); break;
+          case 'years_specific_day': dueAtDate = format(addYears(actualLastCompletedDateObj, intervalValue), 'yyyy-MM-dd'); break;
+        }
+      }
+    }
+    if (task.isHoursDueEnabled && task.hoursDue) { dueAtHours = actualLastCompletedHours + Number(task.hoursDue); }
+    if (task.isCyclesDueEnabled && task.cyclesDue) { dueAtCycles = actualLastCompletedCycles + Number(task.cyclesDue); }
+  } else if (task.trackType === "One Time") {
+    if (task.isDaysDueEnabled && task.daysDueValue && isValid(parseISO(task.daysDueValue))) { dueAtDate = task.daysDueValue; }
+    if (task.isHoursDueEnabled && task.hoursDue) dueAtHours = Number(task.hoursDue);
+    if (task.isCyclesDueEnabled && task.cyclesDue) dueAtCycles = Number(task.cyclesDue);
+  }
+  const toGoData = localCalculateToGoFn({ ...task, dueAtDate, dueAtHours, dueAtCycles }, currentComponentTimesArray);
+  return { ...task, dueAtDate, dueAtHours, dueAtCycles, toGoData };
+};
+
+const formatLocalTaskFrequency = (task: FlowMaintenanceTask): string => {
+  if (task.trackType === "Dont Alert") return "Not Tracked";
+  if (task.trackType === "One Time") return "One Time";
+  const frequencies = [];
+  if (task.isHoursDueEnabled && task.hoursDue) { frequencies.push(`${task.hoursDue.toLocaleString()} hrs`); }
+  if (task.isCyclesDueEnabled && task.cyclesDue) { frequencies.push(`${task.cyclesDue.toLocaleString()} cyc`); }
+  if (task.isDaysDueEnabled && task.daysDueValue) {
+    const numVal = Number(task.daysDueValue);
+    let unit = '';
+    switch(task.daysIntervalType) {
+      case 'days': unit = 'days'; break;
+      case 'months_specific_day': case 'months_eom': unit = 'months'; break;
+      case 'years_specific_day': unit = 'years'; break;
+      default: unit = task.daysIntervalType || 'days';
+    }
+    frequencies.push(`${numVal} ${unit}`);
+  }
+  return frequencies.length > 0 ? frequencies.join(' / ') : 'N/A';
+};
+
+const getLocalReleaseStatus = (
+  toGo: { text: string; numeric: number; unit: 'days' | 'hrs' | 'cycles' | 'N/A'; isOverdue: boolean },
+  task: DisplayMaintenanceItem
+): { icon: JSX.Element; colorClass: string; label: string } => {
+  if (toGo.text.startsWith('N/A (No time for') || toGo.text.startsWith('N/A (No cycles for') || toGo.text.startsWith('N/A (Comp. data missing')) {
+    return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-orange-500', label: 'Missing Comp. Time' };
+  }
+  if (toGo.isOverdue) {
+    let withinGrace = false;
+    const numericOverdueAmount = Math.abs(toGo.numeric);
+    if (toGo.unit === 'days' && typeof task.daysTolerance === 'number' && numericOverdueAmount <= task.daysTolerance) { withinGrace = true; }
+    else if (toGo.unit === 'hrs' && typeof task.hoursTolerance === 'number' && numericOverdueAmount <= task.hoursTolerance) { withinGrace = true; }
+    else if (toGo.unit === 'cycles' && typeof task.cyclesTolerance === 'number' && numericOverdueAmount <= task.cyclesTolerance) { withinGrace = true; }
+    if (withinGrace) { return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-yellow-600 dark:text-yellow-500', label: 'Grace Period' }; }
+    return { icon: <XCircleIcon className="h-5 w-5" />, colorClass: 'text-red-500 dark:text-red-400', label: 'Overdue' };
+  }
+  const daysAlertThreshold = task.alertDaysPrior ?? 30;
+  const hoursAlertThreshold = task.alertHoursPrior ?? 25;
+  const cyclesAlertThreshold = task.alertCyclesPrior ?? 50;
+  if (toGo.unit === 'days' && toGo.numeric < daysAlertThreshold) return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-yellow-500 dark:text-yellow-400', label: 'Due Soon' };
+  if (toGo.unit === 'hrs' && toGo.numeric < hoursAlertThreshold) return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-yellow-500 dark:text-yellow-400', label: 'Due Soon' };
+  if (toGo.unit === 'cycles' && toGo.numeric < cyclesAlertThreshold) return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-yellow-500 dark:text-yellow-400', label: 'Due Soon' };
+  if (toGo.text === 'N/A (Not Date/Hr/Cycle)' || toGo.text === 'Invalid Date') return { icon: <InfoIcon className="h-5 w-5" />, colorClass: 'text-gray-400', label: 'Check Due Info' };
+  return { icon: <CheckCircle2 className="h-5 w-5" />, colorClass: 'text-green-500 dark:text-green-400', label: 'OK' };
+};
+
+
 export default function AircraftMaintenanceDetailPage() {
   const params = useParams();
   const router = useRouter(); 
@@ -140,55 +255,6 @@ export default function AircraftMaintenanceDetailPage() {
       });
     } else { aircraftInfoForm.reset({ model: '', aircraftYear: undefined, baseLocation: '', primaryContactName: '', primaryContactPhone: '', primaryContactEmail: '', internalNotes: '', }); }
   }, [aircraftInfoForm]);
-
-
-  const calculateToGo = useCallback((item: DisplayMaintenanceItem, currentComponentTimes: Array<{ componentName: string; currentTime: number; currentCycles: number }>): { text: string; numeric: number; unit: 'days' | 'hrs' | 'cycles' | 'N/A'; isOverdue: boolean } => {
-    const now = new Date();
-    if (item.dueAtDate && isValid(parse(item.dueAtDate, 'yyyy-MM-dd', new Date()))) {
-      const dueDate = parse(item.dueAtDate, 'yyyy-MM-dd', new Date());
-      const daysRemaining = differenceInCalendarDays(dueDate, now);
-      return { text: `${daysRemaining} days`, numeric: daysRemaining, unit: 'days', isOverdue: daysRemaining < 0 };
-    }
-    let currentRelevantTime: number | undefined = undefined, currentRelevantCycles: number | undefined = undefined;
-    const componentNameToUse = (item.associatedComponent && item.associatedComponent.trim() !== "") ? item.associatedComponent.trim() : "Airframe"; 
-    const timesForComponent = currentComponentTimes.find(c => c.componentName.trim() === componentNameToUse);
-    if (timesForComponent) { currentRelevantTime = timesForComponent.currentTime; currentRelevantCycles = timesForComponent.currentCycles; } 
-    else {
-      if (item.dueAtHours != null) return { text: `N/A (No time for ${componentNameToUse})`, numeric: Infinity, unit: 'hrs', isOverdue: false };
-      if (item.dueAtCycles != null) return { text: `N/A (No cycles for ${componentNameToUse})`, numeric: Infinity, unit: 'cycles', isOverdue: false };
-      return { text: 'N/A (Comp. data missing)', numeric: Infinity, unit: 'N/A', isOverdue: false };
-    }
-    if (item.dueAtHours != null && currentRelevantTime !== undefined) { const hoursRemaining = parseFloat((item.dueAtHours - currentRelevantTime).toFixed(1)); return { text: `${hoursRemaining.toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1})} hrs (from ${componentNameToUse})`, numeric: hoursRemaining, unit: 'hrs', isOverdue: hoursRemaining < 0 }; }
-    if (item.dueAtCycles != null && currentRelevantCycles !== undefined) { const cyclesRemaining = item.dueAtCycles - currentRelevantCycles; return { text: `${cyclesRemaining.toLocaleString()} cycles (from ${componentNameToUse})`, numeric: cyclesRemaining, unit: 'cycles', isOverdue: cyclesRemaining < 0 }; }
-    return { text: 'N/A (Not Date/Hr/Cycle)', numeric: Infinity, unit: 'N/A', isOverdue: false };
-  }, []);
-
-  const calculateDisplayFields = useCallback((task: FlowMaintenanceTask, currentComponentTimes: Array<{ componentName: string; currentTime: number; currentCycles: number }>): DisplayMaintenanceItem => {
-    let dueAtDate: string | undefined = undefined, dueAtHours: number | undefined = undefined, dueAtCycles: number | undefined = undefined;
-    const actualLastCompletedDateObj = task.lastCompletedDate && isValid(parseISO(task.lastCompletedDate)) ? parseISO(task.lastCompletedDate) : new Date(); 
-    const actualLastCompletedHours = Number(task.lastCompletedHours || 0); const actualLastCompletedCycles = Number(task.lastCompletedCycles || 0);
-    if (task.trackType === "Interval") {
-      if (task.isDaysDueEnabled && task.daysDueValue && task.daysIntervalType) {
-        const intervalValue = Number(task.daysDueValue);
-        if (!isNaN(intervalValue) && intervalValue > 0) {
-          switch (task.daysIntervalType) {
-            case 'days': dueAtDate = format(addDays(actualLastCompletedDateObj, intervalValue), 'yyyy-MM-dd'); break;
-            case 'months_specific_day': dueAtDate = format(addMonths(actualLastCompletedDateObj, intervalValue), 'yyyy-MM-dd'); break;
-            case 'months_eom': dueAtDate = format(endOfMonth(addMonths(actualLastCompletedDateObj, intervalValue)), 'yyyy-MM-dd'); break;
-            case 'years_specific_day': dueAtDate = format(addYears(actualLastCompletedDateObj, intervalValue), 'yyyy-MM-dd'); break;
-          }
-        }
-      }
-      if (task.isHoursDueEnabled && task.hoursDue) { dueAtHours = actualLastCompletedHours + Number(task.hoursDue); }
-      if (task.isCyclesDueEnabled && task.cyclesDue) { dueAtCycles = actualLastCompletedCycles + Number(task.cyclesDue); }
-    } else if (task.trackType === "One Time") {
-      if (task.isDaysDueEnabled && task.daysDueValue && isValid(parseISO(task.daysDueValue))) {  dueAtDate = task.daysDueValue; }
-      if (task.isHoursDueEnabled && task.hoursDue) dueAtHours = Number(task.hoursDue);
-      if (task.isCyclesDueEnabled && task.cyclesDue) dueAtCycles = Number(task.cyclesDue);
-    }
-    const toGoData = calculateToGo({ ...task, dueAtDate, dueAtHours, dueAtCycles }, currentComponentTimes);
-    return { ...task, dueAtDate, dueAtHours, dueAtCycles, toGoData };
-  }, [calculateToGo]);
   
   const loadAndInitializeComponentTimes = useCallback(async (aircraft: FleetAircraft | null) => {
     if (!aircraft || !aircraft.id) { setEditableComponentTimes([]); setOriginalComponentTimes([]); setIsLoadingComponentTimes(false); return; }
@@ -285,11 +351,12 @@ export default function AircraftMaintenanceDetailPage() {
     catch (error) { console.error("Failed to delete task:", error); toast({ title: "Error Deleting Task", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" }); }
   }, [currentAircraft, toast, loadMaintenanceTasks, setIsTaskModalOpen]);
 
-  const handleOpenAddDiscrepancyModal = () => {
+  const handleOpenAddDiscrepancyModal = useCallback(() => {
     setEditingDiscrepancyId(null); 
     setInitialDiscrepancyModalData(null);
     setIsDiscrepancyModalOpen(true); 
-  };
+  }, [setEditingDiscrepancyId, setInitialDiscrepancyModalData, setIsDiscrepancyModalOpen]);
+
   const handleOpenEditDiscrepancyModal = useCallback((discrepancy: AircraftDiscrepancy) => {
     setEditingDiscrepancyId(discrepancy.id);
     setInitialDiscrepancyModalData(discrepancy);
@@ -320,47 +387,29 @@ export default function AircraftMaintenanceDetailPage() {
     });
   };
 
-  const formatTaskFrequency = useCallback((task: FlowMaintenanceTask): string => {
-    if (task.trackType === "Dont Alert") return "Not Tracked"; if (task.trackType === "One Time") return "One Time";
-    const frequencies = [];
-    if (task.isHoursDueEnabled && task.hoursDue) { frequencies.push(`${task.hoursDue.toLocaleString()} hrs`); }
-    if (task.isCyclesDueEnabled && task.cyclesDue) { frequencies.push(`${task.cyclesDue.toLocaleString()} cyc`); }
-    if (task.isDaysDueEnabled && task.daysDueValue) { const numVal = Number(task.daysDueValue); let unit = ''; switch(task.daysIntervalType) { case 'days': unit = 'days'; break; case 'months_specific_day': case 'months_eom': unit = 'months'; break; case 'years_specific_day': unit = 'years'; break; default: unit = task.daysIntervalType || 'days'; } frequencies.push(`${numVal} ${unit}`); }
-    return frequencies.length > 0 ? frequencies.join(' / ') : 'N/A';
-  }, []);
-
-  const getReleaseStatus = useCallback((toGo: { text: string; numeric: number; unit: 'days' | 'hrs' | 'cycles' | 'N/A'; isOverdue: boolean }, task: DisplayMaintenanceItem ): { icon: JSX.Element; colorClass: string; label: string } => {
-    if (toGo.text.startsWith('N/A (No time for') || toGo.text.startsWith('N/A (No cycles for') || toGo.text.startsWith('N/A (Comp. data missing')) { return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-orange-500', label: 'Missing Comp. Time' }; }
-    if (toGo.isOverdue) { let withinGrace = false; const numericOverdueAmount = Math.abs(toGo.numeric); if (toGo.unit === 'days' && typeof task.daysTolerance === 'number' && numericOverdueAmount <= task.daysTolerance) { withinGrace = true; } else if (toGo.unit === 'hrs' && typeof task.hoursTolerance === 'number' && numericOverdueAmount <= task.hoursTolerance) { withinGrace = true; } else if (toGo.unit === 'cycles' && typeof task.cyclesTolerance === 'number' && numericOverdueAmount <= task.cyclesTolerance) { withinGrace = true; } if (withinGrace) { return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-yellow-600 dark:text-yellow-500', label: 'Grace Period' }; } return { icon: <XCircleIcon className="h-5 w-5" />, colorClass: 'text-red-500 dark:text-red-400', label: 'Overdue' }; }
-    const daysAlertThreshold = task.alertDaysPrior ?? 30; const hoursAlertThreshold = task.alertHoursPrior ?? 25; const cyclesAlertThreshold = task.alertCyclesPrior ?? 50;
-    if (toGo.unit === 'days' && toGo.numeric < daysAlertThreshold) return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-yellow-500 dark:text-yellow-400', label: 'Due Soon' };
-    if (toGo.unit === 'hrs' && toGo.numeric < hoursAlertThreshold) return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-yellow-500 dark:text-yellow-400', label: 'Due Soon' };
-    if (toGo.unit === 'cycles' && toGo.numeric < cyclesAlertThreshold) return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-yellow-500 dark:text-yellow-400', label: 'Due Soon' };
-    if (toGo.text === 'N/A (Not Date/Hr/Cycle)' || toGo.text === 'Invalid Date') return { icon: <InfoIcon className="h-5 w-5" />, colorClass: 'text-gray-400', label: 'Check Due Info' };
-    return { icon: <CheckCircle2 className="h-5 w-5" />, colorClass: 'text-green-500 dark:text-green-400', label: 'OK' };
-  }, []);
-
   const availableComponentsForFilter = useMemo(() => { const uniqueComponents = new Set<string>(); maintenanceTasks.forEach(task => { if (task.associatedComponent && task.associatedComponent.trim() !== "") { uniqueComponents.add(task.associatedComponent.trim()); } else { uniqueComponents.add("Airframe"); } }); return Array.from(uniqueComponents).sort(); }, [maintenanceTasks]);
   
   const displayedTasks = useMemo(() => {
-    if (isLoadingComponentTimes) return []; let filtered = maintenanceTasks.map(task => calculateDisplayFields(task, editableComponentTimes));
+    if (isLoadingComponentTimes) return [];
+    let filtered = maintenanceTasks.map(task => calculateLocalDisplayFields(task, editableComponentTimes, calculateLocalToGo));
     if (searchTerm) { const lowerSearchTerm = searchTerm.toLowerCase(); filtered = filtered.filter(task => task.itemTitle.toLowerCase().includes(lowerSearchTerm) || (task.referenceNumber && task.referenceNumber.toLowerCase().includes(lowerSearchTerm)) || task.itemType.toLowerCase().includes(lowerSearchTerm) || (task.associatedComponent && task.associatedComponent.toLowerCase().includes(lowerSearchTerm)) ); }
-    if (statusFilter !== 'all') { filtered = filtered.filter(task => { if (statusFilter === 'active') return task.isActive; if (statusFilter === 'inactive') return !task.isActive; if (!task.isActive) return false; const status = getReleaseStatus(task.toGoData!, task); if (statusFilter === 'overdue') return status.label === 'Overdue'; if (statusFilter === 'dueSoon') return status.label === 'Due Soon'; if (statusFilter === 'gracePeriod') return status.label === 'Grace Period'; return true; }); }
+    if (statusFilter !== 'all') { filtered = filtered.filter(task => { if (statusFilter === 'active') return task.isActive; if (statusFilter === 'inactive') return !task.isActive; if (!task.isActive) return false; const status = getLocalReleaseStatus(task.toGoData!, task); if (statusFilter === 'overdue') return status.label === 'Overdue'; if (statusFilter === 'dueSoon') return status.label === 'Due Soon'; if (statusFilter === 'gracePeriod') return status.label === 'Grace Period'; return true; }); }
     if (componentFilter !== 'all') { filtered = filtered.filter(task => (task.associatedComponent || "Airframe") === componentFilter); }
     if (sortConfig !== null) { filtered.sort((a, b) => { let aValue: string | number | undefined; let bValue: string | number | undefined; if (sortConfig.key === 'toGoNumeric') { aValue = a.toGoData?.numeric; bValue = b.toGoData?.numeric; } else { aValue = a[sortConfig.key as keyof DisplayMaintenanceItem] as string | number | undefined; bValue = b[sortConfig.key as keyof DisplayMaintenanceItem] as string | number | undefined; } if (aValue === undefined && bValue === undefined) return 0; if (aValue === undefined) return sortConfig.direction === 'ascending' ? 1 : -1; if (bValue === undefined) return sortConfig.direction === 'ascending' ? -1 : 1; if (typeof aValue === 'string' && typeof bValue === 'string') { const comparison = aValue.toLowerCase().localeCompare(bValue.toLowerCase()); return sortConfig.direction === 'ascending' ? comparison : -comparison; } if (typeof aValue === 'number' && typeof bValue === 'number') { return sortConfig.direction === 'ascending' ? aValue - bValue : bValue - aValue; } return 0; }); }
     return filtered;
-  }, [maintenanceTasks, searchTerm, statusFilter, componentFilter, sortConfig, calculateDisplayFields, editableComponentTimes, isLoadingComponentTimes, getReleaseStatus]);
+  }, [maintenanceTasks, searchTerm, statusFilter, componentFilter, sortConfig, editableComponentTimes, isLoadingComponentTimes]);
   
   const handleSelectTask = useCallback((taskId: string, checked: boolean) => {
     setSelectedTaskIds(prev => checked ? [...prev, taskId] : prev.filter(id => id !== taskId) );
-  }, [setSelectedTaskIds]);
+  }, []); // setSelectedTaskIds is stable
 
   const tableBodyContent = useMemo(() => {
     if (displayedTasks.length === 0) {
       return (<TableRow><TableCell colSpan={11} className="text-center text-muted-foreground py-10"><div>No maintenance tasks match your criteria.<Button variant="link" className="p-0 ml-1" onClick={handleOpenAddTaskModal}>Add one now?</Button></div></TableCell></TableRow>);
     }
-    return displayedTasks.map((item) => { const status = getReleaseStatus(item.toGoData!, item); const frequency = formatTaskFrequency(item); let dueAtDisplay = "N/A"; if (item.dueAtDate && isValid(parse(item.dueAtDate, 'yyyy-MM-dd', new Date()))) { try { dueAtDisplay = format(parse(item.dueAtDate, 'yyyy-MM-dd', new Date()), 'MM/dd/yy'); } catch {} } else if (item.dueAtHours !== undefined) { dueAtDisplay = `${item.dueAtHours.toLocaleString()} hrs`; } else if (item.dueAtCycles !== undefined) { dueAtDisplay = `${item.dueAtCycles.toLocaleString()} cyc`; } let lastDoneDisplay = "N/A"; if (item.lastCompletedDate && isValid(parseISO(item.lastCompletedDate))) { try { lastDoneDisplay = format(parseISO(item.lastCompletedDate), 'MM/dd/yy'); } catch {} } else if (item.lastCompletedHours !== undefined) { lastDoneDisplay = `${item.lastCompletedHours.toLocaleString()} hrs`; } else if (item.lastCompletedCycles !== undefined) { lastDoneDisplay = `${item.lastCompletedCycles.toLocaleString()} cyc`; } return ( <TableRow key={item.id} className={item.isActive ? '' : 'opacity-50 bg-muted/30 hover:bg-muted/40'} data-state={selectedTaskIds.includes(item.id) ? "selected" : ""}><TableCell><Checkbox checked={selectedTaskIds.includes(item.id)} onCheckedChange={(checked) => handleSelectTask(item.id, Boolean(checked))} aria-label={`Select task ${item.itemTitle}`} /></TableCell><TableCell className="text-xs text-muted-foreground">{item.referenceNumber || '-'}</TableCell><TableCell className="font-medium">{item.itemTitle}{!item.isActive && <Badge variant="outline" className="ml-2 text-xs">Inactive</Badge>}</TableCell><TableCell className="text-xs">{item.itemType}</TableCell><TableCell className="text-xs">{item.associatedComponent || 'Airframe'}</TableCell><TableCell className="text-xs">{frequency}</TableCell><TableCell className="text-xs">{lastDoneDisplay}</TableCell><TableCell className="text-xs">{dueAtDisplay}</TableCell><TableCell className={`font-semibold text-xs ${item.toGoData?.isOverdue ? (status.label === 'Grace Period' ? 'text-yellow-600' : 'text-red-600') : (item.toGoData?.unit === 'days' && item.toGoData?.numeric < (item.alertDaysPrior ?? 30)) || (item.toGoData?.unit === 'hrs' && item.toGoData?.numeric < (item.alertHoursPrior ?? 25)) || (item.toGoData?.unit === 'cycles' && item.toGoData?.numeric < (item.alertCyclesPrior ?? 50)) ? 'text-yellow-600' : 'text-green-600'}`}>{item.toGoData?.text}</TableCell><TableCell className="text-center"><div className={`flex flex-col items-center justify-center ${status.colorClass}`}>{status.icon}<span className="text-xs mt-1">{status.label}</span></div></TableCell><TableCell className="text-right"><Button variant="ghost" size="icon" onClick={() => handleOpenEditTaskModal(item)}><Edit3 className="h-4 w-4" /></Button></TableCell></TableRow> ); });
-  }, [displayedTasks, handleOpenAddTaskModal, selectedTaskIds, getReleaseStatus, formatTaskFrequency, handleSelectTask, handleOpenEditTaskModal]);
+    return displayedTasks.map((item) => { const status = getLocalReleaseStatus(item.toGoData!, item); const frequency = formatLocalTaskFrequency(item); let dueAtDisplay = "N/A"; if (item.dueAtDate && isValid(parse(item.dueAtDate, 'yyyy-MM-dd', new Date()))) { try { dueAtDisplay = format(parse(item.dueAtDate, 'yyyy-MM-dd', new Date()), 'MM/dd/yy'); } catch {} } else if (item.dueAtHours !== undefined) { dueAtDisplay = `${item.dueAtHours.toLocaleString()} hrs`; } else if (item.dueAtCycles !== undefined) { dueAtDisplay = `${item.dueAtCycles.toLocaleString()} cyc`; } let lastDoneDisplay = "N/A"; if (item.lastCompletedDate && isValid(parseISO(item.lastCompletedDate))) { try { lastDoneDisplay = format(parseISO(item.lastCompletedDate), 'MM/dd/yy'); } catch {} } else if (item.lastCompletedHours !== undefined) { lastDoneDisplay = `${item.lastCompletedHours.toLocaleString()} hrs`; } else if (item.lastCompletedCycles !== undefined) { lastDoneDisplay = `${item.lastCompletedCycles.toLocaleString()} cyc`; } return ( <TableRow key={item.id} className={item.isActive ? '' : 'opacity-50 bg-muted/30 hover:bg-muted/40'} data-state={selectedTaskIds.includes(item.id) ? "selected" : ""}><TableCell><Checkbox checked={selectedTaskIds.includes(item.id)} onCheckedChange={(checked) => handleSelectTask(item.id, Boolean(checked))} aria-label={`Select task ${item.itemTitle}`} /></TableCell><TableCell className="text-xs text-muted-foreground">{item.referenceNumber || '-'}</TableCell><TableCell className="font-medium">{item.itemTitle}{!item.isActive && <Badge variant="outline" className="ml-2 text-xs">Inactive</Badge>}</TableCell><TableCell className="text-xs">{item.itemType}</TableCell><TableCell className="text-xs">{item.associatedComponent || 'Airframe'}</TableCell><TableCell className="text-xs">{frequency}</TableCell><TableCell className="text-xs">{lastDoneDisplay}</TableCell><TableCell className="text-xs">{dueAtDisplay}</TableCell><TableCell className={`font-semibold text-xs ${item.toGoData?.isOverdue ? (status.label === 'Grace Period' ? 'text-yellow-600' : 'text-red-600') : (item.toGoData?.unit === 'days' && item.toGoData?.numeric < (item.alertDaysPrior ?? 30)) || (item.toGoData?.unit === 'hrs' && item.toGoData?.numeric < (item.alertHoursPrior ?? 25)) || (item.toGoData?.unit === 'cycles' && item.toGoData?.numeric < (item.alertCyclesPrior ?? 50)) ? 'text-yellow-600' : 'text-green-600'}`}>{item.toGoData?.text}</TableCell><TableCell className="text-center"><div className={`flex flex-col items-center justify-center ${status.colorClass}`}>{status.icon}<span className="text-xs mt-1">{status.label}</span></div></TableCell><TableCell className="text-right"><Button variant="ghost" size="icon" onClick={() => handleOpenEditTaskModal(item)}><Edit3 className="h-4 w-4" /></Button></TableCell></TableRow> ); });
+  }, [displayedTasks, handleOpenAddTaskModal, handleSaveTask, handleDeleteTask, selectedTaskIds, handleSelectTask, handleOpenEditTaskModal]);
+
 
   const requestSort = (key: SortKey) => { let direction: SortDirection = 'ascending'; if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') { direction = 'descending'; } setSortConfig({ key, direction }); };
   const getSortIcon = (key: SortKey) => { if (!sortConfig || sortConfig.key !== key) { return <ArrowUpDown className="ml-2 h-3 w-3 opacity-50" />; } return sortConfig.direction === 'ascending' ? <ArrowUp className="ml-2 h-3 w-3" /> : <ArrowDown className="ml-2 h-3 w-3" />; };
@@ -515,5 +564,3 @@ export default function AircraftMaintenanceDetailPage() {
     </div>
   );
 }
-
-    
