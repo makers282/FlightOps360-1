@@ -110,11 +110,10 @@ const fetchAircraftDiscrepanciesFlow = ai.defineFlow(
   async (input) => {
     try {
       const discrepanciesCollectionRef = collection(db, DISCREPANCIES_COLLECTION);
-      // Simplified query: filter by aircraftId and order ONLY by dateDiscovered
+      // Removed orderBy from Firestore query to avoid needing a composite index
       const q = query(
         discrepanciesCollectionRef, 
-        where("aircraftId", "==", input.aircraftId),
-        orderBy("dateDiscovered", "desc") // Show newest first
+        where("aircraftId", "==", input.aircraftId)
       );
       const snapshot = await getDocs(q);
       const discrepanciesList = snapshot.docs.map(docSnapshot => {
@@ -122,10 +121,24 @@ const fetchAircraftDiscrepanciesFlow = ai.defineFlow(
         return {
           ...data,
           id: docSnapshot.id,
+          // Ensure dates are consistently ISO strings, default to a very old date if somehow missing
+          dateDiscovered: data.dateDiscovered || '1970-01-01', 
           createdAt: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
           updatedAt: (data.updatedAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
         } as AircraftDiscrepancy;
       });
+
+      // Sort in JavaScript backend after fetching
+      discrepanciesList.sort((a, b) => {
+        // Sort by dateDiscovered descending (newest first)
+        // Fallback to createdAt if dateDiscovered is the same or missing (though it's required)
+        const dateComparison = b.dateDiscovered.localeCompare(a.dateDiscovered);
+        if (dateComparison !== 0) {
+          return dateComparison;
+        }
+        return b.createdAt.localeCompare(a.createdAt); // Secondary sort by creation time
+      });
+
       return discrepanciesList;
     } catch (error) {
       console.error('Error fetching aircraft discrepancies from Firestore:', error);
