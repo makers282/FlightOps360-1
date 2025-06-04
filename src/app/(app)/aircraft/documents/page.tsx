@@ -23,8 +23,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 
 import { fetchAircraftDocuments, saveAircraftDocument, deleteAircraftDocument } from '@/ai/flows/manage-aircraft-documents-flow';
 import type { AircraftDocument, SaveAircraftDocumentInput, AircraftDocumentType } from '@/ai/schemas/aircraft-document-schemas';
-// aircraftDocumentTypes is already exported from the schema and used in the modal, so it doesn't need to be redefined here.
-import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
+import { aircraftDocumentTypes } from '@/ai/schemas/aircraft-document-schemas';
+import { fetchFleetAircraft, type FleetAircraft } from '@/ai/schemas/fleet-aircraft-schemas';
 import { AddEditAircraftDocumentModal } from './components/add-edit-aircraft-document-modal';
 import { ClientOnly } from '@/components/client-only'; 
 import { Skeleton } from '@/components/ui/skeleton'; 
@@ -251,35 +251,44 @@ export default function AircraftDocumentsPage() {
         <CardHeader>
           <CardTitle>All Aircraft Documents</CardTitle>
           <CardDescription>Central repository for aircraft documentation. (File uploads are simulated)</CardDescription>
-          <div className="mt-2 flex flex-col sm:flex-row gap-2">
-             <div className="relative flex-grow">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input 
-                  placeholder="Search documents (name, type, tail#, notes)..." 
-                  className="pl-8 w-full" 
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  disabled={isLoadingDocuments || (allAircraftDocuments.length === 0 && !searchTerm)}
-                />
+          <ClientOnly
+            fallback={
+              <div className="mt-2 flex flex-col sm:flex-row gap-2">
+                <Skeleton className="h-10 flex-grow" />
+                <Skeleton className="h-10 w-full sm:w-[250px]" />
               </div>
-              <Select
-                value={selectedAircraftFilter}
-                onValueChange={setSelectedAircraftFilter}
-                disabled={isLoadingAircraftForSelect || isLoadingDocuments}
-              >
-                <SelectTrigger className="w-full sm:w-[250px]">
-                  <SelectValue placeholder={isLoadingAircraftForSelect ? "Loading aircraft..." : "Filter by Aircraft"} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Aircraft</SelectItem>
-                  {fleetForSelect.map(ac => (
-                    <SelectItem key={ac.id} value={ac.id}>
-                      {ac.tailNumber} - {ac.model}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-          </div>
+            }
+          >
+            <div className="mt-2 flex flex-col sm:flex-row gap-2">
+               <div className="relative flex-grow">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input 
+                    placeholder="Search documents (name, type, tail#, notes)..." 
+                    className="pl-8 w-full" 
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    disabled={isLoadingDocuments || (allAircraftDocuments.length === 0 && !searchTerm)}
+                  />
+                </div>
+                <Select
+                  value={selectedAircraftFilter}
+                  onValueChange={setSelectedAircraftFilter}
+                  disabled={isLoadingAircraftForSelect || isLoadingDocuments}
+                >
+                  <SelectTrigger className="w-full sm:w-[250px]">
+                    <SelectValue placeholder={isLoadingAircraftForSelect ? "Loading aircraft..." : "Filter by Aircraft"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Aircraft</SelectItem>
+                    {fleetForSelect.map(ac => (
+                      <SelectItem key={ac.id} value={ac.id}>
+                        {ac.tailNumber} - {ac.model}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+            </div>
+          </ClientOnly>
         </CardHeader>
         <CardContent className="p-0">
           {isLoadingDocuments && allAircraftDocuments.length === 0 ? ( 
@@ -332,3 +341,4 @@ export default function AircraftDocumentsPage() {
     </>
   );
 }
+
