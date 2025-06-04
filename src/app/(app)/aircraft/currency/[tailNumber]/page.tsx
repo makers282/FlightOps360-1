@@ -22,7 +22,7 @@ import { useForm, type SubmitHandler } from 'react-hook-form';
 import { z } from 'zod';
 import { AddMaintenanceTaskDialogContent, type MaintenanceTaskFormData, defaultMaintenanceTaskFormValues } from './components/add-maintenance-task-modal';
 import { AddEditAircraftDiscrepancyModal, type AircraftDiscrepancyFormData } from './components/add-edit-aircraft-discrepancy-modal';
-import { Dialog } from '@/components/ui/dialog'; // Removed DialogTrigger as it's handled by Button asChild
+import { Dialog } from '@/components/ui/dialog';
 
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -43,11 +43,11 @@ import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
-  AlertDialogContent as AlertDialogModalContent, // Renamed to avoid conflict
-  AlertDialogDescription as AlertDialogModalDescription, // Renamed
-  AlertDialogFooter as AlertDialogModalFooter, // Renamed
-  AlertDialogHeader as AlertDialogModalHeader, // Renamed
-  AlertDialogTitle as AlertDialogModalTitle, // Renamed
+  AlertDialogContent as AlertDialogModalContent,
+  AlertDialogDescription as AlertDialogModalDescription,
+  AlertDialogFooter as AlertDialogModalFooter,
+  AlertDialogHeader as AlertDialogModalHeader,
+  AlertDialogTitle as AlertDialogModalTitle,
 } from "@/components/ui/alert-dialog";
 
 
@@ -78,7 +78,6 @@ interface SortConfig {
   direction: SortDirection;
 }
 
-// Moved helper functions outside the component
 const calculateLocalToGo = (
   item: Pick<DisplayMaintenanceItem, 'dueAtDate' | 'dueAtHours' | 'dueAtCycles' | 'associatedComponent'>,
   currentComponentTimesArray: Array<{ componentName: string; currentTime: number; currentCycles: number }>
@@ -116,7 +115,7 @@ const calculateLocalToGo = (
 const calculateLocalDisplayFields = (
   task: FlowMaintenanceTask,
   currentComponentTimesArray: Array<{ componentName: string; currentTime: number; currentCycles: number }>,
-): DisplayMaintenanceItem => { // Removed localCalculateToGoFn as it's now top-level
+): DisplayMaintenanceItem => {
   let dueAtDate: string | undefined = undefined, dueAtHours: number | undefined = undefined, dueAtCycles: number | undefined = undefined;
   const actualLastCompletedDateObj = task.lastCompletedDate && isValid(parseISO(task.lastCompletedDate)) ? parseISO(task.lastCompletedDate) : new Date();
   const actualLastCompletedHours = Number(task.lastCompletedHours || 0);
@@ -166,11 +165,11 @@ const formatLocalTaskFrequency = (task: FlowMaintenanceTask): string => {
 };
 
 const getLocalReleaseStatus = (
-  toGo: { text: string; numeric: number; unit: 'days' | 'hrs' | 'cycles' | 'N/A'; isOverdue: boolean } | undefined, // Make toGo optional
+  toGo: { text: string; numeric: number; unit: 'days' | 'hrs' | 'cycles' | 'N/A'; isOverdue: boolean } | undefined,
   task: DisplayMaintenanceItem
 ): { icon: JSX.Element; colorClass: string; label: string } => {
-  if (!toGo) { // Handle case where toGoData might be undefined
-    return { icon: <InfoIcon className="h-5 w-5" />, colorClass: 'text-gray-400', label: 'Data Error' };
+  if (!toGo) {
+    return { icon: <InfoIcon className="h-5 w-5" />, colorClass: 'text-gray-400', label: 'Calculating...' };
   }
   if (toGo.text.startsWith('N/A (No time for') || toGo.text.startsWith('N/A (No cycles for') || toGo.text.startsWith('N/A (Comp. data missing')) {
     return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-orange-500', label: 'Missing Comp. Time' };
@@ -193,6 +192,89 @@ const getLocalReleaseStatus = (
   if (toGo.text === 'N/A (Not Date/Hr/Cycle)' || toGo.text === 'Invalid Date') return { icon: <InfoIcon className="h-5 w-5" />, colorClass: 'text-gray-400', label: 'Check Due Info' };
   return { icon: <CheckCircle2 className="h-5 w-5" />, colorClass: 'text-green-500 dark:text-green-400', label: 'OK' };
 };
+
+interface MaintenanceTaskRowProps {
+  task: DisplayMaintenanceItem;
+  isSelected: boolean;
+  onSelectTask: (taskId: string, checked: boolean) => void;
+  onEditTask: (task: FlowMaintenanceTask) => void;
+  getLocalReleaseStatusProp: typeof getLocalReleaseStatus;
+  formatTaskFrequencyProp: typeof formatLocalTaskFrequency;
+}
+
+const MaintenanceTaskRow = React.memo(function MaintenanceTaskRow(props: MaintenanceTaskRowProps) {
+  const { task: item, isSelected, onSelectTask, onEditTask, getLocalReleaseStatusProp, formatTaskFrequencyProp } = props;
+
+  if (!item || !item.id) {
+    console.error("MaintenanceTaskRow received invalid item:", item);
+    return <TableRow><TableCell colSpan={11} className="text-center text-destructive">Error rendering task row data.</TableCell></TableRow>;
+  }
+
+  const itemTitle = item.itemTitle || "Untitled Task";
+  const referenceNumber = item.referenceNumber || '-';
+  const itemType = item.itemType || "Other";
+  const associatedComponent = item.associatedComponent || 'Airframe';
+
+  const status = item.toGoData
+    ? getLocalReleaseStatusProp(item.toGoData, item)
+    : { icon: <InfoIcon className="h-5 w-5" />, colorClass: 'text-gray-400', label: 'Calculating...' };
+
+  const frequency = formatTaskFrequencyProp(item);
+
+  let dueAtDisplay = "N/A";
+  if (item.dueAtDate && isValid(parse(item.dueAtDate, 'yyyy-MM-dd', new Date()))) {
+    try { dueAtDisplay = format(parse(item.dueAtDate, 'yyyy-MM-dd', new Date()), 'MM/dd/yy'); } catch {}
+  } else if (typeof item.dueAtHours === 'number') {
+    dueAtDisplay = `${item.dueAtHours.toLocaleString()} hrs`;
+  } else if (typeof item.dueAtCycles === 'number') {
+    dueAtDisplay = `${item.dueAtCycles.toLocaleString()} cyc`;
+  }
+
+  let lastDoneDisplay = "N/A";
+  if (item.lastCompletedDate && isValid(parseISO(item.lastCompletedDate))) {
+    try { lastDoneDisplay = format(parseISO(item.lastCompletedDate), 'MM/dd/yy'); } catch {}
+  } else if (typeof item.lastCompletedHours === 'number') {
+    lastDoneDisplay = `${item.lastCompletedHours.toLocaleString()} hrs`;
+  } else if (typeof item.lastCompletedCycles === 'number') {
+    lastDoneDisplay = `${item.lastCompletedCycles.toLocaleString()} cyc`;
+  }
+
+  // Determine color class for "To Go" text
+  let toGoColorClass = 'text-green-600'; // Default
+  const toGoData = item.toGoData;
+  const alertDaysPrior = item.alertDaysPrior ?? 30;
+  const alertHoursPrior = item.alertHoursPrior ?? 25;
+  const alertCyclesPrior = item.alertCyclesPrior ?? 50;
+
+  if (toGoData) {
+    if (toGoData.isOverdue) {
+      toGoColorClass = status.label === 'Grace Period' ? 'text-yellow-600' : 'text-red-600';
+    } else if (
+      (toGoData.unit === 'days' && typeof toGoData.numeric === 'number' && toGoData.numeric < alertDaysPrior) ||
+      (toGoData.unit === 'hrs' && typeof toGoData.numeric === 'number' && toGoData.numeric < alertHoursPrior) ||
+      (toGoData.unit === 'cycles' && typeof toGoData.numeric === 'number' && toGoData.numeric < alertCyclesPrior)
+    ) {
+      toGoColorClass = 'text-yellow-600';
+    }
+  }
+
+
+  return (
+    <TableRow className={item.isActive ? '' : 'opacity-50 bg-muted/30 hover:bg-muted/40'} data-state={isSelected ? "selected" : ""}>
+      <TableCell><Checkbox checked={isSelected} onCheckedChange={(checked) => onSelectTask(item.id, Boolean(checked))} aria-label={`Select task ${itemTitle}`} /></TableCell>
+      <TableCell className="text-xs text-muted-foreground">{referenceNumber}</TableCell>
+      <TableCell className="font-medium">{itemTitle}{!item.isActive && <Badge variant="outline" className="ml-2 text-xs">Inactive</Badge>}</TableCell>
+      <TableCell className="text-xs">{itemType}</TableCell>
+      <TableCell className="text-xs">{associatedComponent}</TableCell>
+      <TableCell className="text-xs">{frequency}</TableCell>
+      <TableCell className="text-xs">{lastDoneDisplay}</TableCell>
+      <TableCell className="text-xs">{dueAtDisplay}</TableCell>
+      <TableCell className={`font-semibold text-xs ${toGoColorClass}`}>{toGoData?.text || 'N/A'}</TableCell>
+      <TableCell className="text-center"><div className={`flex flex-col items-center justify-center ${status.colorClass}`}>{status.icon}<span className="text-xs mt-1">{status.label}</span></div></TableCell>
+      <TableCell className="text-right"><Button variant="ghost" size="icon" onClick={() => onEditTask(item)}><Edit3 className="h-4 w-4" /></Button></TableCell>
+    </TableRow>
+  );
+});
 
 
 export default function AircraftMaintenanceDetailPage() {
@@ -280,7 +362,7 @@ export default function AircraftMaintenanceDetailPage() {
     try { const tasksFromDb = await fetchMaintenanceTasksForAircraft({ aircraftId }); setMaintenanceTasks(tasksFromDb);  }
     catch (error) { console.error("Failed to load maintenance tasks:", error); toast({ title: "Error", description: "Could not load maintenance tasks.", variant: "destructive" }); setMaintenanceTasks([]); }
     finally { setIsLoadingTasks(false); }
-  }, [toast, setMaintenanceTasks, setIsLoadingTasks]);
+  }, [toast]);
 
   const loadAircraftDiscrepancies = useCallback(async (aircraftId: string) => {
     setIsLoadingDiscrepancies(true);
@@ -345,25 +427,25 @@ export default function AircraftMaintenanceDetailPage() {
     const taskToSave: FlowMaintenanceTask = { ...taskFormData, id: editingTaskOriginalId || `MX-${Date.now()}-${Math.random().toString(16).slice(2)}`, aircraftId: currentAircraft.id, };
     try { await saveMaintenanceTask(taskToSave); toast({ title: editingTaskOriginalId ? "Task Updated" : "New Task Added", description: `Task "${taskToSave.itemTitle}" for ${currentAircraft.tailNumber} saved to Firestore.`, }); await loadMaintenanceTasks(currentAircraft.id); setIsTaskModalOpen(false); setEditingTaskOriginalId(null); setInitialModalFormData(null); }
     catch (error) { console.error("Failed to save task:", error); toast({ title: "Error Saving Task", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" }); }
-  }, [currentAircraft, editingTaskOriginalId, toast, loadMaintenanceTasks, setIsTaskModalOpen, setEditingTaskOriginalId, setInitialModalFormData]);
+  }, [currentAircraft, editingTaskOriginalId, toast, loadMaintenanceTasks]);
 
   const handleDeleteTask = useCallback(async (taskId: string) => {
     if (!currentAircraft) return;
     try { await deleteMaintenanceTask({ taskId }); toast({ title: "Task Deleted", description: `Task ID ${taskId} removed from Firestore.` }); await loadMaintenanceTasks(currentAircraft.id); setIsTaskModalOpen(false); }
     catch (error) { console.error("Failed to delete task:", error); toast({ title: "Error Deleting Task", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" }); }
-  }, [currentAircraft, toast, loadMaintenanceTasks, setIsTaskModalOpen]);
+  }, [currentAircraft, toast, loadMaintenanceTasks]);
 
   const handleOpenAddDiscrepancyModal = useCallback(() => {
     setEditingDiscrepancyId(null);
     setInitialDiscrepancyModalData(null);
     setIsDiscrepancyModalOpen(true);
-  }, [setEditingDiscrepancyId, setInitialDiscrepancyModalData, setIsDiscrepancyModalOpen]);
+  }, []);
 
   const handleOpenEditDiscrepancyModal = useCallback((discrepancy: AircraftDiscrepancy) => {
     setEditingDiscrepancyId(discrepancy.id);
     setInitialDiscrepancyModalData(discrepancy);
     setIsDiscrepancyModalOpen(true);
-  }, [setEditingDiscrepancyId, setInitialDiscrepancyModalData, setIsDiscrepancyModalOpen]);
+  }, []);
 
   const handleSaveDiscrepancy = async (discrepancyFormData: SaveAircraftDiscrepancyInput, originalId?: string) => {
     if (!currentAircraft) return;
@@ -405,23 +487,26 @@ export default function AircraftMaintenanceDetailPage() {
     setSelectedTaskIds(prev => checked ? [...prev, taskId] : prev.filter(id => id !== taskId) );
   }, []);
 
+  const mappedTaskRows = useMemo(() => {
+    return displayedTasks.map((item) => (
+      <MaintenanceTaskRow
+        key={item.id}
+        task={item}
+        isSelected={selectedTaskIds.includes(item.id)}
+        onSelectTask={handleSelectTask}
+        onEditTask={handleOpenEditTaskModal}
+        getLocalReleaseStatusProp={getLocalReleaseStatus}
+        formatTaskFrequencyProp={formatLocalTaskFrequency}
+      />
+    ));
+  }, [displayedTasks, selectedTaskIds, handleSelectTask, handleOpenEditTaskModal]);
+
   const tableBodyContent = useMemo(() => {
     if (displayedTasks.length === 0) {
       return ( <TableRow><TableCell colSpan={11} className="text-center text-muted-foreground py-10"><div>No maintenance tasks match your criteria.<Button variant="link" className="p-0 ml-1" onClick={handleOpenAddTaskModal}>Add one now?</Button></div></TableCell></TableRow> );
     }
-    return displayedTasks.map((item) => {
-      const status = item.toGoData ? getLocalReleaseStatus(item.toGoData, item) : { icon: <InfoIcon className="h-5 w-5" />, colorClass: 'text-gray-400', label: 'Data Error' };
-      const frequency = formatLocalTaskFrequency(item);
-      let dueAtDisplay = "N/A";
-      if (item.dueAtDate && isValid(parse(item.dueAtDate, 'yyyy-MM-dd', new Date()))) { try { dueAtDisplay = format(parse(item.dueAtDate, 'yyyy-MM-dd', new Date()), 'MM/dd/yy'); } catch {} }
-      else if (item.dueAtHours !== undefined) { dueAtDisplay = `${item.dueAtHours.toLocaleString()} hrs`; }
-      else if (item.dueAtCycles !== undefined) { dueAtDisplay = `${item.dueAtCycles.toLocaleString()} cyc`; }
-      let lastDoneDisplay = "N/A";
-      if (item.lastCompletedDate && isValid(parseISO(item.lastCompletedDate))) { try { lastDoneDisplay = format(parseISO(item.lastCompletedDate), 'MM/dd/yy'); } catch {} }
-      else if (item.lastCompletedHours !== undefined) { lastDoneDisplay = `${item.lastCompletedHours.toLocaleString()} hrs`; }
-      else if (item.lastCompletedCycles !== undefined) { lastDoneDisplay = `${item.lastCompletedCycles.toLocaleString()} cyc`; }
-      return ( <TableRow key={item.id} className={item.isActive ? '' : 'opacity-50 bg-muted/30 hover:bg-muted/40'} data-state={selectedTaskIds.includes(item.id) ? "selected" : ""}> <TableCell><Checkbox checked={selectedTaskIds.includes(item.id)} onCheckedChange={(checked) => handleSelectTask(item.id, Boolean(checked))} aria-label={`Select task ${item.itemTitle}`} /></TableCell><TableCell className="text-xs text-muted-foreground">{item.referenceNumber || '-'}</TableCell><TableCell className="font-medium">{item.itemTitle}{!item.isActive && <Badge variant="outline" className="ml-2 text-xs">Inactive</Badge>}</TableCell><TableCell className="text-xs">{item.itemType}</TableCell><TableCell className="text-xs">{item.associatedComponent || 'Airframe'}</TableCell><TableCell className="text-xs">{frequency}</TableCell><TableCell className="text-xs">{lastDoneDisplay}</TableCell><TableCell className="text-xs">{dueAtDisplay}</TableCell><TableCell className={`font-semibold text-xs ${item.toGoData?.isOverdue ? (status.label === 'Grace Period' ? 'text-yellow-600' : 'text-red-600') : (item.toGoData?.unit === 'days' && item.toGoData?.numeric < (item.alertDaysPrior ?? 30)) || (item.toGoData?.unit === 'hrs' && item.toGoData?.numeric < (item.alertHoursPrior ?? 25)) || (item.toGoData?.unit === 'cycles' && item.toGoData?.numeric < (item.alertCyclesPrior ?? 50)) ? 'text-yellow-600' : 'text-green-600'}`}>{item.toGoData?.text}</TableCell><TableCell className="text-center"><div className={`flex flex-col items-center justify-center ${status.colorClass}`}>{status.icon}<span className="text-xs mt-1">{status.label}</span></div></TableCell><TableCell className="text-right"><Button variant="ghost" size="icon" onClick={() => handleOpenEditTaskModal(item)}><Edit3 className="h-4 w-4" /></Button></TableCell></TableRow> ); });
-  }, [displayedTasks, handleOpenAddTaskModal, selectedTaskIds, handleSelectTask, handleOpenEditTaskModal]);
+    return mappedTaskRows;
+  }, [displayedTasks, handleOpenAddTaskModal, mappedTaskRows]);
 
 
   const requestSort = (key: SortKey) => { let direction: SortDirection = 'ascending'; if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') { direction = 'descending'; } setSortConfig({ key, direction }); };
@@ -501,7 +586,7 @@ export default function AircraftMaintenanceDetailPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><Wrench className="h-6 w-6 text-primary" />Maintenance Items</CardTitle>
           <CardDescription> Overview of scheduled and upcoming maintenance tasks for {currentAircraft.tailNumber}. Calculated "To Go" is based on the values in "Current Hours &amp; Cycles" above. </CardDescription>
-          <div className="mt-4 flex flex-col sm:flex-row gap-2 items-center"> <div className="relative flex-grow w-full sm:w-auto"> <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /> <Input type="search" placeholder="Search tasks (title, ref, type, component)..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-8 w-full" /> {searchTerm && ( <Button variant="ghost" size="icon" className="absolute right-1 top-1 h-7 w-7" onClick={() => setSearchTerm('')}> <XCircleIcon className="h-4 w-4"/> </Button> )} </div> <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as any)}> <SelectTrigger className="w-full sm:w-[180px]"> <SelectValue placeholder="Filter by status" /> </SelectTrigger> <SelectContent> <SelectItem value="all">All Statuses</SelectItem> <SelectItem value="active">Active Items</SelectItem> <SelectItem value="inactive">Inactive Items</SelectItem> <SelectItem value="dueSoon">Due Soon (Active)</SelectItem> <SelectItem value="overdue">Overdue (Active)</SelectItem> <SelectItem value="gracePeriod">Grace Period (Active)</SelectItem> </SelectContent> </Select> <Select value={componentFilter} onValueChange={setComponentFilter}> <SelectTrigger className="w-full sm:w-[200px]"> <FilterIcon className="h-4 w-4 mr-2 opacity-50" /> <SelectValue placeholder="Filter by component" /> </SelectTrigger> <SelectContent> <SelectItem value="all">All Components</SelectItem> {availableComponentsForFilter.map(comp => ( <SelectItem key={comp} value={comp}>{comp}</SelectItem> ))} </SelectContent> </Select> </div>
+          <div className="mt-4 flex flex-col sm:flex-row gap-2 items-center"> <div className="relative flex-grow w-full sm:w-auto"> <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /> <Input type="search" placeholder="Search tasks (title, ref, type, component)..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-8 w-full" /> {searchTerm && ( <Button variant="ghost" size="icon" className="absolute right-1 top-1 h-7 w-7" onClick={() => setSearchTerm('')}> <XCircleIcon className="h-4 w-4"/> </Button> )} </div> <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as any)}> <SelectTrigger className="w-full sm:w-[180px]"> <SelectValue placeholder="Filter by status" /> </SelectTrigger> <SelectContent> <SelectItem value="all">All Statuses</SelectItem> <SelectItem value="active">Active Items</SelectItem> <SelectItem value="inactive">Inactive Items</SelectItem> <SelectItem value="dueSoon">Due Soon (Active)</SelectItem> <SelectItem value="overdue">Overdue (Active)</SelectItem> <SelectItem value="gracePeriod">Grace Period (Active)</SelectItem> </SelectContent> </Select> <Select value={componentFilter} onValueChange={setComponentFilter}> <SelectTrigger className="w-full sm:w-[200px]"> <Filter className="h-4 w-4 mr-2 opacity-50" /> <SelectValue placeholder="Filter by component" /> </SelectTrigger> <SelectContent> <SelectItem value="all">All Components</SelectItem> {availableComponentsForFilter.map(comp => ( <SelectItem key={comp} value={comp}>{comp}</SelectItem> ))} </SelectContent> </Select> </div>
         </CardHeader>
         <CardContent>{isLoadingTasks ? ( <div className="flex items-center justify-center py-10"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2 text-muted-foreground">Loading maintenance tasks...</p></div> ) : ( <Table><TableHeader><TableRow><TableHead className="w-10"><Checkbox checked={selectedTaskIds.length === displayedTasks.length && displayedTasks.length > 0} onCheckedChange={(checked) => handleSelectAllTasks(Boolean(checked))} aria-label="Select all tasks" disabled={displayedTasks.length === 0} /></TableHead><TableHead>Ref #</TableHead><TableHead><Button variant="ghost" size="sm" onClick={() => requestSort('itemTitle')} className="px-1 -ml-2"> Title {getSortIcon('itemTitle')} </Button></TableHead><TableHead>Type</TableHead><TableHead>Component</TableHead><TableHead>Frequency</TableHead><TableHead>Last Done</TableHead><TableHead>Due At</TableHead><TableHead><Button variant="ghost" size="sm" onClick={() => requestSort('toGoNumeric')} className="px-1 -ml-2"> To Go {getSortIcon('toGoNumeric')} </Button></TableHead><TableHead className="text-center">Status</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader><TableBody>{tableBodyContent}</TableBody></Table> )}
         </CardContent>
@@ -567,26 +652,25 @@ export default function AircraftMaintenanceDetailPage() {
       />
 
        {showDeleteDiscrepancyConfirm && discrepancyToDelete && (
-        <AlertDialog open={showDeleteDiscrepancyConfirm} onOpenChange={setShowDeleteDiscrepancyConfirm}> {/* Ensure correct 'open' and 'onOpenChange' */}
-          <AlertDialogModalContent>
-            <AlertDialogModalHeader>
-              <AlertDialogModalTitle>Confirm Deletion</AlertDialogModalTitle>
-              <AlertDialogModalDescription>
-                Are you sure you want to delete discrepancy: "{discrepancyToDelete.description.substring(0,50)}..."? This action cannot be undone.
-              </AlertDialogModalDescription>
-            </AlertDialogModalHeader>
-            <AlertDialogModalFooter>
-              <AlertDialogCancel onClick={() => setShowDeleteDiscrepancyConfirm(false)} disabled={isDeletingDiscrepancy}>Cancel</AlertDialogCancel>
-              <Button variant="destructive" onClick={executeDeleteDiscrepancy} disabled={isDeletingDiscrepancy}>
-                {isDeletingDiscrepancy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Delete Discrepancy
-              </Button>
-            </AlertDialogModalFooter>
-          </AlertDialogModalContent>
-        </AlertDialog>
+        <AlertDialogModalContent> {/* Using renamed import */}
+          <AlertDialogModalHeader>
+            <AlertDialogModalTitle>Confirm Deletion</AlertDialogModalTitle>
+            <AlertDialogModalDescription>
+              Are you sure you want to delete discrepancy: "{discrepancyToDelete.description.substring(0,50)}..."? This action cannot be undone.
+            </AlertDialogModalDescription>
+          </AlertDialogModalHeader>
+          <AlertDialogModalFooter>
+            <AlertDialogCancel onClick={() => setShowDeleteDiscrepancyConfirm(false)} disabled={isDeletingDiscrepancy}>Cancel</AlertDialogCancel>
+            <Button variant="destructive" onClick={executeDeleteDiscrepancy} disabled={isDeletingDiscrepancy}>
+              {isDeletingDiscrepancy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Delete Discrepancy
+            </Button>
+          </AlertDialogModalFooter>
+        </AlertDialogModalContent>
       )}
 
     </div>
   );
 }
+
     
