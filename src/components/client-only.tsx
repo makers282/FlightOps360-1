@@ -3,7 +3,11 @@
 
 import React, { useState, useEffect, type PropsWithChildren } from 'react';
 
-export function ClientOnly({ children }: PropsWithChildren) {
+interface ClientOnlyProps extends PropsWithChildren {
+  fallback?: React.ReactNode;
+}
+
+export function ClientOnly({ children, fallback = null }: ClientOnlyProps) {
   const [hasMounted, setHasMounted] = useState(false);
 
   useEffect(() => {
@@ -11,7 +15,7 @@ export function ClientOnly({ children }: PropsWithChildren) {
   }, []);
 
   if (!hasMounted) {
-    return null; // Or a loading skeleton/placeholder
+    return <>{fallback}</>;
   }
 
   return <>{children}</>;

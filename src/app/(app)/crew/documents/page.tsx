@@ -17,7 +17,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Label } from "@/components/ui/label"; // Added import
+import { Label } from "@/components/ui/label";
 import { format, parseISO, isValid } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 
@@ -25,6 +25,8 @@ import { fetchCrewMembers, type CrewMember } from '@/ai/flows/manage-crew-flow';
 import { fetchCrewDocuments, saveCrewDocument, deleteCrewDocument } from '@/ai/flows/manage-crew-documents-flow';
 import type { CrewDocument, SaveCrewDocumentInput, CrewDocumentType } from '@/ai/schemas/crew-document-schemas';
 import { AddEditCrewDocumentModal } from './components/add-edit-crew-document-modal';
+import { ClientOnly } from '@/components/client-only';
+import { Skeleton } from '@/components/ui/skeleton';
 
 // Define categories based on document types
 const GENERAL_DOC_TYPES: CrewDocumentType[] = ["License", "Medical", "Passport", "Visa", "Company ID", "Airport ID", "Other"];
@@ -58,11 +60,11 @@ export default function CrewDocumentsPage() {
         fetchCrewMembers(),
         fetchCrewDocuments(),
       ]);
-      setAllCrewMembers(fetchedCrew.filter(cm => cm.id)); // Ensure crew members have IDs
+      setAllCrewMembers(fetchedCrew.filter(cm => cm.id)); 
       setAllCrewDocuments(fetchedDocs);
-      // If no crew member is selected yet, and there's crew, select the first one.
+      
       if (!selectedCrewMemberId && fetchedCrew.length > 0 && fetchedCrew[0].id) {
-        setSelectedCrewMemberId(fetchedCrew[0].id);
+        // setSelectedCrewMemberId(fetchedCrew[0].id); // Let ClientOnly handle initial render
       }
     } catch (error) {
       console.error("Failed to load crew or documents:", error);
@@ -76,7 +78,7 @@ export default function CrewDocumentsPage() {
   useEffect(() => {
     loadAllData();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Load once on mount
+  }, []); 
 
   const documentsForSelectedCrew = useMemo(() => {
     if (!selectedCrewMemberId) return [];
@@ -194,34 +196,35 @@ export default function CrewDocumentsPage() {
         }
       />
 
-      <div className="mb-6 max-w-sm">
-        <Label htmlFor="crewMemberSelect">Choose a Crew Member:</Label>
-        <Select
-          value={selectedCrewMemberId || ''}
-          onValueChange={(value) => setSelectedCrewMemberId(value === 'NONE' ? undefined : value)}
-          disabled={isLoadingCrew}
-          name="crewMemberSelect"
-        >
-          <SelectTrigger id="crewMemberSelect">
-            <SelectValue placeholder={isLoadingCrew ? "Loading crew..." : "Select a crew member"} />
-          </SelectTrigger>
-          <SelectContent>
-            {isLoadingCrew ? (
-              <SelectItem value="loading" disabled>Loading...</SelectItem>
-            ) : (
-              allCrewMembers.length === 0 ? (
-                <SelectItem value="no-crew" disabled>No crew members found</SelectItem>
+      <ClientOnly fallback={<Skeleton className="h-10 w-full max-w-sm mb-6" />}>
+        <div className="mb-6 max-w-sm">
+          <Label htmlFor="crewMemberSelectDropdown">Choose a Crew Member:</Label>
+          <Select
+            value={selectedCrewMemberId || ''}
+            onValueChange={(value) => setSelectedCrewMemberId(value === 'NONE' ? undefined : value)}
+            disabled={isLoadingCrew}
+          >
+            <SelectTrigger id="crewMemberSelectDropdown">
+              <SelectValue placeholder={isLoadingCrew ? "Loading crew..." : "Select a crew member"} />
+            </SelectTrigger>
+            <SelectContent>
+              {isLoadingCrew ? (
+                <SelectItem value="loading" disabled>Loading...</SelectItem>
               ) : (
-                allCrewMembers.map(crew => (
-                  <SelectItem key={crew.id} value={crew.id}>
-                    {crew.firstName} {crew.lastName} ({crew.role})
-                  </SelectItem>
-                ))
-              )
-            )}
-          </SelectContent>
-        </Select>
-      </div>
+                allCrewMembers.length === 0 ? (
+                  <SelectItem value="no-crew" disabled>No crew members found</SelectItem>
+                ) : (
+                  allCrewMembers.map(crew => (
+                    <SelectItem key={crew.id} value={crew.id}>
+                      {crew.firstName} {crew.lastName} ({crew.role})
+                    </SelectItem>
+                  ))
+                )
+              )}
+            </SelectContent>
+          </Select>
+        </div>
+      </ClientOnly>
       
       {isLoadingDocuments && selectedCrewMemberId && (
         <div className="text-center py-10">
@@ -289,7 +292,6 @@ export default function CrewDocumentsPage() {
         </div>
       )}
 
-
       <AddEditCrewDocumentModal
         isOpen={isModalOpen}
         setIsOpen={setIsModalOpen}
@@ -323,5 +325,3 @@ export default function CrewDocumentsPage() {
     </>
   );
 }
-
-    
