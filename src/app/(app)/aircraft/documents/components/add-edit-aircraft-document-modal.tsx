@@ -11,11 +11,11 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
+  DialogDescription as ModalDialogDescription, // Renamed to avoid conflict
   DialogFooter,
   DialogClose,
 } from '@/components/ui/dialog';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form'; // Added FormDescription
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -23,7 +23,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { CalendarIcon, Loader2, Save, FileText as FileTextIcon, Edit3, UploadCloud, Paperclip, XCircle as RemoveFileIcon } from 'lucide-react';
 import { cn } from "@/lib/utils";
-import { format, isValid as isValidDate } from "date-fns"; // Removed parseISO, startOfDay as they are not used here anymore
+import { format, isValid as isValidDate } from "date-fns";
 import type { AircraftDocument, SaveAircraftDocumentInput } from '@/ai/schemas/aircraft-document-schemas';
 import { aircraftDocumentTypes } from '@/ai/schemas/aircraft-document-schemas';
 import type { FleetAircraft } from '@/ai/schemas/fleet-aircraft-schemas';
@@ -202,7 +202,7 @@ export function AddEditAircraftDocumentModal({
             {isEditing ? <Edit3 className="h-6 w-6 text-primary" /> : <FileTextIcon className="h-6 w-6 text-primary" />}
             {modalTitle}
           </DialogTitle>
-          <DialogDescription>{modalDescription}</DialogDescription>
+          <ModalDialogDescription>{modalDescription}</ModalDialogDescription> {/* Use aliased import */}
         </DialogHeader>
         
         <ScrollArea className="max-h-[70vh] pr-5">
@@ -214,24 +214,24 @@ export function AddEditAircraftDocumentModal({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Aircraft</FormLabel>
-                    <FormControl>
-                      <Select
-                        onValueChange={field.onChange}
-                        value={field.value}
-                        disabled={isLoadingAircraft || isEditing}
-                      >
+                    <Select
+                      onValueChange={field.onChange}
+                      value={field.value}
+                      disabled={isLoadingAircraft || isEditing}
+                    >
+                      <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder={isLoadingAircraft ? "Loading aircraft..." : "Select aircraft"} />
                         </SelectTrigger>
-                        <SelectContent>
-                          {!isLoadingAircraft && aircraftList.map(ac => (
-                            <SelectItem key={ac.id} value={ac.id}>
-                              {ac.tailNumber} - {ac.model}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </FormControl>
+                      </FormControl>
+                      <SelectContent>
+                        {!isLoadingAircraft && aircraftList.map(ac => (
+                          <SelectItem key={ac.id} value={ac.id}>
+                            {ac.tailNumber} - {ac.model}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     {isEditing && <FormDescription className="text-xs">Aircraft cannot be changed for an existing document.</FormDescription>}
                     <FormMessage />
                   </FormItem>
@@ -244,14 +244,14 @@ export function AddEditAircraftDocumentModal({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Document Type</FormLabel>
-                    <FormControl>
-                      <Select onValueChange={field.onChange} value={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
                         <SelectTrigger><SelectValue placeholder="Select document type" /></SelectTrigger>
-                        <SelectContent>
-                          {aircraftDocumentTypes.map(type => (<SelectItem key={type} value={type}>{type}</SelectItem>))}
-                        </SelectContent>
-                      </Select>
-                    </FormControl>
+                      </FormControl>
+                      <SelectContent>
+                        {aircraftDocumentTypes.map(type => (<SelectItem key={type} value={type}>{type}</SelectItem>))}
+                      </SelectContent>
+                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -266,7 +266,6 @@ export function AddEditAircraftDocumentModal({
                       <FormLabel>Issue Date (Optional)</FormLabel>
                       <Popover open={isIssueDateOpen} onOpenChange={setIsIssueDateOpen}>
                         <PopoverTrigger asChild>
-                           {/* FormControl removed from here to avoid React.Children.only warning, ref applied directly */}
                            <Button
                             ref={field.ref}
                             variant={"outline"}
@@ -307,7 +306,6 @@ export function AddEditAircraftDocumentModal({
                       <FormLabel>Expiry Date (Optional)</FormLabel>
                        <Popover open={isExpiryDateOpen} onOpenChange={setIsExpiryDateOpen}>
                         <PopoverTrigger asChild>
-                           {/* FormControl removed from here, ref applied directly */}
                            <Button
                             ref={field.ref}
                             variant={"outline"}
