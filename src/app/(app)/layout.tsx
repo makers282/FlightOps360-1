@@ -36,7 +36,7 @@ import {
   Package, 
   TrendingUp, 
   Users2, 
-  BookOpenCheck, // New icon for Aircraft Documents
+  BookOpenCheck, 
 } from 'lucide-react';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -232,6 +232,14 @@ export default function AppLayout({ children }: PropsWithChildren) {
                 FRAT Integration
               </SidebarMenuButton>
             </SidebarMenuItem>
+
+            <SidebarMenuItem>
+              <SidebarMenuButton href="/checking-currency" tooltip="Checking Currency" isActive={pathname === '/checking-currency'}>
+                <ClipboardCheck />
+                Checking Currency
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+
             <SidebarMenuItem>
               <SidebarMenuButton href="/notifications" tooltip="Notifications" isActive={pathname === '/notifications'}>
                 <Bell />
