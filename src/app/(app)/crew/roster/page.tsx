@@ -68,6 +68,7 @@ export default function CrewRosterPage() {
 
   useEffect(() => {
     loadCrewMembers();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleOpenAddModal = () => {
@@ -85,7 +86,11 @@ export default function CrewRosterPage() {
   const handleSaveCrew = async (data: SaveCrewMemberInput) => {
     startSavingCrewTransition(async () => {
       try {
-        const savedData = await saveCrewMember(data);
+        // If it's an edit, ensure the ID is passed along with the data.
+        // If it's new, 'id' in data will be undefined, and the flow will generate one.
+        const dataToSave = isEditingModal && currentCrewForModal ? { ...data, id: currentCrewForModal.id } : data;
+        
+        const savedData = await saveCrewMember(dataToSave);
         toast({
           title: isEditingModal ? "Crew Member Updated" : "Crew Member Added",
           description: `Crew member "${savedData.firstName} ${savedData.lastName}" has been successfully ${isEditingModal ? 'updated' : 'saved'}.`,
