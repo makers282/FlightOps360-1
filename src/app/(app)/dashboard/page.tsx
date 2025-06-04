@@ -291,8 +291,18 @@ export default function DashboardPage() {
           <CardContent> <List> <ListItem className="flex justify-between items-center"> <div> <p className="font-medium">N789EF Maintenance Due</p> <p className="text-sm text-muted-foreground">Scheduled A-Check approaching.</p> </div> <Badge variant="destructive">High</Badge> </ListItem> <Separator className="my-2" /> <ListItem className="flex justify-between items-center"> <div> <p className="font-medium">TRP-004 Weather Alert</p> <p className="text-sm text-muted-foreground">Thunderstorms forecasted for KDEN.</p> </div> <Badge variant="outline">Medium</Badge> </ListItem> </List> </CardContent>
         </Card>
 
-        <Card> <CardHeader> <CardTitle className="flex items-center gap-2"><FileText className="h-5 w-5 text-primary" />Document Hub</CardTitle> <CardDescription>(Static Link)</CardDescription> </CardHeader> <CardContent> <p className="text-sm text-muted-foreground">Access flight and compliance documents.</p> </CardContent> </Card>
-        <Card> <CardHeader> <CardTitle className="flex items-center gap-2"><ShieldAlert className="h-5 w-5 text-primary" />FRAT</CardTitle> <CardDescription>(Static Link)</CardDescription> </CardHeader> <CardContent> <p className="text-sm text-muted-foreground">Flight Risk Assessment Tool status.</p> </CardContent> </Card>
+        <Link href="/documents" className="block hover:shadow-lg transition-shadow rounded-lg">
+          <Card className="h-full hover:border-primary/50"> 
+            <CardHeader> <CardTitle className="flex items-center gap-2"><FileText className="h-5 w-5 text-primary" />Document Hub</CardTitle> <CardDescription>Access flight and compliance documents.</CardDescription> </CardHeader> 
+            <CardContent> <p className="text-sm text-muted-foreground">Find all company manuals, policies, and regulatory documents here.</p> </CardContent> 
+          </Card>
+        </Link>
+        <Link href="/frat" className="block hover:shadow-lg transition-shadow rounded-lg">
+          <Card className="h-full hover:border-primary/50"> 
+            <CardHeader> <CardTitle className="flex items-center gap-2"><ShieldAlert className="h-5 w-5 text-primary" />FRAT Integration</CardTitle> <CardDescription>Flight Risk Assessment Tool.</CardDescription> </CardHeader> 
+            <CardContent> <p className="text-sm text-muted-foreground">Review and submit FRATs to ensure operational safety.</p> </CardContent> 
+          </Card>
+        </Link>
       </div>
 
       {selectedBulletin && (
