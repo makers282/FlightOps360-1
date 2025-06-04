@@ -20,14 +20,14 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { z } from 'zod';
-import { AddMaintenanceTaskDialogContent, type MaintenanceTaskFormData, defaultMaintenanceTaskFormValues } from './components/add-maintenance-task-modal'; // Renamed import
+import { AddMaintenanceTaskDialogContent, type MaintenanceTaskFormData, defaultMaintenanceTaskFormValues } from './components/add-maintenance-task-modal';
 import { AddEditAircraftDiscrepancyModal, type AircraftDiscrepancyFormData, defaultDiscrepancyFormValues } from './components/add-edit-aircraft-discrepancy-modal';
-import { Dialog, DialogTrigger } from '@/components/ui/dialog'; // Import Dialog and DialogTrigger
+import { Dialog, DialogTrigger } from '@/components/ui/dialog';
 
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'; 
 
-import { Wrench, PlusCircle, ArrowLeft, PlaneIcon, Edit, Loader2, InfoIcon, Phone, UserCircle, MapPin, Save, XCircle, Edit2, Edit3, AlertTriangle, CheckCircle2, XCircle as XCircleIcon, Search, ArrowUpDown, ArrowDown, ArrowUp, Printer, Filter } from 'lucide-react'; // Ensure Filter is imported
+import { Wrench, PlusCircle, ArrowLeft, PlaneIcon, Edit, Loader2, InfoIcon, Phone, UserCircle, MapPin, Save, XCircle, Edit2, Edit3, AlertTriangle, CheckCircle2, XCircle as XCircleIcon, Search, ArrowUpDown, ArrowDown, ArrowUp, Printer, Filter } from 'lucide-react';
 import { format, parse, addDays, isValid, addMonths, addYears, endOfMonth, parseISO, differenceInCalendarDays } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { fetchFleetAircraft, saveFleetAircraft } from '@/ai/flows/manage-fleet-flow';
@@ -43,11 +43,11 @@ import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
-  AlertDialogContent as AlertDialogModalContent, // Renamed
-  AlertDialogDescription as AlertDialogModalDescription, // Renamed
-  AlertDialogFooter as AlertDialogModalFooter, // Renamed
-  AlertDialogHeader as AlertDialogModalHeader, // Renamed
-  AlertDialogTitle as AlertDialogModalTitle, // Renamed
+  AlertDialogContent as AlertDialogModalContent,
+  AlertDialogDescription as AlertDialogModalDescription,
+  AlertDialogFooter as AlertDialogModalFooter,
+  AlertDialogHeader as AlertDialogModalHeader,
+  AlertDialogTitle as AlertDialogModalTitle,
 } from "@/components/ui/alert-dialog";
 
 
@@ -101,7 +101,7 @@ export default function AircraftMaintenanceDetailPage() {
   const [isEditingComponentTimes, setIsEditingComponentTimes] = useState(false);
   const [isSavingComponentTimes, startSavingComponentTimesTransition] = useTransition();
 
-  const [isTaskModalOpen, setIsTaskModalOpen] = useState(false); // For main dialog
+  const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [editingTaskOriginalId, setEditingTaskOriginalId] = useState<string | null>(null);
   const [initialModalFormData, setInitialModalFormData] = useState<Partial<MaintenanceTaskFormData> | null>(null);
 
@@ -423,11 +423,11 @@ export default function AircraftMaintenanceDetailPage() {
           <div className="mt-4 flex flex-col sm:flex-row gap-2 items-center"> <div className="relative flex-grow w-full sm:w-auto"> <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /> <Input type="search" placeholder="Search tasks (title, ref, type, component)..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-8 w-full" /> {searchTerm && ( <Button variant="ghost" size="icon" className="absolute right-1 top-1 h-7 w-7" onClick={() => setSearchTerm('')}> <XCircleIcon className="h-4 w-4"/> </Button> )} </div> <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as any)}> <SelectTrigger className="w-full sm:w-[180px]"> <SelectValue placeholder="Filter by status" /> </SelectTrigger> <SelectContent> <SelectItem value="all">All Statuses</SelectItem> <SelectItem value="active">Active Items</SelectItem> <SelectItem value="inactive">Inactive Items</SelectItem> <SelectItem value="dueSoon">Due Soon (Active)</SelectItem> <SelectItem value="overdue">Overdue (Active)</SelectItem> <SelectItem value="gracePeriod">Grace Period (Active)</SelectItem> </SelectContent> </Select> <Select value={componentFilter} onValueChange={setComponentFilter}> <SelectTrigger className="w-full sm:w-[200px]"> <Filter className="h-4 w-4 mr-2 opacity-50" /> <SelectValue placeholder="Filter by component" /> </SelectTrigger> <SelectContent> <SelectItem value="all">All Components</SelectItem> {availableComponentsForFilter.map(comp => ( <SelectItem key={comp} value={comp}>{comp}</SelectItem> ))} </SelectContent> </Select> </div>
         </CardHeader>
         <CardContent> {isLoadingTasks ? ( <div className="flex items-center justify-center py-10"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2 text-muted-foreground">Loading maintenance tasks...</p></div> ) : ( <Table> <TableHeader> <TableRow> <TableHead className="w-10"> <Checkbox checked={selectedTaskIds.length === displayedTasks.length && displayedTasks.length > 0} onCheckedChange={(checked) => handleSelectAllTasks(Boolean(checked))} aria-label="Select all tasks" disabled={displayedTasks.length === 0} /> </TableHead> <TableHead>Ref #</TableHead> <TableHead> <Button variant="ghost" size="sm" onClick={() => requestSort('itemTitle')} className="px-1 -ml-2"> Title {getSortIcon('itemTitle')} </Button> </TableHead> <TableHead>Type</TableHead> <TableHead>Component</TableHead> <TableHead>Frequency</TableHead> <TableHead>Last Done</TableHead> <TableHead>Due At</TableHead> <TableHead> <Button variant="ghost" size="sm" onClick={() => requestSort('toGoNumeric')} className="px-1 -ml-2"> To Go {getSortIcon('toGoNumeric')} </Button> </TableHead> <TableHead className="text-center">Status</TableHead> <TableHead className="text-right">Actions</TableHead> </TableRow> </TableHeader> <TableBody> {displayedTasks.length === 0 && ( <TableRow> <TableCell colSpan={11} className="text-center text-muted-foreground py-10"> No maintenance tasks match your criteria. 
-          <Dialog open={isTaskModalOpen} onOpenChange={setIsTaskModalOpen}>
+          <Dialog open={isTaskModalOpen && initialModalFormData === null /* Heuristic to open only if triggered this way */} onOpenChange={setIsTaskModalOpen}>
             <DialogTrigger asChild>
-              <Button variant="link" className="p-0 ml-1">Add one now?</Button>
+              <Button variant="link" className="p-0 ml-1" onClick={handleOpenAddTaskModal}>Add one now?</Button>
             </DialogTrigger>
-            <AddMaintenanceTaskDialogContent aircraft={currentAircraft} onSave={handleSaveTask} onDelete={handleDeleteTask} initialData={null} isEditing={false} currentTaskId={null} />
+            <AddMaintenanceTaskDialogContent aircraft={currentAircraft} onSave={handleSaveTask} onDelete={handleDeleteTask} initialData={initialModalFormData} isEditing={!!editingTaskOriginalId} currentTaskId={editingTaskOriginalId} />
           </Dialog>
         </TableCell> </TableRow> )} {displayedTasks.map((item) => { const status = getReleaseStatus(item.toGoData!, item); const frequency = formatTaskFrequency(item); let dueAtDisplay = "N/A"; if (item.dueAtDate && isValid(parse(item.dueAtDate, 'yyyy-MM-dd', new Date()))) { try { dueAtDisplay = format(parse(item.dueAtDate, 'yyyy-MM-dd', new Date()), 'MM/dd/yy'); } catch {} } else if (item.dueAtHours !== undefined) { dueAtDisplay = `${item.dueAtHours.toLocaleString()} hrs`; } else if (item.dueAtCycles !== undefined) { dueAtDisplay = `${item.dueAtCycles.toLocaleString()} cyc`; } let lastDoneDisplay = "N/A"; if (item.lastCompletedDate && isValid(parseISO(item.lastCompletedDate))) { try { lastDoneDisplay = format(parseISO(item.lastCompletedDate), 'MM/dd/yy'); } catch {} } else if (item.lastCompletedHours !== undefined) { lastDoneDisplay = `${item.lastCompletedHours.toLocaleString()} hrs`; } else if (item.lastCompletedCycles !== undefined) { lastDoneDisplay = `${item.lastCompletedCycles.toLocaleString()} cyc`; } return ( <TableRow key={item.id} className={item.isActive ? '' : 'opacity-50 bg-muted/30 hover:bg-muted/40'} data-state={selectedTaskIds.includes(item.id) ? "selected" : ""}> <TableCell> <Checkbox checked={selectedTaskIds.includes(item.id)} onCheckedChange={(checked) => handleSelectTask(item.id, Boolean(checked))} aria-label={`Select task ${item.itemTitle}`} /> </TableCell> <TableCell className="text-xs text-muted-foreground">{item.referenceNumber || '-'}</TableCell> <TableCell className="font-medium"> {item.itemTitle} {!item.isActive && <Badge variant="outline" className="ml-2 text-xs">Inactive</Badge>} </TableCell> <TableCell className="text-xs">{item.itemType}</TableCell> <TableCell className="text-xs">{item.associatedComponent || 'Airframe'}</TableCell> <TableCell className="text-xs">{frequency}</TableCell> <TableCell className="text-xs">{lastDoneDisplay}</TableCell> <TableCell className="text-xs">{dueAtDisplay}</TableCell> <TableCell className={`font-semibold text-xs ${item.toGoData?.isOverdue ? (status.label === 'Grace Period' ? 'text-yellow-600' : 'text-red-600') : (item.toGoData?.unit === 'days' && item.toGoData?.numeric < (item.alertDaysPrior ?? 30)) || (item.toGoData?.unit === 'hrs' && item.toGoData?.numeric < (item.alertHoursPrior ?? 25)) || (item.toGoData?.unit === 'cycles' && item.toGoData?.numeric < (item.alertCyclesPrior ?? 50)) ? 'text-yellow-600' : 'text-green-600'}`}>{item.toGoData?.text}</TableCell> <TableCell className="text-center"> <div className={`flex flex-col items-center justify-center ${status.colorClass}`}> {status.icon} <span className="text-xs mt-1">{status.label}</span> </div> </TableCell> <TableCell className="text-right"> <Button variant="ghost" size="icon" onClick={() => handleOpenEditTaskModal(item)}> <Edit3 className="h-4 w-4" /> </Button> </TableCell> </TableRow> ); })} </TableBody> </Table> )} </CardContent>
       </Card>
@@ -489,25 +489,25 @@ export default function AircraftMaintenanceDetailPage() {
       />
 
        {showDeleteDiscrepancyConfirm && discrepancyToDelete && (
-        <AlertDialog open={showDeleteDiscrepancyConfirm} onOpenChange={setShowDeleteDiscrepancyConfirm}>
-          <AlertDialogModalContent>
-            <AlertDialogModalHeader>
-              <AlertDialogModalTitle>Confirm Deletion</AlertDialogModalTitle>
-              <AlertDialogModalDescription>
-                Are you sure you want to delete discrepancy: "{discrepancyToDelete.description.substring(0,50)}..."? This action cannot be undone.
-              </AlertDialogModalDescription>
-            </AlertDialogModalHeader>
-            <AlertDialogModalFooter>
-              <AlertDialogCancel onClick={() => setShowDeleteDiscrepancyConfirm(false)} disabled={isDeletingDiscrepancy}>Cancel</AlertDialogCancel>
-              <Button variant="destructive" onClick={executeDeleteDiscrepancy} disabled={isDeletingDiscrepancy}>
-                {isDeletingDiscrepancy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Delete Discrepancy
-              </Button>
-            </AlertDialogModalFooter>
-          </AlertDialogModalContent>
-        </AlertDialog>
+        <AlertDialogModalContent>
+          <AlertDialogModalHeader>
+            <AlertDialogModalTitle>Confirm Deletion</AlertDialogModalTitle>
+            <AlertDialogModalDescription>
+              Are you sure you want to delete discrepancy: "{discrepancyToDelete.description.substring(0,50)}..."? This action cannot be undone.
+            </AlertDialogModalDescription>
+          </AlertDialogModalHeader>
+          <AlertDialogModalFooter>
+            <AlertDialogCancel onClick={() => setShowDeleteDiscrepancyConfirm(false)} disabled={isDeletingDiscrepancy}>Cancel</AlertDialogCancel>
+            <Button variant="destructive" onClick={executeDeleteDiscrepancy} disabled={isDeletingDiscrepancy}>
+              {isDeletingDiscrepancy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Delete Discrepancy
+            </Button>
+          </AlertDialogModalFooter>
+        </AlertDialogModalContent>
       )}
 
     </div>
   );
 }
+
+    
