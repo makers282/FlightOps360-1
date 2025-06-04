@@ -4,9 +4,10 @@
 import React, { useState, useMemo, useEffect, useTransition } from 'react';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { BookOpenCheck, UploadCloud, Edit3, Trash2, Search, FileText, Loader2, Plane, Link as LinkIcon, ExternalLink } from 'lucide-react';
+import { Library, UploadCloud, Search, FileText, Edit3, Trash2, Loader2, Link as LinkIcon, CalendarDays, Tag, AlertTriangle, CheckCircle2 } from 'lucide-react'; // Added AlertTriangle, CheckCircle2
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -16,102 +17,129 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Label } from "@/components/ui/label";
-import { format, parseISO, isValid } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
+import { format, parseISO, isValid, differenceInDays, isPast } from 'date-fns'; // Added differenceInDays, isPast
 
-import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
-import { fetchAircraftDocuments, saveAircraftDocument, deleteAircraftDocument } from '@/ai/flows/manage-aircraft-documents-flow';
-import type { AircraftDocument, SaveAircraftDocumentInput } from '@/ai/schemas/aircraft-document-schemas';
-import { AddEditAircraftDocumentModal } from './components/add-edit-aircraft-document-modal';
-import { ClientOnly } from '@/components/client-only';
-import { Skeleton } from '@/components/ui/skeleton';
-import Link from 'next/link'; // For linking to fileUrl
+import { fetchCompanyDocuments, saveCompanyDocument, deleteCompanyDocument } from '@/ai/flows/manage-company-documents-flow';
+import type { CompanyDocument, SaveCompanyDocumentInput } from '@/ai/schemas/company-document-schemas';
+import { AddEditCompanyDocumentModal } from './components/add-edit-company-document-modal';
+import { ClientOnly } from '@/components/client-only'; 
+import { Skeleton } from '@/components/ui/skeleton'; 
+import Link from 'next/link';
 
-export default function AircraftDocumentsPage() {
-  const [allFleetAircraft, setAllFleetAircraft] = useState<Pick<FleetAircraft, 'id' | 'tailNumber' | 'model'>[]>([]);
-  const [allAircraftDocuments, setAllAircraftDocuments] = useState<AircraftDocument[]>([]);
-  
-  const [selectedAircraftId, setSelectedAircraftId] = useState<string | undefined>(undefined);
-  
-  const [isLoadingFleet, setIsLoadingFleet] = useState(true);
+const EXPIRY_WARNING_DAYS = 30;
+type DocumentStatus = "Expired" | "Expiring Soon" | "Valid" | "No Expiry";
+
+const getDocumentStatus = (expiryDateString?: string): DocumentStatus => {
+  if (!expiryDateString) return "No Expiry";
+  try {
+    const expiry = parseISO(expiryDateString);
+    if (!isValid(expiry)) return "No Expiry";
+    
+    if (isPast(expiry)) return "Expired";
+    
+    const daysUntilExpiry = differenceInDays(expiry, new Date());
+    if (daysUntilExpiry <= EXPIRY_WARNING_DAYS) return "Expiring Soon";
+    
+    return "Valid";
+  } catch {
+    return "No Expiry"; 
+  }
+};
+
+const getStatusBadgeVariant = (status: DocumentStatus): "default" | "secondary" | "destructive" | "outline" => {
+  switch (status) {
+    case "Expired": return "destructive";
+    case "Expiring Soon": return "secondary"; 
+    case "Valid": return "default";
+    case "No Expiry": return "outline";
+    default: return "outline";
+  }
+};
+
+const getStatusIcon = (status: DocumentStatus) => {
+  switch (status) {
+    case "Expired": return <AlertTriangle className="h-4 w-4 text-destructive" />;
+    case "Expiring Soon": return <AlertTriangle className="h-4 w-4 text-yellow-500" />;
+    case "Valid": return <CheckCircle2 className="h-4 w-4 text-green-500" />;
+    case "No Expiry": return <FileText className="h-4 w-4 text-muted-foreground" />;
+    default: return <FileText className="h-4 w-4 text-muted-foreground" />;
+  }
+};
+
+
+export default function CompanyDocumentsPage() {
+  const [allCompanyDocuments, setAllCompanyDocuments] = useState<CompanyDocument[]>([]);
   const [isLoadingDocuments, setIsLoadingDocuments] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
   const { toast } = useToast();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditingModal, setIsEditingModal] = useState(false);
-  const [currentDocumentToEdit, setCurrentDocumentToEdit] = useState<AircraftDocument | null>(null);
+  const [currentDocumentToEdit, setCurrentDocumentToEdit] = useState<CompanyDocument | null>(null);
   const [isSavingDocument, startSavingDocumentTransition] = useTransition();
   
   const [isDeletingDocument, startDeletingDocumentTransition] = useTransition();
-  const [documentToDelete, setDocumentToDelete] = useState<AircraftDocument | null>(null);
+  const [documentToDelete, setDocumentToDelete] = useState<CompanyDocument | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  const loadAllData = async () => {
-    setIsLoadingFleet(true);
+  const loadCompanyDocuments = async () => {
     setIsLoadingDocuments(true);
     try {
-      const [fetchedFleet, fetchedDocs] = await Promise.all([
-        fetchFleetAircraft(),
-        fetchAircraftDocuments(),
-      ]);
-      setAllFleetAircraft(fetchedFleet.map(ac => ({ id: ac.id, tailNumber: ac.tailNumber, model: ac.model })));
-      setAllAircraftDocuments(fetchedDocs);
+      const fetchedDocs = await fetchCompanyDocuments();
+      setAllCompanyDocuments(fetchedDocs);
     } catch (error) {
-      console.error("Failed to load aircraft or documents:", error);
-      toast({ title: "Error Loading Data", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
+      console.error("Failed to load company documents:", error);
+      toast({ title: "Error Loading Documents", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
     } finally {
-      setIsLoadingFleet(false);
       setIsLoadingDocuments(false);
     }
   };
 
   useEffect(() => {
-    loadAllData();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    loadCompanyDocuments();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); 
 
-  const documentsForSelectedAircraft = useMemo(() => {
-    if (!selectedAircraftId) return [];
-    return allAircraftDocuments.filter(doc => doc.aircraftId === selectedAircraftId);
-  }, [selectedAircraftId, allAircraftDocuments]);
+  const filteredDocuments = allCompanyDocuments.filter(doc =>
+    doc.documentName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    doc.documentType.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (doc.description && doc.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (doc.version && doc.version.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (doc.tags && doc.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase())))
+  );
 
   const handleOpenAddModal = () => {
-    if (!selectedAircraftId) {
-      toast({ title: "Select Aircraft", description: "Please select an aircraft before adding a document.", variant: "info" });
-      return;
-    }
     setIsEditingModal(false);
     setCurrentDocumentToEdit(null);
     setIsModalOpen(true);
   };
 
-  const handleOpenEditModal = (doc: AircraftDocument) => {
+  const handleOpenEditModal = (doc: CompanyDocument) => {
     setIsEditingModal(true);
     setCurrentDocumentToEdit(doc);
     setIsModalOpen(true);
   };
 
-  const handleSaveDocument = async (data: SaveAircraftDocumentInput, originalDocumentId?: string) => {
+  const handleSaveDocument = async (data: SaveCompanyDocumentInput, originalDocumentId?: string) => {
     startSavingDocumentTransition(async () => {
       try {
-        // If originalDocumentId is present, it's an edit; otherwise, it's a new document.
         const dataToSave = { ...data, id: originalDocumentId };
-        const savedData = await saveAircraftDocument(dataToSave);
+        const savedData = await saveCompanyDocument(dataToSave);
         toast({
           title: isEditingModal ? "Document Updated" : "Document Added",
-          description: `Document "${savedData.documentName}" has been successfully ${isEditingModal ? 'updated' : 'saved'}.`,
+          description: `Company document "${savedData.documentName}" has been successfully ${isEditingModal ? 'updated' : 'saved'}.`,
         });
         setIsModalOpen(false);
-        await loadAllData(); 
+        await loadCompanyDocuments(); 
       } catch (error) {
-        console.error("Failed to save document:", error);
+        console.error("Failed to save company document:", error);
         toast({ title: "Error Saving Document", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
       }
     });
   };
 
-  const handleDeleteClick = (doc: AircraftDocument) => {
+  const handleDeleteClick = (doc: CompanyDocument) => {
     setDocumentToDelete(doc);
     setShowDeleteConfirm(true);
   };
@@ -120,11 +148,11 @@ export default function AircraftDocumentsPage() {
     if (!documentToDelete) return;
     startDeletingDocumentTransition(async () => {
       try {
-        await deleteAircraftDocument({ documentId: documentToDelete.id });
+        await deleteCompanyDocument({ documentId: documentToDelete.id });
         toast({ title: "Document Deleted", description: `Document "${documentToDelete.documentName}" has been removed.` });
         setShowDeleteConfirm(false);
         setDocumentToDelete(null);
-        await loadAllData(); 
+        await loadCompanyDocuments(); 
       } catch (error) {
         console.error("Failed to delete document:", error);
         toast({ title: "Error Deleting Document", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
@@ -144,127 +172,109 @@ export default function AircraftDocumentsPage() {
     }
   };
 
-  const DocumentItem = ({ doc }: { doc: AircraftDocument }) => (
-    <div className="flex items-start justify-between py-3 px-4 border-b last:border-b-0 hover:bg-muted/50 transition-colors rounded-sm group">
-      <div className="flex items-start gap-3 flex-1 min-w-0">
-        <FileText className="h-5 w-5 text-muted-foreground flex-shrink-0 mt-0.5" />
-        <div className="truncate flex-grow">
-          <p className="text-sm font-medium text-foreground truncate" title={doc.documentName}>{doc.documentName}</p>
-          <p className="text-xs text-muted-foreground">
-            Type: {doc.documentType} | Expires: {formatDateForDisplay(doc.expiryDate)}
-          </p>
+  const DocumentListItem = ({ doc }: { doc: CompanyDocument }) => {
+    const status = getDocumentStatus(doc.effectiveDate); // Assuming effectiveDate acts like an expiry for this context or should be reviewDate
+                                                        // If reviewDate is more appropriate for status, use doc.reviewDate
+    return (
+      <div className="flex flex-col sm:flex-row items-start justify-between py-3 px-4 border-b last:border-b-0 hover:bg-muted/50 transition-colors rounded-sm group">
+        <div className="flex items-start gap-3 flex-1 min-w-0 mb-2 sm:mb-0">
+          {getStatusIcon(status)}
+          <div className="truncate flex-grow">
+            <p className="text-sm font-semibold text-foreground truncate" title={doc.documentName}>{doc.documentName}</p>
+            <p className="text-xs text-muted-foreground">
+              Type: {doc.documentType} | Version: {doc.version || '-'} | Effective: {formatDateForDisplay(doc.effectiveDate)}
+               <Badge variant={getStatusBadgeVariant(status)} className="ml-2 text-xs px-1.5 py-0">{status}</Badge>
+            </p>
+            {doc.description && <p className="text-xs text-muted-foreground mt-0.5 truncate" title={doc.description}>{doc.description}</p>}
+            {doc.tags && doc.tags.length > 0 && (
+              <div className="mt-1 flex flex-wrap gap-1">
+                {doc.tags.map(tag => <Badge key={tag} variant="secondary" className="text-xs px-1.5 py-0">{tag}</Badge>)}
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity flex-shrink-0 self-start sm:self-center">
           {doc.fileUrl && (
-            <Link href={doc.fileUrl} target="_blank" rel="noopener noreferrer" 
-                  className="text-xs text-primary hover:underline flex items-center gap-1 mt-1">
-              <LinkIcon className="h-3 w-3" /> View/Download Document
-            </Link>
+              <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
+                  <Link href={doc.fileUrl} target="_blank" rel="noopener noreferrer">
+                      <LinkIcon className="h-4 w-4" />
+                      <span className="sr-only">View/Download File</span>
+                  </Link>
+              </Button>
           )}
-           {!doc.fileUrl && <p className="text-xs text-muted-foreground italic mt-1">No file uploaded.</p>}
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleOpenEditModal(doc)}>
+            <Edit3 className="h-4 w-4" />
+            <span className="sr-only">Edit</span>
+          </Button>
+          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => handleDeleteClick(doc)}>
+            <Trash2 className="h-4 w-4" />
+            <span className="sr-only">Delete</span>
+          </Button>
         </div>
       </div>
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity flex-shrink-0">
-        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleOpenEditModal(doc)}>
-          <Edit3 className="h-4 w-4" />
-          <span className="sr-only">Edit</span>
-        </Button>
-        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => handleDeleteClick(doc)}>
-          <Trash2 className="h-4 w-4" />
-          <span className="sr-only">Delete</span>
-        </Button>
-      </div>
-    </div>
-  );
-
-  const selectedAircraftLabel = allFleetAircraft.find(ac => ac.id === selectedAircraftId)?.tailNumber;
-  const pageTitle = selectedAircraftLabel ? `Aircraft Documents: ${selectedAircraftLabel}` : "Aircraft Documents";
+    );
+  }
 
   return (
     <>
       <PageHeader 
-        title={pageTitle}
-        description="Manage and access documents specific to each aircraft in your fleet."
-        icon={BookOpenCheck}
+        title="Company Document Hub"
+        description="Manage and access all company-wide operational manuals, compliance documents, policies, and templates."
+        icon={Library}
         actions={
-          <Button onClick={handleOpenAddModal} disabled={isLoadingFleet || !selectedAircraftId}>
-            <UploadCloud className="mr-2 h-4 w-4" /> Add Aircraft Document
+          <Button onClick={handleOpenAddModal} disabled={isLoadingDocuments}>
+            <UploadCloud className="mr-2 h-4 w-4" /> Upload Company Document
           </Button>
         }
       />
-
-      <ClientOnly fallback={<Skeleton className="h-10 w-full max-w-sm mb-6" />}>
-        <div className="mb-6 max-w-sm">
-          <Label htmlFor="aircraftSelectDropdown">Select an Aircraft:</Label>
-          <Select
-            value={selectedAircraftId || ''}
-            onValueChange={(value) => setSelectedAircraftId(value === 'NONE' ? undefined : value)}
-            disabled={isLoadingFleet}
-            name="aircraftSelectDropdown" // Added name for label association
-            // id="aircraftSelectDropdown" // Ensure id is on SelectTrigger or handled by shadcn
-          >
-            <SelectTrigger id="aircraftSelectDropdown">
-              <SelectValue placeholder={isLoadingFleet ? "Loading aircraft..." : "Select an aircraft"} />
-            </SelectTrigger>
-            <SelectContent>
-              {isLoadingFleet ? (
-                <SelectItem value="loading" disabled>Loading...</SelectItem>
-              ) : (
-                allFleetAircraft.length === 0 ? (
-                  <SelectItem value="no-aircraft" disabled>No aircraft found in fleet</SelectItem>
-                ) : (
-                  allFleetAircraft.map(ac => (
-                    <SelectItem key={ac.id} value={ac.id}>
-                      {ac.tailNumber} - {ac.model}
-                    </SelectItem>
-                  ))
-                )
-              )}
-            </SelectContent>
-          </Select>
-        </div>
-      </ClientOnly>
       
-      {isLoadingDocuments && selectedAircraftId && (
-        <div className="text-center py-10">
-            <Loader2 className="mx-auto h-12 w-12 animate-spin text-primary" />
-            <p className="mt-2 text-muted-foreground">Loading documents for {selectedAircraftLabel}...</p>
-        </div>
-      )}
+      <Card className="shadow-lg">
+        <CardHeader>
+          <CardTitle>All Company Documents</CardTitle>
+          <CardDescription>Central repository for all official company documentation. (File uploads are simulated)</CardDescription>
+          <div className="mt-2 relative">
+            <ClientOnly fallback={<Skeleton className="h-10 pl-8 w-full sm:w-1/2 lg:w-1/3" />}>
+              <> 
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                {isLoadingDocuments ? (
+                  <Skeleton className="h-10 pl-8 w-full sm:w-1/2 lg:w-1/3" />
+                ) : (
+                  <Input 
+                    placeholder="Search documents (name, type, description, tags)..." 
+                    className="pl-8 w-full sm:w-1/2 lg:w-1/3" 
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    disabled={allCompanyDocuments.length === 0 && !searchTerm} 
+                  />
+                )}
+              </>
+            </ClientOnly>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          {isLoadingDocuments && allCompanyDocuments.length === 0 ? ( 
+            <div className="space-y-2 p-4">
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+            </div>
+          ) : filteredDocuments.length === 0 ? (
+            <p className="p-4 text-center text-sm text-muted-foreground">
+              {searchTerm ? "No documents match your search." : "No company documents found. Upload one to get started."}
+            </p>
+          ) : (
+            filteredDocuments.map(doc => <DocumentListItem key={doc.id} doc={doc} />)
+          )}
+        </CardContent>
+      </Card>
 
-      {!selectedAircraftId && !isLoadingFleet && !isLoadingDocuments && (
-        <Card className="shadow-sm">
-            <CardContent className="pt-6 text-center text-muted-foreground">
-                <Plane className="mx-auto h-12 w-12 mb-2" />
-                Please select an aircraft to view its documents.
-            </CardContent>
-        </Card>
-      )}
-
-      {selectedAircraftId && !isLoadingDocuments && (
-        <Card className="shadow-md">
-          <CardHeader>
-            <CardTitle>Documents for {selectedAircraftLabel}</CardTitle>
-            <CardDescription>All registered documents for this aircraft.</CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            {documentsForSelectedAircraft.length === 0 ? (
-              <p className="p-4 text-sm text-muted-foreground">No documents found for this aircraft.</p>
-            ) : (
-              documentsForSelectedAircraft.map(doc => <DocumentItem key={doc.id} doc={doc} />)
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      <AddEditAircraftDocumentModal
+      <AddEditCompanyDocumentModal
         isOpen={isModalOpen}
         setIsOpen={setIsModalOpen}
         onSave={handleSaveDocument}
         initialData={currentDocumentToEdit}
         isEditing={isEditingModal}
         isSaving={isSavingDocument}
-        aircraftList={allFleetAircraft}
-        isLoadingAircraft={isLoadingFleet}
-        selectedAircraftIdForNew={selectedAircraftId}
       />
 
       {showDeleteConfirm && documentToDelete && (
@@ -273,7 +283,7 @@ export default function AircraftDocumentsPage() {
             <AlertDialogHeader>
               <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
               <AlertDialogDescription>
-                Are you sure you want to delete the document "{documentToDelete.documentName}" for aircraft {documentToDelete.aircraftTailNumber || documentToDelete.aircraftId}? This action cannot be undone.
+                Are you sure you want to delete the document "{documentToDelete.documentName}"? This action cannot be undone.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
