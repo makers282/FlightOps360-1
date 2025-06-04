@@ -28,7 +28,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-import { Wrench, PlusCircle, ArrowLeft, PlaneIcon, Edit, Loader2, InfoIcon, Phone, UserCircle, MapPin, Save, XCircle, Edit2, Edit3, AlertTriangle, CheckCircle2, XCircle as XCircleIcon, Search, ArrowUpDown, ArrowDown, ArrowUp, Printer, Filter, ListChecks, BookOpen, Hammer, FileWarning, BookLock } from 'lucide-react';
+import { Wrench, PlusCircle, ArrowLeft, Plane as PlaneIcon, Edit, Loader2, InfoIcon, Save, XCircle, Edit3, AlertTriangle, CheckCircle2, XCircle as XCircleIcon, Search, ArrowUpDown, ArrowDown, ArrowUp, Printer, Filter, ListChecks, BookOpen, Hammer, FileWarning, BookLock, Trash2 } from 'lucide-react';
 import { format, parse, addDays, isValid, addMonths, addYears, endOfMonth, parseISO, differenceInCalendarDays } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { fetchFleetAircraft, saveFleetAircraft } from '@/ai/flows/manage-fleet-flow';
@@ -216,9 +216,22 @@ const MaintenanceTaskRow = React.memo(function MaintenanceTaskRow(props: Mainten
   const referenceNumber = item.referenceNumber || '-';
   const itemType = item.itemType || "Other";
   const associatedComponent = item.associatedComponent || 'Airframe';
-
-  const status = getLocalReleaseStatus(item.toGoData, item);
+  const toGoData = item.toGoData;
+  const status = getLocalReleaseStatus(toGoData, item);
   const frequency = formatLocalTaskFrequency(item);
+  const toGoTextDisplay = toGoData?.text || 'N/A';
+
+  let toGoColorClass = 'text-green-600 dark:text-green-400'; // Default
+  if (toGoData) {
+      if (toGoData.isOverdue) {
+          toGoColorClass = status.label === 'Grace Period' ? 'text-yellow-600 dark:text-yellow-500' : 'text-red-600 dark:text-red-400';
+      } else if (status.label === 'Due Soon') {
+          toGoColorClass = 'text-yellow-500 dark:text-yellow-400';
+      } else if (status.label === 'Missing Comp. Time' || status.label === 'Check Due Info') {
+          toGoColorClass = 'text-orange-500 dark:text-orange-400';
+      }
+  }
+
 
   let dueAtDisplay = "N/A";
   if (item.dueAtDate && isValid(parse(item.dueAtDate, 'yyyy-MM-dd', new Date()))) {
@@ -238,23 +251,6 @@ const MaintenanceTaskRow = React.memo(function MaintenanceTaskRow(props: Mainten
     lastDoneDisplay = `${item.lastCompletedCycles.toLocaleString()} cyc`;
   }
 
-  const toGoData = item.toGoData;
-  let toGoColorClass = 'text-green-600';
-  if (toGoData) {
-    const alertDaysPrior = item.alertDaysPrior ?? 30;
-    const alertHoursPrior = item.alertHoursPrior ?? 25;
-    const cyclesAlertThreshold = item.alertCyclesPrior ?? 50;
-    if (toGoData.isOverdue) {
-      toGoColorClass = status.label === 'Grace Period' ? 'text-yellow-600' : 'text-red-600';
-    } else if (
-      (toGoData.unit === 'days' && typeof toGoData.numeric === 'number' && toGoData.numeric < alertDaysPrior) ||
-      (toGoData.unit === 'hrs' && typeof toGoData.numeric === 'number' && toGoData.numeric < alertHoursPrior) ||
-      (toGoData.unit === 'cycles' && typeof toGoData.numeric === 'number' && toGoData.numeric < cyclesAlertThreshold)
-    ) {
-      toGoColorClass = 'text-yellow-600';
-    }
-  }
-
   return (
     <TableRow className={item.isActive ? '' : 'opacity-50 bg-muted/30 hover:bg-muted/40'} data-state={isSelected ? "selected" : ""}>
       <TableCell><Checkbox checked={isSelected} onCheckedChange={(checked) => onSelectTask(item.id, Boolean(checked))} aria-label={`Select task ${itemTitle}`} /></TableCell>
@@ -265,12 +261,14 @@ const MaintenanceTaskRow = React.memo(function MaintenanceTaskRow(props: Mainten
       <TableCell className="text-xs">{frequency}</TableCell>
       <TableCell className="text-xs">{lastDoneDisplay}</TableCell>
       <TableCell className="text-xs">{dueAtDisplay}</TableCell>
-      <TableCell className={`font-semibold text-xs ${toGoColorClass}`}>{toGoData?.text || 'N/A'}</TableCell>
+      <TableCell className={`font-semibold text-xs ${toGoColorClass}`}>{toGoTextDisplay}</TableCell>
       <TableCell className="text-center"><div className={`flex flex-col items-center justify-center ${status.colorClass}`}>{status.icon}<span className="text-xs mt-1">{status.label}</span></div></TableCell>
       <TableCell className="text-right"><Button variant="ghost" size="icon" onClick={() => onEditTask(item)}><Edit3 className="h-4 w-4" /></Button></TableCell>
     </TableRow>
   );
 });
+MaintenanceTaskRow.displayName = 'MaintenanceTaskRow';
+
 
 export default function AircraftMaintenanceDetailPage() {
   const params = useParams();
@@ -554,6 +552,9 @@ export default function AircraftMaintenanceDetailPage() {
   const openDiscrepancyCount = aircraftDiscrepancies.filter(d => d.status !== "Closed").length;
   const openMelItemsCount = melItems.filter(m => m.status !== "Closed").length;
 
+  const openDiscrepanciesForDisplay = aircraftDiscrepancies.filter(d => d.status !== "Closed").sort((a,b) => parseISO(b.dateDiscovered).getTime() - parseISO(a.dateDiscovered).getTime());
+  const openMelItemsForDisplay = melItems.filter(m => m.status !== "Closed").sort((a, b) => (a.dueDate && b.dueDate ? parseISO(a.dueDate).getTime() - parseISO(b.dueDate).getTime() : (a.dueDate ? -1 : 1)));
+
   return (
     <div>
       <PageHeader
@@ -607,7 +608,7 @@ export default function AircraftMaintenanceDetailPage() {
               <div className="flex items-center gap-2">
                 <BookOpen className="h-6 w-6 text-primary" />
                 <CardTitle className="text-xl">Aircraft Status &amp; Logs</CardTitle>
-                {(openDiscrepancyCount > 0 || openMelItemsCount > 0) && (
+                 {(openDiscrepancyCount > 0 || openMelItemsCount > 0) && (
                     <Badge variant="destructive" className="ml-2">
                         {openDiscrepancyCount > 0 && `${openDiscrepancyCount} Open Disc.`}
                         {openDiscrepancyCount > 0 && openMelItemsCount > 0 && " / "}
@@ -624,7 +625,7 @@ export default function AircraftMaintenanceDetailPage() {
                   <TabsTrigger value="damageLog">Damage Log (0)</TabsTrigger>
                 </TabsList>
                 <TabsContent value="discrepancies">
-                  <CardDescription className="mb-3">Log and track discrepancies for {currentAircraft.tailNumber}.</CardDescription>
+                  <CardDescription className="mb-3">Track and manage discrepancies for {currentAircraft.tailNumber}.</CardDescription>
                   <div className="space-y-3">
                     <div className="flex flex-col sm:flex-row gap-2">
                       <Button onClick={handleOpenAddDiscrepancyModal} disabled={!currentAircraft || isSavingDiscrepancy} className="w-full sm:w-auto">
@@ -642,7 +643,7 @@ export default function AircraftMaintenanceDetailPage() {
                     {isLoadingDiscrepancies ? (
                         <div className="flex items-center justify-center py-6"><Loader2 className="h-6 w-6 animate-spin text-destructive" /><p className="ml-2 text-muted-foreground">Loading discrepancies...</p></div>
                     ) : (
-                        aircraftDiscrepancies.filter(d => d.status !== "Closed").length === 0 ? (
+                        openDiscrepanciesForDisplay.length === 0 ? (
                         <p className="text-center text-muted-foreground py-4">No open or deferred discrepancies for this aircraft.</p>
                         ) : (
                            <Table>
@@ -655,7 +656,7 @@ export default function AircraftMaintenanceDetailPage() {
                               </TableRow>
                             </TableHeader>
                             <TableBody>
-                              {aircraftDiscrepancies.filter(d => d.status !== "Closed").sort((a,b) => parseISO(b.dateDiscovered).getTime() - parseISO(a.dateDiscovered).getTime()).map(disc => (
+                              {openDiscrepanciesForDisplay.map(disc => (
                                 <TableRow key={disc.id} className={disc.status === "Open" ? "bg-destructive/5 hover:bg-destructive/10" : (disc.status === "Deferred" ? "bg-yellow-500/5 hover:bg-yellow-500/10" : "")}>
                                   <TableCell><Badge variant={disc.status === "Open" ? "destructive" : "secondary"}>{disc.status}</Badge></TableCell>
                                   <TableCell className="text-xs">{format(parseISO(disc.dateDiscovered), 'MM/dd/yy')}</TableCell>
@@ -685,20 +686,19 @@ export default function AircraftMaintenanceDetailPage() {
                     </div>
                      {isLoadingMelItems ? (
                         <div className="flex items-center justify-center py-6"><Loader2 className="h-6 w-6 animate-spin text-primary" /><p className="ml-2 text-muted-foreground">Loading MEL items...</p></div>
-                    ) : melItems.filter(m => m.status !== "Closed").length === 0 ? (
+                    ) : openMelItemsForDisplay.length === 0 ? (
                         <p className="text-center text-muted-foreground py-4">No open MEL items logged for this aircraft.</p>
                     ) : (
                         <Table>
                             <TableHeader><TableRow><TableHead>MEL #</TableHead><TableHead>Description</TableHead><TableHead>Cat.</TableHead><TableHead>Status</TableHead><TableHead>Due Date</TableHead></TableRow></TableHeader>
                             <TableBody>
-                                {melItems.filter(m => m.status !== "Closed").sort((a, b) => (a.dueDate && b.dueDate ? parseISO(a.dueDate).getTime() - parseISO(b.dueDate).getTime() : (a.dueDate ? -1 : 1))).map(item => (
+                                {openMelItemsForDisplay.map(item => (
                                     <TableRow key={item.id} className={item.status === "Open" ? "bg-yellow-500/5 hover:bg-yellow-500/10" : ""}>
                                         <TableCell className="font-medium text-xs">{item.melNumber}</TableCell>
                                         <TableCell className="text-xs max-w-xs truncate" title={item.description}>{item.description}</TableCell>
                                         <TableCell className="text-xs text-center">{item.category || '-'}</TableCell>
                                         <TableCell><Badge variant={item.status === "Open" ? "secondary" : "outline"}>{item.status}</Badge></TableCell>
-                                        <TableCell className="text-xs">{item.dueDate ? format(parseISO(item.dueDate), 'MM/dd/yy') : 'N/A'}</TableCell>
-                                        {/* Add Edit/Delete buttons later */}
+                                        <TableCell className="text-xs">{item.dueDate && isValid(parseISO(item.dueDate)) ? format(parseISO(item.dueDate), 'MM/dd/yy') : 'N/A'}</TableCell>
                                     </TableRow>
                                 ))}
                             </TableBody>
@@ -771,3 +771,4 @@ export default function AircraftMaintenanceDetailPage() {
     
 
     
+
