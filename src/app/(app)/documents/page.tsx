@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useEffect, useTransition } from 'react';
+import React, { useState, useMemo, useEffect, useTransition } from 'react';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Library, UploadCloud, Search, FileText, Edit3, Trash2, Loader2, Link as LinkIcon, CalendarDays, Tag } from 'lucide-react';
@@ -23,7 +23,8 @@ import { format, parseISO, isValid } from 'date-fns';
 import { fetchCompanyDocuments, saveCompanyDocument, deleteCompanyDocument } from '@/ai/flows/manage-company-documents-flow';
 import type { CompanyDocument, SaveCompanyDocumentInput } from '@/ai/schemas/company-document-schemas';
 import { AddEditCompanyDocumentModal } from './components/add-edit-company-document-modal';
-import { Skeleton } from '@/components/ui/skeleton';
+import { ClientOnly } from '@/components/client-only'; // Ensure this is imported
+import { Skeleton } from '@/components/ui/skeleton'; // Ensure this is imported
 import Link from 'next/link';
 
 export default function CompanyDocumentsPage() {
@@ -56,6 +57,7 @@ export default function CompanyDocumentsPage() {
 
   useEffect(() => {
     loadCompanyDocuments();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); 
 
   const filteredDocuments = allCompanyDocuments.filter(doc =>
@@ -185,18 +187,26 @@ export default function CompanyDocumentsPage() {
           <CardTitle>All Company Documents</CardTitle>
           <CardDescription>Central repository for all official company documentation. (File uploads are simulated)</CardDescription>
           <div className="mt-2 relative">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input 
-              placeholder="Search documents (name, type, description, tags)..." 
-              className="pl-8 w-full sm:w-1/2 lg:w-1/3" 
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              disabled={isLoadingDocuments && allCompanyDocuments.length === 0}
-            />
+            <ClientOnly fallback={<Skeleton className="h-10 pl-8 w-full sm:w-1/2 lg:w-1/3" />}>
+              <> {/* Fragment to hold Search and conditional Input/Skeleton */}
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                {isLoadingDocuments ? (
+                  <Skeleton className="h-10 pl-8 w-full sm:w-1/2 lg:w-1/3" />
+                ) : (
+                  <Input 
+                    placeholder="Search documents (name, type, description, tags)..." 
+                    className="pl-8 w-full sm:w-1/2 lg:w-1/3" 
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    disabled={allCompanyDocuments.length === 0 && !searchTerm} 
+                  />
+                )}
+              </>
+            </ClientOnly>
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          {isLoadingDocuments && allCompanyDocuments.length === 0 ? (
+          {isLoadingDocuments && allCompanyDocuments.length === 0 ? ( // Show skeletons only if truly initial loading and no data
             <div className="space-y-2 p-4">
                 <Skeleton className="h-10 w-full" />
                 <Skeleton className="h-10 w-full" />
