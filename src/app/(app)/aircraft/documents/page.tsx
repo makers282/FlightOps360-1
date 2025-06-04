@@ -24,7 +24,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { fetchAircraftDocuments, saveAircraftDocument, deleteAircraftDocument } from '@/ai/flows/manage-aircraft-documents-flow';
 import type { AircraftDocument, SaveAircraftDocumentInput, AircraftDocumentType } from '@/ai/schemas/aircraft-document-schemas';
 import { aircraftDocumentTypes } from '@/ai/schemas/aircraft-document-schemas';
-import { fetchFleetAircraft, type FleetAircraft } from '@/ai/schemas/fleet-aircraft-schemas';
+import { fetchFleetAircraft } from '@/ai/flows/manage-fleet-flow'; // CORRECTED IMPORT PATH
+import type { FleetAircraft } from '@/ai/schemas/fleet-aircraft-schemas'; // Type import is correct
 import { AddEditAircraftDocumentModal } from './components/add-edit-aircraft-document-modal';
 import { ClientOnly } from '@/components/client-only'; 
 import { Skeleton } from '@/components/ui/skeleton'; 
@@ -97,7 +98,7 @@ export default function AircraftDocumentsPage() {
     try {
       const [fetchedDocs, fetchedFleet] = await Promise.all([
         fetchAircraftDocuments(),
-        fetchFleetAircraft()
+        fetchFleetAircraft() // Ensure this is called
       ]);
       setAllAircraftDocuments(fetchedDocs);
       setFleetForSelect(fetchedFleet.map(ac => ({ id: ac.id, tailNumber: ac.tailNumber, model: ac.model })));
@@ -146,7 +147,7 @@ export default function AircraftDocumentsPage() {
   const handleSaveDocument = async (data: SaveAircraftDocumentInput, originalDocumentId?: string) => {
     startSavingDocumentTransition(async () => {
       try {
-        const dataToSave = { ...data, id: originalDocumentId };
+        const dataToSave = { ...data, id: originalDocumentId }; // Add id for updates
         const savedData = await saveAircraftDocument(dataToSave);
         toast({
           title: isEditingModal ? "Document Updated" : "Document Added",
@@ -341,4 +342,3 @@ export default function AircraftDocumentsPage() {
     </>
   );
 }
-
