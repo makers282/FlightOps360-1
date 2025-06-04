@@ -9,17 +9,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { SlidersHorizontal, DollarSign, Edit, Percent, PlusCircle, Trash2, Save, XCircle, Loader2, Info } from 'lucide-react';
+import { DollarSign, Edit, PlusCircle, Trash2, Save, XCircle, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { fetchAircraftRates, saveAircraftRate, deleteAircraftRate } from '@/ai/flows/manage-aircraft-rates-flow';
 import type { AircraftRate } from '@/ai/schemas/aircraft-rate-schemas'; 
 import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
-import { fetchCompanyProfile, saveCompanyProfile, type CompanyProfile, type ServiceFeeRate } from '@/ai/flows/manage-company-profile-flow';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -32,20 +29,15 @@ const formatCurrency = (amount: number) => {
   return amount.toLocaleString(undefined, { style: "currency", currency: "USD" });
 };
 
-export default function QuoteConfigPage() {
+export default function AircraftRateConfigPage() { // Renamed component
   const [aircraftRates, setAircraftRates] = useState<AircraftRate[]>([]);
   const [fleet, setFleet] = useState<FleetAircraft[]>([]);
   
-  const [companyProfile, setCompanyProfile] = useState<CompanyProfile | null>(null);
-  const [currentServiceFeeRates, setCurrentServiceFeeRates] = useState<{ [key: string]: ServiceFeeRate }>({});
-
   const [isLoadingAircraftRates, setIsLoadingAircraftRates] = useState(true);
   const [isLoadingFleet, setIsLoadingFleet] = useState(true);
-  const [isLoadingCompanyProfile, setIsLoadingCompanyProfile] = useState(true);
 
   const [isSavingAircraftRate, startSavingAircraftRateTransition] = useTransition();
   const [isDeletingAircraftRate, startDeletingAircraftRateTransition] = useTransition();
-  const [isSavingServiceFee, startSavingServiceFeeTransition] = useTransition();
 
   const [currentDeletingRateId, setCurrentDeletingRateId] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -59,35 +51,22 @@ export default function QuoteConfigPage() {
   const [newAircraftSellRate, setNewAircraftSellRate] = useState('');
   const [editingAircraftRateId, setEditingAircraftRateId] = useState<string | null>(null);
 
-  const [showAddServiceForm, setShowAddServiceForm] = useState(false);
-  const [newServiceDisplayDescription, setNewServiceDisplayDescription] = useState('');
-  const [newServiceUnit, setNewServiceUnit] = useState('');
-  const [newServiceBuyRateLocal, setNewServiceBuyRateLocal] = useState(''); 
-  const [newServiceSellRateLocal, setNewServiceSellRateLocal] = useState(''); 
-  const [editingServiceKey, setEditingServiceKey] = useState<string | null>(null);
-
   const loadInitialData = useCallback(async () => {
     setIsLoadingAircraftRates(true);
     setIsLoadingFleet(true);
-    setIsLoadingCompanyProfile(true);
     try {
-      const [fetchedRates, fetchedFleet, fetchedProfile] = await Promise.all([
+      const [fetchedRates, fetchedFleet] = await Promise.all([
         fetchAircraftRates(),
         fetchFleetAircraft(),
-        fetchCompanyProfile()
       ]);
       setAircraftRates(fetchedRates);
       setFleet(fetchedFleet);
-      setCompanyProfile(fetchedProfile);
-      setCurrentServiceFeeRates(fetchedProfile?.serviceFeeRates || {});
-
     } catch (error) {
-      console.error("Failed to load quote configuration data:", error);
+      console.error("Failed to load aircraft rate configuration data:", error);
       toast({ title: "Error", description: `Could not load configuration data. ${error instanceof Error ? error.message : ''}`, variant: "destructive" });
     } finally {
       setIsLoadingAircraftRates(false);
       setIsLoadingFleet(false);
-      setIsLoadingCompanyProfile(false);
     }
   }, [toast]); 
 
@@ -171,143 +150,19 @@ export default function QuoteConfigPage() {
     });
   };
 
-  const handleEditServiceFeeClick = (key: string) => {
-    const serviceToEdit = currentServiceFeeRates[key];
-    if (serviceToEdit) {
-      setEditingServiceKey(key);
-      setNewServiceDisplayDescription(serviceToEdit.displayDescription);
-      setNewServiceUnit(serviceToEdit.unitDescription);
-      setNewServiceBuyRateLocal(String(serviceToEdit.buy));
-      setNewServiceSellRateLocal(String(serviceToEdit.sell));
-      setShowAddServiceForm(true);
-    }
-  };
-  
-  const handleAddOrUpdateServiceFee = () => {
-    let keyToUse: string;
-
-    if (editingServiceKey) {
-        keyToUse = editingServiceKey;
-    } else {
-        if (!newServiceDisplayDescription) {
-            toast({ title: "Missing Fields", description: "Please provide a display description for the service/fee.", variant: "destructive" });
-            return;
-        }
-        keyToUse = newServiceDisplayDescription
-            .trim()
-            .toUpperCase()
-            .replace(/\s+/g, '_') 
-            .replace(/[^A-Z0-9_]/g, ''); 
-
-        if (!keyToUse) {
-             toast({ title: "Invalid Description", description: "Could not generate a valid key from the description. Please use alphanumeric characters.", variant: "destructive" });
-            return;
-        }
-        if (currentServiceFeeRates[keyToUse] && !editingServiceKey) { 
-            toast({ title: "Key Exists", description: `A service/fee with a similar description (key: ${keyToUse}) already exists. Please use a more unique description or edit the existing one.`, variant: "destructive" });
-            return;
-        }
-    }
-
-    if (!newServiceDisplayDescription || !newServiceUnit || !newServiceBuyRateLocal || !newServiceSellRateLocal) {
-        toast({ title: "Missing Fields", description: "Please fill in all fields for the service/fee.", variant: "destructive" });
-        return;
-    }
-    const buyRateNum = parseFloat(newServiceBuyRateLocal);
-    const sellRateNum = parseFloat(newServiceSellRateLocal);
-
-    if (isNaN(buyRateNum) || isNaN(sellRateNum) || buyRateNum < 0 || sellRateNum < 0) {
-        toast({ title: "Invalid Rates", description: "Buy and Sell rates must be valid non-negative numbers.", variant: "destructive" });
-        return;
-    }
-
-    const updatedServiceFeeRates = {
-        ...currentServiceFeeRates,
-        [keyToUse]: { 
-            displayDescription: newServiceDisplayDescription.trim(),
-            buy: buyRateNum, 
-            sell: sellRateNum, 
-            unitDescription: newServiceUnit.trim() 
-        }
-    };
-
-    if (!companyProfile) {
-        toast({ title: "Error", description: "Company profile not loaded.", variant: "destructive"});
-        return;
-    }
-
-    const updatedProfile: CompanyProfile = {
-        ...companyProfile,
-        serviceFeeRates: updatedServiceFeeRates,
-    };
-    
-    startSavingServiceFeeTransition(async () => {
-        try {
-            await saveCompanyProfile(updatedProfile);
-            setCurrentServiceFeeRates(updatedServiceFeeRates); 
-            setCompanyProfile(updatedProfile); 
-            toast({ title: "Success", description: `Service/Fee ${editingServiceKey ? 'updated' : 'added'} in Firestore.` });
-            handleCancelEditServiceFee();
-        } catch (error) {
-            console.error("Failed to save service/fee rate:", error);
-            toast({ title: "Error Saving Service/Fee", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
-        }
-    });
-  };
-
-  const handleCancelEditServiceFee = () => {
-    setEditingServiceKey(null);
-    setNewServiceDisplayDescription('');
-    setNewServiceUnit('');
-    setNewServiceBuyRateLocal('');
-    setNewServiceSellRateLocal('');
-    setShowAddServiceForm(false);
-  };
-
-  const handleDeleteServiceFee = (keyToDelete: string) => {
-    if (!companyProfile) {
-        toast({ title: "Error", description: "Company profile not loaded.", variant: "destructive"});
-        return;
-    }
-    
-    const updatedServiceFeeRates = { ...currentServiceFeeRates };
-    delete updatedServiceFeeRates[keyToDelete];
-
-    const updatedProfile: CompanyProfile = {
-        ...companyProfile,
-        serviceFeeRates: updatedServiceFeeRates,
-    };
-
-    startSavingServiceFeeTransition(async () => {
-        try {
-            await saveCompanyProfile(updatedProfile);
-            setCurrentServiceFeeRates(updatedServiceFeeRates);
-            setCompanyProfile(updatedProfile);
-            toast({ title: "Success", description: "Service/Fee deleted from Firestore." });
-            if (editingServiceKey === keyToDelete) {
-              handleCancelEditServiceFee();
-            }
-        } catch (error) {
-            console.error("Failed to delete service/fee rate:", error);
-            toast({ title: "Error Deleting Service/Fee", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
-        }
-    });
-  };
-
   const getAircraftDisplayLabel = (aircraftId: string): string => {
     const aircraft = fleet.find(ac => ac.id === aircraftId);
     return aircraft ? `${aircraft.tailNumber} - ${aircraft.model}` : aircraftId;
   };
 
-  // Only show aircraft that don't already have a rate for the "Add New" dropdown
   const availableFleetForNewRate = fleet.filter(ac => !aircraftRates.find(r => r.id === ac.id));
 
   return (
     <>
       <PageHeader 
-        title="Quote Configuration" 
-        description="Manage default rates and costs for flight quotes."
-        icon={SlidersHorizontal}
+        title="Aircraft Hourly Rate Configuration" 
+        description="Manage default hourly buy and sell rates for your aircraft fleet."
+        icon={DollarSign}
       />
 
       <div className="space-y-6">
@@ -453,126 +308,6 @@ export default function QuoteConfigPage() {
             )}
           </CardContent>
         </Card>
-
-        <Card className="shadow-md">
-          <CardHeader>
-             <div className="flex justify-between items-center">
-                <div>
-                    <CardTitle className="flex items-center gap-2"><Percent className="h-5 w-5 text-primary"/> Standard Service &amp; Fee Rates</CardTitle>
-                    <CardDescription>Default buy and sell rates for various services and fees. (Connected to Firestore)</CardDescription>
-                </div>
-                {!showAddServiceForm && (
-                  <Button variant="outline" size="sm" onClick={() => { setEditingServiceKey(null); setShowAddServiceForm(true); setNewServiceDisplayDescription(''); setNewServiceUnit(''); setNewServiceBuyRateLocal(''); setNewServiceSellRateLocal(''); }}>
-                      <PlusCircle className="mr-2 h-4 w-4" /> Add Service/Fee
-                  </Button>
-                )}
-            </div>
-          </CardHeader>
-          <CardContent>
-            {showAddServiceForm && (
-                 <Card className="p-4 mb-4 bg-muted/50 border-dashed">
-                    <CardTitle className="text-lg mb-2">
-                      {editingServiceKey ? `Edit Service/Fee: ${currentServiceFeeRates[editingServiceKey]?.displayDescription || editingServiceKey}` : 'Add New Service/Fee'}
-                    </CardTitle>
-                    <div className="space-y-3">
-                        <div>
-                            <Label htmlFor="newServiceDisplayDescription">Display Description</Label>
-                            <Input id="newServiceDisplayDescription" value={newServiceDisplayDescription} onChange={(e) => setNewServiceDisplayDescription(e.target.value)} placeholder="e.g., International Handling Fee" />
-                            {!editingServiceKey && <p className="text-xs text-muted-foreground">A unique key will be auto-generated from this description.</p>}
-                        </div>
-                        <div>
-                            <Label htmlFor="newServiceUnit">Unit Description</Label>
-                            <Input id="newServiceUnit" value={newServiceUnit} onChange={(e) => setNewServiceUnit(e.target.value)} placeholder="e.g., Per Trip, Per Leg, Per Day" />
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <Label htmlFor="newServiceBuyRateLocal">Buy Rate</Label>
-                                <Input id="newServiceBuyRateLocal" type="number" value={newServiceBuyRateLocal} onChange={(e) => setNewServiceBuyRateLocal(e.target.value)} placeholder="e.g., 200" min="0"/>
-                            </div>
-                            <div>
-                                <Label htmlFor="newServiceSellRateLocal">Sell Rate</Label>
-                                <Input id="newServiceSellRateLocal" type="number" value={newServiceSellRateLocal} onChange={(e) => setNewServiceSellRateLocal(e.target.value)} placeholder="e.g., 250" min="0"/>
-                            </div>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button onClick={handleAddOrUpdateServiceFee} size="sm" disabled={isSavingServiceFee}>
-                            {isSavingServiceFee ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4"/>}
-                            {editingServiceKey ? 'Update Service/Fee' : 'Save New Service/Fee'}
-                          </Button>
-                          <Button variant="outline" onClick={handleCancelEditServiceFee} size="sm" disabled={isSavingServiceFee}>
-                              <XCircle className="mr-2 h-4 w-4"/>Cancel
-                          </Button>
-                        </div>
-                    </div>
-                 </Card>
-            )}
-            {isLoadingCompanyProfile ? (
-                 <div className="space-y-2 py-4">
-                    <Skeleton className="h-8 w-full" />
-                    <Skeleton className="h-8 w-full" />
-                </div>
-            ) : (
-             <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Service / Fee Description</TableHead>
-                  <TableHead>Unit</TableHead>
-                  <TableHead className="text-right">Default Buy Rate</TableHead>
-                  <TableHead className="text-right">Default Sell Rate</TableHead>
-                  <TableHead className="text-right">Default Margin</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {Object.entries(currentServiceFeeRates).length === 0 && (
-                    <TableRow>
-                        <TableCell colSpan={6} className="text-center text-muted-foreground py-4">No service or fee rates configured yet.</TableCell>
-                    </TableRow>
-                )}
-                {Object.entries(currentServiceFeeRates).map(([key, rates]) => {
-                  const margin = rates.sell - rates.buy;
-                  const marginPercent = rates.buy > 0 && rates.buy !== 0 ? (margin / rates.buy) * 100 : 0;
-                  return (
-                    <TableRow key={key}>
-                      <TableCell className="font-medium">{rates.displayDescription}</TableCell>
-                      <TableCell>{rates.unitDescription}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(rates.buy)}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(rates.sell)}</TableCell>
-                      <TableCell className="text-right">
-                        {formatCurrency(margin)} <span className={margin >= 0 ? 'text-green-600' : 'text-red-600'}>({marginPercent.toFixed(1)}%)</span>
-                      </TableCell>
-                       <TableCell className="text-right">
-                        <Button variant="ghost" size="icon" onClick={() => handleEditServiceFeeClick(key)} className="mr-1 hover:text-primary" disabled={isSavingServiceFee}>
-                            <Edit className="h-4 w-4" />
-                            <span className="sr-only">Edit {rates.displayDescription}</span>
-                        </Button>
-                        <Button variant="ghost" size="icon" onClick={() => handleDeleteServiceFee(key)} className="text-destructive hover:text-destructive" disabled={isSavingServiceFee}>
-                          <Trash2 className="h-4 w-4" />
-                           <span className="sr-only">Delete {rates.displayDescription}</span>
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-            )}
-          </CardContent>
-        </Card>
-        
-        <Card className="shadow-md border-primary/30">
-            <CardHeader>
-                <CardTitle className="flex items-center gap-2"><Info className="h-5 w-5 text-blue-500"/> Current Implementation Notes</CardTitle>
-            </CardHeader>
-            <CardContent>
-                 <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
-                    <li>Aircraft hourly rates are managed with a standard buy and sell rate per aircraft.</li>
-                    <li>Service/Fee rates are default values used in quote generation.</li>
-                    <li>Both sections are connected to Firestore and allow adding, editing, and deleting.</li>
-                </ul>
-            </CardContent>
-        </Card>
-
       </div>
       {showDeleteConfirm && rateToDelete && (
         <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
@@ -596,3 +331,4 @@ export default function QuoteConfigPage() {
     </>
   );
 }
+
