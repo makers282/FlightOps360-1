@@ -9,6 +9,7 @@ export type CrewRole = typeof crewRoles[number];
 
 export const CrewMemberSchema = z.object({
   id: z.string().describe("Unique Firestore document ID for the crew member."),
+  userId: z.string().optional().describe("The ID of the associated system user account, if any."), // Added for future integration
   employeeId: z.string().optional().describe("Employee ID or similar internal identifier."),
   firstName: z.string().min(1, "First name is required."),
   lastName: z.string().min(1, "Last name is required."),
@@ -36,8 +37,10 @@ export const CrewMemberSchema = z.object({
 export type CrewMember = z.infer<typeof CrewMemberSchema>;
 
 // Schema for saving a crew member (input to the flow)
-export const SaveCrewMemberInputSchema = CrewMemberSchema.omit({ createdAt: true, updatedAt: true, id: true }).extend({
+// id, userId, createdAt, and updatedAt will be handled by the server or linking process.
+export const SaveCrewMemberInputSchema = CrewMemberSchema.omit({ createdAt: true, updatedAt: true, id: true, userId: true }).extend({
   id: z.string().optional(), // ID is optional for creation
+  userId: z.string().optional(), // userId is also optional on input, can be set by a linking process later
 });
 export type SaveCrewMemberInput = z.infer<typeof SaveCrewMemberInputSchema>;
 
@@ -55,3 +58,4 @@ export const DeleteCrewMemberOutputSchema = z.object({
   success: z.boolean(),
   crewMemberId: z.string(),
 });
+
