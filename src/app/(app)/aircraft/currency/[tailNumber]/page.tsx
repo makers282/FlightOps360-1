@@ -28,7 +28,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-import { Wrench, PlusCircle, ArrowLeft, PlaneIcon, Edit, Loader2, InfoIcon, Phone, UserCircle, MapPin, Save, XCircle, Edit2, Edit3, AlertTriangle, CheckCircle2, XCircle as XCircleIcon, Search, ArrowUpDown, ArrowDown, ArrowUp, Printer, Filter, List, BookOpen, Hammer, FileWarning } from 'lucide-react';
+import { Wrench, PlusCircle, ArrowLeft, PlaneIcon, Edit, Loader2, InfoIcon, Phone, UserCircle, MapPin, Save, XCircle, Edit2, Edit3, AlertTriangle, CheckCircle2, XCircle as XCircleIcon, Search, ArrowUpDown, ArrowDown, ArrowUp, Printer, Filter, ListChecks, BookOpen, Hammer, FileWarning, BookLock } from 'lucide-react';
 import { format, parse, addDays, isValid, addMonths, addYears, endOfMonth, parseISO, differenceInCalendarDays } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { fetchFleetAircraft, saveFleetAircraft } from '@/ai/flows/manage-fleet-flow';
@@ -50,6 +50,8 @@ import {
   AlertDialogHeader as AlertDialogModalHeader,
   AlertDialogTitle as AlertDialogModalTitle,
 } from "@/components/ui/alert-dialog";
+import { fetchMelItemsForAircraft } from '@/ai/flows/manage-mel-items-flow';
+import type { MelItem } from '@/ai/schemas/mel-item-schemas';
 
 
 export interface DisplayMaintenanceItem extends FlowMaintenanceTask {
@@ -237,11 +239,11 @@ const MaintenanceTaskRow = React.memo(function MaintenanceTaskRow(props: Mainten
   }
 
   const toGoData = item.toGoData;
-  const alertDaysPrior = item.alertDaysPrior ?? 30;
-  const alertHoursPrior = item.alertHoursPrior ?? 25;
-  const cyclesAlertThreshold = item.alertCyclesPrior ?? 50;
   let toGoColorClass = 'text-green-600';
   if (toGoData) {
+    const alertDaysPrior = item.alertDaysPrior ?? 30;
+    const alertHoursPrior = item.alertHoursPrior ?? 25;
+    const cyclesAlertThreshold = item.alertCyclesPrior ?? 50;
     if (toGoData.isOverdue) {
       toGoColorClass = status.label === 'Grace Period' ? 'text-yellow-600' : 'text-red-600';
     } else if (
@@ -279,6 +281,7 @@ export default function AircraftMaintenanceDetailPage() {
   const [currentAircraft, setCurrentAircraft] = useState<FleetAircraft | null>(null);
   const [maintenanceTasks, setMaintenanceTasks] = useState<FlowMaintenanceTask[]>([]);
   const [aircraftDiscrepancies, setAircraftDiscrepancies] = useState<AircraftDiscrepancy[]>([]);
+  const [melItems, setMelItems] = useState<MelItem[]>([]);
 
   const [editableComponentTimes, setEditableComponentTimes] = useState<Array<{ componentName: string; currentTime: number; currentCycles: number }>>([]);
   const [originalComponentTimes, setOriginalComponentTimes] = useState<Array<{ componentName: string; currentTime: number; currentCycles: number }>>([]);
@@ -287,6 +290,7 @@ export default function AircraftMaintenanceDetailPage() {
   const [isLoadingTasks, setIsLoadingTasks] = useState(true);
   const [isLoadingDiscrepancies, setIsLoadingDiscrepancies] = useState(true);
   const [isLoadingComponentTimes, setIsLoadingComponentTimes] = useState(true);
+  const [isLoadingMelItems, setIsLoadingMelItems] = useState(true);
 
   const [isSavingAircraftInfo, startSavingAircraftInfoTransition] = useTransition();
   const [isEditingAircraftInfo, setIsEditingAircraftInfo] = useState(false);
@@ -299,6 +303,11 @@ export default function AircraftMaintenanceDetailPage() {
 
   const [isDiscrepancyModalOpen, setIsDiscrepancyModalOpen] = useState(false);
   const [isSavingDiscrepancy, startSavingDiscrepancyTransition] = useTransition();
+  const [editingDiscrepancyId, setEditingDiscrepancyId] = useState<string | null>(null);
+  const [initialDiscrepancyModalData, setInitialDiscrepancyModalData] = useState<AircraftDiscrepancy | null>(null);
+  const [discrepancyToDelete, setDiscrepancyToDelete] = useState<AircraftDiscrepancy | null>(null);
+  const [showDeleteDiscrepancyConfirm, setShowDeleteDiscrepancyConfirm] = useState(false);
+  const [isDeletingDiscrepancy, startDeletingDiscrepancyTransition] = useTransition();
   
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'dueSoon' | 'overdue' | 'gracePeriod'>('all');
@@ -358,6 +367,21 @@ export default function AircraftMaintenanceDetailPage() {
     finally { setIsLoadingDiscrepancies(false); }
   }, [toast]);
 
+  const loadMelItems = useCallback(async (aircraftId: string) => {
+    setIsLoadingMelItems(true);
+    try {
+      const melItemsFromDb = await fetchMelItemsForAircraft({ aircraftId });
+      setMelItems(melItemsFromDb);
+    } catch (error) {
+      console.error("Failed to load MEL items:", error);
+      toast({ title: "Error Loading MELs", description: "Could not load MEL items.", variant: "destructive" });
+      setMelItems([]);
+    } finally {
+      setIsLoadingMelItems(false);
+    }
+  }, [toast]);
+
+
   useEffect(() => {
     const loadAircraftDetails = async () => {
       if (!tailNumber) { setIsLoadingAircraft(false); return; }
@@ -365,13 +389,13 @@ export default function AircraftMaintenanceDetailPage() {
       try {
         const fleet = await fetchFleetAircraft();
         const foundAircraft = fleet.find(ac => ac.tailNumber === tailNumber);
-        if (foundAircraft) { setCurrentAircraft(foundAircraft); resetAircraftInfoForm(foundAircraft); await loadAndInitializeComponentTimes(foundAircraft); await loadMaintenanceTasks(foundAircraft.id); await loadAircraftDiscrepancies(foundAircraft.id); }
-        else { setCurrentAircraft(null); setMaintenanceTasks([]); await loadAndInitializeComponentTimes(null); setAircraftDiscrepancies([]); toast({ title: "Error", description: `Aircraft ${tailNumber} not found in fleet.`, variant: "destructive" }); }
+        if (foundAircraft) { setCurrentAircraft(foundAircraft); resetAircraftInfoForm(foundAircraft); await loadAndInitializeComponentTimes(foundAircraft); await loadMaintenanceTasks(foundAircraft.id); await loadAircraftDiscrepancies(foundAircraft.id); await loadMelItems(foundAircraft.id); }
+        else { setCurrentAircraft(null); setMaintenanceTasks([]); await loadAndInitializeComponentTimes(null); setAircraftDiscrepancies([]); setMelItems([]); toast({ title: "Error", description: `Aircraft ${tailNumber} not found in fleet.`, variant: "destructive" }); }
       } catch (error) { console.error("Failed to load aircraft details:", error); toast({ title: "Error", description: "Could not load aircraft details.", variant: "destructive" }); }
       finally { setIsLoadingAircraft(false); }
     };
     loadAircraftDetails();
-  }, [tailNumber, toast, loadAndInitializeComponentTimes, loadMaintenanceTasks, loadAircraftDiscrepancies, resetAircraftInfoForm]);
+  }, [tailNumber, toast, loadAndInitializeComponentTimes, loadMaintenanceTasks, loadAircraftDiscrepancies, loadMelItems, resetAircraftInfoForm]);
 
   const handleComponentTimeChange = (componentName: string, field: 'currentTime' | 'currentCycles', value: string) => {
     const numericValue = parseFloat(value); if (isNaN(numericValue) && value !== "") return;  setEditableComponentTimes(prev => prev.map(c => c.componentName === componentName ? { ...c, [field]: isNaN(numericValue) ? 0 : numericValue } : c ) );
@@ -423,8 +447,16 @@ export default function AircraftMaintenanceDetailPage() {
   }, [currentAircraft, toast, loadMaintenanceTasks]);
 
   const handleOpenAddDiscrepancyModal = useCallback(() => {
+    setEditingDiscrepancyId(null);
+    setInitialDiscrepancyModalData(null);
     setIsDiscrepancyModalOpen(true);
   }, []);
+
+  const handleOpenEditDiscrepancyModal = (discrepancy: AircraftDiscrepancy) => {
+    setEditingDiscrepancyId(discrepancy.id);
+    setInitialDiscrepancyModalData(discrepancy);
+    setIsDiscrepancyModalOpen(true);
+  };
   
   const handleSaveDiscrepancy = async (discrepancyFormData: SaveAircraftDiscrepancyInput, originalId?: string) => {
     if (!currentAircraft) return;
@@ -434,7 +466,26 @@ export default function AircraftMaintenanceDetailPage() {
         toast({ title: originalId ? "Discrepancy Updated" : "New Discrepancy Added", description: `Discrepancy for ${currentAircraft.tailNumber} saved.` });
         await loadAircraftDiscrepancies(currentAircraft.id);
         setIsDiscrepancyModalOpen(false);
+        setEditingDiscrepancyId(null); 
+        setInitialDiscrepancyModalData(null);
       } catch (error) { console.error("Failed to save discrepancy:", error); toast({ title: "Error Saving Discrepancy", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" }); }
+    });
+  };
+
+  const confirmDeleteDiscrepancy = (discrepancy: AircraftDiscrepancy) => {
+    setDiscrepancyToDelete(discrepancy);
+    setShowDeleteDiscrepancyConfirm(true);
+  };
+
+  const executeDeleteDiscrepancy = async () => {
+    if (!discrepancyToDelete || !currentAircraft) return;
+    startDeletingDiscrepancyTransition(async () => {
+      try {
+        await deleteAircraftDiscrepancy({ discrepancyId: discrepancyToDelete.id });
+        toast({ title: "Discrepancy Deleted", description: `Discrepancy "${discrepancyToDelete.description.substring(0,20)}..." removed.` });
+        await loadAircraftDiscrepancies(currentAircraft.id);
+      } catch (error) { console.error("Failed to delete discrepancy:", error); toast({ title: "Error Deleting Discrepancy", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" }); }
+      finally { setShowDeleteDiscrepancyConfirm(false); setDiscrepancyToDelete(null); }
     });
   };
   
@@ -501,6 +552,7 @@ export default function AircraftMaintenanceDetailPage() {
   const pageHeaderTitle = `Maintenance Details for ${currentAircraft.tailNumber}`;
   const pageHeaderDescription = `Tracked items &amp; component status for ${currentAircraft.model} (${currentAircraft.tailNumber}). Component times are loaded from Firestore.`;
   const openDiscrepancyCount = aircraftDiscrepancies.filter(d => d.status !== "Closed").length;
+  const openMelItemsCount = melItems.filter(m => m.status !== "Closed").length;
 
   return (
     <div>
@@ -555,14 +607,20 @@ export default function AircraftMaintenanceDetailPage() {
               <div className="flex items-center gap-2">
                 <BookOpen className="h-6 w-6 text-primary" />
                 <CardTitle className="text-xl">Aircraft Status &amp; Logs</CardTitle>
-                {openDiscrepancyCount > 0 && <Badge variant="destructive" className="ml-2">{openDiscrepancyCount} Open</Badge>}
+                {(openDiscrepancyCount > 0 || openMelItemsCount > 0) && (
+                    <Badge variant="destructive" className="ml-2">
+                        {openDiscrepancyCount > 0 && `${openDiscrepancyCount} Open Disc.`}
+                        {openDiscrepancyCount > 0 && openMelItemsCount > 0 && " / "}
+                        {openMelItemsCount > 0 && `${openMelItemsCount} Open MELs`}
+                    </Badge>
+                )}
               </div>
             </AccordionTrigger>
             <AccordionContent className="pt-0">
               <Tabs defaultValue="discrepancies" className="w-full px-6 pb-4">
                 <TabsList className="mb-4 grid w-full grid-cols-3">
                   <TabsTrigger value="discrepancies">Discrepancies ({openDiscrepancyCount})</TabsTrigger>
-                  <TabsTrigger value="mels">MELs (0)</TabsTrigger>
+                  <TabsTrigger value="mels">MELs ({openMelItemsCount})</TabsTrigger>
                   <TabsTrigger value="damageLog">Damage Log (0)</TabsTrigger>
                 </TabsList>
                 <TabsContent value="discrepancies">
@@ -578,34 +636,74 @@ export default function AircraftMaintenanceDetailPage() {
                         disabled={!currentAircraft}
                         className="w-full sm:w-auto"
                       >
-                        <List className="mr-2 h-4 w-4" /> View Full Discrepancy Log (Coming Soon)
+                        <ListChecks className="mr-2 h-4 w-4" /> View Full Discrepancy Log (Coming Soon)
                       </Button>
                     </div>
                     {isLoadingDiscrepancies ? (
                         <div className="flex items-center justify-center py-6"><Loader2 className="h-6 w-6 animate-spin text-destructive" /><p className="ml-2 text-muted-foreground">Loading discrepancies...</p></div>
                     ) : (
-                        aircraftDiscrepancies.length === 0 ? (
-                        <p className="text-center text-muted-foreground py-4">No discrepancies logged for this aircraft.</p>
+                        aircraftDiscrepancies.filter(d => d.status !== "Closed").length === 0 ? (
+                        <p className="text-center text-muted-foreground py-4">No open or deferred discrepancies for this aircraft.</p>
                         ) : (
-                           <p className="text-sm text-muted-foreground">
-                            Displaying summary. Full log view coming soon. Currently showing {aircraftDiscrepancies.filter(d => d.status !== "Closed").length} open discrepancy/ies.
-                          </p>
+                           <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Status</TableHead>
+                                <TableHead>Date Disc.</TableHead>
+                                <TableHead>Description</TableHead>
+                                <TableHead className="text-right">Actions</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {aircraftDiscrepancies.filter(d => d.status !== "Closed").sort((a,b) => parseISO(b.dateDiscovered).getTime() - parseISO(a.dateDiscovered).getTime()).map(disc => (
+                                <TableRow key={disc.id} className={disc.status === "Open" ? "bg-destructive/5 hover:bg-destructive/10" : (disc.status === "Deferred" ? "bg-yellow-500/5 hover:bg-yellow-500/10" : "")}>
+                                  <TableCell><Badge variant={disc.status === "Open" ? "destructive" : "secondary"}>{disc.status}</Badge></TableCell>
+                                  <TableCell className="text-xs">{format(parseISO(disc.dateDiscovered), 'MM/dd/yy')}</TableCell>
+                                  <TableCell className="text-xs max-w-xs truncate" title={disc.description}>{disc.description}</TableCell>
+                                  <TableCell className="text-right">
+                                    <Button variant="ghost" size="icon" onClick={() => handleOpenEditDiscrepancyModal(disc)} disabled={isSavingDiscrepancy || isDeletingDiscrepancy}> <Edit3 className="h-4 w-4" /> </Button>
+                                    <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => confirmDeleteDiscrepancy(disc)} disabled={isSavingDiscrepancy || isDeletingDiscrepancy || disc.status === "Closed"}> <Trash2 className="h-4 w-4" /> </Button>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                           </Table>
                         )
                     )}
                   </div>
                 </TabsContent>
                 <TabsContent value="mels">
                   <CardDescription className="mb-3">Manage Minimum Equipment List items for {currentAircraft.tailNumber}.</CardDescription>
-                  <div className="space-y-3 text-center py-4">
-                    <p className="text-muted-foreground">MEL information will be available here soon.</p>
-                     <div className="flex flex-col sm:flex-row gap-2 justify-center">
-                        <Button variant="secondary" onClick={() => toast({ title: "Coming Soon!", description: "Functionality to add MEL items is planned."})} className="w-full sm:w-auto">
-                          <PlusCircle className="mr-2 h-4 w-4" /> Add New MEL Item (Coming Soon)
-                        </Button>
-                        <Button variant="outline" onClick={() => toast({ title: "Coming Soon!", description: "A dedicated page for full MEL log viewing is planned."})} className="w-full sm:w-auto">
-                          <List className="mr-2 h-4 w-4" /> View Full MEL Log (Coming Soon)
-                        </Button>
+                   <div className="space-y-3">
+                    <div className="flex flex-col sm:flex-row gap-2">
+                       <Button onClick={() => toast({ title: "MEL Modal Coming Soon!", description: "Functionality to add MEL items will be available shortly."})} className="w-full sm:w-auto">
+                        <PlusCircle className="mr-2 h-4 w-4" /> Add New MEL Item
+                      </Button>
+                      <Button variant="outline" onClick={() => toast({ title: "Coming Soon!", description: "A dedicated page for full MEL log viewing is planned."})} className="w-full sm:w-auto">
+                        <BookLock className="mr-2 h-4 w-4" /> View Full MEL Log (Coming Soon)
+                      </Button>
                     </div>
+                     {isLoadingMelItems ? (
+                        <div className="flex items-center justify-center py-6"><Loader2 className="h-6 w-6 animate-spin text-primary" /><p className="ml-2 text-muted-foreground">Loading MEL items...</p></div>
+                    ) : melItems.filter(m => m.status !== "Closed").length === 0 ? (
+                        <p className="text-center text-muted-foreground py-4">No open MEL items logged for this aircraft.</p>
+                    ) : (
+                        <Table>
+                            <TableHeader><TableRow><TableHead>MEL #</TableHead><TableHead>Description</TableHead><TableHead>Cat.</TableHead><TableHead>Status</TableHead><TableHead>Due Date</TableHead></TableRow></TableHeader>
+                            <TableBody>
+                                {melItems.filter(m => m.status !== "Closed").sort((a, b) => (a.dueDate && b.dueDate ? parseISO(a.dueDate).getTime() - parseISO(b.dueDate).getTime() : (a.dueDate ? -1 : 1))).map(item => (
+                                    <TableRow key={item.id} className={item.status === "Open" ? "bg-yellow-500/5 hover:bg-yellow-500/10" : ""}>
+                                        <TableCell className="font-medium text-xs">{item.melNumber}</TableCell>
+                                        <TableCell className="text-xs max-w-xs truncate" title={item.description}>{item.description}</TableCell>
+                                        <TableCell className="text-xs text-center">{item.category || '-'}</TableCell>
+                                        <TableCell><Badge variant={item.status === "Open" ? "secondary" : "outline"}>{item.status}</Badge></TableCell>
+                                        <TableCell className="text-xs">{item.dueDate ? format(parseISO(item.dueDate), 'MM/dd/yy') : 'N/A'}</TableCell>
+                                        {/* Add Edit/Delete buttons later */}
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    )}
                   </div>
                 </TabsContent>
                 <TabsContent value="damageLog">
@@ -617,7 +715,7 @@ export default function AircraftMaintenanceDetailPage() {
                           <FileWarning className="mr-2 h-4 w-4" /> Add New Damage Report (Coming Soon)
                         </Button>
                         <Button variant="outline" onClick={() => toast({ title: "Coming Soon!", description: "A dedicated page for full damage log viewing is planned."})} className="w-full sm:w-auto">
-                          <List className="mr-2 h-4 w-4" /> View Full Damage Log (Coming Soon)
+                          <ListChecks className="mr-2 h-4 w-4" /> View Full Damage Log (Coming Soon)
                         </Button>
                     </div>
                   </div>
@@ -643,10 +741,28 @@ export default function AircraftMaintenanceDetailPage() {
         setIsOpen={setIsDiscrepancyModalOpen}
         onSave={handleSaveDiscrepancy}
         aircraft={currentAircraft}
-        initialData={null}
-        isEditing={false} 
+        initialData={initialDiscrepancyModalData}
+        isEditing={!!editingDiscrepancyId}
         isSaving={isSavingDiscrepancy}
       />
+      
+      {showDeleteDiscrepancyConfirm && discrepancyToDelete && (
+        <AlertDialogModalContent>
+          <AlertDialogModalHeader>
+            <AlertDialogModalTitle>Confirm Delete Discrepancy</AlertDialogModalTitle>
+            <AlertDialogModalDescription>
+              Are you sure you want to delete the discrepancy: "{discrepancyToDelete.description.substring(0,50)}..."? This action cannot be undone.
+            </AlertDialogModalDescription>
+          </AlertDialogModalHeader>
+          <AlertDialogModalFooter>
+            <AlertDialogCancel onClick={() => setShowDeleteDiscrepancyConfirm(false)} disabled={isDeletingDiscrepancy}>Cancel</AlertDialogCancel>
+            <Button variant="destructive" onClick={executeDeleteDiscrepancy} disabled={isDeletingDiscrepancy}>
+              {isDeletingDiscrepancy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Delete
+            </Button>
+          </AlertDialogModalFooter>
+        </AlertDialogModalContent>
+      )}
     </div>
   );
 }
