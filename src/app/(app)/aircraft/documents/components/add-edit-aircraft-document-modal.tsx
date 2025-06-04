@@ -28,8 +28,8 @@ import type { AircraftDocument, SaveAircraftDocumentInput } from '@/ai/schemas/a
 import { aircraftDocumentTypes } from '@/ai/schemas/aircraft-document-schemas';
 import type { FleetAircraft } from '@/ai/schemas/fleet-aircraft-schemas';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { uploadAircraftDocument } from '@/ai/flows/upload-aircraft-document-flow'; 
-import { useToast } from '@/hooks/use-toast'; 
+import { uploadAircraftDocument } from '@/ai/flows/upload-aircraft-document-flow';
+import { useToast } from '@/hooks/use-toast';
 
 const aircraftDocumentFormSchema = z.object({
   aircraftId: z.string().min(1, "Aircraft selection is required."),
@@ -38,7 +38,7 @@ const aircraftDocumentFormSchema = z.object({
   issueDate: z.date().optional(),
   expiryDate: z.date().optional(),
   notes: z.string().optional(),
-  fileUrl: z.string().url().optional(), 
+  fileUrl: z.string().url().optional(),
 }).refine(data => {
   if (data.issueDate && data.expiryDate) {
     return data.expiryDate >= data.issueDate;
@@ -69,15 +69,15 @@ export function AddEditAircraftDocumentModal({
   onSave,
   initialData,
   isEditing,
-  isSaving: isSavingProp, 
+  isSaving: isSavingProp,
   aircraftList,
   isLoadingAircraft,
   selectedAircraftIdForNew,
 }: AddEditAircraftDocumentModalProps) {
-  
-  const { toast } = useToast(); 
+
+  const { toast } = useToast();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [isSavingFile, setIsSavingFile] = useState(false); 
+  const [isSavingFile, setIsSavingFile] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const form = useForm<AircraftDocumentFormData>({
@@ -91,7 +91,7 @@ export function AddEditAircraftDocumentModal({
   useEffect(() => {
     if (isOpen) {
       setSelectedFile(null);
-      if (fileInputRef.current) fileInputRef.current.value = ""; 
+      if (fileInputRef.current) fileInputRef.current.value = "";
       if (isEditing && initialData) {
         form.reset({
           aircraftId: initialData.aircraftId,
@@ -115,18 +115,18 @@ export function AddEditAircraftDocumentModal({
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
       setSelectedFile(event.target.files[0]);
-      form.setValue('fileUrl', undefined); 
+      form.setValue('fileUrl', undefined);
     }
   };
-  
+
   const handleRemoveFile = () => {
     setSelectedFile(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const onSubmit: SubmitHandler<AircraftDocumentFormData> = async (formData) => {
-    setIsSavingFile(true); 
-    let finalFileUrl = formData.fileUrl; 
+    setIsSavingFile(true);
+    let finalFileUrl = formData.fileUrl;
 
     if (selectedFile) {
       if (!formData.aircraftId) {
@@ -139,8 +139,8 @@ export function AddEditAircraftDocumentModal({
         reader.readAsDataURL(selectedFile);
         reader.onloadend = async () => {
           const fileDataUri = reader.result as string;
-          const documentIdForUpload = (isEditing && initialData?.id) || `doc_${Date.now()}`; 
-          
+          const documentIdForUpload = (isEditing && initialData?.id) || `doc_${Date.now()}`;
+
           toast({ title: "Uploading File...", description: "Please wait while your document is uploaded.", variant: "default" });
           const uploadResult = await uploadAircraftDocument({
             aircraftId: formData.aircraftId,
@@ -179,16 +179,16 @@ export function AddEditAircraftDocumentModal({
       notes: formData.notes || undefined,
       fileUrl: fileUrlToSave,
     };
-    
+
     await onSave(dataToSave, isEditing && initialData ? initialData.id : undefined);
-    setIsSavingFile(false); 
+    setIsSavingFile(false);
   };
 
   const modalTitle = isEditing ? `Edit Document: ${initialData?.documentName || ''}` : 'Add New Aircraft Document';
   const modalDescription = isEditing
     ? "Update the aircraft document's details."
     : "Fill in the new aircraft document's information.";
-  
+
   const totalSaving = isSavingProp || isSavingFile;
 
   return (
@@ -201,7 +201,7 @@ export function AddEditAircraftDocumentModal({
           </DialogTitle>
           <ModalDialogDescription>{modalDescription}</ModalDialogDescription>
         </DialogHeader>
-        
+
         <ScrollArea className="max-h-[70vh] pr-5">
           <Form {...form}>
             <form id="aircraft-document-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-2">
@@ -211,24 +211,24 @@ export function AddEditAircraftDocumentModal({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Aircraft</FormLabel>
-                    <FormControl>
-                      <Select
-                        onValueChange={field.onChange}
-                        value={field.value}
-                        disabled={isLoadingAircraft || isEditing}
-                      >
+                    <Select
+                      onValueChange={field.onChange}
+                      value={field.value}
+                      disabled={isLoadingAircraft || isEditing}
+                    >
+                      <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder={isLoadingAircraft ? "Loading aircraft..." : "Select aircraft"} />
                         </SelectTrigger>
-                        <SelectContent>
-                          {!isLoadingAircraft && aircraftList.map(ac => (
-                            <SelectItem key={ac.id} value={ac.id}>
-                              {ac.tailNumber} - {ac.model}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </FormControl>
+                      </FormControl>
+                      <SelectContent>
+                        {!isLoadingAircraft && aircraftList.map(ac => (
+                          <SelectItem key={ac.id} value={ac.id}>
+                            {ac.tailNumber} - {ac.model}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     {isEditing && <FormDescription className="text-xs">Aircraft cannot be changed for an existing document.</FormDescription>}
                     <FormMessage />
                   </FormItem>
@@ -241,19 +241,19 @@ export function AddEditAircraftDocumentModal({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Document Type</FormLabel>
-                     <FormControl>
-                        <Select onValueChange={field.onChange} value={field.value}>
+                     <Select onValueChange={field.onChange} value={field.value}>
+                       <FormControl>
                         <SelectTrigger><SelectValue placeholder="Select document type" /></SelectTrigger>
+                       </FormControl>
                         <SelectContent>
                             {aircraftDocumentTypes.map(type => (<SelectItem key={type} value={type}>{type}</SelectItem>))}
                         </SelectContent>
-                        </Select>
-                    </FormControl>
+                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
@@ -261,7 +261,7 @@ export function AddEditAircraftDocumentModal({
                   render={({ field }) => (
                     <FormItem className="flex flex-col">
                       <FormLabel>Issue Date (Optional)</FormLabel>
-                      <Popover>
+                      <Popover modal={false}> {/* Set modal={false} here */}
                         <PopoverTrigger asChild>
                           <FormControl>
                             <Button
@@ -277,7 +277,7 @@ export function AddEditAircraftDocumentModal({
                             </Button>
                           </FormControl>
                         </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
+                        <PopoverContent className="w-auto p-0 z-[100]" align="start"> {/* Keep z-index or adjust if needed */}
                           <Calendar
                             mode="single"
                             selected={field.value}
@@ -296,7 +296,7 @@ export function AddEditAircraftDocumentModal({
                   render={({ field }) => (
                     <FormItem className="flex flex-col">
                       <FormLabel>Expiry Date (Optional)</FormLabel>
-                      <Popover>
+                      <Popover modal={false}> {/* Set modal={false} here */}
                         <PopoverTrigger asChild>
                           <FormControl>
                             <Button
@@ -312,7 +312,7 @@ export function AddEditAircraftDocumentModal({
                             </Button>
                           </FormControl>
                         </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
+                        <PopoverContent className="w-auto p-0 z-[100]" align="start"> {/* Keep z-index or adjust if needed */}
                           <Calendar
                             mode="single"
                             selected={field.value}
@@ -330,16 +330,16 @@ export function AddEditAircraftDocumentModal({
                   )}
                 />
               </div>
-              
+
               <FormItem>
                 <FormLabel className="flex items-center gap-2"><UploadCloud className="h-5 w-5 text-primary"/> Document File (Optional)</FormLabel>
                 <div className="flex items-center gap-2">
                   <FormControl>
-                    <Input 
+                    <Input
                       id="file-upload"
-                      type="file" 
+                      type="file"
                       ref={fileInputRef}
-                      onChange={handleFileChange} 
+                      onChange={handleFileChange}
                       className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
                     />
                   </FormControl>
@@ -367,7 +367,7 @@ export function AddEditAircraftDocumentModal({
             </form>
           </Form>
         </ScrollArea>
-        
+
         <DialogFooter className="pt-4 border-t">
           <DialogClose asChild><Button type="button" variant="outline" disabled={totalSaving}>Cancel</Button></DialogClose>
           <Button form="aircraft-document-form" type="submit" disabled={totalSaving || isLoadingAircraft}>
@@ -380,3 +380,4 @@ export function AddEditAircraftDocumentModal({
   );
 }
 
+    
