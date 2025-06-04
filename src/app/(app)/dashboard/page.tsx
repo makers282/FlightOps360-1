@@ -271,7 +271,11 @@ export default function DashboardPage() {
             ) : (
                <Table>
                 <TableHeader><TableRow><TableHead>Tail Number</TableHead><TableHead>Model</TableHead><TableHead>Base</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
-                <TableBody>{aircraftList.map((aircraft) => (<TableRow key={aircraft.id}><TableCell className="font-medium">{aircraft.tailNumber}</TableCell><TableCell>{aircraft.model}</TableCell><TableCell>{aircraft.baseLocation || 'N/A'}</TableCell><TableCell><Badge variant={getStatusBadgeVariant(aircraft.isMaintenanceTracked ? 'Active' : 'Needs Review')}>{aircraft.isMaintenanceTracked ? 'Active' : 'Needs Review'}</Badge></TableCell></TableRow>))}</TableBody>
+                <TableBody>{aircraftList.map((aircraft) => (<TableRow key={aircraft.id}><TableCell className="font-medium">
+                    <Link href={`/aircraft/currency/${encodeURIComponent(aircraft.tailNumber)}`} className="text-primary hover:underline">
+                        {aircraft.tailNumber}
+                    </Link>
+                </TableCell><TableCell>{aircraft.model}</TableCell><TableCell>{aircraft.baseLocation || 'N/A'}</TableCell><TableCell><Badge variant={getStatusBadgeVariant(aircraft.isMaintenanceTracked ? 'Active' : 'Needs Review')}>{aircraft.isMaintenanceTracked ? 'Active' : 'Needs Review'}</Badge></TableCell></TableRow>))}</TableBody>
               </Table>
             )}
           </CardContent>
