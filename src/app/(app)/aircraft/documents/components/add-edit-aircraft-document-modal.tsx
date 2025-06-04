@@ -11,11 +11,11 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription as ModalDialogDescription, // Renamed to avoid conflict
+  DialogDescription as ModalDialogDescription,
   DialogFooter,
   DialogClose,
 } from '@/components/ui/dialog';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form'; // Added FormDescription
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -23,7 +23,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { CalendarIcon, Loader2, Save, FileText as FileTextIcon, Edit3, UploadCloud, Paperclip, XCircle as RemoveFileIcon } from 'lucide-react';
 import { cn } from "@/lib/utils";
-import { format, isValid as isValidDate } from "date-fns";
+import { format, isValid as isValidDate, parseISO } from "date-fns";
 import type { AircraftDocument, SaveAircraftDocumentInput } from '@/ai/schemas/aircraft-document-schemas';
 import { aircraftDocumentTypes } from '@/ai/schemas/aircraft-document-schemas';
 import type { FleetAircraft } from '@/ai/schemas/fleet-aircraft-schemas';
@@ -80,9 +80,6 @@ export function AddEditAircraftDocumentModal({
   const [isSavingFile, setIsSavingFile] = useState(false); 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [isIssueDateOpen, setIsIssueDateOpen] = useState(false);
-  const [isExpiryDateOpen, setIsExpiryDateOpen] = useState(false);
-
   const form = useForm<AircraftDocumentFormData>({
     resolver: zodResolver(aircraftDocumentFormSchema),
     defaultValues: {
@@ -100,8 +97,8 @@ export function AddEditAircraftDocumentModal({
           aircraftId: initialData.aircraftId,
           documentName: initialData.documentName,
           documentType: initialData.documentType || "Other",
-          issueDate: initialData.issueDate && isValidDate(new Date(initialData.issueDate)) ? new Date(initialData.issueDate) : undefined,
-          expiryDate: initialData.expiryDate && isValidDate(new Date(initialData.expiryDate)) ? new Date(initialData.expiryDate) : undefined,
+          issueDate: initialData.issueDate && isValidDate(parseISO(initialData.issueDate)) ? parseISO(initialData.issueDate) : undefined,
+          expiryDate: initialData.expiryDate && isValidDate(parseISO(initialData.expiryDate)) ? parseISO(initialData.expiryDate) : undefined,
           notes: initialData.notes || '',
           fileUrl: initialData.fileUrl || undefined,
         });
@@ -202,7 +199,7 @@ export function AddEditAircraftDocumentModal({
             {isEditing ? <Edit3 className="h-6 w-6 text-primary" /> : <FileTextIcon className="h-6 w-6 text-primary" />}
             {modalTitle}
           </DialogTitle>
-          <ModalDialogDescription>{modalDescription}</ModalDialogDescription> {/* Use aliased import */}
+          <ModalDialogDescription>{modalDescription}</ModalDialogDescription>
         </DialogHeader>
         
         <ScrollArea className="max-h-[70vh] pr-5">
@@ -214,24 +211,24 @@ export function AddEditAircraftDocumentModal({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Aircraft</FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      value={field.value}
-                      disabled={isLoadingAircraft || isEditing}
-                    >
-                      <FormControl>
+                    <FormControl>
+                      <Select
+                        onValueChange={field.onChange}
+                        value={field.value}
+                        disabled={isLoadingAircraft || isEditing}
+                      >
                         <SelectTrigger>
                           <SelectValue placeholder={isLoadingAircraft ? "Loading aircraft..." : "Select aircraft"} />
                         </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {!isLoadingAircraft && aircraftList.map(ac => (
-                          <SelectItem key={ac.id} value={ac.id}>
-                            {ac.tailNumber} - {ac.model}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                        <SelectContent>
+                          {!isLoadingAircraft && aircraftList.map(ac => (
+                            <SelectItem key={ac.id} value={ac.id}>
+                              {ac.tailNumber} - {ac.model}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FormControl>
                     {isEditing && <FormDescription className="text-xs">Aircraft cannot be changed for an existing document.</FormDescription>}
                     <FormMessage />
                   </FormItem>
@@ -244,14 +241,14 @@ export function AddEditAircraftDocumentModal({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Document Type</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
+                     <FormControl>
+                        <Select onValueChange={field.onChange} value={field.value}>
                         <SelectTrigger><SelectValue placeholder="Select document type" /></SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {aircraftDocumentTypes.map(type => (<SelectItem key={type} value={type}>{type}</SelectItem>))}
-                      </SelectContent>
-                    </Select>
+                        <SelectContent>
+                            {aircraftDocumentTypes.map(type => (<SelectItem key={type} value={type}>{type}</SelectItem>))}
+                        </SelectContent>
+                        </Select>
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -264,32 +261,27 @@ export function AddEditAircraftDocumentModal({
                   render={({ field }) => (
                     <FormItem className="flex flex-col">
                       <FormLabel>Issue Date (Optional)</FormLabel>
-                      <Popover open={isIssueDateOpen} onOpenChange={setIsIssueDateOpen}>
+                      <Popover>
                         <PopoverTrigger asChild>
-                           <Button
-                            ref={field.ref}
-                            variant={"outline"}
-                            className={cn(
-                              "w-full pl-3 text-left font-normal",
-                              !field.value && "text-muted-foreground"
-                            )}
-                          >
-                            {field.value && isValidDate(field.value) ? (
-                              format(field.value, "PPP")
-                            ) : (
-                              <span>Pick a date</span>
-                            )}
-                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                          </Button>
+                          <FormControl>
+                            <Button
+                              ref={field.ref}
+                              variant={"outline"}
+                              className={cn(
+                                "w-full pl-3 text-left font-normal",
+                                !field.value && "text-muted-foreground"
+                              )}
+                            >
+                              {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
+                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                            </Button>
+                          </FormControl>
                         </PopoverTrigger>
                         <PopoverContent className="w-auto p-0" align="start">
                           <Calendar
                             mode="single"
                             selected={field.value}
-                            onSelect={(date) => {
-                              field.onChange(date);
-                              setIsIssueDateOpen(false);
-                            }}
+                            onSelect={field.onChange}
                             initialFocus
                           />
                         </PopoverContent>
@@ -304,32 +296,27 @@ export function AddEditAircraftDocumentModal({
                   render={({ field }) => (
                     <FormItem className="flex flex-col">
                       <FormLabel>Expiry Date (Optional)</FormLabel>
-                       <Popover open={isExpiryDateOpen} onOpenChange={setIsExpiryDateOpen}>
+                      <Popover>
                         <PopoverTrigger asChild>
-                           <Button
-                            ref={field.ref}
-                            variant={"outline"}
-                            className={cn(
-                              "w-full pl-3 text-left font-normal",
-                              !field.value && "text-muted-foreground"
-                            )}
-                          >
-                            {field.value && isValidDate(field.value) ? (
-                              format(field.value, "PPP")
-                            ) : (
-                              <span>Pick a date</span>
-                            )}
-                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                          </Button>
+                          <FormControl>
+                            <Button
+                              ref={field.ref}
+                              variant={"outline"}
+                              className={cn(
+                                "w-full pl-3 text-left font-normal",
+                                !field.value && "text-muted-foreground"
+                              )}
+                            >
+                              {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
+                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                            </Button>
+                          </FormControl>
                         </PopoverTrigger>
                         <PopoverContent className="w-auto p-0" align="start">
                           <Calendar
                             mode="single"
                             selected={field.value}
-                            onSelect={(date) => {
-                              field.onChange(date);
-                              setIsExpiryDateOpen(false);
-                            }}
+                            onSelect={field.onChange}
                             disabled={(date) => {
                                 const issueDateValue = form.getValues("issueDate");
                                 return issueDateValue ? date < issueDateValue : false;
