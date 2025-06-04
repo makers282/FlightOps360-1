@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useMemo, useEffect, useTransition } from 'react';
@@ -24,11 +25,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { fetchAircraftDocuments, saveAircraftDocument, deleteAircraftDocument } from '@/ai/flows/manage-aircraft-documents-flow';
 import type { AircraftDocument, SaveAircraftDocumentInput, AircraftDocumentType } from '@/ai/schemas/aircraft-document-schemas';
 import { aircraftDocumentTypes } from '@/ai/schemas/aircraft-document-schemas';
-import { fetchFleetAircraft } from '@/ai/flows/manage-fleet-flow'; // CORRECTED IMPORT PATH
-import type { FleetAircraft } from '@/ai/schemas/fleet-aircraft-schemas'; // Type import is correct
+import { fetchFleetAircraft } from '@/ai/flows/manage-fleet-flow';
+import type { FleetAircraft } from '@/ai/schemas/fleet-aircraft-schemas';
 import { AddEditAircraftDocumentModal } from './components/add-edit-aircraft-document-modal';
-import { ClientOnly } from '@/components/client-only'; 
-import { Skeleton } from '@/components/ui/skeleton'; 
+import { ClientOnly } from '@/components/client-only';
+import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
 
 const EXPIRY_WARNING_DAYS = 30;
@@ -98,7 +99,7 @@ export default function AircraftDocumentsPage() {
     try {
       const [fetchedDocs, fetchedFleet] = await Promise.all([
         fetchAircraftDocuments(),
-        fetchFleetAircraft() // Ensure this is called
+        fetchFleetAircraft()
       ]);
       setAllAircraftDocuments(fetchedDocs);
       setFleetForSelect(fetchedFleet.map(ac => ({ id: ac.id, tailNumber: ac.tailNumber, model: ac.model })));
@@ -147,7 +148,7 @@ export default function AircraftDocumentsPage() {
   const handleSaveDocument = async (data: SaveAircraftDocumentInput, originalDocumentId?: string) => {
     startSavingDocumentTransition(async () => {
       try {
-        const dataToSave = { ...data, id: originalDocumentId }; // Add id for updates
+        const dataToSave = { ...data, id: originalDocumentId }; 
         const savedData = await saveAircraftDocument(dataToSave);
         toast({
           title: isEditingModal ? "Document Updated" : "Document Added",
@@ -203,10 +204,10 @@ export default function AircraftDocumentsPage() {
           {getStatusIcon(status)}
           <div className="truncate flex-grow">
             <p className="text-sm font-semibold text-foreground truncate" title={doc.documentName}>{doc.documentName}</p>
-            <p className="text-xs text-muted-foreground">
+            <div className="text-xs text-muted-foreground">
               Type: {doc.documentType} | For: {doc.aircraftTailNumber || doc.aircraftId}
                <Badge variant={getStatusBadgeVariant(status)} className="ml-2 text-xs px-1.5 py-0">{status}</Badge>
-            </p>
+            </div>
             <p className="text-xs text-muted-foreground mt-0.5">
                 Expires: {formatDateForDisplay(doc.expiryDate)}
                 {doc.notes && <span className="truncate" title={doc.notes}> | Notes: {doc.notes.substring(0,30)}{doc.notes.length > 30 ? '...' : ''}</span>}
@@ -342,3 +343,4 @@ export default function AircraftDocumentsPage() {
     </>
   );
 }
+
