@@ -27,7 +27,7 @@ import { Dialog, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'; 
 
-import { Wrench, PlusCircle, ArrowLeft, PlaneIcon, Edit, Loader2, InfoIcon, Phone, UserCircle, MapPin, Save, XCircle, Edit2, Edit3, AlertTriangle, CheckCircle2, XCircle as XCircleIcon, Search, ArrowUpDown, ArrowDown, ArrowUp, Printer, Filter } from 'lucide-react';
+import { Wrench, PlusCircle, ArrowLeft, PlaneIcon, Edit, Loader2, InfoIcon, Phone, UserCircle, MapPin, Save, XCircle, Edit2, Edit3, AlertTriangle, CheckCircle2, XCircle as XCircleIcon, Search, ArrowUpDown, ArrowDown, ArrowUp, Printer, Filter, Trash2 } from 'lucide-react';
 import { format, parse, addDays, isValid, addMonths, addYears, endOfMonth, parseISO, differenceInCalendarDays } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { fetchFleetAircraft, saveFleetAircraft } from '@/ai/flows/manage-fleet-flow';
@@ -401,14 +401,14 @@ export default function AircraftMaintenanceDetailPage() {
   
   const handleSelectTask = useCallback((taskId: string, checked: boolean) => {
     setSelectedTaskIds(prev => checked ? [...prev, taskId] : prev.filter(id => id !== taskId) );
-  }, []); // setSelectedTaskIds is stable
+  }, []); 
 
   const tableBodyContent = useMemo(() => {
     if (displayedTasks.length === 0) {
-      return (<TableRow><TableCell colSpan={11} className="text-center text-muted-foreground py-10"><div>No maintenance tasks match your criteria.<Button variant="link" className="p-0 ml-1" onClick={handleOpenAddTaskModal}>Add one now?</Button></div></TableCell></TableRow>);
+      return ( <TableRow><TableCell colSpan={11} className="text-center text-muted-foreground py-10"><div>No maintenance tasks match your criteria.<Button variant="link" className="p-0 ml-1" onClick={handleOpenAddTaskModal}>Add one now?</Button></div></TableCell></TableRow> );
     }
-    return displayedTasks.map((item) => { const status = getLocalReleaseStatus(item.toGoData!, item); const frequency = formatLocalTaskFrequency(item); let dueAtDisplay = "N/A"; if (item.dueAtDate && isValid(parse(item.dueAtDate, 'yyyy-MM-dd', new Date()))) { try { dueAtDisplay = format(parse(item.dueAtDate, 'yyyy-MM-dd', new Date()), 'MM/dd/yy'); } catch {} } else if (item.dueAtHours !== undefined) { dueAtDisplay = `${item.dueAtHours.toLocaleString()} hrs`; } else if (item.dueAtCycles !== undefined) { dueAtDisplay = `${item.dueAtCycles.toLocaleString()} cyc`; } let lastDoneDisplay = "N/A"; if (item.lastCompletedDate && isValid(parseISO(item.lastCompletedDate))) { try { lastDoneDisplay = format(parseISO(item.lastCompletedDate), 'MM/dd/yy'); } catch {} } else if (item.lastCompletedHours !== undefined) { lastDoneDisplay = `${item.lastCompletedHours.toLocaleString()} hrs`; } else if (item.lastCompletedCycles !== undefined) { lastDoneDisplay = `${item.lastCompletedCycles.toLocaleString()} cyc`; } return ( <TableRow key={item.id} className={item.isActive ? '' : 'opacity-50 bg-muted/30 hover:bg-muted/40'} data-state={selectedTaskIds.includes(item.id) ? "selected" : ""}><TableCell><Checkbox checked={selectedTaskIds.includes(item.id)} onCheckedChange={(checked) => handleSelectTask(item.id, Boolean(checked))} aria-label={`Select task ${item.itemTitle}`} /></TableCell><TableCell className="text-xs text-muted-foreground">{item.referenceNumber || '-'}</TableCell><TableCell className="font-medium">{item.itemTitle}{!item.isActive && <Badge variant="outline" className="ml-2 text-xs">Inactive</Badge>}</TableCell><TableCell className="text-xs">{item.itemType}</TableCell><TableCell className="text-xs">{item.associatedComponent || 'Airframe'}</TableCell><TableCell className="text-xs">{frequency}</TableCell><TableCell className="text-xs">{lastDoneDisplay}</TableCell><TableCell className="text-xs">{dueAtDisplay}</TableCell><TableCell className={`font-semibold text-xs ${item.toGoData?.isOverdue ? (status.label === 'Grace Period' ? 'text-yellow-600' : 'text-red-600') : (item.toGoData?.unit === 'days' && item.toGoData?.numeric < (item.alertDaysPrior ?? 30)) || (item.toGoData?.unit === 'hrs' && item.toGoData?.numeric < (item.alertHoursPrior ?? 25)) || (item.toGoData?.unit === 'cycles' && item.toGoData?.numeric < (item.alertCyclesPrior ?? 50)) ? 'text-yellow-600' : 'text-green-600'}`}>{item.toGoData?.text}</TableCell><TableCell className="text-center"><div className={`flex flex-col items-center justify-center ${status.colorClass}`}>{status.icon}<span className="text-xs mt-1">{status.label}</span></div></TableCell><TableCell className="text-right"><Button variant="ghost" size="icon" onClick={() => handleOpenEditTaskModal(item)}><Edit3 className="h-4 w-4" /></Button></TableCell></TableRow> ); });
-  }, [displayedTasks, handleOpenAddTaskModal, handleSaveTask, handleDeleteTask, selectedTaskIds, handleSelectTask, handleOpenEditTaskModal]);
+    return displayedTasks.map((item) => { const status = getLocalReleaseStatus(item.toGoData!, item); const frequency = formatLocalTaskFrequency(item); let dueAtDisplay = "N/A"; if (item.dueAtDate && isValid(parse(item.dueAtDate, 'yyyy-MM-dd', new Date()))) { try { dueAtDisplay = format(parse(item.dueAtDate, 'yyyy-MM-dd', new Date()), 'MM/dd/yy'); } catch {} } else if (item.dueAtHours !== undefined) { dueAtDisplay = `${item.dueAtHours.toLocaleString()} hrs`; } else if (item.dueAtCycles !== undefined) { dueAtDisplay = `${item.dueAtCycles.toLocaleString()} cyc`; } let lastDoneDisplay = "N/A"; if (item.lastCompletedDate && isValid(parseISO(item.lastCompletedDate))) { try { lastDoneDisplay = format(parseISO(item.lastCompletedDate), 'MM/dd/yy'); } catch {} } else if (item.lastCompletedHours !== undefined) { lastDoneDisplay = `${item.lastCompletedHours.toLocaleString()} hrs`; } else if (item.lastCompletedCycles !== undefined) { lastDoneDisplay = `${item.lastCompletedCycles.toLocaleString()} cyc`; } return ( <TableRow key={item.id} className={item.isActive ? '' : 'opacity-50 bg-muted/30 hover:bg-muted/40'} data-state={selectedTaskIds.includes(item.id) ? "selected" : ""}> <TableCell><Checkbox checked={selectedTaskIds.includes(item.id)} onCheckedChange={(checked) => handleSelectTask(item.id, Boolean(checked))} aria-label={`Select task ${item.itemTitle}`} /></TableCell><TableCell className="text-xs text-muted-foreground">{item.referenceNumber || '-'}</TableCell><TableCell className="font-medium">{item.itemTitle}{!item.isActive && <Badge variant="outline" className="ml-2 text-xs">Inactive</Badge>}</TableCell><TableCell className="text-xs">{item.itemType}</TableCell><TableCell className="text-xs">{item.associatedComponent || 'Airframe'}</TableCell><TableCell className="text-xs">{frequency}</TableCell><TableCell className="text-xs">{lastDoneDisplay}</TableCell><TableCell className="text-xs">{dueAtDisplay}</TableCell><TableCell className={`font-semibold text-xs ${item.toGoData?.isOverdue ? (status.label === 'Grace Period' ? 'text-yellow-600' : 'text-red-600') : (item.toGoData?.unit === 'days' && item.toGoData?.numeric < (item.alertDaysPrior ?? 30)) || (item.toGoData?.unit === 'hrs' && item.toGoData?.numeric < (item.alertHoursPrior ?? 25)) || (item.toGoData?.unit === 'cycles' && item.toGoData?.numeric < (item.alertCyclesPrior ?? 50)) ? 'text-yellow-600' : 'text-green-600'}`}>{item.toGoData?.text}</TableCell><TableCell className="text-center"><div className={`flex flex-col items-center justify-center ${status.colorClass}`}>{status.icon}<span className="text-xs mt-1">{status.label}</span></div></TableCell><TableCell className="text-right"><Button variant="ghost" size="icon" onClick={() => handleOpenEditTaskModal(item)}><Edit3 className="h-4 w-4" /></Button></TableCell></TableRow> ); });
+  }, [displayedTasks, isTaskModalOpen, initialModalFormData, editingTaskOriginalId, currentAircraft, handleOpenAddTaskModal, handleSaveTask, handleDeleteTask, selectedTaskIds, handleSelectTask, handleOpenEditTaskModal]);
 
 
   const requestSort = (key: SortKey) => { let direction: SortDirection = 'ascending'; if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') { direction = 'descending'; } setSortConfig({ key, direction }); };
@@ -452,15 +452,26 @@ export default function AircraftMaintenanceDetailPage() {
           </div> 
         } 
       />
-      <Dialog open={isTaskModalOpen} onOpenChange={setIsTaskModalOpen}>
-        <AddMaintenanceTaskDialogContent 
-            aircraft={currentAircraft} 
-            onSave={handleSaveTask} 
-            onDelete={handleDeleteTask} 
-            initialData={initialModalFormData} 
-            isEditing={!!editingTaskOriginalId} 
-            currentTaskId={editingTaskOriginalId} 
-        />
+      <Dialog open={isTaskModalOpen} onOpenChange={(open) => {
+        if (!open) { 
+          setIsTaskModalOpen(false); 
+          setInitialModalFormData(null);
+          setEditingTaskOriginalId(null);
+        } else {
+          setIsTaskModalOpen(true);
+        }
+      }}>
+        {/* The DialogTrigger is now within the table's empty state or on an edit button */}
+        {initialModalFormData && ( /* Render content only if modal is intended to be open with data */
+          <AddMaintenanceTaskDialogContent 
+              aircraft={currentAircraft} 
+              onSave={handleSaveTask} 
+              onDelete={handleDeleteTask} 
+              initialData={initialModalFormData} 
+              isEditing={!!editingTaskOriginalId} 
+              currentTaskId={editingTaskOriginalId} 
+          />
+        )}
       </Dialog>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -564,3 +575,6 @@ export default function AircraftMaintenanceDetailPage() {
     </div>
   );
 }
+
+
+    
