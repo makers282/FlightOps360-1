@@ -2,7 +2,7 @@
 "use client"; 
 
 import React, { useState, useEffect } from 'react'; 
-import Link from 'next/link'; // Import Link
+import Link from 'next/link';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -34,7 +34,7 @@ import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-
 import { fetchTrips, type Trip, type TripStatus } from '@/ai/flows/manage-trips-flow';
 import { fetchBulletins, type Bulletin, type BulletinType } from '@/ai/flows/manage-bulletins-flow'; 
 import { useToast } from '@/hooks/use-toast'; 
-import { format, parseISO, isValid } from 'date-fns';
+import { format, parseISO, isValid, addDays } from 'date-fns';
 
 
 const crewAlertData = [ 
@@ -233,34 +233,44 @@ export default function DashboardPage() {
         </Accordion>
       </Card>
 
-      <Card className="md:col-span-2 lg:col-span-3 mb-6">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2"><Milestone className="h-5 w-5 text-primary" />Trip Status</CardTitle>
-            <CardDescription>Overview of recent and upcoming trips.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {isLoadingTrips ? (
-               <div className="flex items-center justify-center py-10"> <Loader2 className="h-6 w-6 animate-spin text-primary" /> <p className="ml-2 text-muted-foreground">Loading trip data...</p> </div>
-            ) : dashboardTrips.length === 0 ? ( <p className="text-muted-foreground text-center py-5">No trips to display.</p> ) : (
-            <Table>
-              <TableHeader><TableRow><TableHead>Trip ID</TableHead><TableHead>Route</TableHead><TableHead>Aircraft</TableHead><TableHead>Status</TableHead><TableHead>Departure (First Leg)</TableHead></TableRow></TableHeader>
-              <TableBody>{dashboardTrips.map((trip) => (
-                <TableRow key={trip.id}>
-                  <TableCell className="font-medium">
-                    <Link href={`/trips/details/${trip.id}`} className="text-primary hover:underline">
-                      {trip.tripId || trip.id}
-                    </Link>
-                  </TableCell>
-                  <TableCell>{getRouteDisplay(trip.legs)}</TableCell>
-                  <TableCell>{trip.aircraftLabel || trip.aircraftId}</TableCell>
-                  <TableCell><Badge variant={getStatusBadgeVariant(trip.status)}>{trip.status}</Badge></TableCell>
-                  <TableCell>{formatDate(trip.legs?.[0]?.departureDateTime)}</TableCell>
-                </TableRow>
-              ))}</TableBody>
-            </Table>
-            )}
-          </CardContent>
-        </Card>
+      <Card className="md:col-span-2 lg:col-span-3 mb-6 shadow-md">
+        <Accordion type="single" collapsible defaultValue="trip-status-item" className="w-full">
+            <AccordionItem value="trip-status-item">
+                <CardHeader className="p-0">
+                    <AccordionTrigger className="flex flex-1 items-center justify-between p-4 hover:no-underline">
+                        <div className="text-left">
+                            <CardTitle className="flex items-center gap-2"><Milestone className="h-5 w-5 text-primary" />Trip Status</CardTitle>
+                            <CardDescription className="mt-1">Overview of recent and upcoming trips.</CardDescription>
+                        </div>
+                    </AccordionTrigger>
+                </CardHeader>
+                <AccordionContent>
+                    <CardContent className="pt-0 pb-4 px-4">
+                        {isLoadingTrips ? (
+                        <div className="flex items-center justify-center py-10"> <Loader2 className="h-6 w-6 animate-spin text-primary" /> <p className="ml-2 text-muted-foreground">Loading trip data...</p> </div>
+                        ) : dashboardTrips.length === 0 ? ( <p className="text-muted-foreground text-center py-5">No trips to display.</p> ) : (
+                        <Table>
+                        <TableHeader><TableRow><TableHead>Trip ID</TableHead><TableHead>Route</TableHead><TableHead>Aircraft</TableHead><TableHead>Status</TableHead><TableHead>Departure (First Leg)</TableHead></TableRow></TableHeader>
+                        <TableBody>{dashboardTrips.map((trip) => (
+                            <TableRow key={trip.id}>
+                            <TableCell className="font-medium">
+                                <Link href={`/trips/details/${trip.id}`} className="text-primary hover:underline">
+                                {trip.tripId || trip.id}
+                                </Link>
+                            </TableCell>
+                            <TableCell>{getRouteDisplay(trip.legs)}</TableCell>
+                            <TableCell>{trip.aircraftLabel || trip.aircraftId}</TableCell>
+                            <TableCell><Badge variant={getStatusBadgeVariant(trip.status)}>{trip.status}</Badge></TableCell>
+                            <TableCell>{formatDate(trip.legs?.[0]?.departureDateTime)}</TableCell>
+                            </TableRow>
+                        ))}</TableBody>
+                        </Table>
+                        )}
+                    </CardContent>
+                </AccordionContent>
+            </AccordionItem>
+        </Accordion>
+      </Card>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         <Card className="lg:col-span-2">
