@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useEffect, useTransition } from 'react';
+import React, { useState, useEffect, useTransition, useCallback } from 'react';
 import Link from 'next/link';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -11,15 +11,16 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Building2, Plane, PlusCircle, Trash2, Save, XCircle, Loader2, Edit, CheckSquare, Square, Info, Settings2, Cog, Wind, Megaphone, CalendarDays, UserX } from 'lucide-react'; 
+import { Building2, Plane, PlusCircle, Trash2, Save, XCircle, Loader2, Edit, CheckSquare, Square, Info, Settings2, Cog, Wind, Megaphone, CalendarDays, UserX } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { fetchFleetAircraft, saveFleetAircraft, deleteFleetAircraft } from '@/ai/flows/manage-fleet-flow';
 import type { FleetAircraft, SaveFleetAircraftInput, EngineDetail, PropellerDetail } from '@/ai/schemas/fleet-aircraft-schemas';
-import { fetchCompanyProfile, saveCompanyProfile, type CompanyProfile } from '@/ai/flows/manage-company-profile-flow'; 
-import { fetchBulletins, saveBulletin, deleteBulletin, type Bulletin, type SaveBulletinInput, type BulletinType } from '@/ai/schemas/bulletin-schemas'; // Bulletin imports
-import { AddEditBulletinModal } from './components/add-edit-bulletin-modal'; // Bulletin modal import
+import { fetchCompanyProfile, saveCompanyProfile, type CompanyProfile } from '@/ai/flows/manage-company-profile-flow';
+import { fetchBulletins, saveBulletin, deleteBulletin } from '@/ai/flows/manage-bulletins-flow';
+import type { Bulletin, SaveBulletinInput, BulletinType } from '@/ai/schemas/bulletin-schemas';
+import { AddEditBulletinModal } from './components/add-edit-bulletin-modal';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Skeleton } from '@/components/ui/skeleton'; 
+import { Skeleton } from '@/components/ui/skeleton';
 import { ManageEngineDetailsModal } from '@/app/(app)/aircraft/currency/[tailNumber]/components/manage-engine-details-modal';
 import { ManagePropellerDetailsModal } from '@/app/(app)/aircraft/currency/[tailNumber]/components/manage-propeller-details-modal';
 import { format, parseISO, isValid } from 'date-fns';
@@ -57,8 +58,8 @@ export default function CompanySettingsPage() {
   const [newBaseLocation, setNewBaseLocation] = useState('');
   const [newPrimaryContactName, setNewPrimaryContactName] = useState('');
   const [newPrimaryContactPhone, setNewPrimaryContactPhone] = useState('');
-  const [newPrimaryContactEmail, setNewPrimaryContactEmail] = useState(''); 
-  
+  const [newPrimaryContactEmail, setNewPrimaryContactEmail] = useState('');
+
   const [currentEngineDetailsForForm, setCurrentEngineDetailsForForm] = useState<EngineDetail[]>([]);
   const [isEngineModalOpen, setIsEngineModalOpen] = useState(false);
 
@@ -150,12 +151,12 @@ export default function CompanySettingsPage() {
     loadCompanyProfileData();
     loadBulletinsData();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); 
+  }, []);
 
   const resetAircraftFormFields = () => {
     setNewTailNumber(''); setNewModel(''); setNewIsMaintenanceTracked(true);
     setNewTrackedComponentNamesStr(''); setNewSerialNumber(''); setNewBaseLocation('');
-    setNewPrimaryContactName(''); setNewPrimaryContactPhone(''); setNewPrimaryContactEmail(''); 
+    setNewPrimaryContactName(''); setNewPrimaryContactPhone(''); setNewPrimaryContactEmail('');
     setCurrentEngineDetailsForForm([]); setCurrentPropellerDetailsForForm([]);
   };
 
@@ -165,30 +166,30 @@ export default function CompanySettingsPage() {
     setNewTrackedComponentNamesStr((aircraft.trackedComponentNames || ['Airframe', 'Engine 1']).join(', '));
     setNewSerialNumber(aircraft.serialNumber || ''); setNewBaseLocation(aircraft.baseLocation || '');
     setNewPrimaryContactName(aircraft.primaryContactName || ''); setNewPrimaryContactPhone(aircraft.primaryContactPhone || '');
-    setNewPrimaryContactEmail(aircraft.primaryContactEmail || ''); 
-    setCurrentEngineDetailsForForm(aircraft.engineDetails || []); 
+    setNewPrimaryContactEmail(aircraft.primaryContactEmail || '');
+    setCurrentEngineDetailsForForm(aircraft.engineDetails || []);
     setCurrentPropellerDetailsForForm(aircraft.propellerDetails || []);
     setShowAddAircraftForm(true);
   };
-  
-  const handleAddOrUpdateAircraft = () => { 
+
+  const handleAddOrUpdateAircraft = () => {
     if (!newTailNumber || !newModel) { toast({title: "Missing Fields", description: "Tail number and model are required.", variant: "destructive"}); return; }
     const parsedTrackedComponentNames = newTrackedComponentNamesStr.split(',').map(name => name.trim()).filter(name => name.length > 0);
     const aircraftData: SaveFleetAircraftInput = {
       id: editingAircraftId || newTailNumber.toUpperCase().replace(/\s+/g, ''), tailNumber: newTailNumber.toUpperCase().trim(),
       model: newModel.trim(), isMaintenanceTracked: newIsMaintenanceTracked,
       trackedComponentNames: parsedTrackedComponentNames.length > 0 ? parsedTrackedComponentNames : ['Airframe', 'Engine 1'],
-      serialNumber: newSerialNumber.trim() || undefined, aircraftYear: editingAircraftId ? fleet.find(ac => ac.id === editingAircraftId)?.aircraftYear : undefined, 
+      serialNumber: newSerialNumber.trim() || undefined, aircraftYear: editingAircraftId ? fleet.find(ac => ac.id === editingAircraftId)?.aircraftYear : undefined,
       baseLocation: newBaseLocation.trim() || undefined, primaryContactName: newPrimaryContactName.trim() || undefined,
-      primaryContactPhone: newPrimaryContactPhone.trim() || undefined, primaryContactEmail: newPrimaryContactEmail.trim() || undefined, 
+      primaryContactPhone: newPrimaryContactPhone.trim() || undefined, primaryContactEmail: newPrimaryContactEmail.trim() || undefined,
       engineDetails: currentEngineDetailsForForm, propellerDetails: currentPropellerDetailsForForm,
-      internalNotes: editingAircraftId ? fleet.find(ac => ac.id === editingAircraftId)?.internalNotes : undefined, 
+      internalNotes: editingAircraftId ? fleet.find(ac => ac.id === editingAircraftId)?.internalNotes : undefined,
     };
     startSavingAircraftTransition(async () => {
-      try { await saveFleetAircraft(aircraftData); await loadFleetData(); 
+      try { await saveFleetAircraft(aircraftData); await loadFleetData();
         toast({ title: "Success", description: `Aircraft ${editingAircraftId ? 'updated' : 'added'}.` });
         handleCancelEditAircraft();
-      } catch (error) { 
+      } catch (error) {
         console.error("Failed to save aircraft:", error);
         toast({ title: "Error", description: `Could not save aircraft. ${error instanceof Error ? error.message : ''}`, variant: "destructive"});
       }
@@ -196,29 +197,29 @@ export default function CompanySettingsPage() {
   }
 
   const handleCancelEditAircraft = () => { setEditingAircraftId(null); resetAircraftFormFields(); setShowAddAircraftForm(false); };
-  const handleDeleteAircraft = (aircraftIdToDelete: string) => { 
+  const handleDeleteAircraft = (aircraftIdToDelete: string) => {
     startDeletingAircraftTransition(async () => {
       try { await deleteFleetAircraft({ aircraftId: aircraftIdToDelete }); await loadFleetData();
         toast({ title: "Success", description: "Aircraft deleted." });
         if (editingAircraftId === aircraftIdToDelete) handleCancelEditAircraft();
-      } catch (error) { 
+      } catch (error) {
           console.error("Failed to delete aircraft:", error);
           toast({ title: "Error", description: `Could not delete aircraft. ${error instanceof Error ? error.message : ''}`, variant: "destructive"});
       }
     });
   }
 
-  const handleSaveCompanyInfo = () => { 
+  const handleSaveCompanyInfo = () => {
     startSavingCompanyInfoTransition(async () => {
       const profileData: CompanyProfile = {
         id: 'main', companyName: companyName.trim(), companyAddress: companyAddress.trim(),
         companyEmail: companyEmail.trim(), companyPhone: companyPhone.trim(),
         serviceFeeRates: currentCompanyProfile?.serviceFeeRates || {},
       };
-      try { await saveCompanyProfile(profileData); 
+      try { await saveCompanyProfile(profileData);
         setCurrentCompanyProfile(prev => ({...prev, ...profileData} as CompanyProfile));
         toast({ title: "Success", description: "Company info updated." });
-      } catch (error) { 
+      } catch (error) {
         console.error("Failed to save company info:", error);
         toast({ title: "Error", description: `Could not save company info. ${error instanceof Error ? error.message : ''}`, variant: "destructive"});
       }
@@ -250,7 +251,7 @@ export default function CompanySettingsPage() {
           description: `Bulletin "${savedData.title}" has been successfully ${isEditingBulletin ? 'updated' : 'published'}.`,
         });
         setIsBulletinModalOpen(false);
-        await loadBulletinsData(); 
+        await loadBulletinsData();
       } catch (error) {
         console.error("Failed to save bulletin:", error);
         toast({ title: "Error Saving Bulletin", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
@@ -271,7 +272,7 @@ export default function CompanySettingsPage() {
         toast({ title: "Bulletin Deleted", description: `Bulletin "${bulletinToDelete.title}" has been removed.` });
         setShowDeleteBulletinConfirm(false);
         setBulletinToDelete(null);
-        await loadBulletinsData(); 
+        await loadBulletinsData();
       } catch (error) {
         console.error("Failed to delete bulletin:", error);
         toast({ title: "Error Deleting Bulletin", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
@@ -291,8 +292,8 @@ export default function CompanySettingsPage() {
 
   return (
     <>
-      <PageHeader 
-        title="Company Settings" 
+      <PageHeader
+        title="Company Settings"
         description="Manage company information, aircraft fleet, and company bulletins."
         icon={Building2}
       />
@@ -420,13 +421,13 @@ export default function CompanySettingsPage() {
                 </div>
               </Card>
             )}
-            {isLoadingFleet ? ( <div className="flex items-center justify-center py-6"> <Loader2 className="h-8 w-8 animate-spin text-primary" /> <p className="ml-2 text-muted-foreground">Loading fleet...</p> </div> ) : (
+            {isLoadingFleet ? (<div className="flex items-center justify-center py-6"> <Loader2 className="h-8 w-8 animate-spin text-primary" /> <p className="ml-2 text-muted-foreground">Loading fleet...</p> </div> ) : (
               <>
               <Alert className="mb-4"> <Settings2 className="h-4 w-4" /> <AlertDescription className="text-xs"> Aircraft year and internal notes can be managed on the <Button variant="link" size="sm" className="p-0 h-auto ml-1 text-xs" asChild><Link href="/aircraft/currency">Aircraft Maintenance Currency page</Link></Button>. </AlertDescription> </Alert>
               <Table>
                 <TableHeader><TableRow><TableHead>Tail Number</TableHead><TableHead>Model</TableHead><TableHead>Maintenance Tracked</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
                 <TableBody>
-                  {fleet.length === 0 && !isLoadingFleet && ( <TableRow> <TableCell colSpan={4} className="text-center text-muted-foreground py-4">No aircraft in fleet.</TableCell> </TableRow> )}
+                  {fleet.length === 0 && !isLoadingFleet && (<TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-4">No aircraft in fleet.</TableCell></TableRow> )}
                   {fleet.map((aircraft) => (<TableRow key={aircraft.id}><TableCell className="font-medium">{aircraft.tailNumber}</TableCell><TableCell>{aircraft.model}</TableCell><TableCell>{aircraft.isMaintenanceTracked ? <CheckSquare className="h-5 w-5 text-green-500" /> : <Square className="h-5 w-5 text-muted-foreground" />}</TableCell><TableCell className="text-right"><Button variant="ghost" size="icon" onClick={() => handleEditAircraftClick(aircraft)} className="mr-1 hover:text-primary" disabled={isSavingAircraft || isDeletingAircraft}><Edit className="h-4 w-4" /></Button><Button variant="ghost" size="icon" onClick={() => handleDeleteAircraft(aircraft.id)} className="text-destructive hover:text-destructive" disabled={isSavingAircraft || (isDeletingAircraft && editingAircraftId === aircraft.id) }>{isDeletingAircraft && editingAircraftId === aircraft.id ? <Loader2 className="h-4 w-4 animate-spin"/> : <Trash2 className="h-4 w-4" />}</Button></TableCell></TableRow> ))}
                 </TableBody>
               </Table>
@@ -457,20 +458,10 @@ export default function CompanySettingsPage() {
             </div>
           ) : (
             <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Title</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Published</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
+              <TableHeader><TableRow><TableHead>Title</TableHead><TableHead>Type</TableHead><TableHead>Published</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
               <TableBody>
                 {bulletins.length === 0 && !isLoadingBulletins && (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center text-muted-foreground py-4">No bulletins published yet.</TableCell>
-                  </TableRow>
+                  <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-4">No bulletins published yet.</TableCell></TableRow>
                 )}
                 {bulletins.map((bulletin) => (
                   <TableRow key={bulletin.id}>
