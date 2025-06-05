@@ -115,7 +115,7 @@ export function AddEditAircraftDiscrepancyModal({
         });
       }
     }
-  }, [isOpen, isEditing, initialData, form, setIsDateDiscoveredCalendarOpen, setIsDeferralDateCalendarOpen]);
+  }, [isOpen, isEditing, initialData, form]);
 
   const onSubmit: SubmitHandler<AircraftDiscrepancyFormData> = async (formData) => {
     if (!aircraft?.id) {
@@ -165,17 +165,25 @@ export function AddEditAircraftDiscrepancyModal({
                         <FormItem className="flex flex-col">
                           <FormLabel>Date Discovered</FormLabel>
                           <FormControl>
-                            <Popover modal={false} open={isDateDiscoveredCalendarOpen} onOpenChange={setIsDateDiscoveredCalendarOpen}>
-                              <PopoverTrigger>
-                                <span 
+                            <Popover 
+                              modal={false} 
+                              open={isDateDiscoveredCalendarOpen} 
+                              onOpenChange={(openState) => {
+                                console.log('Date Discovered Popover onOpenChange, new state:', openState);
+                                setIsDateDiscoveredCalendarOpen(openState);
+                              }}
+                            >
+                              <PopoverTrigger asChild>
+                                <Button
+                                  variant={"outline"}
                                   className={cn(
-                                    "inline-flex items-center justify-start text-left w-full cursor-pointer p-2 border rounded-md hover:bg-muted",
+                                    "w-full justify-start text-left font-normal",
                                     !field.value && "text-muted-foreground"
                                   )}
                                 >
+                                  <CalendarIcon className="mr-2 h-4 w-4" />
                                   {field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
-                                  <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                                </span>
+                                </Button>
                               </PopoverTrigger>
                               <PopoverContent className="w-auto p-0 z-[100]" align="start"> 
                                 <Calendar 
@@ -241,17 +249,25 @@ export function AddEditAircraftDiscrepancyModal({
                               <FormItem className="flex flex-col">
                                   <FormLabel>Deferral Date (Optional)</FormLabel>
                                   <FormControl>
-                                    <Popover modal={false} open={isDeferralDateCalendarOpen} onOpenChange={setIsDeferralDateCalendarOpen}>
-                                      <PopoverTrigger>
-                                        <span 
+                                    <Popover 
+                                      modal={false} 
+                                      open={isDeferralDateCalendarOpen} 
+                                      onOpenChange={(openState) => {
+                                        console.log('Deferral Date Popover onOpenChange, new state:', openState);
+                                        setIsDeferralDateCalendarOpen(openState);
+                                      }}
+                                    >
+                                      <PopoverTrigger asChild>
+                                        <Button
+                                          variant={"outline"}
                                           className={cn(
-                                            "inline-flex items-center justify-start text-left w-full md:w-1/2 cursor-pointer p-2 border rounded-md hover:bg-muted",
+                                            "w-full md:w-1/2 justify-start text-left font-normal",
                                             !field.value && "text-muted-foreground"
                                           )}
                                         >
+                                          <CalendarIcon className="mr-2 h-4 w-4" />
                                           {field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
-                                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                                        </span>
+                                        </Button>
                                       </PopoverTrigger>
                                       <PopoverContent className="w-auto p-0 z-[100]" align="start"> 
                                         <Calendar 
