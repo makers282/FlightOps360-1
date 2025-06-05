@@ -167,22 +167,21 @@ const fetchAircraftDiscrepanciesFlow = ai.defineFlow(
 const fetchAllAircraftDiscrepanciesFlow = ai.defineFlow(
   {
     name: 'fetchAllAircraftDiscrepanciesFlow',
-    // No input schema needed for fetching all
-    outputSchema: FetchAircraftDiscrepanciesOutputSchema, // z.array(AircraftDiscrepancySchema)
+    outputSchema: FetchAircraftDiscrepanciesOutputSchema, 
   },
   async () => {
     try {
       const discrepanciesCollectionRef = collection(db, DISCREPANCIES_COLLECTION);
-      // Order by dateDiscovered descending, then by createdAt descending for tie-breaking
+      // Simplified query to use only one orderBy clause
       const q = query(
         discrepanciesCollectionRef, 
-        orderBy("dateDiscovered", "desc"), 
-        orderBy("createdAt", "desc")
+        orderBy("dateDiscovered", "desc")
+        // Removed: orderBy("createdAt", "desc") 
       );
       const snapshot = await getDocs(q);
       const discrepanciesList = snapshot.docs.map(docSnapshot => {
         const data = docSnapshot.data();
-        const { timeDiscovered, ...displayData } = data; // Ensure timeDiscovered is not passed
+        const { timeDiscovered, ...displayData } = data; 
         return {
           ...displayData,
           id: docSnapshot.id,
