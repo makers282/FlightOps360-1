@@ -57,7 +57,7 @@ const staticDefaultFormValues: Omit<AircraftDiscrepancyFormData, 'dateDiscovered
 interface AddEditAircraftDiscrepancyModalProps {
   isOpen: boolean;
   setIsOpen: (isOpen: boolean) => void;
-  onSave: (data: Omit<SaveAircraftDiscrepancyInput, 'status'>, originalDiscrepancyId?: string) => Promise<void>; 
+  onSave: (data: Omit<SaveAircraftDiscrepancyInput, 'status' | 'timeDiscovered'>, originalDiscrepancyId?: string) => Promise<void>; 
   aircraft: FleetAircraft | null;
   initialData?: AircraftDiscrepancy | null;
   isEditing?: boolean;
@@ -119,7 +119,7 @@ export function AddEditAircraftDiscrepancyModal({
         alert("Aircraft data is missing. Cannot save discrepancy.");
         return;
     }
-    const dataToSave: Omit<SaveAircraftDiscrepancyInput, 'status'> = { 
+    const dataToSave: Omit<SaveAircraftDiscrepancyInput, 'status' | 'timeDiscovered'> = { 
       aircraftId: aircraft.id,
       aircraftTailNumber: aircraft.tailNumber,
       dateDiscovered: format(formData.dateDiscovered, "yyyy-MM-dd"),
@@ -136,7 +136,7 @@ export function AddEditAircraftDiscrepancyModal({
   const modalTitle = isEditing ? `Edit Discrepancy for ${aircraft?.tailNumber}` : `Add New Discrepancy for ${aircraft?.tailNumber}`;
   const modalDescription = isEditing
     ? "Update the initial details of this aircraft discrepancy."
-    : "Log a new discrepancy for this aircraft. Corrective action and sign-off will be done via the 'Clear Discrepancy' action.";
+    : "Log a new discrepancy. Corrective action and sign-off will be done via the 'Clear Discrepancy' action.";
   
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!isSaving) setIsOpen(open); }}>
@@ -149,95 +149,96 @@ export function AddEditAircraftDiscrepancyModal({
           <ModalDialogDescription>{modalDescription}</ModalDialogDescription>
         </DialogHeader>
         
-        <div className="flex-1 overflow-hidden"> 
-          <ScrollArea className="h-full">
-            <Form {...form}>
-              <form id="aircraft-discrepancy-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-2 px-4"> 
-                <div className="space-y-6">
-                  <Card className="p-4 border-orange-500/50 bg-orange-50/30 dark:bg-orange-900/20">
-                    <CardHeader className="p-0 pb-3">
-                      <CardTitle className="text-md text-orange-700 dark:text-orange-400">Discrepancy Details</CardTitle>
-                    </CardHeader>
-                    <CardContent className="p-0 space-y-4">
-                      <FormField control={form.control} name="dateDiscovered" render={({ field }) => (
-                          <FormItem className="flex flex-col">
-                            <FormLabel>Date Discovered</FormLabel>
-                            <Popover modal={false}><PopoverTrigger asChild>
-                                <FormControl><Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
-                                    {field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
-                                    <CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl>
-                              </PopoverTrigger>
-                              <PopoverContent className="w-auto p-0 z-[100]" align="start">
-                                <Calendar mode="single" selected={field.value} onSelect={(date) => field.onChange(date ? startOfDay(date): undefined)} disabled={(date) => minDateAllowed ? date < minDateAllowed : false} initialFocus /></PopoverContent>
-                            </Popover><FormMessage />
-                          </FormItem>
-                        )} />
-                      <FormField control={form.control} name="description" render={({ field }) => (<FormItem><FormLabel>Description of Discrepancy</FormLabel><FormControl><Textarea placeholder="e.g., Flat spot on #2 main tire, slight oil leak from right engine nacelle." {...field} rows={3} /></FormControl><FormMessage /></FormItem>)} />
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <FormField control={form.control} name="discoveredBy" render={({ field }) => (<FormItem><FormLabel>Discovered By (Optional)</FormLabel><FormControl><Input placeholder="e.g., Capt. Smith, Maintenance" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>)} />
-                        <FormField control={form.control} name="discoveredByCertNumber" render={({ field }) => (<FormItem><FormLabel>Discovered By Cert # (Optional)</FormLabel><FormControl><Input placeholder="e.g., A&P 1234567" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>)} />
-                      </div>
-                      <FormField
-                        control={form.control}
-                        name="isDeferred"
-                        render={({ field }) => (
-                          <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 shadow-sm">
-                            <FormControl>
-                              <Checkbox
-                                checked={field.value}
-                                onCheckedChange={field.onChange}
-                              />
-                            </FormControl>
-                            <div className="space-y-0.5 leading-none">
-                              <FormLabel className="font-normal">
-                                Mark as Deferred (e.g., per MEL/NEF)
-                              </FormLabel>
-                            </div>
-                          </FormItem>
-                        )}
-                      />
-                      {isDeferredWatch && (
-                        <div className="space-y-4 pl-4 border-l-2 border-yellow-500 ml-2">
-                            <FormField
-                                control={form.control}
-                                name="deferralReference"
-                                render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Deferral Reference</FormLabel>
-                                    <FormControl>
-                                    <Input placeholder="e.g., MEL 25-10-01a" {...field} value={field.value || ''} />
-                                    </FormControl>
-                                    <FormDescription className="text-xs">Enter the MEL, NEF, or other reference for deferral.</FormDescription>
-                                    <FormMessage />
-                                </FormItem>
-                                )}
+        {/* Removed wrapping div with overflow-hidden, ScrollArea is now direct child (after header) or form is */}
+        <ScrollArea className="flex-1 h-full p-1"> {/* Added flex-1 to ScrollArea if it's the direct child */}
+          <Form {...form}>
+            <form id="aircraft-discrepancy-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-2 px-4"> 
+              <div className="space-y-6">
+                <Card className="p-4 border-orange-500/50 bg-orange-50/30 dark:bg-orange-900/20">
+                  <CardHeader className="p-0 pb-3">
+                    <CardTitle className="text-md text-orange-700 dark:text-orange-400">Discrepancy Details</CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-0 space-y-4">
+                    <FormField control={form.control} name="dateDiscovered" render={({ field }) => (
+                        <FormItem className="flex flex-col">
+                          <FormLabel>Date Discovered</FormLabel>
+                          <Popover modal={false}> {/* modal={false} is important */}
+                            <PopoverTrigger asChild>
+                              <FormControl><Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
+                                  {field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
+                                  <CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0 z-[100]" align="start"> {/* Ensure high z-index */}
+                              <Calendar mode="single" selected={field.value} onSelect={(date) => field.onChange(date ? startOfDay(date): undefined)} disabled={(date) => minDateAllowed ? date < minDateAllowed : false} initialFocus /></PopoverContent>
+                          </Popover><FormMessage />
+                        </FormItem>
+                      )} />
+                    <FormField control={form.control} name="description" render={({ field }) => (<FormItem><FormLabel>Description of Discrepancy</FormLabel><FormControl><Textarea placeholder="e.g., Flat spot on #2 main tire, slight oil leak from right engine nacelle." {...field} rows={3} /></FormControl><FormMessage /></FormItem>)} />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField control={form.control} name="discoveredBy" render={({ field }) => (<FormItem><FormLabel>Discovered By (Optional)</FormLabel><FormControl><Input placeholder="e.g., Capt. Smith, Maintenance" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>)} />
+                      <FormField control={form.control} name="discoveredByCertNumber" render={({ field }) => (<FormItem><FormLabel>Discovered By Cert # (Optional)</FormLabel><FormControl><Input placeholder="e.g., A&P 1234567" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>)} />
+                    </div>
+                    <FormField
+                      control={form.control}
+                      name="isDeferred"
+                      render={({ field }) => (
+                        <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 shadow-sm">
+                          <FormControl>
+                            <Checkbox
+                              checked={field.value}
+                              onCheckedChange={field.onChange}
                             />
-                             <FormField
-                                control={form.control}
-                                name="deferralDate"
-                                render={({ field }) => (
-                                <FormItem className="flex flex-col">
-                                    <FormLabel>Deferral Date (Optional)</FormLabel>
-                                    <Popover modal={false}><PopoverTrigger asChild>
-                                        <FormControl><Button variant={"outline"} className={cn("w-full md:w-1/2 pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
-                                            {field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
-                                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="w-auto p-0 z-[100]" align="start">
-                                        <Calendar mode="single" selected={field.value} onSelect={(date) => field.onChange(date ? startOfDay(date): undefined)} initialFocus /></PopoverContent>
-                                    </Popover><FormMessage />
-                                </FormItem>
-                                )}
-                            />
-                        </div>
+                          </FormControl>
+                          <div className="space-y-0.5 leading-none">
+                            <FormLabel className="font-normal">
+                              Mark as Deferred (e.g., per MEL/NEF)
+                            </FormLabel>
+                          </div>
+                        </FormItem>
                       )}
-                    </CardContent>
-                  </Card>
-                </div>
-              </form>
-            </Form>
-          </ScrollArea>
-        </div>
+                    />
+                    {isDeferredWatch && (
+                      <div className="space-y-4 pl-4 border-l-2 border-yellow-500 ml-2">
+                          <FormField
+                              control={form.control}
+                              name="deferralReference"
+                              render={({ field }) => (
+                              <FormItem>
+                                  <FormLabel>Deferral Reference</FormLabel>
+                                  <FormControl>
+                                  <Input placeholder="e.g., MEL 25-10-01a" {...field} value={field.value || ''} />
+                                  </FormControl>
+                                  <FormDescription className="text-xs">Enter the MEL, NEF, or other reference for deferral.</FormDescription>
+                                  <FormMessage />
+                              </FormItem>
+                              )}
+                          />
+                           <FormField
+                              control={form.control}
+                              name="deferralDate"
+                              render={({ field }) => (
+                              <FormItem className="flex flex-col">
+                                  <FormLabel>Deferral Date (Optional)</FormLabel>
+                                  <Popover modal={false}> {/* modal={false} is important */}
+                                    <PopoverTrigger asChild>
+                                      <FormControl><Button variant={"outline"} className={cn("w-full md:w-1/2 pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
+                                          {field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
+                                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl>
+                                  </PopoverTrigger>
+                                  <PopoverContent className="w-auto p-0 z-[100]" align="start"> {/* Ensure high z-index */}
+                                      <Calendar mode="single" selected={field.value} onSelect={(date) => field.onChange(date ? startOfDay(date): undefined)} initialFocus /></PopoverContent>
+                                  </Popover><FormMessage />
+                              </FormItem>
+                              )}
+                          />
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            </form>
+          </Form>
+        </ScrollArea>
         
         <DialogFooter className="pt-4 border-t">
           <DialogClose asChild><Button type="button" variant="outline" disabled={isSaving}>Cancel</Button></DialogClose>
