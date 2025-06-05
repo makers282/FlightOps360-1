@@ -1,11 +1,10 @@
 
-
 "use client";
 
 import React, { useState, useMemo, useEffect, useTransition } from 'react';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Library, UploadCloud, Search, FileText, Edit3, Trash2, Loader2, Link as LinkIcon, CalendarDays, Tag, AlertTriangle, CheckCircle2, Plane } from 'lucide-react';
+import { BookOpenCheck, UploadCloud, Search, FileText, Edit3, Trash2, Loader2, Link as LinkIcon, CalendarDays, Tag, AlertTriangle, CheckCircle2, Plane } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -24,12 +23,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 
 import { fetchAircraftDocuments, saveAircraftDocument, deleteAircraftDocument } from '@/ai/flows/manage-aircraft-documents-flow';
 import type { AircraftDocument, SaveAircraftDocumentInput, AircraftDocumentType } from '@/ai/schemas/aircraft-document-schemas';
-import { aircraftDocumentTypes } from '@/ai/schemas/aircraft-document-schemas';
+import { aircraftDocumentTypes } from '@/ai/schemas/aircraft-document-schemas'; // Keep this for type consistency if needed elsewhere
 import { fetchFleetAircraft } from '@/ai/flows/manage-fleet-flow';
 import type { FleetAircraft } from '@/ai/schemas/fleet-aircraft-schemas';
 import { AddEditAircraftDocumentModal } from './components/add-edit-aircraft-document-modal';
-import { ClientOnly } from '@/components/client-only';
-import { Skeleton } from '@/components/ui/skeleton';
+import { ClientOnly } from '@/components/client-only'; 
+import { Skeleton } from '@/components/ui/skeleton'; 
 import Link from 'next/link';
 
 const EXPIRY_WARNING_DAYS = 30;
@@ -101,8 +100,8 @@ export default function AircraftDocumentsPage() {
         fetchAircraftDocuments(),
         fetchFleetAircraft()
       ]);
-      setAllAircraftDocuments(fetchedDocs);
-      setFleetForSelect(fetchedFleet.map(ac => ({ id: ac.id, tailNumber: ac.tailNumber, model: ac.model })));
+      setAllAircraftDocuments(fetchedDocs.sort((a,b) => (a.aircraftTailNumber || a.aircraftId).localeCompare(b.aircraftTailNumber || b.aircraftId) || a.documentName.localeCompare(b.documentName) ));
+      setFleetForSelect(fetchedFleet.map(ac => ({ id: ac.id, tailNumber: ac.tailNumber, model: ac.model })).sort((a,b) => (a.tailNumber || a.id).localeCompare(b.tailNumber || b.id)));
     } catch (error) {
       console.error("Failed to load aircraft documents or fleet:", error);
       toast({ title: "Error Loading Data", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
@@ -114,6 +113,7 @@ export default function AircraftDocumentsPage() {
 
   useEffect(() => {
     loadPageData();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); 
 
   const filteredDocuments = useMemo(() => {
@@ -205,8 +205,9 @@ export default function AircraftDocumentsPage() {
           <div className="truncate flex-grow">
             <p className="text-sm font-semibold text-foreground truncate" title={doc.documentName}>{doc.documentName}</p>
             <div className="text-xs text-muted-foreground">
-              Type: {doc.documentType} | For: {doc.aircraftTailNumber || doc.aircraftId}
-               <Badge variant={getStatusBadgeVariant(status)} className="ml-2 text-xs px-1.5 py-0">{status}</Badge>
+              Type: {doc.documentType} | For: 
+              <Link href={`/aircraft/currency/${doc.aircraftTailNumber?.split(' - ')[0] || doc.aircraftId}`} className="text-primary hover:underline ml-1">{doc.aircraftTailNumber || doc.aircraftId}</Link>
+              <Badge variant={getStatusBadgeVariant(status)} className="ml-2 text-xs px-1.5 py-0">{status}</Badge>
             </div>
             <p className="text-xs text-muted-foreground mt-0.5">
                 Expires: {formatDateForDisplay(doc.expiryDate)}
@@ -241,7 +242,7 @@ export default function AircraftDocumentsPage() {
       <PageHeader 
         title="Aircraft Document Management"
         description="Manage and track all aircraft-specific documents like registration, airworthiness, and insurance."
-        icon={Plane}
+        icon={BookOpenCheck}
         actions={
           <Button onClick={handleOpenAddModal} disabled={isLoadingDocuments || isLoadingAircraftForSelect}>
             <UploadCloud className="mr-2 h-4 w-4" /> Add Aircraft Document
@@ -284,7 +285,7 @@ export default function AircraftDocumentsPage() {
                     <SelectItem value="all">All Aircraft</SelectItem>
                     {fleetForSelect.map(ac => (
                       <SelectItem key={ac.id} value={ac.id}>
-                        {ac.tailNumber} - {ac.model}
+                        {ac.label}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -295,9 +296,7 @@ export default function AircraftDocumentsPage() {
         <CardContent className="p-0">
           {isLoadingDocuments && allAircraftDocuments.length === 0 ? ( 
             <div className="space-y-2 p-4">
-                <Skeleton className="h-10 w-full" />
-                <Skeleton className="h-10 w-full" />
-                <Skeleton className="h-10 w-full" />
+                {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
             </div>
           ) : filteredDocuments.length === 0 ? (
             <p className="p-4 text-center text-sm text-muted-foreground">
@@ -344,3 +343,4 @@ export default function AircraftDocumentsPage() {
   );
 }
 
+    
