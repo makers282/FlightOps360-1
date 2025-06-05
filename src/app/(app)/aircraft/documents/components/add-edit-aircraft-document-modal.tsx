@@ -261,7 +261,7 @@ export function AddEditAircraftDocumentModal({
                   render={({ field }) => (
                     <FormItem className="flex flex-col">
                       <FormLabel>Issue Date (Optional)</FormLabel>
-                      <Popover modal={false}> {/* Set modal={false} here */}
+                      <Popover modal={false}>
                         <PopoverTrigger asChild>
                           <FormControl>
                             <Button
@@ -277,7 +277,7 @@ export function AddEditAircraftDocumentModal({
                             </Button>
                           </FormControl>
                         </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0 z-[100]" align="start"> {/* Keep z-index or adjust if needed */}
+                        <PopoverContent className="w-auto p-0 z-[100]" align="start">
                           <Calendar
                             mode="single"
                             selected={field.value}
@@ -296,7 +296,7 @@ export function AddEditAircraftDocumentModal({
                   render={({ field }) => (
                     <FormItem className="flex flex-col">
                       <FormLabel>Expiry Date (Optional)</FormLabel>
-                      <Popover modal={false}> {/* Set modal={false} here */}
+                      <Popover modal={false}>
                         <PopoverTrigger asChild>
                           <FormControl>
                             <Button
@@ -312,7 +312,7 @@ export function AddEditAircraftDocumentModal({
                             </Button>
                           </FormControl>
                         </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0 z-[100]" align="start"> {/* Keep z-index or adjust if needed */}
+                        <PopoverContent className="w-auto p-0 z-[100]" align="start">
                           <Calendar
                             mode="single"
                             selected={field.value}

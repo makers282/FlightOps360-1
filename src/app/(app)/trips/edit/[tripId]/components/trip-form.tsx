@@ -535,14 +535,14 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
                         <FormLabel>Desired Departure Date & Time</FormLabel>
                         <FormControl>
                           {isClient ? (
-                            <Popover>
+                            <Popover modal={false}>
                               <PopoverTrigger asChild>
                                 <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !(field.value && field.value instanceof Date && isValidDate(field.value)) && "text-muted-foreground")}>
                                   <CalendarIcon className="mr-2 h-4 w-4" />
                                   <span>{field.value && field.value instanceof Date && isValidDate(field.value) ? format(field.value, "PPP HH:mm") : "Pick a date and time"}</span>
                                 </Button>
                               </PopoverTrigger>
-                              <PopoverContent className="w-auto p-0">
+                              <PopoverContent className="w-auto p-0 z-[100]">
                                 <Calendar
                                   mode="single"
                                   selected={field.value && field.value instanceof Date && isValidDate(field.value) ? field.value : undefined}
@@ -642,5 +642,3 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
     </Card>
   );
 }
-
-    

@@ -27,11 +27,10 @@ import type { AircraftDiscrepancy, SaveAircraftDiscrepancyInput } from '@/ai/sch
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { FleetAircraft } from '@/ai/schemas/fleet-aircraft-schemas';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox'; // Added Checkbox import
+import { Checkbox } from '@/components/ui/checkbox';
 
 const discrepancyFormSchema = z.object({
   dateDiscovered: z.date({ required_error: "Date discovered is required." }),
-  // timeDiscovered: z.string().optional().refine(val => !val || /^([01]\d|2[0-3]):([0-5]\d)$/.test(val), { message: "Invalid time format (HH:MM)." }), // Removed
   description: z.string().min(5, "A clear description of the discrepancy is required."),
   discoveredBy: z.string().optional(),
   discoveredByCertNumber: z.string().optional(),
@@ -46,14 +45,12 @@ const discrepancyFormSchema = z.object({
 
 export type AircraftDiscrepancyFormData = z.infer<typeof discrepancyFormSchema>;
 
-const staticDefaultFormValues: AircraftDiscrepancyFormData = {
-  dateDiscovered: new Date(0), 
+const staticDefaultFormValues: Omit<AircraftDiscrepancyFormData, 'dateDiscovered' | 'deferralDate'> & { dateDiscovered?: Date; deferralDate?: Date } = {
   description: "",
   discoveredBy: "",
   discoveredByCertNumber: "",
   isDeferred: false,
   deferralReference: "",
-  deferralDate: undefined,
 };
 
 
@@ -81,7 +78,11 @@ export function AddEditAircraftDiscrepancyModal({
 
   const form = useForm<AircraftDiscrepancyFormData>({
     resolver: zodResolver(discrepancyFormSchema),
-    defaultValues: staticDefaultFormValues,
+    defaultValues: {
+        ...staticDefaultFormValues,
+        dateDiscovered: startOfDay(new Date()),
+        deferralDate: undefined,
+    },
   });
   
   const isDeferredWatch = form.watch("isDeferred");
@@ -107,6 +108,7 @@ export function AddEditAircraftDiscrepancyModal({
         form.reset({
             ...staticDefaultFormValues, 
             dateDiscovered: startOfDay(new Date()),
+            deferralDate: undefined,
         });
       }
     }
@@ -160,17 +162,16 @@ export function AddEditAircraftDiscrepancyModal({
                       <FormField control={form.control} name="dateDiscovered" render={({ field }) => (
                           <FormItem className="flex flex-col">
                             <FormLabel>Date Discovered</FormLabel>
-                            <Popover><PopoverTrigger asChild>
+                            <Popover modal={false}><PopoverTrigger asChild>
                                 <FormControl><Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
                                     {field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
                                     <CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl>
                               </PopoverTrigger>
-                              <PopoverContent className="w-auto p-0" align="start">
+                              <PopoverContent className="w-auto p-0 z-[100]" align="start">
                                 <Calendar mode="single" selected={field.value} onSelect={(date) => field.onChange(date ? startOfDay(date): undefined)} disabled={(date) => minDateAllowed ? date < minDateAllowed : false} initialFocus /></PopoverContent>
                             </Popover><FormMessage />
                           </FormItem>
                         )} />
-                      {/* Time Discovered field removed */}
                       <FormField control={form.control} name="description" render={({ field }) => (<FormItem><FormLabel>Description of Discrepancy</FormLabel><FormControl><Textarea placeholder="e.g., Flat spot on #2 main tire, slight oil leak from right engine nacelle." {...field} rows={3} /></FormControl><FormMessage /></FormItem>)} />
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <FormField control={form.control} name="discoveredBy" render={({ field }) => (<FormItem><FormLabel>Discovered By (Optional)</FormLabel><FormControl><Input placeholder="e.g., Capt. Smith, Maintenance" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>)} />
@@ -217,12 +218,12 @@ export function AddEditAircraftDiscrepancyModal({
                                 render={({ field }) => (
                                 <FormItem className="flex flex-col">
                                     <FormLabel>Deferral Date (Optional)</FormLabel>
-                                    <Popover><PopoverTrigger asChild>
+                                    <Popover modal={false}><PopoverTrigger asChild>
                                         <FormControl><Button variant={"outline"} className={cn("w-full md:w-1/2 pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
                                             {field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
                                             <CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl>
                                     </PopoverTrigger>
-                                    <PopoverContent className="w-auto p-0" align="start">
+                                    <PopoverContent className="w-auto p-0 z-[100]" align="start">
                                         <Calendar mode="single" selected={field.value} onSelect={(date) => field.onChange(date ? startOfDay(date): undefined)} initialFocus /></PopoverContent>
                                     </Popover><FormMessage />
                                 </FormItem>
