@@ -16,7 +16,6 @@ import {
   DialogDescription as ModalDialogDescription,
   DialogFooter,
   DialogClose,
-  // DialogPortal, // Removed: No longer needed at the root of this component
 } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
@@ -67,7 +66,6 @@ export function AddEditAircraftDiscrepancyModal({
     setIsMounted(true);
   }, []);
 
-  // State and refs for "Date Discovered" picker
   const [isDateDiscoveredCalendarOpen, setIsDateDiscoveredCalendarOpen] = useState(false);
   const dateDiscoveredButtonRef = useRef<HTMLButtonElement>(null);
   const { x: dateDiscoveredX, y: dateDiscoveredY, strategy: dateDiscoveredStrategy, refs: { setReference: setDateDiscoveredReference, setFloating: setDateDiscoveredFloating } } = useFloating({
@@ -81,7 +79,6 @@ export function AddEditAircraftDiscrepancyModal({
     }
   }, [setDateDiscoveredReference, dateDiscoveredButtonRef, isDateDiscoveredCalendarOpen]);
 
-  // State and refs for "Deferral Date" picker
   const [isDeferralDateCalendarOpen, setIsDeferralDateCalendarOpen] = useState(false);
   const deferralDateButtonRef = useRef<HTMLButtonElement>(null);
   const { x: deferralDateX, y: deferralDateY, strategy: deferralDateStrategy, refs: { setReference: setDeferralDateReference, setFloating: setDeferralDateFloating } } = useFloating({
@@ -149,10 +146,22 @@ export function AddEditAircraftDiscrepancyModal({
   const modalTitle = isEditing ? `Edit Discrepancy for ${aircraft?.tailNumber}` : `Add New Discrepancy for ${aircraft?.tailNumber}`;
   const modalDescription = isEditing ? "Update the initial details of this aircraft discrepancy." : "Log a new discrepancy. Corrective action and sign-off will be done via the 'Clear Discrepancy' action.";
 
+  const handleInteractOutside = (event: Event) => {
+    if (event.target instanceof Element) {
+      const targetElement = event.target as Element;
+      // Check if the click is on any part of our custom calendar popovers
+      if (targetElement.closest('[data-calendar-popover="true"]')) {
+        event.preventDefault(); // Prevent Dialog from closing
+      }
+    }
+  };
+
   return (
-    // Removed the outer <DialogPortal> that was causing the error
     <Dialog open={isOpen} onOpenChange={(open) => { if (!isSaving) setIsOpen(open); }}>
-      <DialogContent className="overflow-visible sm:max-w-xl flex flex-col max-h-[calc(100vh-8rem)]">
+      <DialogContent 
+        className="overflow-visible sm:max-w-xl flex flex-col max-h-[calc(100vh-8rem)]"
+        onInteractOutside={handleInteractOutside}
+      >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {isEditing ? <Edit3 className="h-6 w-6 text-primary" /> : <AlertTriangle className="h-6 w-6 text-destructive" />}
@@ -259,18 +268,19 @@ export function AddEditAircraftDiscrepancyModal({
           ref={setDateDiscoveredFloating}
           style={{
             position: dateDiscoveredStrategy,
-            top: dateDiscoveredY ?? "",
-            left: dateDiscoveredX ?? "",
+            top: dateDiscoveredY ?? 0, // Provide default if null
+            left: dateDiscoveredX ?? 0, // Provide default if null
             zIndex: 9999,
           }}
+          data-calendar-popover="true" // Added data attribute
         >
-          <div className="bg-background border shadow-lg rounded-md" style={{ pointerEvents: 'auto' }}>
+          <div className="bg-background border shadow-lg rounded-md" onClick={(e) => e.stopPropagation()}>
             <Calendar
               mode="single"
               selected={form.getValues("dateDiscovered")}
               onSelect={(date, selectedDay, activeModifiers, e) => {
-                e?.stopPropagation();
-                e?.preventDefault();
+                // e?.stopPropagation(); // Event is on the inner div already
+                // e?.preventDefault();
                 form.setValue("dateDiscovered", date ? startOfDay(date) : startOfDay(new Date()), { shouldValidate: true });
                 setIsDateDiscoveredCalendarOpen(false);
               }}
@@ -287,18 +297,19 @@ export function AddEditAircraftDiscrepancyModal({
           ref={setDeferralDateFloating}
           style={{
             position: deferralDateStrategy,
-            top: deferralDateY ?? "",
-            left: deferralDateX ?? "",
+            top: deferralDateY ?? 0, // Provide default if null
+            left: deferralDateX ?? 0, // Provide default if null
             zIndex: 9999,
           }}
+          data-calendar-popover="true" // Added data attribute
         >
-          <div className="bg-background border shadow-lg rounded-md" style={{ pointerEvents: 'auto' }}>
+          <div className="bg-background border shadow-lg rounded-md" onClick={(e) => e.stopPropagation()}>
             <Calendar
               mode="single"
               selected={form.getValues("deferralDate")}
               onSelect={(date, selectedDay, activeModifiers, e) => {
-                e?.stopPropagation();
-                e?.preventDefault();
+                // e?.stopPropagation();
+                // e?.preventDefault();
                 form.setValue("deferralDate", date ? startOfDay(date) : undefined, { shouldValidate: true });
                 setIsDeferralDateCalendarOpen(false);
               }}
