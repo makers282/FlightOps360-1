@@ -5,6 +5,7 @@
  *
  * - saveAircraftDiscrepancy - Saves (adds or updates) an aircraft discrepancy.
  * - fetchAircraftDiscrepancies - Fetches all discrepancies for a given aircraft.
+ * - fetchAllAircraftDiscrepancies - Fetches all discrepancies across all aircraft.
  * - deleteAircraftDiscrepancy - Deletes an aircraft discrepancy.
  */
 
@@ -17,7 +18,7 @@ import {
     SaveAircraftDiscrepancyInputSchema,
     SaveAircraftDiscrepancyOutputSchema,
     FetchAircraftDiscrepanciesInputSchema,
-    FetchAircraftDiscrepanciesOutputSchema,
+    FetchAircraftDiscrepanciesOutputSchema, // This is z.array(AircraftDiscrepancySchema)
     DeleteAircraftDiscrepancyInputSchema,
     DeleteAircraftDiscrepancyOutputSchema,
 } from '@/ai/schemas/aircraft-discrepancy-schemas';
@@ -39,6 +40,10 @@ export async function saveAircraftDiscrepancy(input: SaveAircraftDiscrepancyInpu
 
 export async function fetchAircraftDiscrepancies(input: { aircraftId: string }): Promise<AircraftDiscrepancy[]> {
   return fetchAircraftDiscrepanciesFlow(input);
+}
+
+export async function fetchAllAircraftDiscrepancies(): Promise<AircraftDiscrepancy[]> {
+  return fetchAllAircraftDiscrepanciesFlow();
 }
 
 export async function deleteAircraftDiscrepancy(input: { discrepancyId: string }): Promise<{ success: boolean; discrepancyId: string }> {
@@ -87,15 +92,12 @@ const saveAircraftDiscrepancyFlow = ai.defineFlow(
       const dataToSet = {
         ...discrepancyData, // Contains fields like isDeferred, deferralReference, deferralDate
         status: statusToSet,
-        // timeDiscovered is no longer passed or saved
         aircraftTailNumber: aircraftTailNumber || discrepancyData.aircraftTailNumber, 
         updatedAt: serverTimestamp(),
         createdAt: docSnap.exists() && docSnap.data().createdAt ? docSnap.data().createdAt : serverTimestamp(),
       };
 
-      // Remove timeDiscovered explicitly if it somehow exists in discrepancyData (it shouldn't due to schema omit)
       delete (dataToSet as any).timeDiscovered;
-
 
       await setDoc(discrepancyDocRef, dataToSet, { merge: true });
       const savedDoc = await getDoc(discrepancyDocRef);
@@ -105,7 +107,6 @@ const saveAircraftDiscrepancyFlow = ai.defineFlow(
         throw new Error("Failed to retrieve saved discrepancy data from Firestore.");
       }
 
-      // Ensure savedData doesn't include timeDiscovered before returning
       const { timeDiscovered, ...returnData } = savedData;
 
       return {
@@ -137,7 +138,6 @@ const fetchAircraftDiscrepanciesFlow = ai.defineFlow(
       const snapshot = await getDocs(q);
       const discrepanciesList = snapshot.docs.map(docSnapshot => {
         const data = docSnapshot.data();
-        // Ensure timeDiscovered is not included in the returned object
         const { timeDiscovered, ...displayData } = data;
         return {
           ...displayData,
@@ -164,6 +164,41 @@ const fetchAircraftDiscrepanciesFlow = ai.defineFlow(
   }
 );
 
+const fetchAllAircraftDiscrepanciesFlow = ai.defineFlow(
+  {
+    name: 'fetchAllAircraftDiscrepanciesFlow',
+    // No input schema needed for fetching all
+    outputSchema: FetchAircraftDiscrepanciesOutputSchema, // z.array(AircraftDiscrepancySchema)
+  },
+  async () => {
+    try {
+      const discrepanciesCollectionRef = collection(db, DISCREPANCIES_COLLECTION);
+      // Order by dateDiscovered descending, then by createdAt descending for tie-breaking
+      const q = query(
+        discrepanciesCollectionRef, 
+        orderBy("dateDiscovered", "desc"), 
+        orderBy("createdAt", "desc")
+      );
+      const snapshot = await getDocs(q);
+      const discrepanciesList = snapshot.docs.map(docSnapshot => {
+        const data = docSnapshot.data();
+        const { timeDiscovered, ...displayData } = data; // Ensure timeDiscovered is not passed
+        return {
+          ...displayData,
+          id: docSnapshot.id,
+          dateDiscovered: data.dateDiscovered || '1970-01-01', 
+          createdAt: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
+          updatedAt: (data.updatedAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
+        } as AircraftDiscrepancy;
+      });
+      return discrepanciesList;
+    } catch (error) {
+      console.error('Error fetching all aircraft discrepancies from Firestore:', error);
+      throw new Error(`Failed to fetch all aircraft discrepancies: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+);
+
 const deleteAircraftDiscrepancyFlow = ai.defineFlow(
   {
     name: 'deleteAircraftDiscrepancyFlow',
@@ -181,5 +216,3 @@ const deleteAircraftDiscrepancyFlow = ai.defineFlow(
     }
   }
 );
-
-    
