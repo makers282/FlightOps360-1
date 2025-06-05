@@ -2,6 +2,8 @@
 "use client";
 
 import React, { useEffect, useState, useRef } from 'react';
+import { createPortal } from "react-dom";
+import { useFloating, shift, offset, autoUpdate, flip } from "@floating-ui/react-dom";
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { z } from 'zod';
@@ -14,17 +16,11 @@ import {
   DialogDescription as ModalDialogDescription,
   DialogFooter,
   DialogClose,
-  DialogPortal, // Added DialogPortal
+  DialogPortal,
 } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { 
-  Popover, 
-  PopoverAnchor, // Added PopoverAnchor
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { CalendarIcon, Loader2, Save, AlertTriangle, Edit3 } from 'lucide-react';
 import { cn } from "@/lib/utils";
@@ -64,14 +60,42 @@ interface AddEditAircraftDiscrepancyModalProps {
 export function AddEditAircraftDiscrepancyModal({
   isOpen, setIsOpen, onSave, aircraft, initialData, isEditing, isSaving,
 }: AddEditAircraftDiscrepancyModalProps) {
-
   const [minDateAllowed, setMinDateAllowed] = useState<Date | null>(null);
-  
-  const [isDateDiscoveredCalendarOpen, setIsDateDiscoveredCalendarOpen] = useState(false);
-  const [isDeferralDateCalendarOpen, setIsDeferralDateCalendarOpen] = useState(false);
+  const [isMounted, setIsMounted] = React.useState(false);
 
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  // State and refs for "Date Discovered" picker
+  const [isDateDiscoveredCalendarOpen, setIsDateDiscoveredCalendarOpen] = useState(false);
   const dateDiscoveredButtonRef = useRef<HTMLButtonElement>(null);
+  const { x: dateDiscoveredX, y: dateDiscoveredY, strategy: dateDiscoveredStrategy, refs: { setReference: setDateDiscoveredReference, setFloating: setDateDiscoveredFloating }, update: updateDateDiscoveredPosition } = useFloating({
+    placement: "bottom-start",
+    middleware: [offset(4), shift(), flip()],
+    whileElementsMounted: autoUpdate,
+  });
+   React.useEffect(() => {
+    if (dateDiscoveredButtonRef.current) {
+      setDateDiscoveredReference(dateDiscoveredButtonRef.current);
+    }
+  }, [setDateDiscoveredReference, dateDiscoveredButtonRef, isDateDiscoveredCalendarOpen]);
+
+  // State and refs for "Deferral Date" picker
+  const [isDeferralDateCalendarOpen, setIsDeferralDateCalendarOpen] = useState(false);
   const deferralDateButtonRef = useRef<HTMLButtonElement>(null);
+  const { x: deferralDateX, y: deferralDateY, strategy: deferralDateStrategy, refs: { setReference: setDeferralDateReference, setFloating: setDeferralDateFloating }, update: updateDeferralDatePosition } = useFloating({
+    placement: "bottom-start",
+    middleware: [offset(4), shift(), flip()],
+    whileElementsMounted: autoUpdate,
+  });
+
+  React.useEffect(() => {
+    if (deferralDateButtonRef.current) {
+      setDeferralDateReference(deferralDateButtonRef.current);
+    }
+  }, [setDeferralDateReference, deferralDateButtonRef, isDeferralDateCalendarOpen]);
+
 
   const form = useForm<AircraftDiscrepancyFormData>({
     resolver: zodResolver(discrepancyFormSchema),
@@ -98,11 +122,20 @@ export function AddEditAircraftDiscrepancyModal({
       } else {
         form.reset({ ...staticDefaultFormValues, dateDiscovered: startOfDay(new Date()), deferralDate: undefined, });
       }
-      // Reset calendar open states when modal opens
+      // Ensure calendars are closed when dialog reopens/resets, in addition to the effect below
       setIsDateDiscoveredCalendarOpen(false);
       setIsDeferralDateCalendarOpen(false);
     }
   }, [isOpen, isEditing, initialData, form]);
+
+  // Effect to close calendars when the dialog itself closes
+  useEffect(() => {
+    if (!isOpen) {
+      setIsDateDiscoveredCalendarOpen(false);
+      setIsDeferralDateCalendarOpen(false);
+    }
+  }, [isOpen]);
+
 
   const onSubmit: SubmitHandler<AircraftDiscrepancyFormData> = async (formData) => {
     if (!aircraft?.id) { alert("Aircraft data is missing. Cannot save discrepancy."); return; }
@@ -227,38 +260,47 @@ export function AddEditAircraftDiscrepancyModal({
         </DialogPortal>
       </Dialog>
 
-      {/* Popover for Date Discovered - Rendered OUTSIDE THE DIALOG */}
-      <Popover open={isDateDiscoveredCalendarOpen} onOpenChange={setIsDateDiscoveredCalendarOpen} modal={false}>
-        <PopoverAnchor asChild>
-          {/* This div is the anchor. Its ref MUST point to the button in the modal. */}
-          <div ref={dateDiscoveredButtonRef} style={{ position: 'absolute', width: 0, height: 0, opacity: 0, pointerEvents: 'none' }} />
-        </PopoverAnchor>
-        <PopoverContent side="bottom" align="start" className="z-[9999] p-0 w-auto">
-          <div className="bg-background border rounded-md shadow-lg"> {/* Styled wrapper for Calendar */}
-            <Calendar
-              mode="single"
-              selected={form.getValues("dateDiscovered") || undefined}
-              onSelect={(date) => {
-                form.setValue("dateDiscovered", date ? startOfDay(date) : startOfDay(new Date()), { shouldValidate: true });
-                setIsDateDiscoveredCalendarOpen(false);
-              }}
-              disabled={(date) => minDateAllowed ? date < minDateAllowed : false}
-            />
-          </div>
-        </PopoverContent>
-      </Popover>
-
-      {/* Popover for Deferral Date - Rendered OUTSIDE THE DIALOG (conditionally) */}
-      {isDeferredWatch && (
-        <Popover open={isDeferralDateCalendarOpen} onOpenChange={setIsDeferralDateCalendarOpen} modal={false}>
-          <PopoverAnchor asChild>
-            <div ref={deferralDateButtonRef} style={{ position: 'absolute', width: 0, height: 0, opacity: 0, pointerEvents: 'none' }} />
-          </PopoverAnchor>
-          <PopoverContent side="bottom" align="start" className="z-[9999] p-0 w-auto">
-            <div className="bg-background border rounded-md shadow-lg"> {/* Styled wrapper for Calendar */}
+      {isMounted && isDateDiscoveredCalendarOpen &&
+        createPortal(
+          <div
+            ref={setDateDiscoveredFloating}
+            style={{
+              position: dateDiscoveredStrategy,
+              top: dateDiscoveredY ?? "",
+              left: dateDiscoveredX ?? "",
+              zIndex: 9999,
+            }}
+          >
+            <div className="bg-background border shadow-lg rounded-md" style={{ pointerEvents: 'auto' }}>
               <Calendar
                 mode="single"
-                selected={form.getValues("deferralDate") || undefined}
+                selected={form.getValues("dateDiscovered")}
+                onSelect={(date) => {
+                  form.setValue("dateDiscovered", date ? startOfDay(date) : startOfDay(new Date()), { shouldValidate: true });
+                  setIsDateDiscoveredCalendarOpen(false);
+                }}
+                disabled={(date) => minDateAllowed ? date < minDateAllowed : false}
+              />
+            </div>
+          </div>,
+          document.body
+        )}
+
+      {isMounted && isDeferralDateCalendarOpen && isDeferredWatch &&
+        createPortal(
+          <div
+            ref={setDeferralDateFloating}
+            style={{
+              position: deferralDateStrategy,
+              top: deferralDateY ?? "",
+              left: deferralDateX ?? "",
+              zIndex: 9999,
+            }}
+          >
+            <div className="bg-background border shadow-lg rounded-md" style={{ pointerEvents: 'auto' }}>
+              <Calendar
+                mode="single"
+                selected={form.getValues("deferralDate")}
                 onSelect={(date) => {
                   form.setValue("deferralDate", date ? startOfDay(date) : undefined, { shouldValidate: true });
                   setIsDeferralDateCalendarOpen(false);
@@ -269,9 +311,9 @@ export function AddEditAircraftDiscrepancyModal({
                 }}
               />
             </div>
-          </PopoverContent>
-        </Popover>
-      )}
+          </div>,
+          document.body
+        )}
     </>
   );
 }
