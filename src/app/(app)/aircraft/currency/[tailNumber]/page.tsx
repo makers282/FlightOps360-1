@@ -518,13 +518,13 @@ export default function AircraftMaintenanceDetailPage() {
             const dataToSave: SaveAircraftDiscrepancyInput = {
                 aircraftId: originalDiscrepancy.aircraftId,
                 aircraftTailNumber: originalDiscrepancy.aircraftTailNumber,
-                status: "Closed", // Force status to Closed
+                status: "Closed", 
                 dateDiscovered: originalDiscrepancy.dateDiscovered,
                 timeDiscovered: originalDiscrepancy.timeDiscovered,
                 description: originalDiscrepancy.description,
                 discoveredBy: originalDiscrepancy.discoveredBy,
                 discoveredByCertNumber: originalDiscrepancy.discoveredByCertNumber,
-                isDeferred: false, // Closing out, so no longer deferred
+                isDeferred: false, 
                 deferralReference: undefined,
                 deferralDate: undefined,
                 correctiveAction: signOffData.correctiveAction,
@@ -767,7 +767,7 @@ export default function AircraftMaintenanceDetailPage() {
                                   <TableCell className="text-right space-x-1">
                                     <Button variant="outline" size="sm" onClick={() => handleOpenEditDiscrepancyModal(disc)} disabled={isSavingDiscrepancy || isDeletingDiscrepancy || isSavingSignOff}>Edit</Button>
                                     {(disc.status === "Open" || disc.status === "Deferred") && (
-                                        <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white shadow-md" onClick={() => handleOpenSignOffModal(disc)} disabled={isSavingDiscrepancy || isDeletingDiscrepancy || isSavingSignOff}>Clear</Button>
+                                        <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-md" onClick={() => handleOpenSignOffModal(disc)} disabled={isSavingDiscrepancy || isDeletingDiscrepancy || isSavingSignOff}>Clear</Button>
                                     )}
                                     <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => confirmDeleteDiscrepancy(disc)} disabled={isSavingDiscrepancy || isDeletingDiscrepancy || isSavingSignOff || disc.status === "Closed"}> <Trash2 className="h-4 w-4" /> </Button>
                                   </TableCell>
@@ -917,6 +917,7 @@ export default function AircraftMaintenanceDetailPage() {
     
 
     
+
 
 
 
