@@ -728,10 +728,9 @@ export default function AircraftMaintenanceDetailPage() {
             </AccordionTrigger>
             <AccordionContent className="pt-0">
               <Tabs defaultValue="discrepancies" className="w-full px-6 pb-4">
-                <TabsList className="mb-4 grid w-full grid-cols-3">
+                <TabsList className="mb-4 grid w-full grid-cols-2">
                   <TabsTrigger value="discrepancies">Discrepancies ({openDiscrepancyCount})</TabsTrigger>
                   <TabsTrigger value="mels">MELs ({openMelItemsCount})</TabsTrigger>
-                  <TabsTrigger value="damageLog">Damage Log (0)</TabsTrigger>
                 </TabsList>
                 <TabsContent value="discrepancies">
                   <CardDescription className="mb-3">Track and manage discrepancies for {currentAircraft.tailNumber}. Showing Open/Deferred.</CardDescription>
@@ -826,20 +825,6 @@ export default function AircraftMaintenanceDetailPage() {
                             </TableBody>
                         </Table>
                     )}
-                  </div>
-                </TabsContent>
-                <TabsContent value="damageLog">
-                  <CardDescription className="mb-3">Track and manage any reported damage for {currentAircraft.tailNumber}.</CardDescription>
-                   <div className="space-y-3 text-center py-4">
-                    <p className="text-muted-foreground">Damage Log information will be available here soon.</p>
-                     <div className="flex flex-col sm:flex-row gap-2 justify-center">
-                        <Button variant="secondary" onClick={() => toast({ title: "Coming Soon!", description: "Functionality to add damage reports is planned."})} className="w-full sm:w-auto">
-                          <FileWarning className="mr-2 h-4 w-4" /> Add New Damage Report (Coming Soon)
-                        </Button>
-                        <Button variant="outline" onClick={() => toast({ title: "Coming Soon!", description: "A dedicated page for full damage log viewing is planned."})} className="w-full sm:w-auto">
-                          <ListChecks className="mr-2 h-4 w-4" /> View Full Damage Log (Coming Soon)
-                        </Button>
-                    </div>
                   </div>
                 </TabsContent>
               </Tabs>
@@ -947,5 +932,6 @@ export default function AircraftMaintenanceDetailPage() {
 
       
     
+
 
 
