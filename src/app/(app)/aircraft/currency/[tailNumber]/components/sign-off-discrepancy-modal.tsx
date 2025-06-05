@@ -95,7 +95,7 @@ export function SignOffDiscrepancyModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!isSaving) setIsOpen(open); }}>
-      <DialogContent className="sm:max-w-lg flex flex-col max-h-[80vh]"> {/* Changed max-h */}
+      <DialogContent className="sm:max-w-lg flex flex-col max-h-[calc(100vh-8rem)]"> {/* Adjusted max-h */}
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ShieldCheck className="h-6 w-6 text-primary" />
@@ -130,12 +130,12 @@ export function SignOffDiscrepancyModal({
                   render={({ field }) => (
                   <FormItem className="flex flex-col">
                       <FormLabel>Date Corrected</FormLabel>
-                      <Popover><PopoverTrigger asChild>
+                      <Popover modal={false}><PopoverTrigger asChild>
                           <FormControl><Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
                               {field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
                               <CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl>
                           </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0" align="start">
+                          <PopoverContent className="w-auto p-0 z-[100]" align="start">
                           <Calendar mode="single" selected={field.value} onSelect={(date) => field.onChange(date ? startOfDay(date): undefined)} initialFocus /></PopoverContent>
                       </Popover><FormMessage />
                   </FormItem>
@@ -205,3 +205,4 @@ export function SignOffDiscrepancyModal({
     </Dialog>
   );
 }
+

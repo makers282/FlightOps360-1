@@ -24,7 +24,7 @@ import { CalendarIcon, Loader2, Save, AlertTriangle, Edit3 } from 'lucide-react'
 import { cn } from "@/lib/utils";
 import { format, parseISO, isValid as isValidDate, startOfDay } from "date-fns";
 import type { AircraftDiscrepancy, SaveAircraftDiscrepancyInput } from '@/ai/schemas/aircraft-discrepancy-schemas';
-import { ScrollArea } from '@/components/ui/scroll-area';
+// Removed ScrollArea import: import { ScrollArea } from '@/components/ui/scroll-area';
 import type { FleetAircraft } from '@/ai/schemas/fleet-aircraft-schemas';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -57,7 +57,7 @@ const staticDefaultFormValues: Omit<AircraftDiscrepancyFormData, 'dateDiscovered
 interface AddEditAircraftDiscrepancyModalProps {
   isOpen: boolean;
   setIsOpen: (isOpen: boolean) => void;
-  onSave: (data: Omit<SaveAircraftDiscrepancyInput, 'status' | 'timeDiscovered'>, originalDiscrepancyId?: string) => Promise<void>; 
+  onSave: (data: Omit<SaveAircraftDiscrepancyInput, 'status'>, originalDiscrepancyId?: string) => Promise<void>; 
   aircraft: FleetAircraft | null;
   initialData?: AircraftDiscrepancy | null;
   isEditing?: boolean;
@@ -119,7 +119,7 @@ export function AddEditAircraftDiscrepancyModal({
         alert("Aircraft data is missing. Cannot save discrepancy.");
         return;
     }
-    const dataToSave: Omit<SaveAircraftDiscrepancyInput, 'status' | 'timeDiscovered'> = { 
+    const dataToSave: Omit<SaveAircraftDiscrepancyInput, 'status'> = { 
       aircraftId: aircraft.id,
       aircraftTailNumber: aircraft.tailNumber,
       dateDiscovered: format(formData.dateDiscovered, "yyyy-MM-dd"),
@@ -149,10 +149,11 @@ export function AddEditAircraftDiscrepancyModal({
           <ModalDialogDescription>{modalDescription}</ModalDialogDescription>
         </DialogHeader>
         
-        {/* Removed wrapping div with overflow-hidden, ScrollArea is now direct child (after header) or form is */}
-        <ScrollArea className="flex-1 h-full p-1"> {/* Added flex-1 to ScrollArea if it's the direct child */}
+        {/* Removed ScrollArea, form content wrapped in a div with overflow-y-auto */}
+        <div className="flex-1 overflow-y-auto px-4 py-2">
           <Form {...form}>
-            <form id="aircraft-discrepancy-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-2 px-4"> 
+            {/* Removed py-2 px-4 from form tag, moved to parent div */}
+            <form id="aircraft-discrepancy-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-4"> 
               <div className="space-y-6">
                 <Card className="p-4 border-orange-500/50 bg-orange-50/30 dark:bg-orange-900/20">
                   <CardHeader className="p-0 pb-3">
@@ -219,13 +220,13 @@ export function AddEditAircraftDiscrepancyModal({
                               render={({ field }) => (
                               <FormItem className="flex flex-col">
                                   <FormLabel>Deferral Date (Optional)</FormLabel>
-                                  <Popover modal={false}> {/* modal={false} is important */}
+                                  <Popover modal={false}> 
                                     <PopoverTrigger asChild>
                                       <FormControl><Button variant={"outline"} className={cn("w-full md:w-1/2 pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
                                           {field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
                                           <CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl>
                                   </PopoverTrigger>
-                                  <PopoverContent className="w-auto p-0 z-[100]" align="start"> {/* Ensure high z-index */}
+                                  <PopoverContent className="w-auto p-0 z-[100]" align="start"> 
                                       <Calendar mode="single" selected={field.value} onSelect={(date) => field.onChange(date ? startOfDay(date): undefined)} initialFocus /></PopoverContent>
                                   </Popover><FormMessage />
                               </FormItem>
@@ -238,7 +239,7 @@ export function AddEditAircraftDiscrepancyModal({
               </div>
             </form>
           </Form>
-        </ScrollArea>
+        </div>
         
         <DialogFooter className="pt-4 border-t">
           <DialogClose asChild><Button type="button" variant="outline" disabled={isSaving}>Cancel</Button></DialogClose>
@@ -252,5 +253,6 @@ export function AddEditAircraftDiscrepancyModal({
   );
 }
     
-
     
+    
+
