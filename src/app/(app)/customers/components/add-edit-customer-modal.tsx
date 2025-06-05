@@ -1,9 +1,8 @@
 
 "use client";
 
-import React, { useEffect, useState, useRef } from 'react';
-import { createPortal } from "react-dom";
-import { useFloating, shift, offset, autoUpdate, flip } from "@floating-ui/react-dom";
+import React, { useEffect, useState } from 'react';
+// Removed useFloating, createPortal, and related imports
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { z } from 'zod';
@@ -22,6 +21,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover"; // Added PopoverContent
 import { Calendar } from "@/components/ui/calendar";
 import { CalendarIcon, Loader2, Save } from 'lucide-react';
 import { cn } from "@/lib/utils";
@@ -66,15 +66,7 @@ export function AddEditCustomerModal({
   
   const [minStartDateAllowed, setMinStartDateAllowed] = useState<Date | null>(null);
   const [isClient, setIsClient] = useState(false);
-  const [isMounted, setIsMounted] = React.useState(false);
-  useEffect(() => { setIsMounted(true); setIsClient(true); }, []);
-
-  const [isStartDateCalendarOpen, setIsStartDateCalendarOpen] = useState(false);
-  const startDateButtonRef = useRef<HTMLButtonElement>(null);
-  const { x: startDateX, y: startDateY, strategy: startDateStrategy, refs: { setReference: setStartDateReference, setFloating: setStartDateFloating } } = useFloating({
-    placement: "bottom-start", middleware: [offset(4), shift(), flip()], whileElementsMounted: autoUpdate,
-  });
-  useEffect(() => { if (startDateButtonRef.current) setStartDateReference(startDateButtonRef.current); }, [setStartDateReference, startDateButtonRef, isStartDateCalendarOpen]);
+  // Removed isMounted and calendar open states, and useFloating hooks
 
   const form = useForm<CustomerFormData>({
     resolver: zodResolver(customerFormSchema),
@@ -86,10 +78,7 @@ export function AddEditCustomerModal({
   });
 
   useEffect(() => {
-    if (!isOpen) setIsStartDateCalendarOpen(false);
-  }, [isOpen]);
-
-  useEffect(() => {
+    setIsClient(true); // Ensure this is set for client-side conditional rendering
     const today = new Date(); today.setFullYear(today.getFullYear() - 50); setMinStartDateAllowed(today);
     if (isOpen) {
       if (isEditing && initialData) {
@@ -124,22 +113,13 @@ export function AddEditCustomerModal({
   const modalTitle = isEditing ? `Edit: ${initialData?.name || ''}` : 'Add New Customer';
   const modalDescription = isEditing ? "Update the customer's details." : "Fill in the new customer's information.";
   
-  const handleInteractOutside = (event: Event) => {
-    if (event.target instanceof Element) {
-      const targetElement = event.target as Element;
-      if (targetElement.closest('[data-calendar-popover="true"]')) {
-        event.preventDefault(); 
-      }
-    }
-  };
-
+  // Removed onInteractOutside handler
 
   return (
-    <>
     <Dialog open={isOpen} onOpenChange={(open) => { if (!isSaving) setIsOpen(open); }}>
       <DialogContent 
         className="sm:max-w-2xl overflow-visible"
-        onInteractOutside={handleInteractOutside}
+        // Removed onInteractOutside
       >
         <DialogHeader><DialogTitle>{modalTitle}</DialogTitle><DialogDescription>{modalDescription}</DialogDescription></DialogHeader>
         <ScrollArea className="max-h-[70vh] pr-5">
@@ -157,7 +137,21 @@ export function AddEditCustomerModal({
               <h3 className="text-md font-semibold border-b pb-1 text-primary">Additional Information</h3>
                <FormField control={form.control} name="startDate" render={({ field }) => (
                   <FormItem className="flex flex-col"><FormLabel>Start Date (Optional)</FormLabel>
-                    {isClient ? (<Button ref={startDateButtonRef} type="button" variant={"outline"} className={cn("w-full md:w-[280px] justify-start text-left font-normal", !field.value && "text-muted-foreground")} onClick={() => setIsStartDateCalendarOpen((prev) => !prev)}><CalendarIcon className="mr-2 h-4 w-4" />{field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}</Button>) : <Skeleton className="h-10 w-full md:w-[280px]" />}
+                    {isClient ? (
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <FormControl>
+                                    <Button variant={"outline"} className={cn("w-full md:w-[280px] justify-start text-left font-normal", !field.value && "text-muted-foreground")}>
+                                        <CalendarIcon className="mr-2 h-4 w-4" />
+                                        {field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
+                                    </Button>
+                                </FormControl>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0 z-[100]" align="start">
+                                <Calendar mode="single" selected={field.value} onSelect={(date) => field.onChange(date ? startOfDay(date) : undefined)} disabled={(date) => minStartDateAllowed ? date < minStartDateAllowed : false} />
+                            </PopoverContent>
+                        </Popover>
+                    ) : <Skeleton className="h-10 w-full md:w-[280px]" />}
                   <FormMessage /></FormItem>)} />
               <FormField control={form.control} name="isActive" render={({ field }) => (<FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 shadow-sm"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><div className="space-y-0.5"><FormLabel className="text-sm font-normal">Active Customer</FormLabel><FormDescription className="text-xs">Inactive customers may be hidden.</FormDescription></div></FormItem>)} />
               <FormField control={form.control} name="internalNotes" render={({ field }) => (<FormItem><FormLabel>Internal Notes</FormLabel><FormControl><Textarea placeholder="Internal team notes..." {...field} value={field.value || ''} rows={3} /></FormControl><FormMessage /></FormItem>)} />
@@ -168,10 +162,6 @@ export function AddEditCustomerModal({
         <DialogFooter className="pt-4 border-t"><DialogClose asChild><Button type="button" variant="outline" disabled={isSaving}>Cancel</Button></DialogClose><Button form="customer-form" type="submit" disabled={isSaving}>{isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}{isEditing ? 'Save Changes' : 'Add Customer'}</Button></DialogFooter>
       </DialogContent>
     </Dialog>
-
-    {isMounted && isStartDateCalendarOpen && createPortal(<div ref={setStartDateFloating} style={{ position: startDateStrategy, top: startDateY ?? "", left: startDateX ?? "", zIndex: 9999 }} data-calendar-popover="true" onMouseDown={(e) => e.preventDefault()}><div className="bg-background border shadow-lg rounded-md"><Calendar mode="single" selected={form.getValues("startDate")} onSelect={(date) => { form.setValue("startDate", date ? startOfDay(date) : undefined, { shouldValidate: true }); setIsStartDateCalendarOpen(false); }} disabled={(date) => minStartDateAllowed ? date < minStartDateAllowed : false} /></div></div>, document.body)}
-    </>
   );
 }
-
     

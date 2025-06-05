@@ -1,9 +1,8 @@
 
 "use client";
 
-import React, { useEffect, useState, useRef } from 'react';
-import { createPortal } from "react-dom";
-import { useFloating, shift, offset, autoUpdate, flip } from "@floating-ui/react-dom";
+import React, { useEffect, useState } from 'react';
+// Removed useFloating, createPortal, and related imports
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { z } from 'zod';
@@ -20,6 +19,7 @@ import {
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover"; // Added PopoverContent
 import { Calendar } from "@/components/ui/calendar";
 import { CalendarIcon, Loader2, Save, AlertTriangle, Edit3 } from 'lucide-react';
 import { cn } from "@/lib/utils";
@@ -60,39 +60,7 @@ export function AddEditAircraftDiscrepancyModal({
   isOpen, setIsOpen, onSave, aircraft, initialData, isEditing, isSaving,
 }: AddEditAircraftDiscrepancyModalProps) {
   const [minDateAllowed, setMinDateAllowed] = useState<Date | null>(null);
-  const [isMounted, setIsMounted] = React.useState(false);
-
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
-
-  const [isDateDiscoveredCalendarOpen, setIsDateDiscoveredCalendarOpen] = useState(false);
-  const dateDiscoveredButtonRef = useRef<HTMLButtonElement>(null);
-  const { x: dateDiscoveredX, y: dateDiscoveredY, strategy: dateDiscoveredStrategy, refs: { setReference: setDateDiscoveredReference, setFloating: setDateDiscoveredFloating } } = useFloating({
-    placement: "bottom-start",
-    middleware: [offset(4), shift(), flip()],
-    whileElementsMounted: autoUpdate,
-  });
-   React.useEffect(() => {
-    if (dateDiscoveredButtonRef.current) {
-      setDateDiscoveredReference(dateDiscoveredButtonRef.current);
-    }
-  }, [setDateDiscoveredReference, dateDiscoveredButtonRef, isDateDiscoveredCalendarOpen]);
-
-  const [isDeferralDateCalendarOpen, setIsDeferralDateCalendarOpen] = useState(false);
-  const deferralDateButtonRef = useRef<HTMLButtonElement>(null);
-  const { x: deferralDateX, y: deferralDateY, strategy: deferralDateStrategy, refs: { setReference: setDeferralDateReference, setFloating: setDeferralDateFloating } } = useFloating({
-    placement: "bottom-start",
-    middleware: [offset(4), shift(), flip()],
-    whileElementsMounted: autoUpdate,
-  });
-
-  React.useEffect(() => {
-    if (deferralDateButtonRef.current) {
-      setDeferralDateReference(deferralDateButtonRef.current);
-    }
-  }, [setDeferralDateReference, deferralDateButtonRef, isDeferralDateCalendarOpen]);
-
+  // Removed isMounted, calendar open states, and useFloating hooks
 
   const form = useForm<AircraftDiscrepancyFormData>({
     resolver: zodResolver(discrepancyFormSchema),
@@ -122,14 +90,6 @@ export function AddEditAircraftDiscrepancyModal({
     }
   }, [isOpen, isEditing, initialData, form]);
 
-  useEffect(() => {
-    if (!isOpen) {
-      setIsDateDiscoveredCalendarOpen(false);
-      setIsDeferralDateCalendarOpen(false);
-    }
-  }, [isOpen]);
-
-
   const onSubmit: SubmitHandler<AircraftDiscrepancyFormData> = async (formData) => {
     if (!aircraft?.id) { alert("Aircraft data is missing. Cannot save discrepancy."); return; }
     const dataToSave: Omit<SaveAircraftDiscrepancyInput, 'status'> = {
@@ -146,20 +106,13 @@ export function AddEditAircraftDiscrepancyModal({
   const modalTitle = isEditing ? `Edit Discrepancy for ${aircraft?.tailNumber}` : `Add New Discrepancy for ${aircraft?.tailNumber}`;
   const modalDescription = isEditing ? "Update the initial details of this aircraft discrepancy." : "Log a new discrepancy. Corrective action and sign-off will be done via the 'Clear Discrepancy' action.";
 
-  const handleInteractOutside = (event: Event) => {
-    if (event.target instanceof Element) {
-      const targetElement = event.target as Element;
-      if (targetElement.closest('[data-calendar-popover="true"]')) {
-        event.preventDefault(); 
-      }
-    }
-  };
+  // Removed onInteractOutside handler
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!isSaving) setIsOpen(open); }}>
-      <DialogContent 
+      <DialogContent
         className="overflow-visible sm:max-w-xl flex flex-col max-h-[calc(100vh-8rem)]"
-        onInteractOutside={handleInteractOutside}
+        // Removed onInteractOutside
       >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -181,18 +134,27 @@ export function AddEditAircraftDiscrepancyModal({
                         render={({ field }) => (
                           <FormItem className="flex flex-col">
                             <FormLabel>Date Discovered</FormLabel>
-                            <FormControl>
-                              <Button
-                                ref={dateDiscoveredButtonRef}
-                                type="button"
-                                variant={"outline"}
-                                className={cn("w-full justify-start text-left font-normal", !field.value && "text-muted-foreground")}
-                                onClick={() => setIsDateDiscoveredCalendarOpen((prev) => !prev)}
-                              >
-                                <CalendarIcon className="mr-2 h-4 w-4" />
-                                {field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
-                              </Button>
-                            </FormControl>
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <FormControl>
+                                  <Button
+                                    variant={"outline"}
+                                    className={cn("w-full justify-start text-left font-normal", !field.value && "text-muted-foreground")}
+                                  >
+                                    <CalendarIcon className="mr-2 h-4 w-4" />
+                                    {field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
+                                  </Button>
+                                </FormControl>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-auto p-0 z-[100]" align="start">
+                                <Calendar
+                                  mode="single"
+                                  selected={field.value}
+                                  onSelect={(date) => field.onChange(date ? startOfDay(date) : startOfDay(new Date()))}
+                                  disabled={(date) => minDateAllowed ? date < minDateAllowed : false}
+                                />
+                              </PopoverContent>
+                            </Popover>
                             <FormMessage />
                           </FormItem>
                         )}
@@ -228,18 +190,28 @@ export function AddEditAircraftDiscrepancyModal({
                             render={({ field }) => (
                               <FormItem className="flex flex-col">
                                 <FormLabel>Deferral Date (Optional)</FormLabel>
-                                <FormControl>
-                                  <Button
-                                    ref={deferralDateButtonRef}
-                                    type="button"
-                                    variant={"outline"}
-                                    className={cn("w-full md:w-1/2 justify-start text-left font-normal", !field.value && "text-muted-foreground")}
-                                    onClick={() => setIsDeferralDateCalendarOpen((prev) => !prev)}
-                                  >
-                                    <CalendarIcon className="mr-2 h-4 w-4" />
-                                    {field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
-                                  </Button>
-                                </FormControl>
+                                <Popover>
+                                  <PopoverTrigger asChild>
+                                    <FormControl>
+                                      <Button
+                                        variant={"outline"}
+                                        className={cn("w-full md:w-1/2 justify-start text-left font-normal", !field.value && "text-muted-foreground")}
+                                      >
+                                        <CalendarIcon className="mr-2 h-4 w-4" />
+                                        {field.value && isValidDate(field.value) ? format(field.value, "PPP") : 
+                                        <span>Pick a date</span>}
+                                      </Button>
+                                    </FormControl>
+                                  </PopoverTrigger>
+                                  <PopoverContent className="w-auto p-0 z-[100]" align="start">
+                                    <Calendar
+                                      mode="single"
+                                      selected={field.value}
+                                      onSelect={(date) => field.onChange(date ? startOfDay(date) : undefined)}
+                                      disabled={(date) => { const dateDisc = form.getValues("dateDiscovered"); return dateDisc ? date < dateDisc : (minDateAllowed ? date < minDateAllowed : false); }}
+                                    />
+                                  </PopoverContent>
+                                </Popover>
                                 <FormMessage />
                               </FormItem>
                             )}
@@ -260,67 +232,7 @@ export function AddEditAircraftDiscrepancyModal({
             </Button>
           </DialogFooter>
       </DialogContent>
-
-    {isMounted && isDateDiscoveredCalendarOpen &&
-      createPortal(
-        <div
-          ref={setDateDiscoveredFloating}
-          style={{
-            position: dateDiscoveredStrategy,
-            top: dateDiscoveredY ?? 0,
-            left: dateDiscoveredX ?? 0,
-            zIndex: 9999,
-          }}
-          data-calendar-popover="true"
-          onMouseDown={(e) => e.preventDefault()}
-        >
-          <div className="bg-background border shadow-lg rounded-md">
-            <Calendar
-              mode="single"
-              selected={form.getValues("dateDiscovered")}
-              onSelect={(date) => {
-                form.setValue("dateDiscovered", date ? startOfDay(date) : startOfDay(new Date()), { shouldValidate: true });
-                setIsDateDiscoveredCalendarOpen(false);
-              }}
-              disabled={(date) => minDateAllowed ? date < minDateAllowed : false}
-            />
-          </div>
-        </div>,
-        document.body
-      )}
-
-    {isMounted && isDeferralDateCalendarOpen && isDeferredWatch &&
-      createPortal(
-        <div
-          ref={setDeferralDateFloating}
-          style={{
-            position: deferralDateStrategy,
-            top: deferralDateY ?? 0,
-            left: deferralDateX ?? 0,
-            zIndex: 9999,
-          }}
-          data-calendar-popover="true"
-          onMouseDown={(e) => e.preventDefault()}
-        >
-          <div className="bg-background border shadow-lg rounded-md">
-            <Calendar
-              mode="single"
-              selected={form.getValues("deferralDate")}
-              onSelect={(date) => {
-                form.setValue("deferralDate", date ? startOfDay(date) : undefined, { shouldValidate: true });
-                setIsDeferralDateCalendarOpen(false);
-              }}
-              disabled={(date) => {
-                const dateDisc = form.getValues("dateDiscovered");
-                return dateDisc ? date < dateDisc : (minDateAllowed ? date < minDateAllowed : false);
-              }}
-            />
-          </div>
-        </div>,
-        document.body
-      )}
     </Dialog>
   );
 }
-
     

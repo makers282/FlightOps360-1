@@ -1,9 +1,8 @@
 
 "use client";
 
-import React, { useEffect, useState, useRef } from 'react';
-import { createPortal } from "react-dom";
-import { useFloating, shift, offset, autoUpdate, flip } from "@floating-ui/react-dom";
+import React, { useEffect, useState } from 'react';
+// Removed useFloating, createPortal, and related imports
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { z } from 'zod';
@@ -21,6 +20,7 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover"; // Added PopoverContent
 import { Calendar } from "@/components/ui/calendar";
 import { CalendarIcon, Loader2, Save, FileText as FileTextIcon, Edit3 } from 'lucide-react';
 import { cn } from "@/lib/utils";
@@ -58,22 +58,7 @@ export function AddEditCrewDocumentModal({
   isOpen, setIsOpen, onSave, initialData, isEditing, isSaving, crewMembers, isLoadingCrewMembers,
 }: AddEditCrewDocumentModalProps) {
   
-  const [isMounted, setIsMounted] = React.useState(false);
-  useEffect(() => { setIsMounted(true); }, []);
-
-  const [isIssueDateCalendarOpen, setIsIssueDateCalendarOpen] = useState(false);
-  const issueDateButtonRef = useRef<HTMLButtonElement>(null);
-  const { x: issueDateX, y: issueDateY, strategy: issueDateStrategy, refs: { setReference: setIssueDateReference, setFloating: setIssueDateFloating } } = useFloating({
-    placement: "bottom-start", middleware: [offset(4), shift(), flip()], whileElementsMounted: autoUpdate,
-  });
-  useEffect(() => { if (issueDateButtonRef.current) setIssueDateReference(issueDateButtonRef.current); }, [setIssueDateReference, issueDateButtonRef, isIssueDateCalendarOpen]);
-
-  const [isExpiryDateCalendarOpen, setIsExpiryDateCalendarOpen] = useState(false);
-  const expiryDateButtonRef = useRef<HTMLButtonElement>(null);
-  const { x: expiryDateX, y: expiryDateY, strategy: expiryDateStrategy, refs: { setReference: setExpiryDateReference, setFloating: setExpiryDateFloating } } = useFloating({
-    placement: "bottom-start", middleware: [offset(4), shift(), flip()], whileElementsMounted: autoUpdate,
-  });
-  useEffect(() => { if (expiryDateButtonRef.current) setExpiryDateReference(expiryDateButtonRef.current); }, [setExpiryDateReference, expiryDateButtonRef, isExpiryDateCalendarOpen]);
+  // Removed isMounted and calendar open states, and useFloating hooks
 
   const form = useForm<CrewDocumentFormData>({
     resolver: zodResolver(crewDocumentFormSchema),
@@ -82,13 +67,6 @@ export function AddEditCrewDocumentModal({
       issueDate: undefined, expiryDate: undefined, notes: '',
     },
   });
-
-  useEffect(() => {
-    if (!isOpen) {
-      setIsIssueDateCalendarOpen(false);
-      setIsExpiryDateCalendarOpen(false);
-    }
-  }, [isOpen]);
 
   useEffect(() => {
     if (isOpen) {
@@ -124,21 +102,13 @@ export function AddEditCrewDocumentModal({
   const modalTitle = isEditing ? `Edit Document: ${initialData?.documentName || ''}` : 'Add New Crew Document';
   const modalDescription = isEditing ? "Update the crew document's details." : "Fill in the new crew document's information.";
 
-  const handleInteractOutside = (event: Event) => {
-    if (event.target instanceof Element) {
-      const targetElement = event.target as Element;
-      if (targetElement.closest('[data-calendar-popover="true"]')) {
-        event.preventDefault(); 
-      }
-    }
-  };
+  // Removed onInteractOutside handler
 
   return (
-    <>
     <Dialog open={isOpen} onOpenChange={(open) => { if (!isSaving) setIsOpen(open); }}>
       <DialogContent 
         className="sm:max-w-lg overflow-visible"
-        onInteractOutside={handleInteractOutside}
+        // Removed onInteractOutside
       >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -159,17 +129,37 @@ export function AddEditCrewDocumentModal({
                 <FormField control={form.control} name="issueDate" render={({ field }) => (
                     <FormItem className="flex flex-col">
                       <FormLabel>Issue Date (Optional)</FormLabel>
-                      <Button ref={issueDateButtonRef} type="button" variant={"outline"} className={cn("w-full justify-start text-left font-normal", !field.value && "text-muted-foreground")} onClick={() => setIsIssueDateCalendarOpen((prev) => !prev)}>
-                        <CalendarIcon className="mr-2 h-4 w-4" />{field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
-                      </Button><FormMessage />
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <FormControl>
+                            <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !field.value && "text-muted-foreground")}>
+                              <CalendarIcon className="mr-2 h-4 w-4" />{field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
+                            </Button>
+                          </FormControl>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0 z-[100]" align="start">
+                          <Calendar mode="single" selected={field.value} onSelect={(date) => field.onChange(date ? startOfDay(date) : undefined)} />
+                        </PopoverContent>
+                      </Popover>
+                      <FormMessage />
                     </FormItem>
                 )} />
                 <FormField control={form.control} name="expiryDate" render={({ field }) => (
                     <FormItem className="flex flex-col">
                       <FormLabel>Expiry Date (Optional)</FormLabel>
-                      <Button ref={expiryDateButtonRef} type="button" variant={"outline"} className={cn("w-full justify-start text-left font-normal", !field.value && "text-muted-foreground")} onClick={() => setIsExpiryDateCalendarOpen((prev) => !prev)}>
-                        <CalendarIcon className="mr-2 h-4 w-4" />{field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
-                      </Button><FormMessage />
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <FormControl>
+                            <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !field.value && "text-muted-foreground")}>
+                              <CalendarIcon className="mr-2 h-4 w-4" />{field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
+                            </Button>
+                          </FormControl>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0 z-[100]" align="start">
+                          <Calendar mode="single" selected={field.value} onSelect={(date) => field.onChange(date ? startOfDay(date) : undefined)} disabled={(date) => { const issueDateVal = form.getValues("issueDate"); return issueDateVal ? date < issueDateVal : false; }} />
+                        </PopoverContent>
+                      </Popover>
+                      <FormMessage />
                     </FormItem>
                 )} />
               </div>
@@ -188,11 +178,6 @@ export function AddEditCrewDocumentModal({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-
-    {isMounted && isIssueDateCalendarOpen && createPortal(<div ref={setIssueDateFloating} style={{ position: issueDateStrategy, top: issueDateY ?? "", left: issueDateX ?? "", zIndex: 9999 }} data-calendar-popover="true" onMouseDown={(e) => e.preventDefault()}><div className="bg-background border shadow-lg rounded-md"><Calendar mode="single" selected={form.getValues("issueDate")} onSelect={(date) => { form.setValue("issueDate", date ? startOfDay(date) : undefined, { shouldValidate: true }); setIsIssueDateCalendarOpen(false); }} /></div></div>, document.body)}
-    {isMounted && isExpiryDateCalendarOpen && createPortal(<div ref={setExpiryDateFloating} style={{ position: expiryDateStrategy, top: expiryDateY ?? "", left: expiryDateX ?? "", zIndex: 9999 }} data-calendar-popover="true" onMouseDown={(e) => e.preventDefault()}><div className="bg-background border shadow-lg rounded-md"><Calendar mode="single" selected={form.getValues("expiryDate")} onSelect={(date) => { form.setValue("expiryDate", date ? startOfDay(date) : undefined, { shouldValidate: true }); setIsExpiryDateCalendarOpen(false); }} disabled={(date) => { const issueDateVal = form.getValues("issueDate"); return issueDateVal ? date < issueDateVal : false; }} /></div></div>, document.body)}
-    </>
   );
 }
-
     

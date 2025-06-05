@@ -2,8 +2,7 @@
 "use client";
 
 import React, { useEffect, useState, useRef } from 'react';
-import { createPortal } from "react-dom";
-import { useFloating, shift, offset, autoUpdate, flip } from "@floating-ui/react-dom";
+// Removed useFloating, createPortal, and related imports
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { z } from 'zod';
@@ -21,6 +20,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDes
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover"; // Added PopoverContent
 import { Calendar } from "@/components/ui/calendar";
 import { CalendarIcon, Loader2, Save, FileText as FileTextIcon, Edit3, UploadCloud, Paperclip, XCircle as RemoveFileIcon } from 'lucide-react';
 import { cn } from "@/lib/utils";
@@ -66,22 +66,7 @@ export function AddEditAircraftDocumentModal({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isSavingFile, setIsSavingFile] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [isMounted, setIsMounted] = React.useState(false);
-  useEffect(() => { setIsMounted(true); }, []);
-
-  const [isIssueDateCalendarOpen, setIsIssueDateCalendarOpen] = useState(false);
-  const issueDateButtonRef = useRef<HTMLButtonElement>(null);
-  const { x: issueDateX, y: issueDateY, strategy: issueDateStrategy, refs: { setReference: setIssueDateReference, setFloating: setIssueDateFloating } } = useFloating({
-    placement: "bottom-start", middleware: [offset(4), shift(), flip()], whileElementsMounted: autoUpdate,
-  });
-  useEffect(() => { if (issueDateButtonRef.current) setIssueDateReference(issueDateButtonRef.current); }, [setIssueDateReference, issueDateButtonRef, isIssueDateCalendarOpen]);
-
-  const [isExpiryDateCalendarOpen, setIsExpiryDateCalendarOpen] = useState(false);
-  const expiryDateButtonRef = useRef<HTMLButtonElement>(null);
-  const { x: expiryDateX, y: expiryDateY, strategy: expiryDateStrategy, refs: { setReference: setExpiryDateReference, setFloating: setExpiryDateFloating } } = useFloating({
-    placement: "bottom-start", middleware: [offset(4), shift(), flip()], whileElementsMounted: autoUpdate,
-  });
-  useEffect(() => { if (expiryDateButtonRef.current) setExpiryDateReference(expiryDateButtonRef.current); }, [setExpiryDateReference, expiryDateButtonRef, isExpiryDateCalendarOpen]);
+  // Removed isMounted and calendar open states, and useFloating hooks
 
   const form = useForm<AircraftDocumentFormData>({
     resolver: zodResolver(aircraftDocumentFormSchema),
@@ -90,13 +75,6 @@ export function AddEditAircraftDocumentModal({
       issueDate: undefined, expiryDate: undefined, notes: '', fileUrl: undefined,
     },
   });
-
-  useEffect(() => {
-    if (!isOpen) {
-      setIsIssueDateCalendarOpen(false);
-      setIsExpiryDateCalendarOpen(false);
-    }
-  }, [isOpen]);
 
   useEffect(() => {
     if (isOpen) {
@@ -156,21 +134,13 @@ export function AddEditAircraftDocumentModal({
   const modalDescription = isEditing ? "Update document details." : "Fill in document information.";
   const totalSaving = isSavingProp || isSavingFile;
   
-  const handleInteractOutside = (event: Event) => {
-    if (event.target instanceof Element) {
-      const targetElement = event.target as Element;
-      if (targetElement.closest('[data-calendar-popover="true"]')) {
-        event.preventDefault(); 
-      }
-    }
-  };
+  // Removed onInteractOutside handler
 
   return (
-    <>
     <Dialog open={isOpen} onOpenChange={(open) => { if (!totalSaving) setIsOpen(open); }}>
       <DialogContent 
         className="sm:max-w-lg overflow-visible"
-        onInteractOutside={handleInteractOutside}
+        // Removed onInteractOutside
       >
         <DialogHeader><DialogTitle className="flex items-center gap-2">{isEditing ? <Edit3 /> : <FileTextIcon />}{modalTitle}</DialogTitle><ModalDialogDescription>{modalDescription}</ModalDialogDescription></DialogHeader>
         <ScrollArea className="max-h-[70vh] pr-5">
@@ -180,8 +150,42 @@ export function AddEditAircraftDocumentModal({
               <FormField control={form.control} name="documentName" render={({ field }) => (<FormItem><FormLabel>Document Name</FormLabel><FormControl><Input placeholder="Registration Certificate" {...field} /></FormControl><FormMessage /></FormItem>)} />
               <FormField control={form.control} name="documentType" render={({ field }) => (<FormItem><FormLabel>Document Type</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger></FormControl><SelectContent>{aircraftDocumentTypes.map(type => (<SelectItem key={type} value={type}>{type}</SelectItem>))}</SelectContent></Select><FormMessage /></FormItem>)} />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField control={form.control} name="issueDate" render={({ field }) => (<FormItem className="flex flex-col"><FormLabel>Issue Date</FormLabel><Button ref={issueDateButtonRef} type="button" variant={"outline"} className={cn("w-full justify-start text-left font-normal", !field.value && "text-muted-foreground")} onClick={() => setIsIssueDateCalendarOpen((prev) => !prev)}><CalendarIcon className="mr-2 h-4 w-4" />{field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick date</span>}</Button><FormMessage /></FormItem>)} />
-                <FormField control={form.control} name="expiryDate" render={({ field }) => (<FormItem className="flex flex-col"><FormLabel>Expiry Date</FormLabel><Button ref={expiryDateButtonRef} type="button" variant={"outline"} className={cn("w-full justify-start text-left font-normal", !field.value && "text-muted-foreground")} onClick={() => setIsExpiryDateCalendarOpen((prev) => !prev)}><CalendarIcon className="mr-2 h-4 w-4" />{field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick date</span>}</Button><FormMessage /></FormItem>)} />
+                <FormField control={form.control} name="issueDate" render={({ field }) => (
+                    <FormItem className="flex flex-col">
+                        <FormLabel>Issue Date</FormLabel>
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <FormControl>
+                                    <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !field.value && "text-muted-foreground")}>
+                                        <CalendarIcon className="mr-2 h-4 w-4" />{field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick date</span>}
+                                    </Button>
+                                </FormControl>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0 z-[100]" align="start">
+                                <Calendar mode="single" selected={field.value} onSelect={(date) => field.onChange(date ? startOfDay(date) : undefined)} />
+                            </PopoverContent>
+                        </Popover>
+                        <FormMessage />
+                    </FormItem>
+                )} />
+                <FormField control={form.control} name="expiryDate" render={({ field }) => (
+                    <FormItem className="flex flex-col">
+                        <FormLabel>Expiry Date</FormLabel>
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <FormControl>
+                                    <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !field.value && "text-muted-foreground")}>
+                                        <CalendarIcon className="mr-2 h-4 w-4" />{field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick date</span>}
+                                    </Button>
+                                </FormControl>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0 z-[100]" align="start">
+                                <Calendar mode="single" selected={field.value} onSelect={(date) => field.onChange(date ? startOfDay(date) : undefined)} disabled={(date) => { const issueDateVal = form.getValues("issueDate"); return issueDateVal ? date < issueDateVal : false; }} />
+                            </PopoverContent>
+                        </Popover>
+                        <FormMessage />
+                    </FormItem>
+                )} />
               </div>
               <FormItem><FormLabel className="flex items-center gap-2"><UploadCloud /> Document File</FormLabel><div className="flex items-center gap-2"><FormControl><Input id="file-upload" type="file" ref={fileInputRef} onChange={handleFileChange} className="text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"/></FormControl>{selectedFile && (<Button type="button" variant="ghost" size="icon" onClick={handleRemoveFile} className="text-destructive"><RemoveFileIcon /></Button>)}</div>{selectedFile && (<p className="text-xs text-muted-foreground mt-1 flex items-center gap-1"><Paperclip />Selected: {selectedFile.name} ({(selectedFile.size / 1024).toFixed(1)} KB)</p>)}{!selectedFile && form.getValues('fileUrl') && (<p className="text-xs mt-1">Current: <a href={form.getValues('fileUrl')!} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline truncate max-w-xs inline-block">{form.getValues('fileUrl')?.split('/').pop()}</a></p>)}<FormDescription className="text-xs">Max 5MB. PDF, DOCX, PNG, JPG.</FormDescription><FormMessage /></FormItem>
               <FormField control={form.control} name="notes" render={({ field }) => (<FormItem><FormLabel>Notes</FormLabel><FormControl><Textarea placeholder="Notes about this document..." {...field} value={field.value || ''} rows={3} /></FormControl><FormMessage /></FormItem>)} />
@@ -191,11 +195,6 @@ export function AddEditAircraftDocumentModal({
         <DialogFooter className="pt-4 border-t"><DialogClose asChild><Button type="button" variant="outline" disabled={totalSaving}>Cancel</Button></DialogClose><Button form="aircraft-document-form" type="submit" disabled={totalSaving || isLoadingAircraft}>{totalSaving ? <Loader2 className="animate-spin" /> : <Save />}{isEditing ? 'Save Changes' : 'Add Document'}</Button></DialogFooter>
       </DialogContent>
     </Dialog>
-
-    {isMounted && isIssueDateCalendarOpen && createPortal(<div ref={setIssueDateFloating} style={{ position: issueDateStrategy, top: issueDateY ?? "", left: issueDateX ?? "", zIndex: 9999 }} data-calendar-popover="true" onMouseDown={(e) => e.preventDefault()}><div className="bg-background border shadow-lg rounded-md"><Calendar mode="single" selected={form.getValues("issueDate")} onSelect={(date) => { form.setValue("issueDate", date ? startOfDay(date) : undefined, { shouldValidate: true }); setIsIssueDateCalendarOpen(false); }}/></div></div>, document.body)}
-    {isMounted && isExpiryDateCalendarOpen && createPortal(<div ref={setExpiryDateFloating} style={{ position: expiryDateStrategy, top: expiryDateY ?? "", left: expiryDateX ?? "", zIndex: 9999 }} data-calendar-popover="true" onMouseDown={(e) => e.preventDefault()}><div className="bg-background border shadow-lg rounded-md"><Calendar mode="single" selected={form.getValues("expiryDate")} onSelect={(date) => { form.setValue("expiryDate", date ? startOfDay(date) : undefined, { shouldValidate: true }); setIsExpiryDateCalendarOpen(false); }} disabled={(date) => { const issueDateVal = form.getValues("issueDate"); return issueDateVal ? date < issueDateVal : false; }} /></div></div>, document.body)}
-    </>
   );
 }
-
     

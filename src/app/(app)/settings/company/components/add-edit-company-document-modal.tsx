@@ -2,8 +2,7 @@
 "use client";
 
 import React, { useEffect, useState, useRef } from 'react';
-import { createPortal } from "react-dom";
-import { useFloating, shift, offset, autoUpdate, flip } from "@floating-ui/react-dom";
+// Removed useFloating, createPortal, and related imports
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { z } from 'zod';
@@ -21,6 +20,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDes
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover"; // Added PopoverContent
 import { Calendar } from "@/components/ui/calendar";
 import { CalendarIcon, Loader2, Save, Library as LibraryIcon, Edit3, UploadCloud, Paperclip, XCircle as RemoveFileIcon, Tag } from 'lucide-react';
 import { cn } from "@/lib/utils";
@@ -74,22 +74,7 @@ export function AddEditCompanyDocumentModal({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploadingFile, setIsUploadingFile] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [isMounted, setIsMounted] = React.useState(false);
-  useEffect(() => { setIsMounted(true); }, []);
-
-  const [isEffectiveDateCalendarOpen, setIsEffectiveDateCalendarOpen] = useState(false);
-  const effectiveDateButtonRef = useRef<HTMLButtonElement>(null);
-  const { x: effectiveDateX, y: effectiveDateY, strategy: effectiveDateStrategy, refs: { setReference: setEffectiveDateReference, setFloating: setEffectiveDateFloating } } = useFloating({
-    placement: "bottom-start", middleware: [offset(4), shift(), flip()], whileElementsMounted: autoUpdate,
-  });
-  useEffect(() => { if (effectiveDateButtonRef.current) setEffectiveDateReference(effectiveDateButtonRef.current); }, [setEffectiveDateReference, effectiveDateButtonRef, isEffectiveDateCalendarOpen]);
-
-  const [isReviewDateCalendarOpen, setIsReviewDateCalendarOpen] = useState(false);
-  const reviewDateButtonRef = useRef<HTMLButtonElement>(null);
-  const { x: reviewDateX, y: reviewDateY, strategy: reviewDateStrategy, refs: { setReference: setReviewDateReference, setFloating: setReviewDateFloating } } = useFloating({
-    placement: "bottom-start", middleware: [offset(4), shift(), flip()], whileElementsMounted: autoUpdate,
-  });
-  useEffect(() => { if (reviewDateButtonRef.current) setReviewDateReference(reviewDateButtonRef.current); }, [setReviewDateReference, reviewDateButtonRef, isReviewDateCalendarOpen]);
+  // Removed isMounted and calendar open states, and useFloating hooks
 
   const form = useForm<CompanyDocumentFormData>({
     resolver: zodResolver(companyDocumentFormSchema),
@@ -99,13 +84,6 @@ export function AddEditCompanyDocumentModal({
     },
   });
   
-  useEffect(() => {
-    if (!isOpen) {
-      setIsEffectiveDateCalendarOpen(false);
-      setIsReviewDateCalendarOpen(false);
-    }
-  }, [isOpen]);
-
   useEffect(() => {
     if (isOpen) {
       setSelectedFile(null);
@@ -147,23 +125,10 @@ export function AddEditCompanyDocumentModal({
     let finalFileUrl = formData.fileUrl;
 
     if (selectedFile) {
-      // Placeholder: Actual file upload logic would go here
-      // For now, we'll just simulate it and use a placeholder URL.
       toast({ title: "File Upload (Simulation)", description: `Simulating upload of ${selectedFile.name}. This will be a placeholder URL.` });
-      await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate delay
+      await new Promise(resolve => setTimeout(resolve, 1500)); 
       finalFileUrl = `https://storage.example.com/company_documents/${selectedFile.name.replace(/\s+/g, '_')}`;
-      // try {
-      //   const reader = new FileReader();
-      //   reader.readAsDataURL(selectedFile);
-      //   reader.onloadend = async () => {
-      //     const fileDataUri = reader.result as string;
-      //     // Replace with actual upload flow call:
-      //     // const uploadResult = await uploadCompanyDocument({ documentName: formData.documentName, fileName: selectedFile.name, fileDataUri });
-      //     // finalFileUrl = uploadResult.fileUrl;
-      //     // proceedWithSave(formData, finalFileUrl);
-      //   };
-      // } catch (error) { ... }
-      proceedWithSave(formData, finalFileUrl); // Call with placeholder
+      proceedWithSave(formData, finalFileUrl); 
     } else {
       proceedWithSave(formData, finalFileUrl);
     }
@@ -193,21 +158,13 @@ export function AddEditCompanyDocumentModal({
   
   const totalSaving = isSavingProp || isUploadingFile;
 
-  const handleInteractOutside = (event: Event) => {
-    if (event.target instanceof Element) {
-      const targetElement = event.target as Element;
-      if (targetElement.closest('[data-calendar-popover="true"]')) {
-        event.preventDefault(); 
-      }
-    }
-  };
+  // Removed onInteractOutside handler
 
   return (
-    <>
     <Dialog open={isOpen} onOpenChange={(open) => { if (!totalSaving) setIsOpen(open); }}>
       <DialogContent 
         className="sm:max-w-lg overflow-visible"
-        onInteractOutside={handleInteractOutside}
+        // Removed onInteractOutside
       >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -236,14 +193,32 @@ export function AddEditCompanyDocumentModal({
                 <FormField control={form.control} name="effectiveDate" render={({ field }) => (
                   <FormItem className="flex flex-col">
                     <FormLabel>Effective Date (Optional)</FormLabel>
-                    <Button ref={effectiveDateButtonRef} type="button" variant={"outline"} className={cn("w-full justify-start text-left font-normal", !field.value && "text-muted-foreground")} onClick={() => setIsEffectiveDateCalendarOpen((prev) => !prev)}><CalendarIcon className="mr-2 h-4 w-4" />{field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick date</span>}</Button>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <FormControl><Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !field.value && "text-muted-foreground")}>
+                            {field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
+                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0 z-[100]" align="start">
+                        <Calendar mode="single" selected={field.value} onSelect={(date) => field.onChange(date ? startOfDay(date) : undefined)} />
+                      </PopoverContent>
+                    </Popover>
                     <FormMessage />
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="reviewDate" render={({ field }) => (
                   <FormItem className="flex flex-col">
                     <FormLabel>Next Review Date (Optional)</FormLabel>
-                    <Button ref={reviewDateButtonRef} type="button" variant={"outline"} className={cn("w-full justify-start text-left font-normal", !field.value && "text-muted-foreground")} onClick={() => setIsReviewDateCalendarOpen((prev) => !prev)}><CalendarIcon className="mr-2 h-4 w-4" />{field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick date</span>}</Button>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <FormControl><Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !field.value && "text-muted-foreground")}>
+                            {field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
+                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0 z-[100]" align="start">
+                        <Calendar mode="single" selected={field.value} onSelect={(date) => field.onChange(date ? startOfDay(date) : undefined)} disabled={(date) => { const effDate = form.getValues("effectiveDate"); return effDate ? date < effDate : false; }} />
+                      </PopoverContent>
+                    </Popover>
                     <FormMessage />
                   </FormItem>
                 )} />
@@ -278,11 +253,6 @@ export function AddEditCompanyDocumentModal({
         <DialogFooter className="pt-4 border-t"><DialogClose asChild><Button type="button" variant="outline" disabled={totalSaving}>Cancel</Button></DialogClose><Button form="company-document-form" type="submit" disabled={totalSaving}>{totalSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}{isEditing ? 'Save Changes' : 'Add Document'}</Button></DialogFooter>
       </DialogContent>
     </Dialog>
-
-    {isMounted && isEffectiveDateCalendarOpen && createPortal(<div ref={setEffectiveDateFloating} style={{ position: effectiveDateStrategy, top: effectiveDateY ?? "", left: effectiveDateX ?? "", zIndex: 9999 }} data-calendar-popover="true" onMouseDown={(e) => e.preventDefault()}><div className="bg-background border shadow-lg rounded-md"><Calendar mode="single" selected={form.getValues("effectiveDate")} onSelect={(date) => { form.setValue("effectiveDate", date ? startOfDay(date) : undefined, { shouldValidate: true }); setIsEffectiveDateCalendarOpen(false); }}/></div></div>, document.body)}
-    {isMounted && isReviewDateCalendarOpen && createPortal(<div ref={setReviewDateFloating} style={{ position: reviewDateStrategy, top: reviewDateY ?? "", left: reviewDateX ?? "", zIndex: 9999 }} data-calendar-popover="true" onMouseDown={(e) => e.preventDefault()}><div className="bg-background border shadow-lg rounded-md"><Calendar mode="single" selected={form.getValues("reviewDate")} onSelect={(date) => { form.setValue("reviewDate", date ? startOfDay(date) : undefined, { shouldValidate: true }); setIsReviewDateCalendarOpen(false); }} disabled={(date) => { const effDate = form.getValues("effectiveDate"); return effDate ? date < effDate : false; }} /></div></div>, document.body)}
-    </>
   );
 }
-
     
