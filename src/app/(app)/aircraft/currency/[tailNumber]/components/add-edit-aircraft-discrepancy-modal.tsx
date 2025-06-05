@@ -18,20 +18,18 @@ import {
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { CalendarIcon, Loader2, Save, AlertTriangle, Edit3 } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { format, parseISO, isValid as isValidDate, startOfDay } from "date-fns";
 import type { AircraftDiscrepancy, SaveAircraftDiscrepancyInput } from '@/ai/schemas/aircraft-discrepancy-schemas';
-import { discrepancyStatuses } from '@/ai/schemas/aircraft-discrepancy-schemas';
+// Removed: import { discrepancyStatuses } from '@/ai/schemas/aircraft-discrepancy-schemas';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { FleetAircraft } from '@/ai/schemas/fleet-aircraft-schemas';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 
 const discrepancyFormSchema = z.object({
-  status: z.enum(discrepancyStatuses).default("Open"),
   dateDiscovered: z.date({ required_error: "Date discovered is required." }),
   timeDiscovered: z.string().optional().refine(val => !val || /^([01]\d|2[0-3]):([0-5]\d)$/.test(val), { message: "Invalid time format (HH:MM)." }),
   description: z.string().min(5, "A clear description of the discrepancy is required."),
@@ -43,7 +41,6 @@ const discrepancyFormSchema = z.object({
 export type AircraftDiscrepancyFormData = z.infer<typeof discrepancyFormSchema>;
 
 const staticDefaultFormValues: AircraftDiscrepancyFormData = {
-  status: "Open",
   dateDiscovered: new Date(0), 
   timeDiscovered: "00:00",
   description: "",
@@ -55,7 +52,7 @@ const staticDefaultFormValues: AircraftDiscrepancyFormData = {
 interface AddEditAircraftDiscrepancyModalProps {
   isOpen: boolean;
   setIsOpen: (isOpen: boolean) => void;
-  onSave: (data: SaveAircraftDiscrepancyInput, originalDiscrepancyId?: string) => Promise<void>;
+  onSave: (data: Omit<SaveAircraftDiscrepancyInput, 'status'>, originalDiscrepancyId?: string) => Promise<void>; // Status removed from data type
   aircraft: FleetAircraft | null;
   initialData?: AircraftDiscrepancy | null;
   isEditing?: boolean;
@@ -88,7 +85,6 @@ export function AddEditAircraftDiscrepancyModal({
     if (isOpen) {
       if (isEditing && initialData) {
         form.reset({
-          status: initialData.status || "Open",
           dateDiscovered: initialData.dateDiscovered && isValidDate(parseISO(initialData.dateDiscovered)) ? parseISO(initialData.dateDiscovered) : startOfDay(new Date()),
           timeDiscovered: initialData.timeDiscovered || format(new Date(), "HH:mm"),
           description: initialData.description,
@@ -110,17 +106,15 @@ export function AddEditAircraftDiscrepancyModal({
         alert("Aircraft data is missing. Cannot save discrepancy.");
         return;
     }
-    const dataToSave: SaveAircraftDiscrepancyInput = {
+    const dataToSave: Omit<SaveAircraftDiscrepancyInput, 'status'> = { // Status is removed
       aircraftId: aircraft.id,
       aircraftTailNumber: aircraft.tailNumber,
-      status: formData.status,
       dateDiscovered: format(formData.dateDiscovered, "yyyy-MM-dd"),
       timeDiscovered: formData.timeDiscovered,
       description: formData.description,
       discoveredBy: formData.discoveredBy,
       discoveredByCertNumber: formData.discoveredByCertNumber,
-      // Corrective action fields are no longer part of this form
-      isDeferred: false, // Assuming deferral is handled elsewhere or not set initially here
+      isDeferred: false, 
     };
     await onSave(dataToSave, isEditing && initialData ? initialData.id : undefined);
   };
@@ -128,7 +122,7 @@ export function AddEditAircraftDiscrepancyModal({
   const modalTitle = isEditing ? `Edit Discrepancy for ${aircraft?.tailNumber}` : `Add New Discrepancy for ${aircraft?.tailNumber}`;
   const modalDescription = isEditing
     ? "Update the initial details of this aircraft discrepancy. Clearing and sign-off are handled separately."
-    : "Log a new discrepancy for this aircraft. Corrective action and sign-off will be done via the 'Clear Discrepancy' action.";
+    : "Log a new discrepancy for this aircraft. It will be marked as 'Open'. Corrective action and sign-off will be done via the 'Clear Discrepancy' action.";
   
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!isSaving) setIsOpen(open); }}>
@@ -146,27 +140,7 @@ export function AddEditAircraftDiscrepancyModal({
             <Form {...form}>
               <form id="aircraft-discrepancy-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-2 px-4"> 
                 <div className="space-y-6">
-                  <FormField
-                    control={form.control}
-                    name="status"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Status</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value} disabled={field.value === "Closed" && isEditing}>
-                          <FormControl><SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger></FormControl>
-                          <SelectContent>
-                            {discrepancyStatuses
-                                .filter(s => s !== "Closed" || (isEditing && initialData?.status === "Closed") ) // Prevent changing to "Closed" here
-                                .map(s => (<SelectItem key={s} value={s}>{s}</SelectItem>))
-                            }
-                          </SelectContent>
-                        </Select>
-                        { (isEditing && initialData?.status === "Closed") && <FormMessage>Status cannot be changed from 'Closed' in this form. Use re-open functionality if needed.</FormMessage>}
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
+                  {/* Status FormField removed */}
                   <Card className="p-4 border-orange-500/50 bg-orange-50/30 dark:bg-orange-900/20">
                     <CardHeader className="p-0 pb-3">
                       <CardTitle className="text-md text-orange-700 dark:text-orange-400">Discrepancy Details</CardTitle>
@@ -214,5 +188,6 @@ export function AddEditAircraftDiscrepancyModal({
     </Dialog>
   );
 }
+    
 
     

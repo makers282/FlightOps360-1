@@ -470,12 +470,27 @@ export default function AircraftMaintenanceDetailPage() {
     setIsDiscrepancyModalOpen(true);
   };
   
-  const handleSaveDiscrepancy = async (discrepancyFormData: SaveAircraftDiscrepancyInput, originalId?: string) => {
+  const handleSaveDiscrepancy = async (discrepancyFormDataFromModal: Omit<SaveAircraftDiscrepancyInput, 'status'>, originalId?: string) => {
     if (!currentAircraft) return;
     startSavingDiscrepancyTransition(async () => {
       try {
-        await saveAircraftDiscrepancy({ ...discrepancyFormData, id: originalId });
-        toast({ title: originalId ? "Discrepancy Updated" : "New Discrepancy Added", description: `Discrepancy for ${currentAircraft.tailNumber} saved.` });
+        let statusToSet: AircraftDiscrepancy['status'] = "Open"; // Default for new
+        if (originalId) { // If editing, preserve existing status or use status from a more complete form
+          const existingDiscrepancy = aircraftDiscrepancies.find(d => d.id === originalId);
+          statusToSet = existingDiscrepancy?.status || "Open";
+        }
+
+        const completeDiscrepancyData: SaveAircraftDiscrepancyInput = {
+            ...discrepancyFormDataFromModal,
+            id: originalId,
+            // Status is now handled by the flow or explicitly set here for clarity if needed for edits from other forms
+            // For this modal, if editing, the flow will preserve. If new, flow sets to "Open".
+            // If the `discrepancyFormDataFromModal` could include status for edits, it would be:
+            // status: originalId ? (discrepancyFormDataFromModal as SaveAircraftDiscrepancyInput).status || statusToSet : "Open",
+        };
+
+        await saveAircraftDiscrepancy(completeDiscrepancyData);
+        toast({ title: originalId ? "Discrepancy Updated" : "New Discrepancy Logged", description: `Discrepancy for ${currentAircraft.tailNumber} saved.` });
         await loadAircraftDiscrepancies(currentAircraft.id);
         setIsDiscrepancyModalOpen(false);
         setEditingDiscrepancyId(null); 
@@ -768,7 +783,6 @@ export default function AircraftMaintenanceDetailPage() {
                                     <Button variant="outline" size="sm" onClick={() => handleOpenEditDiscrepancyModal(disc)} disabled={isSavingDiscrepancy || isDeletingDiscrepancy || isSavingSignOff}>Edit</Button>
                                     {(disc.status === "Open" || disc.status === "Deferred") && (
                                         <Button 
-                                            variant="outline"
                                             size="sm" 
                                             className="bg-green-500 hover:bg-green-600 text-white border-green-700 hover:border-green-800 shadow-md"
                                             onClick={() => handleOpenSignOffModal(disc)} 
@@ -937,3 +951,6 @@ export default function AircraftMaintenanceDetailPage() {
 
 
 
+
+
+    

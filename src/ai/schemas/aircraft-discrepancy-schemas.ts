@@ -35,14 +35,16 @@ export const AircraftDiscrepancySchema = z.object({
 export type AircraftDiscrepancy = z.infer<typeof AircraftDiscrepancySchema>;
 
 // Schema for saving a discrepancy (input to the flow)
-// id, createdAt, updatedAt will be handled by the server.
+// id, createdAt, updatedAt will be handled by the server. Status is also handled by server for new, or preserved for edits from this simplified modal.
 export const SaveAircraftDiscrepancyInputSchema = AircraftDiscrepancySchema.omit({ 
   id: true, 
   createdAt: true, 
   updatedAt: true,
   aircraftTailNumber: true, // Tail number is for display, aircraftId is the key relation
+  status: true, // Status is handled by the flow
 }).extend({
   id: z.string().optional(), // ID is optional for creation, can be provided for updates
+  status: z.enum(discrepancyStatuses).optional(), // Make status optional in input
 });
 export type SaveAircraftDiscrepancyInput = z.infer<typeof SaveAircraftDiscrepancyInputSchema>;
 
@@ -63,3 +65,6 @@ export const DeleteAircraftDiscrepancyOutputSchema = z.object({
   success: z.boolean(),
   discrepancyId: z.string(),
 });
+
+
+    
