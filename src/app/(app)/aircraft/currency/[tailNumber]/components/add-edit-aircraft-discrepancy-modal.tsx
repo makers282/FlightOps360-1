@@ -95,7 +95,7 @@ export function AddEditAircraftDiscrepancyModal({
     setMinDateAllowed(pastLimit);
 
     if (isOpen) {
-      setIsDateDiscoveredCalendarOpen(false); // Close popovers when modal opens/resets
+      setIsDateDiscoveredCalendarOpen(false); 
       setIsDeferralDateCalendarOpen(false);
       if (isEditing && initialData) {
         form.reset({
@@ -115,7 +115,7 @@ export function AddEditAircraftDiscrepancyModal({
         });
       }
     }
-  }, [isOpen, isEditing, initialData, form]);
+  }, [isOpen, isEditing, initialData, form, setIsDateDiscoveredCalendarOpen, setIsDeferralDateCalendarOpen]);
 
   const onSubmit: SubmitHandler<AircraftDiscrepancyFormData> = async (formData) => {
     if (!aircraft?.id) {
@@ -166,11 +166,16 @@ export function AddEditAircraftDiscrepancyModal({
                           <FormLabel>Date Discovered</FormLabel>
                           <FormControl>
                             <Popover modal={false} open={isDateDiscoveredCalendarOpen} onOpenChange={setIsDateDiscoveredCalendarOpen}>
-                              <PopoverTrigger asChild>
-                                <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
-                                    {field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
-                                    <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                                </Button>
+                              <PopoverTrigger>
+                                <span 
+                                  className={cn(
+                                    "inline-flex items-center justify-start text-left w-full cursor-pointer p-2 border rounded-md hover:bg-muted",
+                                    !field.value && "text-muted-foreground"
+                                  )}
+                                >
+                                  {field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
+                                  <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                </span>
                               </PopoverTrigger>
                               <PopoverContent className="w-auto p-0 z-[100]" align="start"> 
                                 <Calendar 
@@ -237,11 +242,16 @@ export function AddEditAircraftDiscrepancyModal({
                                   <FormLabel>Deferral Date (Optional)</FormLabel>
                                   <FormControl>
                                     <Popover modal={false} open={isDeferralDateCalendarOpen} onOpenChange={setIsDeferralDateCalendarOpen}>
-                                      <PopoverTrigger asChild>
-                                        <Button variant={"outline"} className={cn("w-full md:w-1/2 pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
-                                            {field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
-                                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                                        </Button>
+                                      <PopoverTrigger>
+                                        <span 
+                                          className={cn(
+                                            "inline-flex items-center justify-start text-left w-full md:w-1/2 cursor-pointer p-2 border rounded-md hover:bg-muted",
+                                            !field.value && "text-muted-foreground"
+                                          )}
+                                        >
+                                          {field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
+                                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                        </span>
                                       </PopoverTrigger>
                                       <PopoverContent className="w-auto p-0 z-[100]" align="start"> 
                                         <Calendar 
@@ -283,5 +293,3 @@ export function AddEditAircraftDiscrepancyModal({
     
     
     
-
-
