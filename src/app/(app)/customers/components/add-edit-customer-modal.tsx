@@ -169,7 +169,7 @@ export function AddEditCustomerModal({
       </DialogContent>
     </Dialog>
 
-    {isMounted && isStartDateCalendarOpen && createPortal(<div ref={setStartDateFloating} style={{ position: startDateStrategy, top: startDateY ?? "", left: startDateX ?? "", zIndex: 9999 }} data-calendar-popover="true"><div className="bg-background border shadow-lg rounded-md"><Calendar mode="single" selected={form.getValues("startDate")} onSelect={(date) => { form.setValue("startDate", date ? startOfDay(date) : undefined, { shouldValidate: true }); setIsStartDateCalendarOpen(false); }} disabled={(date) => minStartDateAllowed ? date < minStartDateAllowed : false} /></div></div>, document.body)}
+    {isMounted && isStartDateCalendarOpen && createPortal(<div ref={setStartDateFloating} style={{ position: startDateStrategy, top: startDateY ?? "", left: startDateX ?? "", zIndex: 9999 }} data-calendar-popover="true" onMouseDown={(e) => e.preventDefault()}><div className="bg-background border shadow-lg rounded-md"><Calendar mode="single" selected={form.getValues("startDate")} onSelect={(date) => { form.setValue("startDate", date ? startOfDay(date) : undefined, { shouldValidate: true }); setIsStartDateCalendarOpen(false); }} disabled={(date) => minStartDateAllowed ? date < minStartDateAllowed : false} /></div></div>, document.body)}
     </>
   );
 }

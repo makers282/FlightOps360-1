@@ -149,9 +149,8 @@ export function AddEditAircraftDiscrepancyModal({
   const handleInteractOutside = (event: Event) => {
     if (event.target instanceof Element) {
       const targetElement = event.target as Element;
-      // Check if the click is on any part of our custom calendar popovers
       if (targetElement.closest('[data-calendar-popover="true"]')) {
-        event.preventDefault(); // Prevent Dialog from closing
+        event.preventDefault(); 
       }
     }
   };
@@ -273,6 +272,7 @@ export function AddEditAircraftDiscrepancyModal({
             zIndex: 9999,
           }}
           data-calendar-popover="true"
+          onMouseDown={(e) => e.preventDefault()}
         >
           <div className="bg-background border shadow-lg rounded-md">
             <Calendar
@@ -300,6 +300,7 @@ export function AddEditAircraftDiscrepancyModal({
             zIndex: 9999,
           }}
           data-calendar-popover="true"
+          onMouseDown={(e) => e.preventDefault()}
         >
           <div className="bg-background border shadow-lg rounded-md">
             <Calendar
