@@ -25,7 +25,7 @@ import { cn } from "@/lib/utils";
 import { format, parseISO, isValid as isValidDate, startOfDay } from "date-fns";
 import type { AircraftDiscrepancy } from '@/ai/schemas/aircraft-discrepancy-schemas';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Checkbox } from '@/components/ui/checkbox'; // Added Checkbox import
+import { Checkbox } from '@/components/ui/checkbox';
 
 const signOffFormSchema = z.object({
   correctiveAction: z.string().min(5, "Corrective action details are required."),
@@ -74,7 +74,7 @@ export function SignOffDiscrepancyModal({
         dateCorrected: discrepancy.dateCorrected && isValidDate(parseISO(discrepancy.dateCorrected)) ? parseISO(discrepancy.dateCorrected) : startOfDay(new Date()),
         correctedBy: discrepancy.correctedBy || '',
         correctedByCertNumber: discrepancy.correctedByCertNumber || '',
-        signOffConfirmation: false, // Always require re-confirmation
+        signOffConfirmation: false, 
       });
     } else if (isOpen && !discrepancy) {
         form.reset({
@@ -96,7 +96,7 @@ export function SignOffDiscrepancyModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!isSaving) setIsOpen(open); }}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg flex flex-col max-h-[calc(100vh-8rem)]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ShieldCheck className="h-6 w-6 text-primary" />
@@ -107,91 +107,93 @@ export function SignOffDiscrepancyModal({
           </ModalDialogDescription>
         </DialogHeader>
         
-        <Form {...form}>
-          <form id="sign-off-discrepancy-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-2">
-            <ScrollArea className="max-h-[60vh] pr-3">
-              <div className="space-y-4 p-1">
-                <FormField
+        <div className="flex-1 overflow-hidden"> {/* Wrapper for ScrollArea */}
+          <ScrollArea className="h-full">
+            <Form {...form}>
+              <form id="sign-off-discrepancy-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-2 px-4">
+                <div className="space-y-4 p-1"> {/* Content now inside ScrollArea */}
+                  <FormField
+                      control={form.control}
+                      name="correctiveAction"
+                      render={({ field }) => (
+                      <FormItem>
+                          <FormLabel>Corrective Action Taken</FormLabel>
+                          <FormControl>
+                          <Textarea placeholder="e.g., Replaced #2 main tire, torqued B-nut on engine oil line..." {...field} rows={4} />
+                          </FormControl>
+                          <FormMessage />
+                      </FormItem>
+                      )}
+                  />
+                  <FormField
+                      control={form.control}
+                      name="dateCorrected"
+                      render={({ field }) => (
+                      <FormItem className="flex flex-col">
+                          <FormLabel>Date Corrected</FormLabel>
+                          <Popover><PopoverTrigger asChild>
+                              <FormControl><Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
+                                  {field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
+                                  <CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-auto p-0" align="start">
+                              <Calendar mode="single" selected={field.value} onSelect={(date) => field.onChange(date ? startOfDay(date): undefined)} initialFocus /></PopoverContent>
+                          </Popover><FormMessage />
+                      </FormItem>
+                      )}
+                  />
+                  <FormField
+                      control={form.control}
+                      name="correctedBy"
+                      render={({ field }) => (
+                      <FormItem>
+                          <FormLabel>Corrected By</FormLabel>
+                          <FormControl><Input placeholder="e.g., Maintenance Staff, John Doe" {...field} /></FormControl>
+                          <FormMessage />
+                      </FormItem>
+                      )}
+                  />
+                  <FormField
+                      control={form.control}
+                      name="correctedByCertNumber"
+                      render={({ field }) => (
+                      <FormItem>
+                          <FormLabel>Corrected By Cert # (Optional)</FormLabel>
+                          <FormControl><Input placeholder="e.g., A&P 7654321" {...field} value={field.value || ''} /></FormControl>
+                          <FormMessage />
+                      </FormItem>
+                      )}
+                  />
+                  <FormField
                     control={form.control}
-                    name="correctiveAction"
+                    name="signOffConfirmation"
                     render={({ field }) => (
-                    <FormItem>
-                        <FormLabel>Corrective Action Taken</FormLabel>
+                      <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4 shadow-sm bg-muted/30">
                         <FormControl>
-                        <Textarea placeholder="e.g., Replaced #2 main tire, torqued B-nut on engine oil line..." {...field} rows={4} />
+                          <Checkbox
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                          />
                         </FormControl>
-                        <FormMessage />
-                    </FormItem>
+                        <div className="space-y-1 leading-none">
+                          <FormLabel className="text-sm">
+                            Sign-Off Confirmation
+                          </FormLabel>
+                          <FormDescription className="text-xs">
+                            I certify that the corrective action described above has been completed and this entry is accurate and constitutes my official sign-off.
+                          </FormDescription>
+                          <FormMessage />
+                        </div>
+                      </FormItem>
                     )}
-                />
-                <FormField
-                    control={form.control}
-                    name="dateCorrected"
-                    render={({ field }) => (
-                    <FormItem className="flex flex-col">
-                        <FormLabel>Date Corrected</FormLabel>
-                        <Popover><PopoverTrigger asChild>
-                            <FormControl><Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
-                                {field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
-                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar mode="single" selected={field.value} onSelect={(date) => field.onChange(date ? startOfDay(date): undefined)} initialFocus /></PopoverContent>
-                        </Popover><FormMessage />
-                    </FormItem>
-                    )}
-                />
-                <FormField
-                    control={form.control}
-                    name="correctedBy"
-                    render={({ field }) => (
-                    <FormItem>
-                        <FormLabel>Corrected By</FormLabel>
-                        <FormControl><Input placeholder="e.g., Maintenance Staff, John Doe" {...field} /></FormControl>
-                        <FormMessage />
-                    </FormItem>
-                    )}
-                />
-                <FormField
-                    control={form.control}
-                    name="correctedByCertNumber"
-                    render={({ field }) => (
-                    <FormItem>
-                        <FormLabel>Corrected By Cert # (Optional)</FormLabel>
-                        <FormControl><Input placeholder="e.g., A&P 7654321" {...field} value={field.value || ''} /></FormControl>
-                        <FormMessage />
-                    </FormItem>
-                    )}
-                />
-                <FormField
-                  control={form.control}
-                  name="signOffConfirmation"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4 shadow-sm bg-muted/30">
-                      <FormControl>
-                        <Checkbox
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                        />
-                      </FormControl>
-                      <div className="space-y-1 leading-none">
-                        <FormLabel className="text-sm">
-                          Sign-Off Confirmation
-                        </FormLabel>
-                        <FormDescription className="text-xs">
-                          I certify that the corrective action described above has been completed and this entry is accurate and constitutes my official sign-off.
-                        </FormDescription>
-                         <FormMessage />
-                      </div>
-                    </FormItem>
-                  )}
-                />
-              </div>
-            </ScrollArea>
-          </form>
-        </Form>
+                  />
+                </div>
+              </form>
+            </Form>
+          </ScrollArea>
+        </div>
         
-        <DialogFooter className="pt-4 border-t">
+        <DialogFooter className="pt-4 border-t mt-2">
           <DialogClose asChild><Button type="button" variant="outline" disabled={isSaving}>Cancel</Button></DialogClose>
           <Button 
             form="sign-off-discrepancy-form" 
@@ -207,5 +209,5 @@ export function SignOffDiscrepancyModal({
   );
 }
     
-
+    
     
