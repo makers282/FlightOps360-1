@@ -1,7 +1,9 @@
 
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
+import { createPortal } from "react-dom";
+import { useFloating, shift, offset, autoUpdate, flip } from "@floating-ui/react-dom";
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { z } from 'zod';
@@ -19,7 +21,6 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { CalendarIcon, Loader2, Save, BookOpen, Edit3 } from 'lucide-react';
 import { cn } from "@/lib/utils";
@@ -28,7 +29,7 @@ import type { MelItem, SaveMelItemInput } from '@/ai/schemas/mel-item-schemas';
 import { melCategories, melStatuses } from '@/ai/schemas/mel-item-schemas';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { FleetAircraft } from '@/ai/schemas/fleet-aircraft-schemas';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle as ModalCardTitle, CardContent as ModalCardContent } from '@/components/ui/card'; // Aliased to avoid conflict with DialogTitle
 
 const melItemFormSchema = z.object({
   melNumber: z.string().min(1, "MEL item number is required (e.g., 25-10-01a)."),
@@ -48,10 +49,7 @@ const melItemFormSchema = z.object({
 }, { message: "Corrective action and closed date are required if status is Closed.", path: ["correctiveAction", "closedDate"] })
 .refine(data => {
   if (data.category === "A" && !data.dueDate) {
-      // This is a soft warning, might not always be strictly enforced by all MELs as a hard due date.
-      // Could also make this a warning in the UI rather than a hard validation if preferred.
-      // For now, keeping it as a gentle reminder via validation.
-      // return false; // Uncomment if strict validation for Cat A due date is desired
+      // This is a soft warning
   }
   return true;
 }, { message: "Category 'A' items often have a specific time limit (due date).", path: ["dueDate"]});
@@ -59,40 +57,52 @@ const melItemFormSchema = z.object({
 
 export type MelItemFormData = z.infer<typeof melItemFormSchema>;
 
-// Static default values (no new Date() here)
 const staticDefaultMelFormValues: MelItemFormData = {
-  melNumber: "",
-  description: "",
-  category: undefined,
-  status: "Open",
-  dateEntered: new Date(0), // Placeholder, will be overwritten by useEffect
-  dueDate: undefined,
-  provisionsOrLimitations: "",
-  correctiveAction: "",
-  closedDate: undefined,
+  melNumber: "", description: "", category: undefined, status: "Open",
+  dateEntered: new Date(0), dueDate: undefined, provisionsOrLimitations: "",
+  correctiveAction: "", closedDate: undefined,
 };
 
 interface AddEditMelItemModalProps {
-  isOpen: boolean;
-  setIsOpen: (isOpen: boolean) => void;
+  isOpen: boolean; setIsOpen: (isOpen: boolean) => void;
   onSave: (data: SaveMelItemInput, originalMelItemId?: string) => Promise<void>;
-  aircraft: FleetAircraft | null;
-  initialData?: MelItem | null;
-  isEditing?: boolean;
-  isSaving: boolean;
+  aircraft: FleetAircraft | null; initialData?: MelItem | null;
+  isEditing?: boolean; isSaving: boolean;
 }
 
 export function AddEditMelItemModal({
-  isOpen,
-  setIsOpen,
-  onSave,
-  aircraft,
-  initialData,
-  isEditing,
-  isSaving,
+  isOpen, setIsOpen, onSave, aircraft, initialData, isEditing, isSaving,
 }: AddEditMelItemModalProps) {
   
   const [minDateAllowed, setMinDateAllowed] = useState<Date | null>(null);
+  const [isMounted, setIsMounted] = React.useState(false);
+
+  useEffect(() => { setIsMounted(true); }, []);
+
+  // Date Entered Picker
+  const [isDateEnteredCalendarOpen, setIsDateEnteredCalendarOpen] = useState(false);
+  const dateEnteredButtonRef = useRef<HTMLButtonElement>(null);
+  const { x: dateEnteredX, y: dateEnteredY, strategy: dateEnteredStrategy, refs: { setReference: setDateEnteredReference, setFloating: setDateEnteredFloating } } = useFloating({
+    placement: "bottom-start", middleware: [offset(4), shift(), flip()], whileElementsMounted: autoUpdate,
+  });
+  useEffect(() => { if (dateEnteredButtonRef.current) setDateEnteredReference(dateEnteredButtonRef.current); }, [setDateEnteredReference, dateEnteredButtonRef, isDateEnteredCalendarOpen]);
+
+  // Due Date Picker
+  const [isDueDateCalendarOpen, setIsDueDateCalendarOpen] = useState(false);
+  const dueDateButtonRef = useRef<HTMLButtonElement>(null);
+  const { x: dueDateX, y: dueDateY, strategy: dueDateStrategy, refs: { setReference: setDueDateReference, setFloating: setDueDateFloating } } = useFloating({
+    placement: "bottom-start", middleware: [offset(4), shift(), flip()], whileElementsMounted: autoUpdate,
+  });
+  useEffect(() => { if (dueDateButtonRef.current) setDueDateReference(dueDateButtonRef.current); }, [setDueDateReference, dueDateButtonRef, isDueDateCalendarOpen]);
+
+  // Closed Date Picker
+  const [isClosedDateCalendarOpen, setIsClosedDateCalendarOpen] = useState(false);
+  const closedDateButtonRef = useRef<HTMLButtonElement>(null);
+  const { x: closedDateX, y: closedDateY, strategy: closedDateStrategy, refs: { setReference: setClosedDateReference, setFloating: setClosedDateFloating } } = useFloating({
+    placement: "bottom-start", middleware: [offset(4), shift(), flip()], whileElementsMounted: autoUpdate,
+  });
+  useEffect(() => { if (closedDateButtonRef.current) setClosedDateReference(closedDateButtonRef.current); }, [setClosedDateReference, closedDateButtonRef, isClosedDateCalendarOpen]);
+
 
   const form = useForm<MelItemFormData>({
     resolver: zodResolver(melItemFormSchema),
@@ -102,17 +112,23 @@ export function AddEditMelItemModal({
   const statusWatch = form.watch("status");
 
   useEffect(() => {
+    if (!isOpen) {
+      setIsDateEnteredCalendarOpen(false);
+      setIsDueDateCalendarOpen(false);
+      setIsClosedDateCalendarOpen(false);
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
     const todayForMinDate = new Date();
     const pastLimit = new Date(todayForMinDate);
-    pastLimit.setFullYear(todayForMinDate.getFullYear() - 5); // Allow up to 5 years in past for entry/due dates
+    pastLimit.setFullYear(todayForMinDate.getFullYear() - 5);
     setMinDateAllowed(pastLimit);
 
     if (isOpen) {
       if (isEditing && initialData) {
         form.reset({
-          melNumber: initialData.melNumber,
-          description: initialData.description,
-          category: initialData.category,
+          melNumber: initialData.melNumber, description: initialData.description, category: initialData.category,
           status: initialData.status || "Open",
           dateEntered: initialData.dateEntered && isValidDate(parseISO(initialData.dateEntered)) ? parseISO(initialData.dateEntered) : startOfDay(new Date()),
           dueDate: initialData.dueDate && isValidDate(parseISO(initialData.dueDate)) ? parseISO(initialData.dueDate) : undefined,
@@ -120,27 +136,17 @@ export function AddEditMelItemModal({
           correctiveAction: initialData.correctiveAction || "",
           closedDate: initialData.closedDate && isValidDate(parseISO(initialData.closedDate)) ? parseISO(initialData.closedDate) : undefined,
         });
-      } else { // New form
-        form.reset({
-            ...staticDefaultMelFormValues,
-            dateEntered: startOfDay(new Date()),
-        });
+      } else {
+        form.reset({ ...staticDefaultMelFormValues, dateEntered: startOfDay(new Date()) });
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, isEditing, initialData, form.reset]);
+  }, [isOpen, isEditing, initialData, form]);
 
   const onSubmit: SubmitHandler<MelItemFormData> = async (formData) => {
-    if (!aircraft?.id) {
-        alert("Aircraft data is missing. Cannot save MEL item.");
-        return;
-    }
+    if (!aircraft?.id) { alert("Aircraft data is missing. Cannot save MEL item."); return; }
     const dataToSave: SaveMelItemInput = {
-      aircraftId: aircraft.id,
-      aircraftTailNumber: aircraft.tailNumber, // Denormalized for easier display
-      melNumber: formData.melNumber,
-      description: formData.description,
-      category: formData.category,
+      aircraftId: aircraft.id, aircraftTailNumber: aircraft.tailNumber,
+      melNumber: formData.melNumber, description: formData.description, category: formData.category,
       status: formData.status,
       dateEntered: format(formData.dateEntered, "yyyy-MM-dd"),
       dueDate: formData.dueDate ? format(formData.dueDate, "yyyy-MM-dd") : undefined,
@@ -151,12 +157,11 @@ export function AddEditMelItemModal({
     await onSave(dataToSave, isEditing && initialData ? initialData.id : undefined);
   };
 
-  const modalTitle = isEditing ? 'Edit MEL Item for ' + (aircraft?.tailNumber || '') : 'Add New MEL Item for ' + (aircraft?.tailNumber || '');
-  const modalDescription = isEditing
-    ? "Update the details of this MEL item."
-    : "Log a new MEL item for this aircraft.";
+  const modalTitle = isEditing ? `Edit MEL Item for ${aircraft?.tailNumber || ''}` : `Add New MEL Item for ${aircraft?.tailNumber || ''}`;
+  const modalDescription = isEditing ? "Update the details of this MEL item." : "Log a new MEL item for this aircraft.";
   
   return (
+    <>
     <Dialog open={isOpen} onOpenChange={(open) => { if (!isSaving) setIsOpen(open); }}>
       <DialogContent className="sm:max-w-xl overflow-visible">
         <DialogHeader>
@@ -171,141 +176,49 @@ export function AddEditMelItemModal({
           <form id="mel-item-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-2">
             <ScrollArea className="max-h-[70vh] pr-5">
               <div className="space-y-6 p-1">
-                <FormField
-                  control={form.control}
-                  name="melNumber"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>MEL Item Number</FormLabel>
-                      <FormControl><Input placeholder="e.g., 25-10-01a or SB-XYZ-001" {...field} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="description"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Description</FormLabel>
-                      <FormControl><Textarea placeholder="Describe the MEL item and its effect..." {...field} rows={3} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <FormField control={form.control} name="melNumber" render={({ field }) => (<FormItem><FormLabel>MEL Item Number</FormLabel><FormControl><Input placeholder="e.g., 25-10-01a or SB-XYZ-001" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                <FormField control={form.control} name="description" render={({ field }) => (<FormItem><FormLabel>Description</FormLabel><FormControl><Textarea placeholder="Describe the MEL item and its effect..." {...field} rows={3} /></FormControl><FormMessage /></FormItem>)} />
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <FormField
-                        control={form.control}
-                        name="category"
-                        render={({ field }) => (
-                            <FormItem>
-                            <FormLabel>Category</FormLabel>
-                            <Select onValueChange={field.onChange} value={field.value || ''}>
-                                <FormControl><SelectTrigger><SelectValue placeholder="Select category (A, B, C, D)" /></SelectTrigger></FormControl>
-                                <SelectContent>
-                                {melCategories.map(cat => (<SelectItem key={cat} value={cat}>{cat}</SelectItem>))}
-                                </SelectContent>
-                            </Select>
-                            <FormMessage />
-                            </FormItem>
-                        )}
-                    />
-                    <FormField
-                        control={form.control}
-                        name="status"
-                        render={({ field }) => (
-                            <FormItem>
-                            <FormLabel>Status</FormLabel>
-                            <Select onValueChange={field.onChange} value={field.value}>
-                                <FormControl><SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger></FormControl>
-                                <SelectContent>
-                                {melStatuses.map(s => (<SelectItem key={s} value={s}>{s}</SelectItem>))}
-                                </SelectContent>
-                            </Select>
-                            <FormMessage />
-                            </FormItem>
-                        )}
-                    />
+                    <FormField control={form.control} name="category" render={({ field }) => (<FormItem><FormLabel>Category</FormLabel><Select onValueChange={field.onChange} value={field.value || ''}><FormControl><SelectTrigger><SelectValue placeholder="Select category (A, B, C, D)" /></SelectTrigger></FormControl><SelectContent>{melCategories.map(cat => (<SelectItem key={cat} value={cat}>{cat}</SelectItem>))}</SelectContent></Select><FormMessage /></FormItem>)} />
+                    <FormField control={form.control} name="status" render={({ field }) => (<FormItem><FormLabel>Status</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger></FormControl><SelectContent>{melStatuses.map(s => (<SelectItem key={s} value={s}>{s}</SelectItem>))}</SelectContent></Select><FormMessage /></FormItem>)} />
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <FormField control={form.control} name="dateEntered" render={({ field }) => (
                         <FormItem className="flex flex-col">
-                        <FormLabel>Date Entered / Became Active</FormLabel>
-                        <FormControl>
-                          <Popover modal={false}>
-                            <PopoverTrigger asChild>
-                              <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
-                                  {field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
-                                  <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                              </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0 z-[100]" align="start">
-                            <Calendar mode="single" selected={field.value} onSelect={(date) => field.onChange(date ? startOfDay(date): undefined)} disabled={(date) => minDateAllowed ? date < minDateAllowed : false} initialFocus /></PopoverContent>
-                          </Popover>
-                        </FormControl>
-                        <FormMessage />
+                          <FormLabel>Date Entered / Became Active</FormLabel>
+                          <Button ref={dateEnteredButtonRef} type="button" variant={"outline"} className={cn("w-full justify-start text-left font-normal", !field.value && "text-muted-foreground")} onClick={() => setIsDateEnteredCalendarOpen((prev) => !prev)}>
+                            <CalendarIcon className="mr-2 h-4 w-4" />{field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
+                          </Button><FormMessage />
                         </FormItem>
                     )} />
                     <FormField control={form.control} name="dueDate" render={({ field }) => (
                         <FormItem className="flex flex-col">
-                        <FormLabel>Due Date (if applicable)</FormLabel>
-                        <FormControl>
-                          <Popover modal={false}>
-                            <PopoverTrigger asChild>
-                              <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
-                                  {field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
-                                  <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                              </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0 z-[100]" align="start">
-                            <Calendar mode="single" selected={field.value} onSelect={(date) => field.onChange(date ? startOfDay(date) : undefined)} disabled={(date) => {const dateEntered = form.getValues("dateEntered"); return dateEntered ? date < dateEntered : (minDateAllowed ? date < minDateAllowed : false);}} initialFocus /></PopoverContent>
-                          </Popover>
-                        </FormControl>
-                        <FormMessage />
+                          <FormLabel>Due Date (if applicable)</FormLabel>
+                          <Button ref={dueDateButtonRef} type="button" variant={"outline"} className={cn("w-full justify-start text-left font-normal", !field.value && "text-muted-foreground")} onClick={() => setIsDueDateCalendarOpen((prev) => !prev)}>
+                            <CalendarIcon className="mr-2 h-4 w-4" />{field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
+                          </Button><FormMessage />
                         </FormItem>
                     )} />
                 </div>
 
-                <FormField
-                  control={form.control}
-                  name="provisionsOrLimitations"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Provisions or Limitations (Optional)</FormLabel>
-                      <FormControl><Textarea placeholder="Detail any operational limitations or procedures required..." {...field} value={field.value || ""} rows={3} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <FormField control={form.control} name="provisionsOrLimitations" render={({ field }) => (<FormItem><FormLabel>Provisions or Limitations (Optional)</FormLabel><FormControl><Textarea placeholder="Detail any operational limitations or procedures required..." {...field} value={field.value || ""} rows={3} /></FormControl><FormMessage /></FormItem>)} />
                 
                 {statusWatch === 'Closed' && (
-                    <Card className="p-4 border-green-500/50 bg-green-50/30 dark:bg-green-900/20 mt-4">
-                        <CardHeader className="p-0 pb-3">
-                            <CardTitle className="text-md text-green-700 dark:text-green-400">Closure Details</CardTitle>
-                        </CardHeader>
-                        <CardContent className="p-0 space-y-4">
+                    <ModalCard className="p-4 border-green-500/50 bg-green-50/30 dark:bg-green-900/20 mt-4">
+                        <ModalCardHeader className="p-0 pb-3"><ModalCardTitle className="text-md text-green-700 dark:text-green-400">Closure Details</ModalCardTitle></ModalCardHeader>
+                        <ModalCardContent className="p-0 space-y-4">
                              <FormField control={form.control} name="correctiveAction" render={({ field }) => (<FormItem><FormLabel>Corrective Action Taken</FormLabel><FormControl><Textarea placeholder="e.g., Replaced component, performed operational check..." {...field} value={field.value || ''} rows={3} /></FormControl><FormMessage /></FormItem>)} />
                             <FormField control={form.control} name="closedDate" render={({ field }) => (
                                 <FormItem className="flex flex-col">
-                                <FormLabel>Date Closed</FormLabel>
-                                <FormControl>
-                                  <Popover modal={false}>
-                                    <PopoverTrigger asChild>
-                                      <Button variant={"outline"} className={cn("w-full md:w-1/2 pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
-                                          {field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
-                                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                                      </Button>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="w-auto p-0 z-[100]" align="start">
-                                    <Calendar mode="single" selected={field.value} onSelect={(date) => field.onChange(date ? startOfDay(date): undefined)} disabled={(date) => {const dateEntered = form.getValues("dateEntered"); return dateEntered ? date < dateEntered : (minDateAllowed ? date < minDateAllowed : false);}} initialFocus /></PopoverContent>
-                                  </Popover>
-                                </FormControl>
-                                <FormMessage />
+                                  <FormLabel>Date Closed</FormLabel>
+                                  <Button ref={closedDateButtonRef} type="button" variant={"outline"} className={cn("w-full md:w-1/2 justify-start text-left font-normal", !field.value && "text-muted-foreground")} onClick={() => setIsClosedDateCalendarOpen((prev) => !prev)}>
+                                    <CalendarIcon className="mr-2 h-4 w-4" />{field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
+                                  </Button><FormMessage />
                                 </FormItem>
                             )} />
-                        </CardContent>
-                    </Card>
+                        </ModalCardContent>
+                    </ModalCard>
                 )}
               </div>
             </ScrollArea>
@@ -321,7 +234,10 @@ export function AddEditMelItemModal({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    {isMounted && isDateEnteredCalendarOpen && createPortal(<div ref={setDateEnteredFloating} style={{ position: dateEnteredStrategy, top: dateEnteredY ?? "", left: dateEnteredX ?? "", zIndex: 9999 }}><div className="bg-background border shadow-lg rounded-md" style={{pointerEvents: 'auto'}}><Calendar mode="single" selected={form.getValues("dateEntered")} onSelect={(date, _, __, e) => { e?.stopPropagation(); e?.preventDefault(); form.setValue("dateEntered", date ? startOfDay(date) : startOfDay(new Date()), { shouldValidate: true }); setIsDateEnteredCalendarOpen(false); }} disabled={(date) => minDateAllowed ? date < minDateAllowed : false} /></div></div>, document.body)}
+    {isMounted && isDueDateCalendarOpen && createPortal(<div ref={setDueDateFloating} style={{ position: dueDateStrategy, top: dueDateY ?? "", left: dueDateX ?? "", zIndex: 9999 }}><div className="bg-background border shadow-lg rounded-md" style={{pointerEvents: 'auto'}}><Calendar mode="single" selected={form.getValues("dueDate")} onSelect={(date, _, __, e) => { e?.stopPropagation(); e?.preventDefault(); form.setValue("dueDate", date ? startOfDay(date) : undefined, { shouldValidate: true }); setIsDueDateCalendarOpen(false); }} disabled={(date) => { const dateEntered = form.getValues("dateEntered"); return dateEntered ? date < dateEntered : (minDateAllowed ? date < minDateAllowed : false); }} /></div></div>, document.body)}
+    {isMounted && isClosedDateCalendarOpen && statusWatch === 'Closed' && createPortal(<div ref={setClosedDateFloating} style={{ position: closedDateStrategy, top: closedDateY ?? "", left: closedDateX ?? "", zIndex: 9999 }}><div className="bg-background border shadow-lg rounded-md" style={{pointerEvents: 'auto'}}><Calendar mode="single" selected={form.getValues("closedDate")} onSelect={(date, _, __, e) => { e?.stopPropagation(); e?.preventDefault(); form.setValue("closedDate", date ? startOfDay(date) : undefined, { shouldValidate: true }); setIsClosedDateCalendarOpen(false); }} disabled={(date) => { const dateEntered = form.getValues("dateEntered"); return dateEntered ? date < dateEntered : (minDateAllowed ? date < minDateAllowed : false); }} /></div></div>, document.body)}
+    </>
   );
 }
-
-    
