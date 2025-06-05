@@ -15,7 +15,7 @@ import {
   DialogFooter,
   DialogClose,
 } from '@/components/ui/dialog';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -25,12 +25,17 @@ import { cn } from "@/lib/utils";
 import { format, parseISO, isValid as isValidDate, startOfDay } from "date-fns";
 import type { AircraftDiscrepancy } from '@/ai/schemas/aircraft-discrepancy-schemas';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Checkbox } from '@/components/ui/checkbox'; // Added Checkbox import
 
 const signOffFormSchema = z.object({
   correctiveAction: z.string().min(5, "Corrective action details are required."),
   dateCorrected: z.date({ required_error: "Date corrected is required." }),
   correctedBy: z.string().min(1, "Corrected By is required."),
   correctedByCertNumber: z.string().optional(),
+  signOffConfirmation: z.boolean().default(false),
+}).refine(data => data.signOffConfirmation === true, {
+  message: "You must confirm the sign-off.",
+  path: ["signOffConfirmation"],
 });
 
 export type SignOffFormData = z.infer<typeof signOffFormSchema>;
@@ -58,25 +63,26 @@ export function SignOffDiscrepancyModal({
       dateCorrected: startOfDay(new Date()),
       correctedBy: '',
       correctedByCertNumber: '',
+      signOffConfirmation: false,
     },
   });
 
   useEffect(() => {
     if (isOpen && discrepancy) {
-      // Pre-fill if there's existing data from a previous attempt to close, or keep defaults
       form.reset({
         correctiveAction: discrepancy.correctiveAction || '',
         dateCorrected: discrepancy.dateCorrected && isValidDate(parseISO(discrepancy.dateCorrected)) ? parseISO(discrepancy.dateCorrected) : startOfDay(new Date()),
         correctedBy: discrepancy.correctedBy || '',
         correctedByCertNumber: discrepancy.correctedByCertNumber || '',
+        signOffConfirmation: false, // Always require re-confirmation
       });
     } else if (isOpen && !discrepancy) {
-        // Reset to defaults if no discrepancy is passed (should not happen in normal flow)
         form.reset({
             correctiveAction: '',
             dateCorrected: startOfDay(new Date()),
             correctedBy: '',
             correctedByCertNumber: '',
+            signOffConfirmation: false,
         });
     }
   }, [isOpen, discrepancy, form]);
@@ -157,6 +163,29 @@ export function SignOffDiscrepancyModal({
                     </FormItem>
                     )}
                 />
+                <FormField
+                  control={form.control}
+                  name="signOffConfirmation"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4 shadow-sm bg-muted/30">
+                      <FormControl>
+                        <Checkbox
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                        />
+                      </FormControl>
+                      <div className="space-y-1 leading-none">
+                        <FormLabel className="text-sm">
+                          Sign-Off Confirmation
+                        </FormLabel>
+                        <FormDescription className="text-xs">
+                          I certify that the corrective action described above has been completed and this entry is accurate and constitutes my official sign-off.
+                        </FormDescription>
+                         <FormMessage />
+                      </div>
+                    </FormItem>
+                  )}
+                />
               </div>
             </ScrollArea>
           </form>
@@ -164,7 +193,11 @@ export function SignOffDiscrepancyModal({
         
         <DialogFooter className="pt-4 border-t">
           <DialogClose asChild><Button type="button" variant="outline" disabled={isSaving}>Cancel</Button></DialogClose>
-          <Button form="sign-off-discrepancy-form" type="submit" disabled={isSaving}>
+          <Button 
+            form="sign-off-discrepancy-form" 
+            type="submit" 
+            disabled={isSaving || !form.formState.isValid}
+          >
             {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
             Sign Off & Close Discrepancy
           </Button>
@@ -173,4 +206,6 @@ export function SignOffDiscrepancyModal({
     </Dialog>
   );
 }
+    
+
     
