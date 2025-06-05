@@ -30,7 +30,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-import { Wrench, PlusCircle, ArrowLeft, Plane as PlaneIcon, Edit, Loader2, InfoIcon, Save, XCircle as XCircleIcon, Edit3, AlertTriangle, CheckCircle2, Search, ArrowUpDown, ArrowDown, ArrowUp, Printer, Filter as FilterIcon, ListChecks, BookOpen, Hammer, FileWarning, BookLock, Trash2, ShieldCheck, GripVertical } from 'lucide-react';
+import { Wrench, PlusCircle, ArrowLeft, Plane as PlaneIcon, Edit, Loader2, InfoIcon, Save, XCircle as XCircleIcon, Edit3, AlertTriangle, CheckCircle2, Search, ArrowUpDown, ArrowDown, ArrowUp, Printer, Filter as FilterIcon, ListChecks, BookOpen, Hammer, FileWarning, BookLock, Trash2, ShieldCheck, GripVertical, History as HistoryIcon } from 'lucide-react';
 import { format, parse, addDays, isValid, addMonths, addYears, endOfMonth, parseISO, differenceInCalendarDays } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { fetchFleetAircraft, saveFleetAircraft } from '@/ai/flows/manage-fleet-flow';
@@ -668,10 +668,11 @@ export default function AircraftMaintenanceDetailPage() {
 
   const pageHeaderTitle = `Maintenance Details for ${currentAircraft.tailNumber}`;
   const pageHeaderDescription = `Tracked items &amp; component status for ${currentAircraft.model} (${currentAircraft.tailNumber}). Component times are loaded from Firestore.`;
-  const openDiscrepancyCount = aircraftDiscrepancies.filter(d => d.status !== "Closed").length;
-  const openMelItemsCount = melItems.filter(m => m.status !== "Closed").length;
-
+  
   const openDiscrepanciesForDisplay = aircraftDiscrepancies.filter(d => d.status !== "Closed").sort((a,b) => parseISO(b.dateDiscovered).getTime() - parseISO(a.dateDiscovered).getTime());
+  const openDiscrepancyCount = openDiscrepanciesForDisplay.length;
+
+  const openMelItemsCount = melItems.filter(m => m.status !== "Closed").length;
 
   return (
     <div> 
@@ -743,15 +744,20 @@ export default function AircraftMaintenanceDetailPage() {
                   <TabsTrigger value="damageLog">Damage Log (0)</TabsTrigger>
                 </TabsList>
                 <TabsContent value="discrepancies">
-                  <CardDescription className="mb-3">Track and manage discrepancies for {currentAircraft.tailNumber}.</CardDescription>
+                  <CardDescription className="mb-3">Track and manage discrepancies for {currentAircraft.tailNumber}. Showing Open/Deferred.</CardDescription>
                   <div className="space-y-3">
                     <div className="flex flex-col sm:flex-row gap-2">
                       <Button onClick={handleOpenAddDiscrepancyModal} disabled={!currentAircraft || isSavingDiscrepancy} className="w-full sm:w-auto">
                         <PlusCircle className="mr-2 h-4 w-4" /> Add New Discrepancy
                       </Button>
                       <Button asChild variant="outline" className="w-full sm:w-auto">
+                        <Link href={`/aircraft/discrepancies?aircraftId=${currentAircraft.id}`}>
+                          <HistoryIcon className="mr-2 h-4 w-4" /> View Full History for {currentAircraft.tailNumber}
+                        </Link>
+                      </Button>
+                      <Button asChild variant="outline" className="w-full sm:w-auto">
                         <Link href="/aircraft/discrepancies">
-                          <ListChecks className="mr-2 h-4 w-4" /> View Full Discrepancy Log
+                          <ListChecks className="mr-2 h-4 w-4" /> View Global Discrepancy Log
                         </Link>
                       </Button>
                     </div>
@@ -953,3 +959,4 @@ export default function AircraftMaintenanceDetailPage() {
     
 
       
+    
