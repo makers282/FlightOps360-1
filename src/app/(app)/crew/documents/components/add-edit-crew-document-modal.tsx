@@ -124,10 +124,22 @@ export function AddEditCrewDocumentModal({
   const modalTitle = isEditing ? `Edit Document: ${initialData?.documentName || ''}` : 'Add New Crew Document';
   const modalDescription = isEditing ? "Update the crew document's details." : "Fill in the new crew document's information.";
 
+  const handleInteractOutside = (event: Event) => {
+    if (event.target instanceof Element) {
+      const targetElement = event.target as Element;
+      if (targetElement.closest('[data-calendar-popover="true"]')) {
+        event.preventDefault(); 
+      }
+    }
+  };
+
   return (
     <>
     <Dialog open={isOpen} onOpenChange={(open) => { if (!isSaving) setIsOpen(open); }}>
-      <DialogContent className="sm:max-w-lg overflow-visible">
+      <DialogContent 
+        className="sm:max-w-lg overflow-visible"
+        onInteractOutside={handleInteractOutside}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {isEditing ? <Edit3 className="h-6 w-6 text-primary" /> : <FileTextIcon className="h-6 w-6 text-primary" />}
@@ -177,8 +189,10 @@ export function AddEditCrewDocumentModal({
       </DialogContent>
     </Dialog>
 
-    {isMounted && isIssueDateCalendarOpen && createPortal(<div ref={setIssueDateFloating} style={{ position: issueDateStrategy, top: issueDateY ?? "", left: issueDateX ?? "", zIndex: 9999 }}><div className="bg-background border shadow-lg rounded-md" style={{pointerEvents: 'auto'}}><Calendar mode="single" selected={form.getValues("issueDate")} onSelect={(date, _, __, e) => { e?.stopPropagation(); e?.preventDefault(); form.setValue("issueDate", date ? startOfDay(date) : undefined, { shouldValidate: true }); setIsIssueDateCalendarOpen(false); }} /></div></div>, document.body)}
-    {isMounted && isExpiryDateCalendarOpen && createPortal(<div ref={setExpiryDateFloating} style={{ position: expiryDateStrategy, top: expiryDateY ?? "", left: expiryDateX ?? "", zIndex: 9999 }}><div className="bg-background border shadow-lg rounded-md" style={{pointerEvents: 'auto'}}><Calendar mode="single" selected={form.getValues("expiryDate")} onSelect={(date, _, __, e) => { e?.stopPropagation(); e?.preventDefault(); form.setValue("expiryDate", date ? startOfDay(date) : undefined, { shouldValidate: true }); setIsExpiryDateCalendarOpen(false); }} disabled={(date) => { const issueDateVal = form.getValues("issueDate"); return issueDateVal ? date < issueDateVal : false; }} /></div></div>, document.body)}
+    {isMounted && isIssueDateCalendarOpen && createPortal(<div ref={setIssueDateFloating} style={{ position: issueDateStrategy, top: issueDateY ?? "", left: issueDateX ?? "", zIndex: 9999 }} data-calendar-popover="true"><div className="bg-background border shadow-lg rounded-md"><Calendar mode="single" selected={form.getValues("issueDate")} onSelect={(date) => { form.setValue("issueDate", date ? startOfDay(date) : undefined, { shouldValidate: true }); setIsIssueDateCalendarOpen(false); }} /></div></div>, document.body)}
+    {isMounted && isExpiryDateCalendarOpen && createPortal(<div ref={setExpiryDateFloating} style={{ position: expiryDateStrategy, top: expiryDateY ?? "", left: expiryDateX ?? "", zIndex: 9999 }} data-calendar-popover="true"><div className="bg-background border shadow-lg rounded-md"><Calendar mode="single" selected={form.getValues("expiryDate")} onSelect={(date) => { form.setValue("expiryDate", date ? startOfDay(date) : undefined, { shouldValidate: true }); setIsExpiryDateCalendarOpen(false); }} disabled={(date) => { const issueDateVal = form.getValues("issueDate"); return issueDateVal ? date < issueDateVal : false; }} /></div></div>, document.body)}
     </>
   );
 }
+
+    

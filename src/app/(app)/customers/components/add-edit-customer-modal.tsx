@@ -123,11 +123,24 @@ export function AddEditCustomerModal({
 
   const modalTitle = isEditing ? `Edit: ${initialData?.name || ''}` : 'Add New Customer';
   const modalDescription = isEditing ? "Update the customer's details." : "Fill in the new customer's information.";
+  
+  const handleInteractOutside = (event: Event) => {
+    if (event.target instanceof Element) {
+      const targetElement = event.target as Element;
+      if (targetElement.closest('[data-calendar-popover="true"]')) {
+        event.preventDefault(); 
+      }
+    }
+  };
+
 
   return (
     <>
     <Dialog open={isOpen} onOpenChange={(open) => { if (!isSaving) setIsOpen(open); }}>
-      <DialogContent className="sm:max-w-2xl overflow-visible">
+      <DialogContent 
+        className="sm:max-w-2xl overflow-visible"
+        onInteractOutside={handleInteractOutside}
+      >
         <DialogHeader><DialogTitle>{modalTitle}</DialogTitle><DialogDescription>{modalDescription}</DialogDescription></DialogHeader>
         <ScrollArea className="max-h-[70vh] pr-5">
           <Form {...form}>
@@ -156,7 +169,9 @@ export function AddEditCustomerModal({
       </DialogContent>
     </Dialog>
 
-    {isMounted && isStartDateCalendarOpen && createPortal(<div ref={setStartDateFloating} style={{ position: startDateStrategy, top: startDateY ?? "", left: startDateX ?? "", zIndex: 9999 }}><div className="bg-background border shadow-lg rounded-md" style={{pointerEvents: 'auto'}}><Calendar mode="single" selected={form.getValues("startDate")} onSelect={(date, _, __, e) => { e?.stopPropagation(); e?.preventDefault(); form.setValue("startDate", date ? startOfDay(date) : undefined, { shouldValidate: true }); setIsStartDateCalendarOpen(false); }} disabled={(date) => minStartDateAllowed ? date < minStartDateAllowed : false} /></div></div>, document.body)}
+    {isMounted && isStartDateCalendarOpen && createPortal(<div ref={setStartDateFloating} style={{ position: startDateStrategy, top: startDateY ?? "", left: startDateX ?? "", zIndex: 9999 }} data-calendar-popover="true"><div className="bg-background border shadow-lg rounded-md"><Calendar mode="single" selected={form.getValues("startDate")} onSelect={(date) => { form.setValue("startDate", date ? startOfDay(date) : undefined, { shouldValidate: true }); setIsStartDateCalendarOpen(false); }} disabled={(date) => minStartDateAllowed ? date < minStartDateAllowed : false} /></div></div>, document.body)}
     </>
   );
 }
+
+    

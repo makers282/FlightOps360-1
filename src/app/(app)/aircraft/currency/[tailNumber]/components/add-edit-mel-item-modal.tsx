@@ -160,10 +160,22 @@ export function AddEditMelItemModal({
   const modalTitle = isEditing ? `Edit MEL Item for ${aircraft?.tailNumber || ''}` : `Add New MEL Item for ${aircraft?.tailNumber || ''}`;
   const modalDescription = isEditing ? "Update the details of this MEL item." : "Log a new MEL item for this aircraft.";
   
+  const handleInteractOutside = (event: Event) => {
+    if (event.target instanceof Element) {
+      const targetElement = event.target as Element;
+      if (targetElement.closest('[data-calendar-popover="true"]')) {
+        event.preventDefault(); 
+      }
+    }
+  };
+  
   return (
     <>
     <Dialog open={isOpen} onOpenChange={(open) => { if (!isSaving) setIsOpen(open); }}>
-      <DialogContent className="sm:max-w-xl overflow-visible">
+      <DialogContent 
+        className="sm:max-w-xl overflow-visible"
+        onInteractOutside={handleInteractOutside}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {isEditing ? <Edit3 className="h-6 w-6 text-primary" /> : <BookOpen className="h-6 w-6 text-primary" />}
@@ -235,9 +247,11 @@ export function AddEditMelItemModal({
       </DialogContent>
     </Dialog>
 
-    {isMounted && isDateEnteredCalendarOpen && createPortal(<div ref={setDateEnteredFloating} style={{ position: dateEnteredStrategy, top: dateEnteredY ?? "", left: dateEnteredX ?? "", zIndex: 9999 }}><div className="bg-background border shadow-lg rounded-md" style={{pointerEvents: 'auto'}}><Calendar mode="single" selected={form.getValues("dateEntered")} onSelect={(date, _, __, e) => { e?.stopPropagation(); e?.preventDefault(); form.setValue("dateEntered", date ? startOfDay(date) : startOfDay(new Date()), { shouldValidate: true }); setIsDateEnteredCalendarOpen(false); }} disabled={(date) => minDateAllowed ? date < minDateAllowed : false} /></div></div>, document.body)}
-    {isMounted && isDueDateCalendarOpen && createPortal(<div ref={setDueDateFloating} style={{ position: dueDateStrategy, top: dueDateY ?? "", left: dueDateX ?? "", zIndex: 9999 }}><div className="bg-background border shadow-lg rounded-md" style={{pointerEvents: 'auto'}}><Calendar mode="single" selected={form.getValues("dueDate")} onSelect={(date, _, __, e) => { e?.stopPropagation(); e?.preventDefault(); form.setValue("dueDate", date ? startOfDay(date) : undefined, { shouldValidate: true }); setIsDueDateCalendarOpen(false); }} disabled={(date) => { const dateEntered = form.getValues("dateEntered"); return dateEntered ? date < dateEntered : (minDateAllowed ? date < minDateAllowed : false); }} /></div></div>, document.body)}
-    {isMounted && isClosedDateCalendarOpen && statusWatch === 'Closed' && createPortal(<div ref={setClosedDateFloating} style={{ position: closedDateStrategy, top: closedDateY ?? "", left: closedDateX ?? "", zIndex: 9999 }}><div className="bg-background border shadow-lg rounded-md" style={{pointerEvents: 'auto'}}><Calendar mode="single" selected={form.getValues("closedDate")} onSelect={(date, _, __, e) => { e?.stopPropagation(); e?.preventDefault(); form.setValue("closedDate", date ? startOfDay(date) : undefined, { shouldValidate: true }); setIsClosedDateCalendarOpen(false); }} disabled={(date) => { const dateEntered = form.getValues("dateEntered"); return dateEntered ? date < dateEntered : (minDateAllowed ? date < minDateAllowed : false); }} /></div></div>, document.body)}
+    {isMounted && isDateEnteredCalendarOpen && createPortal(<div ref={setDateEnteredFloating} style={{ position: dateEnteredStrategy, top: dateEnteredY ?? "", left: dateEnteredX ?? "", zIndex: 9999 }} data-calendar-popover="true"><div className="bg-background border shadow-lg rounded-md"><Calendar mode="single" selected={form.getValues("dateEntered")} onSelect={(date, _, __, e) => { form.setValue("dateEntered", date ? startOfDay(date) : startOfDay(new Date()), { shouldValidate: true }); setIsDateEnteredCalendarOpen(false); }} disabled={(date) => minDateAllowed ? date < minDateAllowed : false} /></div></div>, document.body)}
+    {isMounted && isDueDateCalendarOpen && createPortal(<div ref={setDueDateFloating} style={{ position: dueDateStrategy, top: dueDateY ?? "", left: dueDateX ?? "", zIndex: 9999 }} data-calendar-popover="true"><div className="bg-background border shadow-lg rounded-md"><Calendar mode="single" selected={form.getValues("dueDate")} onSelect={(date, _, __, e) => { form.setValue("dueDate", date ? startOfDay(date) : undefined, { shouldValidate: true }); setIsDueDateCalendarOpen(false); }} disabled={(date) => { const dateEntered = form.getValues("dateEntered"); return dateEntered ? date < dateEntered : (minDateAllowed ? date < minDateAllowed : false); }} /></div></div>, document.body)}
+    {isMounted && isClosedDateCalendarOpen && statusWatch === 'Closed' && createPortal(<div ref={setClosedDateFloating} style={{ position: closedDateStrategy, top: closedDateY ?? "", left: closedDateX ?? "", zIndex: 9999 }} data-calendar-popover="true"><div className="bg-background border shadow-lg rounded-md"><Calendar mode="single" selected={form.getValues("closedDate")} onSelect={(date, _, __, e) => { form.setValue("closedDate", date ? startOfDay(date) : undefined, { shouldValidate: true }); setIsClosedDateCalendarOpen(false); }} disabled={(date) => { const dateEntered = form.getValues("dateEntered"); return dateEntered ? date < dateEntered : (minDateAllowed ? date < minDateAllowed : false); }} /></div></div>, document.body)}
     </>
   );
 }
+
+    

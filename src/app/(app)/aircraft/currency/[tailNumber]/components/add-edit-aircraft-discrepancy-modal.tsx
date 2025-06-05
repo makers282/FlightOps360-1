@@ -268,19 +268,17 @@ export function AddEditAircraftDiscrepancyModal({
           ref={setDateDiscoveredFloating}
           style={{
             position: dateDiscoveredStrategy,
-            top: dateDiscoveredY ?? 0, // Provide default if null
-            left: dateDiscoveredX ?? 0, // Provide default if null
+            top: dateDiscoveredY ?? 0,
+            left: dateDiscoveredX ?? 0,
             zIndex: 9999,
           }}
-          data-calendar-popover="true" // Added data attribute
+          data-calendar-popover="true"
         >
-          <div className="bg-background border shadow-lg rounded-md" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-background border shadow-lg rounded-md">
             <Calendar
               mode="single"
               selected={form.getValues("dateDiscovered")}
-              onSelect={(date, selectedDay, activeModifiers, e) => {
-                // e?.stopPropagation(); // Event is on the inner div already
-                // e?.preventDefault();
+              onSelect={(date) => {
                 form.setValue("dateDiscovered", date ? startOfDay(date) : startOfDay(new Date()), { shouldValidate: true });
                 setIsDateDiscoveredCalendarOpen(false);
               }}
@@ -297,19 +295,17 @@ export function AddEditAircraftDiscrepancyModal({
           ref={setDeferralDateFloating}
           style={{
             position: deferralDateStrategy,
-            top: deferralDateY ?? 0, // Provide default if null
-            left: deferralDateX ?? 0, // Provide default if null
+            top: deferralDateY ?? 0,
+            left: deferralDateX ?? 0,
             zIndex: 9999,
           }}
-          data-calendar-popover="true" // Added data attribute
+          data-calendar-popover="true"
         >
-          <div className="bg-background border shadow-lg rounded-md" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-background border shadow-lg rounded-md">
             <Calendar
               mode="single"
               selected={form.getValues("deferralDate")}
-              onSelect={(date, selectedDay, activeModifiers, e) => {
-                // e?.stopPropagation();
-                // e?.preventDefault();
+              onSelect={(date) => {
                 form.setValue("deferralDate", date ? startOfDay(date) : undefined, { shouldValidate: true });
                 setIsDeferralDateCalendarOpen(false);
               }}
@@ -325,3 +321,5 @@ export function AddEditAircraftDiscrepancyModal({
     </Dialog>
   );
 }
+
+    
