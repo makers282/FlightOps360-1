@@ -765,9 +765,9 @@ export default function AircraftMaintenanceDetailPage() {
                                   <TableCell className="text-xs">{format(parseISO(disc.dateDiscovered), 'MM/dd/yy')}</TableCell>
                                   <TableCell className="text-xs max-w-xs truncate" title={disc.description}>{disc.description}</TableCell>
                                   <TableCell className="text-right space-x-1">
-                                    <Button variant="outline" size="sm" onClick={() => handleOpenEditDiscrepancyModal(disc)} disabled={isSavingDiscrepancy || isDeletingDiscrepancy || isSavingSignOff}> Edit </Button>
-                                    {disc.status === "Open" && (
-                                        <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" onClick={() => handleOpenSignOffModal(disc)} disabled={isSavingDiscrepancy || isDeletingDiscrepancy || isSavingSignOff}> Clear </Button>
+                                    <Button variant="outline" size="sm" onClick={() => handleOpenEditDiscrepancyModal(disc)} disabled={isSavingDiscrepancy || isDeletingDiscrepancy || isSavingSignOff}>Edit</Button>
+                                    {(disc.status === "Open" || disc.status === "Deferred") && (
+                                        <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" onClick={() => handleOpenSignOffModal(disc)} disabled={isSavingDiscrepancy || isDeletingDiscrepancy || isSavingSignOff}>Clear</Button>
                                     )}
                                     <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => confirmDeleteDiscrepancy(disc)} disabled={isSavingDiscrepancy || isDeletingDiscrepancy || isSavingSignOff || disc.status === "Closed"}> <Trash2 className="h-4 w-4" /> </Button>
                                   </TableCell>
@@ -917,6 +917,7 @@ export default function AircraftMaintenanceDetailPage() {
     
 
     
+
 
 
 
