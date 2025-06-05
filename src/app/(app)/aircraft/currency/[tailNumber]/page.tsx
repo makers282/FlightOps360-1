@@ -22,13 +22,14 @@ import { useForm, type SubmitHandler } from 'react-hook-form';
 import { z } from 'zod';
 import { AddMaintenanceTaskDialogContent, type MaintenanceTaskFormData, defaultMaintenanceTaskFormValues } from './components/add-maintenance-task-modal';
 import { AddEditAircraftDiscrepancyModal } from './components/add-edit-aircraft-discrepancy-modal';
+import { SignOffDiscrepancyModal, type SignOffFormData } from './components/sign-off-discrepancy-modal'; // New import
 import { Dialog } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-import { Wrench, PlusCircle, ArrowLeft, Plane as PlaneIcon, Edit, Loader2, InfoIcon, Save, XCircle, Edit3, AlertTriangle, CheckCircle2, XCircle as XCircleIcon, Search, ArrowUpDown, ArrowDown, ArrowUp, Printer, Filter, ListChecks, BookOpen, Hammer, FileWarning, BookLock, Trash2 } from 'lucide-react';
+import { Wrench, PlusCircle, ArrowLeft, Plane as PlaneIcon, Edit, Loader2, InfoIcon, Save, XCircle, Edit3, AlertTriangle, CheckCircle2, XCircle as XCircleIcon, Search, ArrowUpDown, ArrowDown, ArrowUp, Printer, Filter, ListChecks, BookOpen, Hammer, FileWarning, BookLock, Trash2, ShieldCheck } from 'lucide-react';
 import { format, parse, addDays, isValid, addMonths, addYears, endOfMonth, parseISO, differenceInCalendarDays } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { fetchFleetAircraft, saveFleetAircraft } from '@/ai/flows/manage-fleet-flow';
@@ -44,14 +45,15 @@ import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
-  AlertDialogContent as AlertDialogModalContent,
-  AlertDialogDescription as AlertDialogModalDescription,
-  AlertDialogFooter as AlertDialogModalFooter,
-  AlertDialogHeader as AlertDialogModalHeader,
-  AlertDialogTitle as AlertDialogModalTitle,
+  AlertDialogContent as AlertDialogModalContent, // Renamed for clarity
+  AlertDialogDescription as AlertDialogModalDescription, // Renamed
+  AlertDialogFooter as AlertDialogModalFooter, // Renamed
+  AlertDialogHeader as AlertDialogModalHeader, // Renamed
+  AlertDialogTitle as AlertDialogModalTitle, // Renamed
 } from "@/components/ui/alert-dialog";
-import { fetchMelItemsForAircraft } from '@/ai/flows/manage-mel-items-flow';
-import type { MelItem } from '@/ai/schemas/mel-item-schemas';
+import { fetchMelItemsForAircraft, saveMelItem, deleteMelItem } from '@/ai/flows/manage-mel-items-flow';
+import type { MelItem, SaveMelItemInput } from '@/ai/schemas/mel-item-schemas';
+import { AddEditMelItemModal } from './components/add-edit-mel-item-modal';
 
 
 export interface DisplayMaintenanceItem extends FlowMaintenanceTask {
@@ -306,7 +308,19 @@ export default function AircraftMaintenanceDetailPage() {
   const [discrepancyToDelete, setDiscrepancyToDelete] = useState<AircraftDiscrepancy | null>(null);
   const [showDeleteDiscrepancyConfirm, setShowDeleteDiscrepancyConfirm] = useState(false);
   const [isDeletingDiscrepancy, startDeletingDiscrepancyTransition] = useTransition();
+
+  const [isSignOffModalOpen, setIsSignOffModalOpen] = useState(false);
+  const [discrepancyToSignOff, setDiscrepancyToSignOff] = useState<AircraftDiscrepancy | null>(null);
+  const [isSavingSignOff, startSavingSignOffTransition] = useTransition();
   
+  const [isMelModalOpen, setIsMelModalOpen] = useState(false);
+  const [isEditingMelItem, setIsEditingMelItem] = useState(false);
+  const [currentMelItemToEdit, setCurrentMelItemToEdit] = useState<MelItem | null>(null);
+  const [isSavingMelItem, startSavingMelItemTransition] = useTransition();
+  const [melItemToDelete, setMelItemToDelete] = useState<MelItem | null>(null);
+  const [showDeleteMelConfirm, setShowDeleteMelConfirm] = useState(false);
+  const [isDeletingMelItem, startDeletingMelItemTransition] = useTransition();
+
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'dueSoon' | 'overdue' | 'gracePeriod'>('all');
   const [componentFilter, setComponentFilter] = useState<string>('all');
@@ -486,6 +500,98 @@ export default function AircraftMaintenanceDetailPage() {
       finally { setShowDeleteDiscrepancyConfirm(false); setDiscrepancyToDelete(null); }
     });
   };
+
+  const handleOpenSignOffModal = (discrepancy: AircraftDiscrepancy) => {
+    setDiscrepancyToSignOff(discrepancy);
+    setIsSignOffModalOpen(true);
+  };
+
+  const handleExecuteSignOff = async (discrepancyId: string, signOffData: SignOffFormData) => {
+    if (!currentAircraft) return;
+    const originalDiscrepancy = aircraftDiscrepancies.find(d => d.id === discrepancyId);
+    if (!originalDiscrepancy) {
+        toast({ title: "Error", description: "Original discrepancy not found for sign-off.", variant: "destructive"});
+        return;
+    }
+    startSavingSignOffTransition(async () => {
+        try {
+            const dataToSave: SaveAircraftDiscrepancyInput = {
+                aircraftId: originalDiscrepancy.aircraftId,
+                aircraftTailNumber: originalDiscrepancy.aircraftTailNumber,
+                status: "Closed", // Force status to Closed
+                dateDiscovered: originalDiscrepancy.dateDiscovered,
+                timeDiscovered: originalDiscrepancy.timeDiscovered,
+                description: originalDiscrepancy.description,
+                discoveredBy: originalDiscrepancy.discoveredBy,
+                discoveredByCertNumber: originalDiscrepancy.discoveredByCertNumber,
+                isDeferred: false, // Closing out, so no longer deferred
+                deferralReference: undefined,
+                deferralDate: undefined,
+                correctiveAction: signOffData.correctiveAction,
+                dateCorrected: format(signOffData.dateCorrected, "yyyy-MM-dd"),
+                correctedBy: signOffData.correctedBy,
+                correctedByCertNumber: signOffData.correctedByCertNumber,
+            };
+            await saveAircraftDiscrepancy({ ...dataToSave, id: discrepancyId });
+            toast({ title: "Discrepancy Closed", description: `Discrepancy for ${currentAircraft.tailNumber} signed off and closed.`});
+            await loadAircraftDiscrepancies(currentAircraft.id);
+            setIsSignOffModalOpen(false);
+            setDiscrepancyToSignOff(null);
+        } catch (error) {
+            console.error("Failed to sign off discrepancy:", error);
+            toast({ title: "Error Signing Off", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
+        }
+    });
+  };
+
+  const handleOpenAddMelModal = useCallback(() => {
+    setIsEditingMelItem(false);
+    setCurrentMelItemToEdit(null);
+    setIsMelModalOpen(true);
+  }, []);
+
+  const handleOpenEditMelModal = useCallback((melItem: MelItem) => {
+    setIsEditingMelItem(true);
+    setCurrentMelItemToEdit(melItem);
+    setIsMelModalOpen(true);
+  }, []);
+
+  const handleSaveMelItem = useCallback(async (melItemData: SaveMelItemInput, originalMelId?: string) => {
+    if (!currentAircraft) return;
+    startSavingMelItemTransition(async () => {
+      try {
+        await saveMelItem({ ...melItemData, id: originalMelId });
+        toast({ title: originalMelId ? "MEL Item Updated" : "New MEL Item Added", description: `MEL item for ${currentAircraft.tailNumber} saved.` });
+        await loadMelItems(currentAircraft.id);
+        setIsMelModalOpen(false);
+      } catch (error) {
+        console.error("Failed to save MEL item:", error);
+        toast({ title: "Error Saving MEL Item", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
+      }
+    });
+  }, [currentAircraft, toast, loadMelItems]);
+  
+  const confirmDeleteMelItem = useCallback((melItem: MelItem) => {
+    setMelItemToDelete(melItem);
+    setShowDeleteMelConfirm(true);
+  }, []);
+
+  const executeDeleteMelItem = useCallback(async () => {
+    if (!melItemToDelete || !currentAircraft) return;
+    startDeletingMelItemTransition(async () => {
+      try {
+        await deleteMelItem({ melItemId: melItemToDelete.id });
+        toast({ title: "MEL Item Deleted", description: `MEL Item "${melItemToDelete.melNumber}" removed.`});
+        await loadMelItems(currentAircraft.id);
+      } catch (error) {
+        console.error("Failed to delete MEL Item:", error);
+        toast({ title: "Error Deleting MEL Item", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
+      } finally {
+        setShowDeleteMelConfirm(false);
+        setMelItemToDelete(null);
+      }
+    });
+  }, [melItemToDelete, currentAircraft, toast, loadMelItems]);
   
   const availableComponentsForFilter = useMemo(() => { const uniqueComponents = new Set<string>(); maintenanceTasks.forEach(task => { if (task.associatedComponent && task.associatedComponent.trim() !== "") { uniqueComponents.add(task.associatedComponent.trim()); } else { uniqueComponents.add("Airframe"); } }); return Array.from(uniqueComponents).sort(); }, [maintenanceTasks]);
 
@@ -662,8 +768,11 @@ export default function AircraftMaintenanceDetailPage() {
                                   <TableCell className="text-xs">{format(parseISO(disc.dateDiscovered), 'MM/dd/yy')}</TableCell>
                                   <TableCell className="text-xs max-w-xs truncate" title={disc.description}>{disc.description}</TableCell>
                                   <TableCell className="text-right">
-                                    <Button variant="ghost" size="icon" onClick={() => handleOpenEditDiscrepancyModal(disc)} disabled={isSavingDiscrepancy || isDeletingDiscrepancy}> <Edit3 className="h-4 w-4" /> </Button>
-                                    <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => confirmDeleteDiscrepancy(disc)} disabled={isSavingDiscrepancy || isDeletingDiscrepancy || disc.status === "Closed"}> <Trash2 className="h-4 w-4" /> </Button>
+                                    <Button variant="ghost" size="icon" onClick={() => handleOpenEditDiscrepancyModal(disc)} disabled={isSavingDiscrepancy || isDeletingDiscrepancy || isSavingSignOff} className="mr-1"> <Edit3 className="h-4 w-4" /> </Button>
+                                    {disc.status === "Open" && (
+                                        <Button variant="ghost" size="icon" onClick={() => handleOpenSignOffModal(disc)} disabled={isSavingDiscrepancy || isDeletingDiscrepancy || isSavingSignOff} className="text-green-600 hover:text-green-700 mr-1"> <ShieldCheck className="h-4 w-4" /> </Button>
+                                    )}
+                                    <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => confirmDeleteDiscrepancy(disc)} disabled={isSavingDiscrepancy || isDeletingDiscrepancy || isSavingSignOff || disc.status === "Closed"}> <Trash2 className="h-4 w-4" /> </Button>
                                   </TableCell>
                                 </TableRow>
                               ))}
@@ -677,7 +786,7 @@ export default function AircraftMaintenanceDetailPage() {
                   <CardDescription className="mb-3">Manage Minimum Equipment List items for {currentAircraft.tailNumber}.</CardDescription>
                    <div className="space-y-3">
                     <div className="flex flex-col sm:flex-row gap-2">
-                       <Button onClick={() => toast({ title: "MEL Modal Coming Soon!", description: "Functionality to add MEL items will be available shortly."})} className="w-full sm:w-auto">
+                       <Button onClick={handleOpenAddMelModal} disabled={!currentAircraft || isSavingMelItem} className="w-full sm:w-auto">
                         <PlusCircle className="mr-2 h-4 w-4" /> Add New MEL Item
                       </Button>
                       <Button variant="outline" onClick={() => toast({ title: "Coming Soon!", description: "A dedicated page for full MEL log viewing is planned."})} className="w-full sm:w-auto">
@@ -686,19 +795,23 @@ export default function AircraftMaintenanceDetailPage() {
                     </div>
                      {isLoadingMelItems ? (
                         <div className="flex items-center justify-center py-6"><Loader2 className="h-6 w-6 animate-spin text-primary" /><p className="ml-2 text-muted-foreground">Loading MEL items...</p></div>
-                    ) : openMelItemsForDisplay.length === 0 ? (
-                        <p className="text-center text-muted-foreground py-4">No open MEL items logged for this aircraft.</p>
+                    ) : melItems.length === 0 ? (
+                        <p className="text-center text-muted-foreground py-4">No MEL items logged for this aircraft.</p>
                     ) : (
                         <Table>
-                            <TableHeader><TableRow><TableHead>MEL #</TableHead><TableHead>Description</TableHead><TableHead>Cat.</TableHead><TableHead>Status</TableHead><TableHead>Due Date</TableHead></TableRow></TableHeader>
+                            <TableHeader><TableRow><TableHead>MEL #</TableHead><TableHead>Description</TableHead><TableHead>Cat.</TableHead><TableHead>Status</TableHead><TableHead>Due Date</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
                             <TableBody>
-                                {openMelItemsForDisplay.map(item => (
-                                    <TableRow key={item.id} className={item.status === "Open" ? "bg-yellow-500/5 hover:bg-yellow-500/10" : ""}>
+                                {melItems.map(item => (
+                                    <TableRow key={item.id} className={item.status === "Closed" ? "opacity-60 bg-muted/30" : (item.status === "Open" ? "bg-yellow-500/5 hover:bg-yellow-500/10" : "")}>
                                         <TableCell className="font-medium text-xs">{item.melNumber}</TableCell>
-                                        <TableCell className="text-xs max-w-xs truncate" title={item.description}>{item.description}</TableCell>
+                                        <TableCell className="text-xs max-w-[200px] truncate" title={item.description}>{item.description}</TableCell>
                                         <TableCell className="text-xs text-center">{item.category || '-'}</TableCell>
-                                        <TableCell><Badge variant={item.status === "Open" ? "secondary" : "outline"}>{item.status}</Badge></TableCell>
+                                        <TableCell><Badge variant={item.status === "Open" ? "destructive" : "default"} className="text-xs">{item.status}</Badge></TableCell>
                                         <TableCell className="text-xs">{item.dueDate && isValid(parseISO(item.dueDate)) ? format(parseISO(item.dueDate), 'MM/dd/yy') : 'N/A'}</TableCell>
+                                        <TableCell className="text-right">
+                                            <Button variant="ghost" size="icon" onClick={() => handleOpenEditMelModal(item)} disabled={isSavingMelItem || isDeletingMelItem}><Edit3 className="h-4 w-4"/></Button>
+                                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => confirmDeleteMelItem(item)} disabled={isSavingMelItem || isDeletingMelItem}><Trash2 className="h-4 w-4"/></Button>
+                                        </TableCell>
                                     </TableRow>
                                 ))}
                             </TableBody>
@@ -746,6 +859,14 @@ export default function AircraftMaintenanceDetailPage() {
         isSaving={isSavingDiscrepancy}
       />
       
+      <SignOffDiscrepancyModal
+        isOpen={isSignOffModalOpen}
+        setIsOpen={setIsSignOffModalOpen}
+        onSignOff={handleExecuteSignOff}
+        discrepancy={discrepancyToSignOff}
+        isSaving={isSavingSignOff}
+      />
+
       {showDeleteDiscrepancyConfirm && discrepancyToDelete && (
         <AlertDialogModalContent>
           <AlertDialogModalHeader>
@@ -763,6 +884,34 @@ export default function AircraftMaintenanceDetailPage() {
           </AlertDialogModalFooter>
         </AlertDialogModalContent>
       )}
+
+      <AddEditMelItemModal
+        isOpen={isMelModalOpen}
+        setIsOpen={setIsMelModalOpen}
+        onSave={handleSaveMelItem}
+        aircraft={currentAircraft}
+        initialData={currentMelItemToEdit}
+        isEditing={isEditingMelItem}
+        isSaving={isSavingMelItem}
+      />
+
+      {showDeleteMelConfirm && melItemToDelete && (
+        <AlertDialogModalContent>
+          <AlertDialogModalHeader>
+            <AlertDialogModalTitle>Confirm Delete MEL Item</AlertDialogModalTitle>
+            <AlertDialogModalDescription>
+              Are you sure you want to delete MEL Item "{melItemToDelete.melNumber}: {melItemToDelete.description.substring(0,40)}..."? This action cannot be undone.
+            </AlertDialogModalDescription>
+          </AlertDialogModalHeader>
+          <AlertDialogModalFooter>
+            <AlertDialogCancel onClick={() => setShowDeleteMelConfirm(false)} disabled={isDeletingMelItem}>Cancel</AlertDialogCancel>
+            <Button variant="destructive" onClick={executeDeleteMelItem} disabled={isDeletingMelItem}>
+              {isDeletingMelItem && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Delete
+            </Button>
+          </AlertDialogModalFooter>
+        </AlertDialogModalContent>
+      )}
     </div>
   );
 }
@@ -771,4 +920,5 @@ export default function AircraftMaintenanceDetailPage() {
     
 
     
+
 
