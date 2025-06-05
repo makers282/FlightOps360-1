@@ -172,11 +172,10 @@ const fetchAllAircraftDiscrepanciesFlow = ai.defineFlow(
   async () => {
     try {
       const discrepanciesCollectionRef = collection(db, DISCREPANCIES_COLLECTION);
-      // Simplified query to use only one orderBy clause
       const q = query(
         discrepanciesCollectionRef, 
-        orderBy("dateDiscovered", "desc")
-        // Removed: orderBy("createdAt", "desc") 
+        orderBy("dateDiscovered", "desc"),
+        orderBy("createdAt", "desc") // Restored this line
       );
       const snapshot = await getDocs(q);
       const discrepanciesList = snapshot.docs.map(docSnapshot => {
