@@ -12,7 +12,7 @@ import { ai } from '@/ai/genkit';
 import { db } from '@/lib/firebase';
 import { collection, doc, setDoc, getDoc, getDocs, serverTimestamp, Timestamp, deleteDoc, query, where, orderBy } from 'firebase/firestore';
 import { z } from 'zod';
-import type { AircraftDiscrepancy, SaveAircraftDiscrepancyInput } from '@/ai/schemas/aircraft-discrepancy-schemas';
+import type { AircraftDiscrepancy, SaveAircraftDiscrepancyInput, DiscrepancyStatus } from '@/ai/schemas/aircraft-discrepancy-schemas';
 import {
     SaveAircraftDiscrepancyInputSchema,
     SaveAircraftDiscrepancyOutputSchema,
@@ -29,14 +29,11 @@ const FLEET_COLLECTION = 'fleet'; // To get tail number
 // Exported async functions that clients will call
 export async function saveAircraftDiscrepancy(input: SaveAircraftDiscrepancyInput): Promise<AircraftDiscrepancy> {
   const discrepancyId = input.id || doc(collection(db, DISCREPANCIES_COLLECTION)).id;
-  // Ensure ID field is not part of the data passed to flow for fields.
-  // Status is also handled by the flow based on whether it's a new or existing doc.
-  const { id, status, ...discrepancyDataForFlow } = input;
+  const { id, ...discrepancyDataForFlow } = input;
 
   return saveAircraftDiscrepancyFlow({ 
     firestoreDocId: discrepancyId, 
-    // Pass status separately or let the flow infer it. For now, pass status if it exists on input.
-    discrepancyData: { ...discrepancyDataForFlow, status: input.status } as Omit<SaveAircraftDiscrepancyInput, 'id'>
+    discrepancyData: discrepancyDataForFlow as Omit<SaveAircraftDiscrepancyInput, 'id'>
   });
 }
 
@@ -50,7 +47,6 @@ export async function deleteAircraftDiscrepancy(input: { discrepancyId: string }
 
 
 // Internal Genkit Flow Schemas and Definitions
-// The input schema for the flow still includes status as optional.
 const InternalSaveAircraftDiscrepancyInputSchema = z.object({
   firestoreDocId: z.string(),
   discrepancyData: SaveAircraftDiscrepancyInputSchema.omit({ id: true }),
@@ -77,25 +73,29 @@ const saveAircraftDiscrepancyFlow = ai.defineFlow(
         }
       }
 
-      let statusToSet;
-      if (docSnap.exists()) {
-        // For updates, if status is provided in discrepancyData, use it.
-        // Otherwise, preserve existing status.
-        // The simplified modal doesn't send status for edits, so discrepancyData.status will be undefined.
-        // The full edit form (like sign-off) *will* send status.
-        statusToSet = discrepancyData.status !== undefined ? discrepancyData.status : docSnap.data().status;
+      let statusToSet: DiscrepancyStatus;
+      const existingStatus = docSnap.exists() ? docSnap.data().status as DiscrepancyStatus : undefined;
+
+      if (existingStatus === "Closed") {
+        statusToSet = "Closed"; // Do not change a closed status from this simplified modal
+      } else if (discrepancyData.isDeferred) {
+        statusToSet = "Deferred";
       } else {
-        // For new documents, default to "Open" if not explicitly provided (though modal won't provide it)
-        statusToSet = discrepancyData.status !== undefined ? discrepancyData.status : "Open";
+        statusToSet = "Open";
       }
 
       const dataToSet = {
-        ...discrepancyData,
+        ...discrepancyData, // Contains fields like isDeferred, deferralReference, deferralDate
         status: statusToSet,
+        // timeDiscovered is no longer passed or saved
         aircraftTailNumber: aircraftTailNumber || discrepancyData.aircraftTailNumber, 
         updatedAt: serverTimestamp(),
         createdAt: docSnap.exists() && docSnap.data().createdAt ? docSnap.data().createdAt : serverTimestamp(),
       };
+
+      // Remove timeDiscovered explicitly if it somehow exists in discrepancyData (it shouldn't due to schema omit)
+      delete (dataToSet as any).timeDiscovered;
+
 
       await setDoc(discrepancyDocRef, dataToSet, { merge: true });
       const savedDoc = await getDoc(discrepancyDocRef);
@@ -105,8 +105,11 @@ const saveAircraftDiscrepancyFlow = ai.defineFlow(
         throw new Error("Failed to retrieve saved discrepancy data from Firestore.");
       }
 
+      // Ensure savedData doesn't include timeDiscovered before returning
+      const { timeDiscovered, ...returnData } = savedData;
+
       return {
-        ...savedData,
+        ...returnData,
         id: firestoreDocId,
         createdAt: (savedData.createdAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
         updatedAt: (savedData.updatedAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
@@ -134,8 +137,10 @@ const fetchAircraftDiscrepanciesFlow = ai.defineFlow(
       const snapshot = await getDocs(q);
       const discrepanciesList = snapshot.docs.map(docSnapshot => {
         const data = docSnapshot.data();
+        // Ensure timeDiscovered is not included in the returned object
+        const { timeDiscovered, ...displayData } = data;
         return {
-          ...data,
+          ...displayData,
           id: docSnapshot.id,
           dateDiscovered: data.dateDiscovered || '1970-01-01', 
           createdAt: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),

@@ -15,14 +15,14 @@ export const AircraftDiscrepancySchema = z.object({
   status: z.enum(discrepancyStatuses).default("Open"),
   
   dateDiscovered: z.string().describe("YYYY-MM-DD format, when the discrepancy was found."),
-  timeDiscovered: z.string().optional().describe("HH:MM format, time of discovery."),
+  // timeDiscovered: z.string().optional().describe("HH:MM format, time of discovery."), // Removed
   description: z.string().min(5, "A clear description of the discrepancy is required."),
   discoveredBy: z.string().optional(),
   discoveredByCertNumber: z.string().optional().describe("Certification number of the person who discovered it, if applicable."),
 
   isDeferred: z.boolean().default(false).describe("Is this discrepancy deferred (e.g., per MEL/NEF)?"),
-  deferralReference: z.string().optional().describe("Reference for deferral, e.g., MEL item number."),
-  deferralDate: z.string().optional().describe("YYYY-MM-DD format, date of deferral."),
+  deferralReference: z.string().optional().describe("Reference for deferral, e.g., MEL item number."), // Kept for context if deferred
+  deferralDate: z.string().optional().describe("YYYY-MM-DD format, date of deferral."), // Kept for context if deferred
 
   correctiveAction: z.string().optional().describe("Details of the corrective action taken."),
   dateCorrected: z.string().optional().describe("YYYY-MM-DD format, when the corrective action was completed."),
@@ -35,16 +35,21 @@ export const AircraftDiscrepancySchema = z.object({
 export type AircraftDiscrepancy = z.infer<typeof AircraftDiscrepancySchema>;
 
 // Schema for saving a discrepancy (input to the flow)
-// id, createdAt, updatedAt will be handled by the server. Status is also handled by server for new, or preserved for edits from this simplified modal.
 export const SaveAircraftDiscrepancyInputSchema = AircraftDiscrepancySchema.omit({ 
   id: true, 
   createdAt: true, 
   updatedAt: true,
-  aircraftTailNumber: true, // Tail number is for display, aircraftId is the key relation
-  status: true, // Status is handled by the flow
+  aircraftTailNumber: true, 
+  status: true, // Status is now determined by the flow based on isDeferred and existing status
+  // timeDiscovered: true, // Removed
+  // Fields related to sign-off are not part of this initial save/edit modal
+  correctiveAction: true,
+  dateCorrected: true,
+  correctedBy: true,
+  correctedByCertNumber: true,
 }).extend({
   id: z.string().optional(), // ID is optional for creation, can be provided for updates
-  status: z.enum(discrepancyStatuses).optional(), // Make status optional in input
+  // isDeferred is part of the base schema and will be passed.
 });
 export type SaveAircraftDiscrepancyInput = z.infer<typeof SaveAircraftDiscrepancyInputSchema>;
 
