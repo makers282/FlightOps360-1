@@ -4,12 +4,11 @@
 import React, { useState, useMemo, useEffect, useTransition } from 'react';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { FolderArchive, UploadCloud, Edit3, Trash2, Search, FileText, Loader2, CalendarDays, User, ClipboardCheck, AlertTriangle, CheckCircle2 } from 'lucide-react'; // Added ClipboardCheck
+import { FolderArchive, UploadCloud, Edit3, Trash2, FileText, Loader2, CalendarDays, User, ClipboardCheck, AlertTriangle, CheckCircle2, Link as LinkIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -18,7 +17,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
-import { format, parseISO, isValid, differenceInDays, isPast, isFuture } from 'date-fns';
+import { format, parseISO, isValid, differenceInDays, isPast } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 
 import { fetchCrewMembers, type CrewMember } from '@/ai/flows/manage-crew-flow';
@@ -28,6 +27,7 @@ import { AddEditCrewDocumentModal } from './components/add-edit-crew-document-mo
 import { ClientOnly } from '@/components/client-only';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
+import Link from 'next/link'; // Added for file links
 
 // Define categories based on document types
 const GENERAL_DOC_TYPES: CrewDocumentType[] = ["License", "Medical", "Passport", "Visa", "Company ID", "Airport ID", "Other"];
@@ -42,7 +42,7 @@ const getDocumentStatus = (expiryDateString?: string): DocumentStatus => {
   if (!expiryDateString) return "No Expiry";
   try {
     const expiry = parseISO(expiryDateString);
-    if (!isValid(expiry)) return "No Expiry"; // Or treat as invalid input
+    if (!isValid(expiry)) return "No Expiry"; 
     
     if (isPast(expiry)) return "Expired";
     
@@ -51,14 +51,14 @@ const getDocumentStatus = (expiryDateString?: string): DocumentStatus => {
     
     return "Valid";
   } catch {
-    return "No Expiry"; // If parsing fails
+    return "No Expiry"; 
   }
 };
 
 const getStatusBadgeVariant = (status: DocumentStatus): "default" | "secondary" | "destructive" | "outline" => {
   switch (status) {
     case "Expired": return "destructive";
-    case "Expiring Soon": return "secondary"; // Or a custom 'warning' variant if defined
+    case "Expiring Soon": return "secondary"; 
     case "Valid": return "default";
     case "No Expiry": return "outline";
     default: return "outline";
@@ -103,7 +103,7 @@ export default function CrewDocumentsPage() {
         fetchCrewMembers(),
         fetchCrewDocuments(),
       ]);
-      setAllCrewMembers(fetchedCrew.filter(cm => cm.id)); 
+      setAllCrewMembers(fetchedCrew.filter(cm => cm.id).sort((a,b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`))); 
       setAllCrewDocuments(fetchedDocs);
       
     } catch (error) {
@@ -122,19 +122,20 @@ export default function CrewDocumentsPage() {
 
   const documentsForSelectedCrew = useMemo(() => {
     if (!selectedCrewMemberId) return [];
-    return allCrewDocuments.filter(doc => doc.crewMemberId === selectedCrewMemberId);
+    return allCrewDocuments.filter(doc => doc.crewMemberId === selectedCrewMemberId)
+                           .sort((a,b) => (a.documentName || '').localeCompare(b.documentName || ''));
   }, [selectedCrewMemberId, allCrewDocuments]);
 
   const generalDocuments = useMemo(() => {
-    return documentsForSelectedCrew.filter(doc => GENERAL_DOC_TYPES.includes(doc.documentType));
+    return documentsForSelectedCrew.filter(doc => GENERAL_DOC_TYPES.includes(doc.documentType as CrewDocumentType));
   }, [documentsForSelectedCrew]);
 
   const trainingDocuments = useMemo(() => {
-    return documentsForSelectedCrew.filter(doc => TRAINING_DOC_TYPES.includes(doc.documentType));
+    return documentsForSelectedCrew.filter(doc => TRAINING_DOC_TYPES.includes(doc.documentType as CrewDocumentType));
   }, [documentsForSelectedCrew]);
 
   const currencyDocuments = useMemo(() => {
-    return documentsForSelectedCrew.filter(doc => CURRENCY_DOC_TYPES.includes(doc.documentType));
+    return documentsForSelectedCrew.filter(doc => CURRENCY_DOC_TYPES.includes(doc.documentType as CrewDocumentType));
   }, [documentsForSelectedCrew]);
 
   const handleOpenAddModal = () => {
@@ -215,6 +216,14 @@ export default function CrewDocumentsPage() {
           </div>
         </div>
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+          {doc.fileUrl && (
+            <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
+              <Link href={doc.fileUrl} target="_blank" rel="noopener noreferrer">
+                <LinkIcon className="h-4 w-4" />
+                <span className="sr-only">View/Download File</span>
+              </Link>
+            </Button>
+          )}
           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleOpenEditModal(doc)}>
             <Edit3 className="h-4 w-4" />
             <span className="sr-only">Edit</span>
@@ -249,7 +258,7 @@ export default function CrewDocumentsPage() {
           <Label htmlFor="crewMemberSelectDropdown">Choose a Crew Member:</Label>
           <Select
             value={selectedCrewMemberId || ''}
-            onValueChange={(value) => setSelectedCrewMemberId(value === 'NONE' ? undefined : value)}
+            onValueChange={(value) => setSelectedCrewMemberId(value === '' ? undefined : value)}
             disabled={isLoadingCrew}
           >
             <SelectTrigger id="crewMemberSelectDropdown">
@@ -365,6 +374,7 @@ export default function CrewDocumentsPage() {
         isSaving={isSavingDocument}
         crewMembers={allCrewMembers.map(cm => ({id: cm.id, firstName: cm.firstName, lastName: cm.lastName, role: cm.role}))}
         isLoadingCrewMembers={isLoadingCrew}
+        selectedCrewMemberIdForNew={selectedCrewMemberId}
       />
 
       {showDeleteConfirm && documentToDelete && (
