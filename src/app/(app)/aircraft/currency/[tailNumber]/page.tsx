@@ -22,7 +22,8 @@ import { useForm, type SubmitHandler } from 'react-hook-form';
 import { z } from 'zod';
 import { AddMaintenanceTaskDialogContent, type MaintenanceTaskFormData, defaultMaintenanceTaskFormValues } from './components/add-maintenance-task-modal';
 import { AddEditAircraftDiscrepancyModal } from './components/add-edit-aircraft-discrepancy-modal';
-import { SignOffDiscrepancyModal, type SignOffFormData } from './components/sign-off-discrepancy-modal'; // New import
+import { SignOffDiscrepancyModal, type SignOffFormData } from './components/sign-off-discrepancy-modal';
+import { AddEditMelItemModal } from './components/add-edit-mel-item-modal';
 import { Dialog } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -53,7 +54,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { fetchMelItemsForAircraft, saveMelItem, deleteMelItem } from '@/ai/flows/manage-mel-items-flow';
 import type { MelItem, SaveMelItemInput } from '@/ai/schemas/mel-item-schemas';
-import { AddEditMelItemModal } from './components/add-edit-mel-item-modal';
 
 
 export interface DisplayMaintenanceItem extends FlowMaintenanceTask {
@@ -659,7 +659,6 @@ export default function AircraftMaintenanceDetailPage() {
   const openMelItemsCount = melItems.filter(m => m.status !== "Closed").length;
 
   const openDiscrepanciesForDisplay = aircraftDiscrepancies.filter(d => d.status !== "Closed").sort((a,b) => parseISO(b.dateDiscovered).getTime() - parseISO(a.dateDiscovered).getTime());
-  const openMelItemsForDisplay = melItems.filter(m => m.status !== "Closed").sort((a, b) => (a.dueDate && b.dueDate ? parseISO(a.dueDate).getTime() - parseISO(b.dueDate).getTime() : (a.dueDate ? -1 : 1)));
 
   return (
     <div>
@@ -843,7 +842,7 @@ export default function AircraftMaintenanceDetailPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><Wrench className="h-6 w-6 text-primary" />Maintenance Items</CardTitle>
           <CardDescription> Overview of scheduled and upcoming maintenance tasks for {currentAircraft.tailNumber}. Calculated "To Go" is based on the values in "Current Hours &amp; Cycles" above. </CardDescription>
-          <div className="mt-4 flex flex-col sm:flex-row gap-2 items-center"> <div className="relative flex-grow w-full sm:w-auto"> <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /> <Input type="search" placeholder="Search tasks (title, ref, type, component)..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-8 w-full" /> {searchTerm && ( <Button variant="ghost" size="icon" className="absolute right-1 top-1 h-7 w-7" onClick={() => setSearchTerm('')}> <XCircleIcon className="h-4 w-4"/> </Button> )} </div> <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as any)}> <SelectTrigger className="w-full sm:w-[180px]"> <SelectValue placeholder="Filter by status" /> </SelectTrigger> <SelectContent> <SelectItem value="all">All Statuses</SelectItem> <SelectItem value="active">Active Items</SelectItem> <SelectItem value="inactive">Inactive Items</SelectItem> <SelectItem value="dueSoon">Due Soon (Active)</SelectItem> <SelectItem value="overdue">Overdue (Active)</SelectItem> <SelectItem value="gracePeriod">Grace Period (Active)</SelectItem> </SelectContent> </Select> <Select value={componentFilter} onValueChange={setComponentFilter}> <SelectTrigger className="w-full sm:w-[200px]"> <Filter className="h-4 w-4 mr-2 opacity-50" /> <SelectValue placeholder="Filter by component" /> </SelectTrigger> <SelectContent> <SelectItem value="all">All Components</SelectItem> {availableComponentsForFilter.map(comp => ( <SelectItem key={comp} value={comp}>{comp}</SelectItem> ))} </SelectContent> </Select> </div>
+          <div className="mt-4 flex flex-col sm:flex-row gap-2 items-center"> <div className="relative flex-grow w-full sm:w-auto"> <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /> <Input type="search" placeholder="Search tasks (title, ref, type, component)..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-8 w-full" /> {searchTerm && ( <Button variant="ghost" size="icon" className="absolute right-1 top-1 h-7 w-7" onClick={() => setSearchTerm('')}> <XCircleIcon className="h-4 w-4"/> </Button> )} </div> <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as any)}> <SelectTrigger className="w-full sm:w-[180px]"> <SelectValue placeholder="Filter by status" /> </SelectTrigger> <SelectContent> <SelectItem value="all">All Statuses</SelectItem> <SelectItem value="active">Active Items</SelectItem> <SelectItem value="inactive">Inactive Items</SelectItem> <SelectItem value="dueSoon">Due Soon (Active)</SelectItem> <SelectItem value="overdue">Overdue (Active)</SelectItem> <SelectItem value="gracePeriod">Grace Period (Active)</SelectItem> </SelectContent> </Select> <Select value={componentFilter} onValueChange={setComponentFilter}> <SelectTrigger className="w-full sm:w-[200px]"> <FilterIcon className="h-4 w-4 mr-2 opacity-50" /> <SelectValue placeholder="Filter by component" /> </SelectTrigger> <SelectContent> <SelectItem value="all">All Components</SelectItem> {availableComponentsForFilter.map(comp => ( <SelectItem key={comp} value={comp}>{comp}</SelectItem> ))} </SelectContent> </Select> </div>
         </CardHeader>
         <CardContent>{isLoadingTasks ? ( <div className="flex items-center justify-center py-10"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2 text-muted-foreground">Loading maintenance tasks...</p></div> ) : ( <Table><TableHeader><TableRow><TableHead className="w-10"><Checkbox checked={selectedTaskIds.length === displayedTasks.length && displayedTasks.length > 0} onCheckedChange={(checked) => handleSelectAllTasks(Boolean(checked))} aria-label="Select all tasks" disabled={displayedTasks.length === 0} /></TableHead><TableHead>Ref #</TableHead><TableHead><Button variant="ghost" size="sm" onClick={() => requestSort('itemTitle')} className="px-1 -ml-2"> Title {getSortIcon('itemTitle')} </Button></TableHead><TableHead>Type</TableHead><TableHead>Component</TableHead><TableHead>Frequency</TableHead><TableHead>Last Done</TableHead><TableHead>Due At</TableHead><TableHead><Button variant="ghost" size="sm" onClick={() => requestSort('toGoNumeric')} className="px-1 -ml-2"> To Go {getSortIcon('toGoNumeric')} </Button></TableHead><TableHead className="text-center">Status</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader><TableBody>{tableBodyContent}</TableBody></Table> )}
         </CardContent>
@@ -920,5 +919,6 @@ export default function AircraftMaintenanceDetailPage() {
     
 
     
+
 
 
