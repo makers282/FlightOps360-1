@@ -25,7 +25,7 @@ import { CalendarIcon, Loader2, Save, BookOpen, Edit3 } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { format, parseISO, isValid as isValidDate, startOfDay } from "date-fns";
 import type { MelItem, SaveMelItemInput } from '@/ai/schemas/mel-item-schemas';
-import { melCategories, melStatuses } from '@/ai/schemas/mel-item-schemas'; // melStatuses will now be ["Open", "Closed"]
+import { melCategories, melStatuses } from '@/ai/schemas/mel-item-schemas';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { FleetAircraft } from '@/ai/schemas/fleet-aircraft-schemas';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
@@ -151,7 +151,7 @@ export function AddEditMelItemModal({
     await onSave(dataToSave, isEditing && initialData ? initialData.id : undefined);
   };
 
-  const modalTitle = isEditing ? \`Edit MEL Item for \${aircraft?.tailNumber}\` : \`Add New MEL Item for \${aircraft?.tailNumber}\`;
+  const modalTitle = isEditing ? 'Edit MEL Item for ' + (aircraft?.tailNumber || '') : 'Add New MEL Item for ' + (aircraft?.tailNumber || '');
   const modalDescription = isEditing
     ? "Update the details of this MEL item."
     : "Log a new MEL item for this aircraft.";
