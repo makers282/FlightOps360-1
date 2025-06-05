@@ -14,9 +14,9 @@ import { db } from '@/lib/firebase';
 import { collection, doc, setDoc, getDoc, getDocs, serverTimestamp, Timestamp, query, orderBy, deleteDoc } from 'firebase/firestore';
 import { z } from 'zod';
 import type { Trip, SaveTripInput, DeleteTripInput } from '@/ai/schemas/trip-schemas';
-import { 
+import {
     TripSchema,
-    SaveTripInputSchema, 
+    SaveTripInputSchema,
     SaveTripOutputSchema,
     FetchTripsOutputSchema,
     FetchTripByIdInputSchema,
@@ -31,7 +31,7 @@ const TRIPS_COLLECTION = 'trips';
 export async function saveTrip(input: SaveTripInput | Trip): Promise<Trip> {
   // Use input.id if provided (for updates), otherwise generate a new Firestore document ID
   const firestoreDocId = (input as Trip).id || doc(collection(db, TRIPS_COLLECTION)).id;
-  
+
   // Prepare data for the flow: exclude 'id', 'createdAt', 'updatedAt' from the data payload
   // as these are handled by Firestore or are part of the document key.
   const { id, createdAt, updatedAt, ...tripDataForFlow } = input as Trip;
@@ -43,29 +43,30 @@ export async function saveTrip(input: SaveTripInput | Trip): Promise<Trip> {
 
 const InternalSaveTripInputSchema = z.object({
   firestoreDocId: z.string(),
-  tripData: SaveTripInputSchema, 
+  tripData: SaveTripInputSchema,
 });
 
 const saveTripFlow = ai.defineFlow(
   {
     name: 'saveTripFlow',
     inputSchema: InternalSaveTripInputSchema,
-    outputSchema: SaveTripOutputSchema, 
+    outputSchema: SaveTripOutputSchema,
   },
   async ({ firestoreDocId, tripData }) => {
     console.log('Executing saveTripFlow with input - Firestore Doc ID:', firestoreDocId, 'Data:', JSON.stringify(tripData));
-    
+
     const tripDocRef = doc(db, TRIPS_COLLECTION, firestoreDocId);
-    
+
     try {
       const docSnap = await getDoc(tripDocRef);
       let finalDataToSave;
 
-      // Ensure crew assignment arrays are initialized if not provided
+      // Ensure crew assignment arrays are initialized if not provided,
+      // and string fields are null if undefined.
       const dataWithDefaults = {
         ...tripData,
-        assignedPilotId: tripData.assignedPilotId || undefined,
-        assignedCoPilotId: tripData.assignedCoPilotId || undefined,
+        assignedPilotId: tripData.assignedPilotId === undefined ? null : tripData.assignedPilotId,
+        assignedCoPilotId: tripData.assignedCoPilotId === undefined ? null : tripData.assignedCoPilotId,
         assignedFlightAttendantIds: tripData.assignedFlightAttendantIds || [],
       };
 
@@ -73,20 +74,20 @@ const saveTripFlow = ai.defineFlow(
         // Document exists, prepare for update
         finalDataToSave = {
           ...dataWithDefaults, // User-provided data with defaults
-          id: firestoreDocId, 
-          updatedAt: serverTimestamp(), 
+          id: firestoreDocId,
+          updatedAt: serverTimestamp(),
           createdAt: docSnap.data().createdAt || serverTimestamp(), // Preserve original createdAt if it exists
         };
       } else {
         // New document, set both timestamps
         finalDataToSave = {
           ...dataWithDefaults,
-          id: firestoreDocId, 
+          id: firestoreDocId,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         };
       }
-      
+
       await setDoc(tripDocRef, finalDataToSave, { merge: true });
       console.log('Saved trip in Firestore:', firestoreDocId);
 
@@ -96,7 +97,7 @@ const saveTripFlow = ai.defineFlow(
       if (!savedData) {
         throw new Error("Failed to retrieve saved trip data from Firestore.");
       }
-      
+
       // Construct the output Trip object, ensuring all fields are present as per TripSchema
       const outputTrip: Trip = {
         ...savedData, // Spread saved data first
@@ -106,11 +107,13 @@ const saveTripFlow = ai.defineFlow(
         // Ensure array fields are present even if they were undefined in Firestore
         assignedFlightAttendantIds: savedData.assignedFlightAttendantIds || [],
         legs: savedData.legs || [],
+        assignedPilotId: savedData.assignedPilotId === null ? undefined : savedData.assignedPilotId,
+        assignedCoPilotId: savedData.assignedCoPilotId === null ? undefined : savedData.assignedCoPilotId,
       } as Trip; // Assert type
       return outputTrip;
 
     } catch (error) {
-      console.error('Error saving trip to Firestore:', error);
+      console.error(`Error saving trip ${firestoreDocId}:`, error);
       throw new Error(`Failed to save trip ${firestoreDocId}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
@@ -130,17 +133,19 @@ const fetchTripsFlow = ai.defineFlow(
     console.log('Executing fetchTripsFlow - Firestore');
     try {
       const tripsCollectionRef = collection(db, TRIPS_COLLECTION);
-      const q = query(tripsCollectionRef, orderBy("createdAt", "desc")); 
+      const q = query(tripsCollectionRef, orderBy("createdAt", "desc"));
       const snapshot = await getDocs(q);
       const tripsList = snapshot.docs.map(docSnapshot => {
         const data = docSnapshot.data();
         return {
           ...data,
-          id: docSnapshot.id, 
+          id: docSnapshot.id,
           createdAt: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
           updatedAt: (data.updatedAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
           assignedFlightAttendantIds: data.assignedFlightAttendantIds || [], // ensure array on output
           legs: data.legs || [], // ensure array on output
+          assignedPilotId: data.assignedPilotId === null ? undefined : data.assignedPilotId,
+          assignedCoPilotId: data.assignedCoPilotId === null ? undefined : data.assignedCoPilotId,
         } as Trip;
       });
       console.log('Fetched trips from Firestore:', tripsList.length, 'trips.');
@@ -172,13 +177,15 @@ const fetchTripByIdFlow = ai.defineFlow(
       if (docSnap.exists()) {
         const data = docSnap.data();
         const trip: Trip = {
-          ...data, 
-          id: docSnap.id, 
+          ...data,
+          id: docSnap.id,
           createdAt: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
           updatedAt: (data.updatedAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
           assignedFlightAttendantIds: data.assignedFlightAttendantIds || [],
           legs: data.legs || [],
-        } as Trip; 
+          assignedPilotId: data.assignedPilotId === null ? undefined : data.assignedPilotId,
+          assignedCoPilotId: data.assignedCoPilotId === null ? undefined : data.assignedCoPilotId,
+        } as Trip;
         console.log('Fetched trip by ID from Firestore:', trip);
         return trip;
       } else {
@@ -200,8 +207,8 @@ export async function deleteTrip(input: DeleteTripInput): Promise<{ success: boo
 const deleteTripFlow = ai.defineFlow(
   {
     name: 'deleteTripFlow',
-    inputSchema: DeleteTripInputSchema, 
-    outputSchema: DeleteTripOutputSchema, 
+    inputSchema: DeleteTripInputSchema,
+    outputSchema: DeleteTripOutputSchema,
   },
   async (input) => {
     console.log('Executing deleteTripFlow for trip ID - Firestore:', input.id);
@@ -213,7 +220,7 @@ const deleteTripFlow = ai.defineFlow(
           console.warn(`Trip with ID ${input.id} not found for deletion.`);
           return { success: true, tripId: input.id }; // Considered success if already gone
       }
-      
+
       await deleteDoc(tripDocRef);
       console.log('Deleted trip from Firestore:', input.id);
       return { success: true, tripId: input.id };

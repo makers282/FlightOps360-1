@@ -5,7 +5,7 @@ import React, { useState, useEffect, useTransition } from 'react';
 import Link from 'next/link';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { FileArchive, PlusCircle, Edit3, Trash2, Search, Eye, Loader2, CheckCircle, CalendarPlus, Edit } from 'lucide-react'; 
+import { FileArchive, PlusCircle, Edit3, Trash2, Search, Eye, Loader2, CheckCircle, CalendarPlus, Edit } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -40,11 +40,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { fetchQuotes, deleteQuote, saveQuote } from '@/ai/flows/manage-quotes-flow'; 
+import { fetchQuotes, deleteQuote, saveQuote } from '@/ai/flows/manage-quotes-flow';
 import type { Quote, QuoteLeg, quoteStatuses as QuoteStatusType, SaveQuoteInput } from '@/ai/schemas/quote-schemas';
 import { quoteStatuses } from '@/ai/schemas/quote-schemas';
-import { saveTrip } from '@/ai/flows/manage-trips-flow'; 
-import type { SaveTripInput as TripToSave, TripLeg as TripLegType } from '@/ai/schemas/trip-schemas'; 
+import { saveTrip } from '@/ai/flows/manage-trips-flow';
+import type { SaveTripInput as TripToSave, TripLeg as TripLegType } from '@/ai/schemas/trip-schemas';
 import { useToast } from '@/hooks/use-toast';
 import { format, parseISO } from 'date-fns';
 
@@ -57,15 +57,15 @@ const getStatusBadgeVariant = (status?: typeof QuoteStatusType[number]): "defaul
   switch (status?.toLowerCase()) {
     case 'accepted':
     case 'booked':
-      return 'default'; 
-    case 'sent': 
-      return 'secondary'; 
-    case 'draft': 
-      return 'outline'; 
+      return 'default';
+    case 'sent':
+      return 'secondary';
+    case 'draft':
+      return 'outline';
     case 'expired':
-    case 'rejected': 
-    case 'cancelled': 
-      return 'destructive'; 
+    case 'rejected':
+    case 'cancelled':
+      return 'destructive';
     default: return 'outline';
   }
 };
@@ -75,7 +75,7 @@ export default function AllQuotesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const { toast } = useToast();
-  
+
   const [isDeleting, startDeletingTransition] = useTransition();
   const [quoteToDelete, setQuoteToDelete] = useState<Quote | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -117,7 +117,7 @@ export default function AllQuotesPage() {
         toast({ title: "Success", description: `Quote "${quoteToDelete.quoteId}" deleted.` });
         setShowDeleteConfirm(false);
         setQuoteToDelete(null);
-        await loadQuotes(); 
+        await loadQuotes();
       } catch (error) {
         console.error("Failed to delete quote:", error);
         toast({ title: "Error Deleting Quote", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
@@ -135,7 +135,7 @@ export default function AllQuotesPage() {
 
   const executeStatusUpdate = async () => {
     if (!quoteToProcess || !newStatusForQuote) return;
-    
+
     const wasPreviouslyBooked = quoteToProcess.status === "Booked";
     const isNowBooking = newStatusForQuote === "Booked";
 
@@ -145,14 +145,14 @@ export default function AllQuotesPage() {
           ...quoteToProcess,
           status: newStatusForQuote,
         };
-        
+
         const { id: originalDocId, createdAt, updatedAt, ...quoteDataForSave } = updatedQuoteData;
-        const savedQuote = await saveQuote(quoteDataForSave as SaveQuoteInput); 
+        const savedQuote = await saveQuote(quoteDataForSave as SaveQuoteInput);
 
         let tripCreatedSuccessfully = false;
         let tripCreationMessage = "";
 
-        if (isNowBooking && !wasPreviouslyBooked) { // Only attempt to create trip if newly booked
+        if (isNowBooking && !wasPreviouslyBooked) {
             const newTripId = `TRP-${savedQuote.quoteId.replace(/^QT-/i, '')}-${Date.now().toString().slice(-5)}`;
             const tripLegs: TripLegType[] = savedQuote.legs.map(qLeg => ({
                 origin: qLeg.origin,
@@ -163,10 +163,10 @@ export default function AllQuotesPage() {
                 originFbo: qLeg.originFbo,
                 destinationFbo: qLeg.destinationFbo,
                 flightTimeHours: qLeg.flightTimeHours,
-                blockTimeHours: qLeg.calculatedBlockTimeHours, 
+                blockTimeHours: qLeg.calculatedBlockTimeHours,
             }));
 
-            const tripToSave: TripToSave = { 
+            const tripToSave: TripToSave = {
                 tripId: newTripId,
                 quoteId: savedQuote.id,
                 customerId: savedQuote.selectedCustomerId,
@@ -174,11 +174,11 @@ export default function AllQuotesPage() {
                 aircraftId: savedQuote.aircraftId || "UNKNOWN_AC",
                 aircraftLabel: savedQuote.aircraftLabel,
                 legs: tripLegs,
-                status: "Scheduled", 
+                status: "Scheduled",
                 notes: `Trip created from Quote ${savedQuote.quoteId}. ${savedQuote.options.notes || ''}`.trim(),
-                assignedPilotId: undefined,
-                assignedCoPilotId: undefined,
-                assignedFlightAttendantIds: [],
+                assignedPilotId: undefined, // Explicitly undefined, flow will handle null
+                assignedCoPilotId: undefined, // Explicitly undefined, flow will handle null
+                assignedFlightAttendantIds: [], // Default to empty array
             };
 
             try {
@@ -191,16 +191,16 @@ export default function AllQuotesPage() {
             }
         }
 
-        toast({ 
-            title: "Quote Status Updated", 
+        toast({
+            title: "Quote Status Updated",
             description: `Quote "${savedQuote.quoteId}" status changed to ${newStatusForQuote}.${tripCreationMessage}`,
             variant: tripCreatedSuccessfully || !isNowBooking ? "default" : "destructive"
         });
-        
+
         setShowStatusConfirm(false);
         setQuoteToProcess(null);
         setNewStatusForQuote(null);
-        await loadQuotes(); 
+        await loadQuotes();
       } catch (error) {
         console.error("Failed to update quote status:", error);
         toast({ title: "Error Updating Status", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
@@ -217,7 +217,7 @@ export default function AllQuotesPage() {
     (quote.clientName && quote.clientName.toLowerCase().includes(searchTerm.toLowerCase())) ||
     (quote.aircraftLabel && quote.aircraftLabel.toLowerCase().includes(searchTerm.toLowerCase())) ||
     (quote.status && quote.status.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (quote.legs && quote.legs.length > 0 && 
+    (quote.legs && quote.legs.length > 0 &&
       `${quote.legs[0].origin} -> ${quote.legs[quote.legs.length - 1].destination}`.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
@@ -236,8 +236,8 @@ export default function AllQuotesPage() {
 
   return (
     <TooltipProvider>
-      <PageHeader 
-        title="All Quotes" 
+      <PageHeader
+        title="All Quotes"
         description="Browse, manage, and track all flight quotes from Firestore."
         icon={FileArchive}
         actions={
@@ -254,8 +254,8 @@ export default function AllQuotesPage() {
           <CardDescription>Review and manage all generated quotes.</CardDescription>
            <div className="mt-2 relative">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input 
-              placeholder="Search quotes (ID, client, route, aircraft, status)..." 
+            <Input
+              placeholder="Search quotes (ID, client, route, aircraft, status)..."
               className="pl-8 w-full sm:w-1/2 lg:w-1/3"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -323,14 +323,14 @@ export default function AllQuotesPage() {
                           {canBookQuote(quote.status as typeof QuoteStatusType[number]) && (
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <Button 
-                                  variant="outline" 
+                                <Button
+                                  variant="outline"
                                   size="sm"
                                   onClick={() => handleStatusChange(quote, "Booked")}
                                   disabled={isBookingOrUpdating}
                                   className="text-green-600 border-green-600 hover:bg-green-50 hover:text-green-700 p-2 w-9"
                                 >
-                                  <CalendarPlus className="h-4 w-4" /> 
+                                  <CalendarPlus className="h-4 w-4" />
                                   <span className="sr-only">Book Trip</span>
                                 </Button>
                               </TooltipTrigger>
@@ -361,11 +361,11 @@ export default function AllQuotesPage() {
                           </Tooltip>
                           <Tooltip>
                               <TooltipTrigger asChild>
-                                <Button 
-                                  variant="ghost" 
-                                  size="sm" 
-                                  className="text-destructive hover:text-destructive p-2 w-9" 
-                                  onClick={() => handleDeleteClick(quote)} 
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-destructive hover:text-destructive p-2 w-9"
+                                  onClick={() => handleDeleteClick(quote)}
                                   disabled={isDeleting || quote.status === 'Booked'}
                                 >
                                   {isDeleting && quoteToDelete?.id === quote.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
@@ -384,7 +384,7 @@ export default function AllQuotesPage() {
           )}
         </CardContent>
       </Card>
-      
+
       {showDeleteConfirm && quoteToDelete && (
         <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
           <AlertDialogContent>
@@ -417,9 +417,9 @@ export default function AllQuotesPage() {
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel onClick={() => {setShowStatusConfirm(false); setQuoteToProcess(null); setNewStatusForQuote(null);}} disabled={isBookingOrUpdating}>Cancel</AlertDialogCancel>
-              <Button 
+              <Button
                 variant={newStatusForQuote === "Booked" || newStatusForQuote === "Accepted" ? "default" : (newStatusForQuote === "Rejected" || newStatusForQuote === "Expired" || newStatusForQuote === "Cancelled" ? "destructive" : "secondary")}
-                onClick={executeStatusUpdate} 
+                onClick={executeStatusUpdate}
                 disabled={isBookingOrUpdating}
               >
                 {isBookingOrUpdating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -432,4 +432,5 @@ export default function AllQuotesPage() {
     </TooltipProvider>
   );
 }
+
     
