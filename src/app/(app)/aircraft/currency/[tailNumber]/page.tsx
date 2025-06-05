@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useEffect, useTransition, useCallback, useMemo } from 'react';
@@ -767,7 +768,14 @@ export default function AircraftMaintenanceDetailPage() {
                                   <TableCell className="text-right space-x-1">
                                     <Button variant="outline" size="sm" onClick={() => handleOpenEditDiscrepancyModal(disc)} disabled={isSavingDiscrepancy || isDeletingDiscrepancy || isSavingSignOff}>Edit</Button>
                                     {(disc.status === "Open" || disc.status === "Deferred") && (
-                                        <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-md" onClick={() => handleOpenSignOffModal(disc)} disabled={isSavingDiscrepancy || isDeletingDiscrepancy || isSavingSignOff}>Clear</Button>
+                                        <button
+                                          type="button"
+                                          className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-green-500 text-white hover:bg-green-600 shadow-md px-3 py-1.5"
+                                          onClick={() => handleOpenSignOffModal(disc)}
+                                          disabled={isSavingDiscrepancy || isDeletingDiscrepancy || isSavingSignOff}
+                                        >
+                                          Clear
+                                        </button>
                                     )}
                                     <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => confirmDeleteDiscrepancy(disc)} disabled={isSavingDiscrepancy || isDeletingDiscrepancy || isSavingSignOff || disc.status === "Closed"}> <Trash2 className="h-4 w-4" /> </Button>
                                   </TableCell>
@@ -917,6 +925,7 @@ export default function AircraftMaintenanceDetailPage() {
     
 
     
+
 
 
 
