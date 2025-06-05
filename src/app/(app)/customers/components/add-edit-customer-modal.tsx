@@ -158,7 +158,7 @@ export function AddEditCustomerModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!isSaving) setIsOpen(open); }}>
-      <DialogContent className="sm:max-w-2xl"> {/* Increased width */}
+      <DialogContent className="sm:max-w-2xl overflow-visible"> {/* Increased width */}
         <DialogHeader>
           <DialogTitle>{modalTitle}</DialogTitle>
           <DialogDescription>{modalDescription}</DialogDescription>

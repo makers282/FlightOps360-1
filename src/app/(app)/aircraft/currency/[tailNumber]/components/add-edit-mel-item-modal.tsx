@@ -158,7 +158,7 @@ export function AddEditMelItemModal({
   
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!isSaving) setIsOpen(open); }}>
-      <DialogContent className="sm:max-w-xl">
+      <DialogContent className="sm:max-w-xl overflow-visible">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {isEditing ? <Edit3 className="h-6 w-6 text-primary" /> : <BookOpen className="h-6 w-6 text-primary" />}

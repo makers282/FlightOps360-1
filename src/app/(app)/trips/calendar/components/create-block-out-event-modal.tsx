@@ -91,7 +91,7 @@ export function CreateBlockOutEventModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if(!isSaving) setIsOpen(open);}}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg overflow-visible">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Lock className="h-6 w-6 text-primary" />
