@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useEffect, useTransition, useCallback, useMemo } from 'react';
@@ -474,21 +475,10 @@ export default function AircraftMaintenanceDetailPage() {
     if (!currentAircraft) return;
     startSavingDiscrepancyTransition(async () => {
       try {
-        let statusToSet: AircraftDiscrepancy['status'] = "Open"; // Default for new
-        if (originalId) { // If editing, preserve existing status or use status from a more complete form
-          const existingDiscrepancy = aircraftDiscrepancies.find(d => d.id === originalId);
-          statusToSet = existingDiscrepancy?.status || "Open";
-        }
-
         const completeDiscrepancyData: SaveAircraftDiscrepancyInput = {
             ...discrepancyFormDataFromModal,
             id: originalId,
-            // Status is now handled by the flow or explicitly set here for clarity if needed for edits from other forms
-            // For this modal, if editing, the flow will preserve. If new, flow sets to "Open".
-            // If the `discrepancyFormDataFromModal` could include status for edits, it would be:
-            // status: originalId ? (discrepancyFormDataFromModal as SaveAircraftDiscrepancyInput).status || statusToSet : "Open",
         };
-
         await saveAircraftDiscrepancy(completeDiscrepancyData);
         toast({ title: originalId ? "Discrepancy Updated" : "New Discrepancy Logged", description: `Discrepancy for ${currentAircraft.tailNumber} saved.` });
         await loadAircraftDiscrepancies(currentAircraft.id);
@@ -671,7 +661,8 @@ export default function AircraftMaintenanceDetailPage() {
   const openDiscrepanciesForDisplay = aircraftDiscrepancies.filter(d => d.status !== "Closed").sort((a,b) => parseISO(b.dateDiscovered).getTime() - parseISO(a.dateDiscovered).getTime());
   const openDiscrepancyCount = openDiscrepanciesForDisplay.length;
 
-  const openMelItemsCount = melItems.filter(m => m.status !== "Closed").length;
+  const openMelItemsForDisplay = melItems.filter(m => m.status !== "Closed").sort((a,b) => parseISO(b.dateEntered).getTime() - parseISO(a.dateEntered).getTime());
+  const openMelItemsCount = openMelItemsForDisplay.length;
 
   return (
     <div> 
@@ -754,7 +745,6 @@ export default function AircraftMaintenanceDetailPage() {
                           <HistoryIcon className="mr-2 h-4 w-4" /> View Full History for {currentAircraft.tailNumber}
                         </Link>
                       </Button>
-                      
                     </div>
                     {isLoadingDiscrepancies ? (
                         <div className="flex items-center justify-center py-6"><Loader2 className="h-6 w-6 animate-spin text-destructive" /><p className="ml-2 text-muted-foreground">Loading discrepancies...</p></div>
@@ -800,26 +790,28 @@ export default function AircraftMaintenanceDetailPage() {
                   </div>
                 </TabsContent>
                 <TabsContent value="mels">
-                  <CardDescription className="mb-3">Manage Minimum Equipment List items for {currentAircraft.tailNumber}.</CardDescription>
+                  <CardDescription className="mb-3">Track and manage MEL items for {currentAircraft.tailNumber}. Showing Open Items.</CardDescription>
                    <div className="space-y-3">
                     <div className="flex flex-col sm:flex-row gap-2">
                        <Button onClick={handleOpenAddMelModal} disabled={!currentAircraft || isSavingMelItem} className="w-full sm:w-auto">
                         <PlusCircle className="mr-2 h-4 w-4" /> Add New MEL Item
                       </Button>
-                      <Button variant="outline" onClick={() => toast({ title: "Coming Soon!", description: "A dedicated page for full MEL log viewing is planned."})} className="w-full sm:w-auto">
-                        <BookLock className="mr-2 h-4 w-4" /> View Full MEL Log (Coming Soon)
+                      <Button asChild variant="outline" className="w-full sm:w-auto">
+                        <Link href={`/aircraft/mels?aircraftId=${currentAircraft.id}`}>
+                           <HistoryIcon className="mr-2 h-4 w-4" /> View Full MEL History for {currentAircraft.tailNumber}
+                        </Link>
                       </Button>
                     </div>
                      {isLoadingMelItems ? (
                         <div className="flex items-center justify-center py-6"><Loader2 className="h-6 w-6 animate-spin text-primary" /><p className="ml-2 text-muted-foreground">Loading MEL items...</p></div>
-                    ) : melItems.length === 0 ? (
-                        <p className="text-center text-muted-foreground py-4">No MEL items logged for this aircraft.</p>
+                    ) : openMelItemsForDisplay.length === 0 ? (
+                        <p className="text-center text-muted-foreground py-4">No open MEL items for this aircraft.</p>
                     ) : (
                         <Table>
                             <TableHeader><TableRow><TableHead>MEL #</TableHead><TableHead>Description</TableHead><TableHead>Cat.</TableHead><TableHead>Status</TableHead><TableHead>Due Date</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
                             <TableBody>
-                                {melItems.map(item => (
-                                    <TableRow key={item.id} className={item.status === "Closed" ? "opacity-60 bg-muted/30" : (item.status === "Open" ? "bg-yellow-500/5 hover:bg-yellow-500/10" : "")}>
+                                {openMelItemsForDisplay.map(item => (
+                                    <TableRow key={item.id} className={item.status === "Open" ? "bg-yellow-500/5 hover:bg-yellow-500/10" : ""}>
                                         <TableCell className="font-medium text-xs">{item.melNumber}</TableCell>
                                         <TableCell className="text-xs max-w-[200px] truncate" title={item.description}>{item.description}</TableCell>
                                         <TableCell className="text-xs text-center">{item.category || '-'}</TableCell>
@@ -955,4 +947,5 @@ export default function AircraftMaintenanceDetailPage() {
 
       
     
+
 

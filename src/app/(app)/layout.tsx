@@ -36,7 +36,9 @@ import {
   Package, 
   TrendingUp, 
   Users2, 
-  BookOpenCheck, 
+  BookOpenCheck,
+  BookOpen, // Added for MEL Log
+  FileWarning, // Added for Discrepancy Log
 } from 'lucide-react';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -65,7 +67,6 @@ import {
   SidebarMenuBadge
 } from '@/components/ui/sidebar';
 import { Icons } from '@/components/icons';
-// import { ClientOnly } from '@/components/client-only'; // Reverted: ClientOnly removed for SidebarTrigger
 
 
 export default function AppLayout({ children }: PropsWithChildren) {
@@ -147,6 +148,14 @@ export default function AppLayout({ children }: PropsWithChildren) {
                   <Wrench /> 
                   Maintenance Currency
                 </SidebarMenuSubButton>
+                 <SidebarMenuSubButton href="/aircraft/discrepancies" tooltip="Discrepancy Log" isActive={pathname.startsWith('/aircraft/discrepancies')}>
+                  <FileWarning /> 
+                  Discrepancy Log
+                </SidebarMenuSubButton>
+                <SidebarMenuSubButton href="/aircraft/mels" tooltip="MEL Log" isActive={pathname.startsWith('/aircraft/mels')}>
+                  <BookOpen /> 
+                  MEL Log
+                </SidebarMenuSubButton>
                 <SidebarMenuSubButton href="/aircraft/documents" tooltip="Aircraft Documents" isActive={pathname.startsWith('/aircraft/documents')}>
                   <BookOpenCheck /> 
                   Aircraft Documents
@@ -160,7 +169,7 @@ export default function AppLayout({ children }: PropsWithChildren) {
                 tooltip="Crew Management" 
                 isActive={
                   pathname.startsWith('/crew') || 
-                  pathname === '/trips/crew-schedule' // Keeping crew schedule under this broader menu
+                  pathname === '/trips/crew-schedule' 
                 }
               >
                 <Users /> 
@@ -270,9 +279,7 @@ export default function AppLayout({ children }: PropsWithChildren) {
       </Sidebar>
       <SidebarInset>
         <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background/80 px-4 backdrop-blur-sm sm:h-16 sm:px-6">
-          {/* <ClientOnly> Reverted */}
             <SidebarTrigger /> 
-          {/* </ClientOnly> */}
           <div className="flex-1">
           </div>
           <DropdownMenu>
@@ -306,3 +313,4 @@ export default function AppLayout({ children }: PropsWithChildren) {
 }
 
     
+

@@ -5,6 +5,7 @@
  *
  * - saveMelItem - Saves (adds or updates) an MEL item.
  * - fetchMelItemsForAircraft - Fetches all MEL items for a given aircraft.
+ * - fetchAllMelItems - Fetches all MEL items across all aircraft.
  * - deleteMelItem - Deletes an MEL item.
  */
 
@@ -14,6 +15,7 @@ import { collection, doc, setDoc, getDoc, getDocs, serverTimestamp, Timestamp, d
 import { z } from 'zod';
 import type { MelItem, SaveMelItemInput } from '@/ai/schemas/mel-item-schemas';
 import {
+    MelItemSchema, // Added for FetchAllMelItemsOutputSchema
     SaveMelItemInputSchema,
     SaveMelItemOutputSchema,
     FetchMelItemsInputSchema,
@@ -38,6 +40,10 @@ export async function saveMelItem(input: SaveMelItemInput): Promise<MelItem> {
 
 export async function fetchMelItemsForAircraft(input: { aircraftId: string }): Promise<MelItem[]> {
   return fetchMelItemsForAircraftFlow(input);
+}
+
+export async function fetchAllMelItems(): Promise<MelItem[]> {
+  return fetchAllMelItemsFlow();
 }
 
 export async function deleteMelItem(input: { melItemId: string }): Promise<{ success: boolean; melItemId: string }> {
@@ -129,7 +135,6 @@ const fetchMelItemsForAircraftFlow = ai.defineFlow(
           updatedAt: (data.updatedAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
         } as MelItem;
       });
-      // Removed client-side sorting as Firestore will handle it now
       return melItemsList;
     } catch (error) {
       console.error('Error fetching MEL items from Firestore:', error);
@@ -137,6 +142,42 @@ const fetchMelItemsForAircraftFlow = ai.defineFlow(
     }
   }
 );
+
+const FetchAllMelItemsOutputSchema = z.array(MelItemSchema);
+
+const fetchAllMelItemsFlow = ai.defineFlow(
+  {
+    name: 'fetchAllMelItemsFlow',
+    outputSchema: FetchAllMelItemsOutputSchema,
+  },
+  async () => {
+    try {
+      const melItemsCollectionRef = collection(db, MEL_ITEMS_COLLECTION);
+      const q = query(
+        melItemsCollectionRef,
+        orderBy("dateEntered", "desc") 
+      );
+      const snapshot = await getDocs(q);
+      const melItemsList = snapshot.docs.map(docSnapshot => {
+        const data = docSnapshot.data();
+        return {
+          ...data,
+          id: docSnapshot.id,
+          dateEntered: data.dateEntered,
+          dueDate: data.dueDate,
+          closedDate: data.closedDate,
+          createdAt: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
+          updatedAt: (data.updatedAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
+        } as MelItem;
+      });
+      return melItemsList;
+    } catch (error) {
+      console.error('Error fetching all MEL items from Firestore:', error);
+      throw new Error(`Failed to fetch all MEL items: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+);
+
 
 const deleteMelItemFlow = ai.defineFlow(
   {
@@ -155,3 +196,4 @@ const deleteMelItemFlow = ai.defineFlow(
     }
   }
 );
+
