@@ -4,7 +4,7 @@
 import React, { useState, useMemo, useEffect, useTransition } from 'react';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { BookOpenCheck, UploadCloud, Search, FileText, Edit3, Trash2, Loader2, Link as LinkIcon, CalendarDays, Tag, AlertTriangle, CheckCircle2, Plane } from 'lucide-react';
+import { BookOpenCheck, UploadCloud, Search, FileText, Edit3, Trash2, Loader2, Link as LinkIcon, AlertTriangle, CheckCircle2, Plane } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -20,6 +20,9 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { format, parseISO, isValid, differenceInDays, isPast } from 'date-fns';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+
 
 import { fetchAircraftDocuments, saveAircraftDocument, deleteAircraftDocument } from '@/ai/flows/manage-aircraft-documents-flow';
 import type { AircraftDocument, SaveAircraftDocumentInput, AircraftDocumentType } from '@/ai/schemas/aircraft-document-schemas';
@@ -71,6 +74,61 @@ const getStatusIcon = (status: DocumentStatus) => {
   }
 };
 
+const formatDateForDisplay = (dateString?: string): string => {
+  if (!dateString) return '-';
+  try {
+    const date = parseISO(dateString);
+    return isValid(date) ? format(date, 'MM/dd/yyyy') : '-';
+  } catch {
+    return '-';
+  }
+};
+
+// Reusable component for displaying a single document's details
+const DocumentListItem = React.memo(({ doc, onEdit, onDelete }: { doc: AircraftDocument; onEdit: (doc: AircraftDocument) => void; onDelete: (doc: AircraftDocument) => void; }) => {
+  const status = getDocumentStatus(doc.expiryDate);
+  const aircraftForLink = doc.aircraftTailNumber?.split(' - ')[0] || doc.aircraftId;
+
+  return (
+    <div className="flex flex-col sm:flex-row items-start justify-between py-3 px-4 border-b last:border-b-0 hover:bg-muted/50 transition-colors rounded-sm group">
+      <div className="flex items-start gap-3 flex-1 min-w-0 mb-2 sm:mb-0">
+        {getStatusIcon(status)}
+        <div className="truncate flex-grow">
+          <p className="text-sm font-semibold text-foreground truncate" title={doc.documentName}>{doc.documentName}</p>
+          <div className="text-xs text-muted-foreground">
+            Type: {doc.documentType} | For: 
+            <Link href={`/aircraft/currency/${encodeURIComponent(aircraftForLink)}`} className="text-primary hover:underline ml-1">{doc.aircraftTailNumber || doc.aircraftId}</Link>
+            <Badge variant={getStatusBadgeVariant(status)} className="ml-2 text-xs px-1.5 py-0">{status}</Badge>
+          </div>
+          <p className="text-xs text-muted-foreground mt-0.5">
+              Expires: {formatDateForDisplay(doc.expiryDate)}
+              {doc.notes && <span className="truncate" title={doc.notes}> | Notes: {doc.notes.substring(0,30)}{doc.notes.length > 30 ? '...' : ''}</span>}
+          </p>
+        </div>
+      </div>
+      <div className="flex items-center gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity flex-shrink-0 self-start sm:self-center">
+        {doc.fileUrl && (
+            <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
+                <Link href={doc.fileUrl} target="_blank" rel="noopener noreferrer">
+                    <LinkIcon className="h-4 w-4" />
+                    <span className="sr-only">View/Download File</span>
+                </Link>
+            </Button>
+        )}
+        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEdit(doc)}>
+          <Edit3 className="h-4 w-4" />
+          <span className="sr-only">Edit</span>
+        </Button>
+        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => onDelete(doc)}>
+          <Trash2 className="h-4 w-4" />
+          <span className="sr-only">Delete</span>
+        </Button>
+      </div>
+    </div>
+  );
+});
+DocumentListItem.displayName = 'DocumentListItem';
+
 
 export default function AircraftDocumentsPage() {
   const [allAircraftDocuments, setAllAircraftDocuments] = useState<AircraftDocument[]>([]);
@@ -100,7 +158,7 @@ export default function AircraftDocumentsPage() {
         fetchAircraftDocuments(),
         fetchFleetAircraft()
       ]);
-      setAllAircraftDocuments(fetchedDocs.sort((a,b) => (a.aircraftTailNumber || a.aircraftId).localeCompare(b.aircraftTailNumber || b.aircraftId) || a.documentName.localeCompare(b.documentName) ));
+      setAllAircraftDocuments(fetchedDocs);
       setFleetForSelect(fetchedFleet.map(ac => ({ id: ac.id, tailNumber: ac.tailNumber || 'Unknown Tail', model: ac.model || 'Unknown Model' })).sort((a,b) => (a.tailNumber).localeCompare(b.tailNumber)));
     } catch (error) {
       console.error("Failed to load aircraft documents or fleet:", error);
@@ -131,6 +189,20 @@ export default function AircraftDocumentsPage() {
         );
     });
   }, [allAircraftDocuments, searchTerm, selectedAircraftFilter]);
+
+  const groupedDocuments = useMemo(() => {
+    if (selectedAircraftFilter === 'all' || filteredDocuments.length === 0) {
+      return {};
+    }
+    return filteredDocuments.reduce((acc, doc) => {
+      const type = doc.documentType;
+      if (!acc[type]) {
+        acc[type] = [];
+      }
+      acc[type].push(doc);
+      return acc;
+    }, {} as Record<AircraftDocumentType, AircraftDocument[]>);
+  }, [filteredDocuments, selectedAircraftFilter]);
 
 
   const handleOpenAddModal = () => {
@@ -186,57 +258,6 @@ export default function AircraftDocumentsPage() {
     });
   };
 
-  const formatDateForDisplay = (dateString?: string): string => {
-    if (!dateString) return '-';
-    try {
-      const date = parseISO(dateString);
-      return isValid(date) ? format(date, 'MM/dd/yyyy') : '-';
-    } catch {
-      return '-';
-    }
-  };
-
-  const DocumentListItem = ({ doc }: { doc: AircraftDocument }) => {
-    const status = getDocumentStatus(doc.expiryDate); 
-    const aircraftForLink = doc.aircraftTailNumber?.split(' - ')[0] || doc.aircraftId;
-    return (
-      <div className="flex flex-col sm:flex-row items-start justify-between py-3 px-4 border-b last:border-b-0 hover:bg-muted/50 transition-colors rounded-sm group">
-        <div className="flex items-start gap-3 flex-1 min-w-0 mb-2 sm:mb-0">
-          {getStatusIcon(status)}
-          <div className="truncate flex-grow">
-            <p className="text-sm font-semibold text-foreground truncate" title={doc.documentName}>{doc.documentName}</p>
-            <div className="text-xs text-muted-foreground">
-              Type: {doc.documentType} | For: 
-              <Link href={`/aircraft/currency/${encodeURIComponent(aircraftForLink)}`} className="text-primary hover:underline ml-1">{doc.aircraftTailNumber || doc.aircraftId}</Link>
-              <Badge variant={getStatusBadgeVariant(status)} className="ml-2 text-xs px-1.5 py-0">{status}</Badge>
-            </div>
-            <p className="text-xs text-muted-foreground mt-0.5">
-                Expires: {formatDateForDisplay(doc.expiryDate)}
-                {doc.notes && <span className="truncate" title={doc.notes}> | Notes: {doc.notes.substring(0,30)}{doc.notes.length > 30 ? '...' : ''}</span>}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity flex-shrink-0 self-start sm:self-center">
-          {doc.fileUrl && (
-              <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
-                  <Link href={doc.fileUrl} target="_blank" rel="noopener noreferrer">
-                      <LinkIcon className="h-4 w-4" />
-                      <span className="sr-only">View/Download File</span>
-                  </Link>
-              </Button>
-          )}
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleOpenEditModal(doc)}>
-            <Edit3 className="h-4 w-4" />
-            <span className="sr-only">Edit</span>
-          </Button>
-          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => handleDeleteClick(doc)}>
-            <Trash2 className="h-4 w-4" />
-            <span className="sr-only">Delete</span>
-          </Button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <>
@@ -299,12 +320,79 @@ export default function AircraftDocumentsPage() {
             <div className="space-y-2 p-4">
                 {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
             </div>
-          ) : filteredDocuments.length === 0 ? (
-            <p className="p-4 text-center text-sm text-muted-foreground">
-              {searchTerm || selectedAircraftFilter !== 'all' ? "No documents match your criteria." : "No aircraft documents found. Add one to get started."}
-            </p>
+          ) : selectedAircraftFilter === 'all' ? (
+             // TABLE VIEW for "All Aircraft"
+             filteredDocuments.length === 0 ? (
+                <p className="p-4 text-center text-sm text-muted-foreground">
+                    {searchTerm ? "No documents match your criteria." : "No aircraft documents found. Add one to get started."}
+                </p>
+             ) : (
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>Document Name</TableHead>
+                            <TableHead>Aircraft</TableHead>
+                            <TableHead>Type</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead>Expires</TableHead>
+                            <TableHead className="text-right">Actions</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {filteredDocuments.map(doc => {
+                            const status = getDocumentStatus(doc.expiryDate);
+                            const aircraftForLink = doc.aircraftTailNumber?.split(' - ')[0] || doc.aircraftId;
+                            return (
+                            <TableRow key={doc.id} className="group">
+                                <TableCell className="font-medium">{doc.documentName}</TableCell>
+                                <TableCell>
+                                <Link href={`/aircraft/currency/${encodeURIComponent(aircraftForLink)}`} className="text-primary hover:underline">
+                                    {doc.aircraftTailNumber || doc.aircraftId}
+                                </Link>
+                                </TableCell>
+                                <TableCell>{doc.documentType}</TableCell>
+                                <TableCell><Badge variant={getStatusBadgeVariant(status)}>{status}</Badge></TableCell>
+                                <TableCell>{formatDateForDisplay(doc.expiryDate)}</TableCell>
+                                <TableCell className="text-right">
+                                  <div className="flex items-center justify-end gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                                    {doc.fileUrl && (<Button variant="ghost" size="icon" className="h-7 w-7" asChild><Link href={doc.fileUrl} target="_blank" rel="noopener noreferrer"><LinkIcon className="h-4 w-4" /><span className="sr-only">File</span></Link></Button>)}
+                                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleOpenEditModal(doc)}><Edit3 className="h-4 w-4" /><span className="sr-only">Edit</span></Button>
+                                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => handleDeleteClick(doc)}><Trash2 className="h-4 w-4" /><span className="sr-only">Delete</span></Button>
+                                  </div>
+                                </TableCell>
+                            </TableRow>
+                            );
+                        })}
+                    </TableBody>
+                </Table>
+             )
           ) : (
-            filteredDocuments.map(doc => <DocumentListItem key={doc.id} doc={doc} />)
+            // ACCORDION VIEW for specific aircraft
+            Object.keys(groupedDocuments).length === 0 ? (
+              <p className="p-4 text-center text-sm text-muted-foreground">
+                {searchTerm ? "No documents match your criteria for this aircraft." : `No documents found for ${fleetForSelect.find(f=>f.id === selectedAircraftFilter)?.label || 'the selected aircraft'}.`}
+              </p>
+            ) : (
+              <Accordion type="multiple" defaultValue={Object.keys(groupedDocuments)} className="w-full">
+                {Object.entries(groupedDocuments).map(([type, docsInType]) => (
+                  <AccordionItem value={type} key={type}>
+                    <AccordionTrigger className="px-4 py-3 text-sm font-medium hover:bg-muted/50">
+                      {type} ({docsInType.length})
+                    </AccordionTrigger>
+                    <AccordionContent className="pt-0 pb-1 px-0">
+                      {docsInType.map(doc => (
+                        <DocumentListItem 
+                            key={doc.id} 
+                            doc={doc}
+                            onEdit={handleOpenEditModal}
+                            onDelete={handleDeleteClick}
+                        />
+                      ))}
+                    </AccordionContent>
+                  </AccordionItem>
+                ))}
+              </Accordion>
+            )
           )}
         </CardContent>
       </Card>
@@ -343,3 +431,5 @@ export default function AircraftDocumentsPage() {
     </>
   );
 }
+
+    
