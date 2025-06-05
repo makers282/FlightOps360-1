@@ -23,7 +23,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 
 import { fetchAircraftDocuments, saveAircraftDocument, deleteAircraftDocument } from '@/ai/flows/manage-aircraft-documents-flow';
 import type { AircraftDocument, SaveAircraftDocumentInput, AircraftDocumentType } from '@/ai/schemas/aircraft-document-schemas';
-import { aircraftDocumentTypes } from '@/ai/schemas/aircraft-document-schemas'; // Keep this for type consistency if needed elsewhere
+// aircraftDocumentTypes is imported by the modal
 import { fetchFleetAircraft } from '@/ai/flows/manage-fleet-flow';
 import type { FleetAircraft } from '@/ai/schemas/fleet-aircraft-schemas';
 import { AddEditAircraftDocumentModal } from './components/add-edit-aircraft-document-modal';
@@ -101,7 +101,7 @@ export default function AircraftDocumentsPage() {
         fetchFleetAircraft()
       ]);
       setAllAircraftDocuments(fetchedDocs.sort((a,b) => (a.aircraftTailNumber || a.aircraftId).localeCompare(b.aircraftTailNumber || b.aircraftId) || a.documentName.localeCompare(b.documentName) ));
-      setFleetForSelect(fetchedFleet.map(ac => ({ id: ac.id, tailNumber: ac.tailNumber, model: ac.model })).sort((a,b) => (a.tailNumber || a.id).localeCompare(b.tailNumber || b.id)));
+      setFleetForSelect(fetchedFleet.map(ac => ({ id: ac.id, tailNumber: ac.tailNumber || 'Unknown Tail', model: ac.model || 'Unknown Model' })).sort((a,b) => (a.tailNumber).localeCompare(b.tailNumber)));
     } catch (error) {
       console.error("Failed to load aircraft documents or fleet:", error);
       toast({ title: "Error Loading Data", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
@@ -198,6 +198,7 @@ export default function AircraftDocumentsPage() {
 
   const DocumentListItem = ({ doc }: { doc: AircraftDocument }) => {
     const status = getDocumentStatus(doc.expiryDate); 
+    const aircraftForLink = doc.aircraftTailNumber?.split(' - ')[0] || doc.aircraftId;
     return (
       <div className="flex flex-col sm:flex-row items-start justify-between py-3 px-4 border-b last:border-b-0 hover:bg-muted/50 transition-colors rounded-sm group">
         <div className="flex items-start gap-3 flex-1 min-w-0 mb-2 sm:mb-0">
@@ -206,7 +207,7 @@ export default function AircraftDocumentsPage() {
             <p className="text-sm font-semibold text-foreground truncate" title={doc.documentName}>{doc.documentName}</p>
             <div className="text-xs text-muted-foreground">
               Type: {doc.documentType} | For: 
-              <Link href={`/aircraft/currency/${doc.aircraftTailNumber?.split(' - ')[0] || doc.aircraftId}`} className="text-primary hover:underline ml-1">{doc.aircraftTailNumber || doc.aircraftId}</Link>
+              <Link href={`/aircraft/currency/${encodeURIComponent(aircraftForLink)}`} className="text-primary hover:underline ml-1">{doc.aircraftTailNumber || doc.aircraftId}</Link>
               <Badge variant={getStatusBadgeVariant(status)} className="ml-2 text-xs px-1.5 py-0">{status}</Badge>
             </div>
             <p className="text-xs text-muted-foreground mt-0.5">
@@ -285,7 +286,7 @@ export default function AircraftDocumentsPage() {
                     <SelectItem value="all">All Aircraft</SelectItem>
                     {fleetForSelect.map(ac => (
                       <SelectItem key={ac.id} value={ac.id}>
-                        {ac.label}
+                        {ac.tailNumber} - {ac.model}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -342,5 +343,3 @@ export default function AircraftDocumentsPage() {
     </>
   );
 }
-
-    
