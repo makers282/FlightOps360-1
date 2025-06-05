@@ -122,13 +122,9 @@ export function AddEditAircraftDiscrepancyModal({
       } else {
         form.reset({ ...staticDefaultFormValues, dateDiscovered: startOfDay(new Date()), deferralDate: undefined, });
       }
-      // Ensure calendars are closed when dialog reopens/resets, in addition to the effect below
-      setIsDateDiscoveredCalendarOpen(false);
-      setIsDeferralDateCalendarOpen(false);
     }
   }, [isOpen, isEditing, initialData, form]);
 
-  // Effect to close calendars when the dialog itself closes
   useEffect(() => {
     if (!isOpen) {
       setIsDateDiscoveredCalendarOpen(false);
@@ -154,10 +150,9 @@ export function AddEditAircraftDiscrepancyModal({
   const modalDescription = isEditing ? "Update the initial details of this aircraft discrepancy." : "Log a new discrepancy. Corrective action and sign-off will be done via the 'Clear Discrepancy' action.";
 
   return (
-    <>
+    <DialogPortal>
       <Dialog open={isOpen} onOpenChange={(open) => { if (!isSaving) setIsOpen(open); }}>
-        <DialogPortal>
-          <DialogContent className="overflow-visible sm:max-w-xl flex flex-col max-h-[calc(100vh-8rem)]">
+        <DialogContent className="overflow-visible sm:max-w-xl flex flex-col max-h-[calc(100vh-8rem)]">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 {isEditing ? <Edit3 className="h-6 w-6 text-primary" /> : <AlertTriangle className="h-6 w-6 text-destructive" />}
@@ -256,8 +251,7 @@ export function AddEditAircraftDiscrepancyModal({
                 {isEditing ? 'Save Changes' : 'Add Discrepancy'}
               </Button>
             </DialogFooter>
-          </DialogContent>
-        </DialogPortal>
+        </DialogContent>
       </Dialog>
 
       {isMounted && isDateDiscoveredCalendarOpen &&
@@ -275,7 +269,9 @@ export function AddEditAircraftDiscrepancyModal({
               <Calendar
                 mode="single"
                 selected={form.getValues("dateDiscovered")}
-                onSelect={(date) => {
+                onSelect={(date, selectedDay, activeModifiers, e) => {
+                  e?.stopPropagation();
+                  e?.preventDefault();
                   form.setValue("dateDiscovered", date ? startOfDay(date) : startOfDay(new Date()), { shouldValidate: true });
                   setIsDateDiscoveredCalendarOpen(false);
                 }}
@@ -301,7 +297,9 @@ export function AddEditAircraftDiscrepancyModal({
               <Calendar
                 mode="single"
                 selected={form.getValues("deferralDate")}
-                onSelect={(date) => {
+                onSelect={(date, selectedDay, activeModifiers, e) => {
+                  e?.stopPropagation();
+                  e?.preventDefault();
                   form.setValue("deferralDate", date ? startOfDay(date) : undefined, { shouldValidate: true });
                   setIsDeferralDateCalendarOpen(false);
                 }}
@@ -314,6 +312,6 @@ export function AddEditAircraftDiscrepancyModal({
           </div>,
           document.body
         )}
-    </>
+    </DialogPortal>
   );
 }
