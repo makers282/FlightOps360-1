@@ -28,6 +28,7 @@ import { format, isValid as isValidDate, parseISO } from "date-fns";
 import type { Customer, SaveCustomerInput } from '@/ai/schemas/customer-schemas';
 import { customerTypes } from '@/ai/schemas/customer-schemas';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Skeleton } from '@/components/ui/skeleton'; // Added for ClientOnly fallback
 
 // Schema for form validation, aligned with SaveCustomerInput (excluding id, timestamps)
 const customerFormSchema = z.object({
@@ -202,27 +203,27 @@ export function AddEditCustomerModal({
                 render={({ field }) => (
                   <FormItem className="flex flex-col">
                     <FormLabel>Start Date (Optional)</FormLabel>
-                    {isClient ? (
-                      <Popover modal={false}>
-                        <PopoverTrigger asChild>
-                          <FormControl>
-                            <Button variant={"outline"} className={cn("w-full md:w-[280px] pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
-                              {field.value && isValidDate(parseISO(field.value)) ? format(parseISO(field.value), "PPP") : <span>Pick a date</span>}
-                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                            </Button>
-                          </FormControl>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0 z-[100]" align="start">
-                          <Calendar
-                            mode="single"
-                            selected={field.value && isValidDate(parseISO(field.value)) ? parseISO(field.value) : undefined}
-                            onSelect={(date) => field.onChange(date ? format(date, 'yyyy-MM-dd') : '')}
-                            disabled={(date) => minStartDate ? date < minStartDate : false} // Example: disable past dates
-                            initialFocus
-                          />
-                        </PopoverContent>
-                      </Popover>
-                    ) : <Skeleton className="h-10 w-full md:w-[280px]" /> }
+                    <FormControl>
+                      {isClient ? (
+                        <Popover modal={false}>
+                          <PopoverTrigger asChild>
+                              <Button variant={"outline"} className={cn("w-full md:w-[280px] pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
+                                {field.value && isValidDate(parseISO(field.value)) ? format(parseISO(field.value), "PPP") : <span>Pick a date</span>}
+                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                              </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0 z-[100]" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={field.value && isValidDate(parseISO(field.value)) ? parseISO(field.value) : undefined}
+                              onSelect={(date) => field.onChange(date ? format(date, 'yyyy-MM-dd') : '')}
+                              disabled={(date) => minStartDate ? date < minStartDate : false}
+                              initialFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      ) : <Skeleton className="h-10 w-full md:w-[280px]" /> }
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}

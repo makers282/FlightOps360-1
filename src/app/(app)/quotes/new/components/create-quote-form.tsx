@@ -802,24 +802,19 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
 
 
   const handleAddLeg = () => {
-    let newLegOrigin = '';
-    let newLegDepartureDateTime: Date | undefined = undefined;
-    let previousLegPax = 1;
-    let previousLegOriginTaxi = 15;
-    let previousLegDestTaxi = 15;
-    let previousLegOriginFbo = '';
-    let previousLegDestinationFbo = '';
-
+    let newLegDefaults: Partial<LegFormData> = {
+      origin: '', destination: '', legType: 'Charter', passengerCount: 1, originTaxiTimeMinutes: 15, destinationTaxiTimeMinutes: 15, originFbo: '', destinationFbo: '', flightTimeHours: undefined,
+    };
     if (fields.length > 0) {
       const previousLegIndex = fields.length - 1;
       const previousLeg = getValues(`legs.${previousLegIndex}`);
       
-      newLegOrigin = previousLeg.destination; 
-      previousLegPax = Number(previousLeg.passengerCount || 1); 
-      previousLegOriginTaxi = Number(previousLeg.originTaxiTimeMinutes || 15);
-      previousLegDestTaxi = Number(previousLeg.destinationTaxiTimeMinutes || 15);
-      previousLegOriginFbo = previousLeg.destinationFbo || ''; 
-      previousLegDestinationFbo = '';
+      newLegDefaults.origin = previousLeg.destination; 
+      newLegDefaults.passengerCount = Number(previousLeg.passengerCount || 1); 
+      newLegDefaults.originTaxiTimeMinutes = Number(previousLeg.originTaxiTimeMinutes || 15);
+      newLegDefaults.destinationTaxiTimeMinutes = Number(previousLeg.destinationTaxiTimeMinutes || 15);
+      newLegDefaults.originFbo = previousLeg.destinationFbo || ''; 
+      newLegDefaults.destinationFbo = '';
 
       const previousLegFlightTime = Number(previousLeg.flightTimeHours || (legEstimates[previousLegIndex]?.estimatedFlightTimeHours || 0));
 
@@ -828,24 +823,13 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
         const previousLegFlightMillis = previousLegFlightTime * 60 * 60 * 1000;
         const previousLegDestTaxiMillis = (Number(previousLeg.destinationTaxiTimeMinutes || 0)) * 60 * 1000;
         const estimatedArrivalMillis = previousLegDeparture.getTime() + previousLegFlightMillis + previousLegDestTaxiMillis;
-        newLegDepartureDateTime = new Date(estimatedArrivalMillis + (60 * 60 * 1000)); 
+        newLegDefaults.departureDateTime = new Date(estimatedArrivalMillis + (60 * 60 * 1000)); 
       } else if (previousLeg.departureDateTime && previousLeg.departureDateTime instanceof Date && isValidDate(previousLeg.departureDateTime)) {
-         newLegDepartureDateTime = new Date(previousLeg.departureDateTime.getTime() + (3 * 60 * 60 * 1000)); 
+         newLegDefaults.departureDateTime = new Date(previousLeg.departureDateTime.getTime() + (3 * 60 * 60 * 1000)); 
       }
     }
 
-    append({
-      origin: newLegOrigin.toUpperCase(),
-      destination: '',
-      departureDateTime: newLegDepartureDateTime,
-      legType: 'Charter',
-      passengerCount: previousLegPax,
-      originFbo: previousLegOriginFbo, 
-      destinationFbo: previousLegDestinationFbo,
-      originTaxiTimeMinutes: previousLegOriginTaxi,
-      destinationTaxiTimeMinutes: previousLegDestTaxi,
-      flightTimeHours: undefined,
-    });
+    append(newLegDefaults as LegFormData);
   };
 
   const handleRemoveLeg = (index: number) => {
@@ -1011,19 +995,30 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
                         <FormField control={control} name={`legs.${index}.originFbo`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><Building className="h-4 w-4" />Origin FBO (Optional)</FormLabel> <FormControl><Input placeholder="e.g., Signature, Atlantic" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
                         <FormField control={control} name={`legs.${index}.destinationFbo`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><Building className="h-4 w-4" />Destination FBO (Optional)</FormLabel> <FormControl><Input placeholder="e.g., Signature, Atlantic" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
                     </div>
-                    <FormField control={control} name={`legs.${index}.departureDateTime`} render={({ field }) => ( <FormItem className="flex flex-col"> <FormLabel>Desired Departure Date & Time</FormLabel> {isClient ? ( <Popover modal={false}> <PopoverTrigger asChild> 
-                        <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !(field.value && field.value instanceof Date && isValidDate(field.value)) && "text-muted-foreground")}> 
-                          <span>{field.value && field.value instanceof Date && isValidDate(field.value) ? format(field.value, "PPP HH:mm") : "Pick a date and time"}</span> 
-                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" /> 
-                        </Button> 
-                        </PopoverTrigger> 
-                        <PopoverContent className="w-auto p-0 z-[100]" align="start"> 
-                          <Calendar mode="single" selected={field.value && field.value instanceof Date && isValidDate(field.value) ? field.value : undefined} onSelect={field.onChange} disabled={(date) => minLegDepartureDate ? date < minLegDepartureDate : true} initialFocus /> 
-                          <div className="p-2 border-t border-border"> 
-                            <Input type="time" defaultValue={field.value && field.value instanceof Date && isValidDate(field.value) ? format(field.value, "HH:mm") : ""} onChange={(e) => { const time = e.target.value; const [hours, minutes] = time.split(':').map(Number); let newDate = field.value && field.value instanceof Date && isValidDate(field.value) ? new Date(field.value) : new Date(); if (!isValidDate(newDate)) newDate = new Date(); newDate.setHours(hours, minutes,0,0); field.onChange(newDate); }} /> 
-                          </div> 
-                        </PopoverContent> 
-                      </Popover> ) : ( <Skeleton className="h-10 w-full" /> )} <FormMessage /> </FormItem> )} />
+                    <FormField control={control} name={`legs.${index}.departureDateTime`} render={({ field }) => ( 
+                      <FormItem className="flex flex-col"> 
+                        <FormLabel>Desired Departure Date & Time</FormLabel> 
+                        <FormControl>
+                          {isClient ? ( 
+                            <Popover modal={false}> 
+                              <PopoverTrigger asChild> 
+                                <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !(field.value && field.value instanceof Date && isValidDate(field.value)) && "text-muted-foreground")}> 
+                                  <span>{field.value && field.value instanceof Date && isValidDate(field.value) ? format(field.value, "PPP HH:mm") : "Pick a date and time"}</span> 
+                                  <CalendarIcon className="ml-auto h-4 w-4 opacity-50" /> 
+                                </Button> 
+                              </PopoverTrigger> 
+                              <PopoverContent className="w-auto p-0 z-[100]" align="start"> 
+                                <Calendar mode="single" selected={field.value && field.value instanceof Date && isValidDate(field.value) ? field.value : undefined} onSelect={field.onChange} disabled={(date) => minLegDepartureDate ? date < minLegDepartureDate : true} initialFocus /> 
+                                <div className="p-2 border-t border-border"> 
+                                  <Input type="time" defaultValue={field.value && field.value instanceof Date && isValidDate(field.value) ? format(field.value, "HH:mm") : ""} onChange={(e) => { const time = e.target.value; const [hours, minutes] = time.split(':').map(Number); let newDate = field.value && field.value instanceof Date && isValidDate(field.value) ? new Date(field.value) : new Date(); if (!isValidDate(newDate)) newDate = new Date(); newDate.setHours(hours, minutes,0,0); field.onChange(newDate); }} /> 
+                                </div> 
+                              </PopoverContent> 
+                            </Popover> 
+                          ) : ( <Skeleton className="h-10 w-full" /> )} 
+                        </FormControl>
+                        <FormMessage /> 
+                      </FormItem> 
+                    )} />
                     
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <FormField control={control} name={`legs.${index}.legType`} render={({ field }) => ( <FormItem> <FormLabel>Leg Type</FormLabel> <Select onValueChange={field.onChange} value={field.value || ""} name={field.name}> <FormControl><SelectTrigger><SelectValue placeholder="Select leg type" /></SelectTrigger></FormControl> <SelectContent>{legTypes.map(type => (<SelectItem key={type} value={type}>{type}</SelectItem>))}</SelectContent> </Select> <FormMessage /> </FormItem> )} />

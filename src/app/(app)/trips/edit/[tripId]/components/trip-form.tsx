@@ -542,7 +542,7 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
                                   <span>{field.value && field.value instanceof Date && isValidDate(field.value) ? format(field.value, "PPP HH:mm") : "Pick a date and time"}</span>
                                 </Button>
                               </PopoverTrigger>
-                              <PopoverContent className="w-auto p-0 z-[100]">
+                              <PopoverContent className="w-auto p-0 z-[100]" align="start">
                                 <Calendar
                                   mode="single"
                                   selected={field.value && field.value instanceof Date && isValidDate(field.value) ? field.value : undefined}

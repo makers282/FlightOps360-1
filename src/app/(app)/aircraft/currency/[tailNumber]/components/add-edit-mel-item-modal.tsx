@@ -232,27 +232,37 @@ export function AddEditMelItemModal({
                     <FormField control={form.control} name="dateEntered" render={({ field }) => (
                         <FormItem className="flex flex-col">
                         <FormLabel>Date Entered / Became Active</FormLabel>
-                        <Popover modal={false}><PopoverTrigger asChild>
-                            <FormControl><Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
-                                {field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
-                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl>
+                        <FormControl>
+                          <Popover modal={false}>
+                            <PopoverTrigger asChild>
+                              <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
+                                  {field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
+                                  <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                              </Button>
                             </PopoverTrigger>
                             <PopoverContent className="w-auto p-0 z-[100]" align="start">
                             <Calendar mode="single" selected={field.value} onSelect={(date) => field.onChange(date ? startOfDay(date): undefined)} disabled={(date) => minDateAllowed ? date < minDateAllowed : false} initialFocus /></PopoverContent>
-                        </Popover><FormMessage />
+                          </Popover>
+                        </FormControl>
+                        <FormMessage />
                         </FormItem>
                     )} />
                     <FormField control={form.control} name="dueDate" render={({ field }) => (
                         <FormItem className="flex flex-col">
                         <FormLabel>Due Date (if applicable)</FormLabel>
-                        <Popover modal={false}><PopoverTrigger asChild>
-                            <FormControl><Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
-                                {field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
-                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl>
+                        <FormControl>
+                          <Popover modal={false}>
+                            <PopoverTrigger asChild>
+                              <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
+                                  {field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
+                                  <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                              </Button>
                             </PopoverTrigger>
                             <PopoverContent className="w-auto p-0 z-[100]" align="start">
                             <Calendar mode="single" selected={field.value} onSelect={(date) => field.onChange(date ? startOfDay(date) : undefined)} disabled={(date) => {const dateEntered = form.getValues("dateEntered"); return dateEntered ? date < dateEntered : (minDateAllowed ? date < minDateAllowed : false);}} initialFocus /></PopoverContent>
-                        </Popover><FormMessage />
+                          </Popover>
+                        </FormControl>
+                        <FormMessage />
                         </FormItem>
                     )} />
                 </div>
@@ -279,14 +289,19 @@ export function AddEditMelItemModal({
                             <FormField control={form.control} name="closedDate" render={({ field }) => (
                                 <FormItem className="flex flex-col">
                                 <FormLabel>Date Closed</FormLabel>
-                                <Popover modal={false}><PopoverTrigger asChild>
-                                    <FormControl><Button variant={"outline"} className={cn("w-full md:w-1/2 pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
-                                        {field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
-                                        <CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl>
+                                <FormControl>
+                                  <Popover modal={false}>
+                                    <PopoverTrigger asChild>
+                                      <Button variant={"outline"} className={cn("w-full md:w-1/2 pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
+                                          {field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
+                                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                      </Button>
                                     </PopoverTrigger>
                                     <PopoverContent className="w-auto p-0 z-[100]" align="start">
                                     <Calendar mode="single" selected={field.value} onSelect={(date) => field.onChange(date ? startOfDay(date): undefined)} disabled={(date) => {const dateEntered = form.getValues("dateEntered"); return dateEntered ? date < dateEntered : (minDateAllowed ? date < minDateAllowed : false);}} initialFocus /></PopoverContent>
-                                </Popover><FormMessage />
+                                  </Popover>
+                                </FormControl>
+                                <FormMessage />
                                 </FormItem>
                             )} />
                         </CardContent>

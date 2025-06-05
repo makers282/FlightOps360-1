@@ -179,24 +179,24 @@ export function AddEditCrewDocumentModal({
                   render={({ field }) => (
                     <FormItem className="flex flex-col">
                       <FormLabel>Issue Date (Optional)</FormLabel>
-                      <Popover modal={false}>
-                        <PopoverTrigger asChild>
-                          <FormControl>
+                      <FormControl>
+                        <Popover modal={false}>
+                          <PopoverTrigger asChild>
                             <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
                               {field.value && isValidDate(parseISO(field.value)) ? format(parseISO(field.value), "PPP") : <span>Pick a date</span>}
                               <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
                             </Button>
-                          </FormControl>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0 z-[100]" align="start">
-                          <Calendar
-                            mode="single"
-                            selected={field.value && isValidDate(parseISO(field.value)) ? parseISO(field.value) : undefined}
-                            onSelect={(date) => field.onChange(date ? format(startOfDay(date), 'yyyy-MM-dd') : '')}
-                            initialFocus
-                          />
-                        </PopoverContent>
-                      </Popover>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0 z-[100]" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={field.value && isValidDate(parseISO(field.value)) ? parseISO(field.value) : undefined}
+                              onSelect={(date) => field.onChange(date ? format(startOfDay(date), 'yyyy-MM-dd') : '')}
+                              initialFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -207,28 +207,28 @@ export function AddEditCrewDocumentModal({
                   render={({ field }) => (
                     <FormItem className="flex flex-col">
                       <FormLabel>Expiry Date (Optional)</FormLabel>
-                      <Popover modal={false}>
-                        <PopoverTrigger asChild>
-                          <FormControl>
+                      <FormControl>
+                        <Popover modal={false}>
+                          <PopoverTrigger asChild>
                             <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
                               {field.value && isValidDate(parseISO(field.value)) ? format(parseISO(field.value), "PPP") : <span>Pick a date</span>}
                               <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
                             </Button>
-                          </FormControl>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0 z-[100]" align="start">
-                          <Calendar
-                            mode="single"
-                            selected={field.value && isValidDate(parseISO(field.value)) ? parseISO(field.value) : undefined}
-                            onSelect={(date) => field.onChange(date ? format(startOfDay(date), 'yyyy-MM-dd') : '')}
-                            disabled={(date) => {
-                                const issueDate = form.getValues("issueDate");
-                                return issueDate && isValidDate(parseISO(issueDate)) ? date < parseISO(issueDate) : false;
-                            }}
-                            initialFocus
-                          />
-                        </PopoverContent>
-                      </Popover>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0 z-[100]" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={field.value && isValidDate(parseISO(field.value)) ? parseISO(field.value) : undefined}
+                              onSelect={(date) => field.onChange(date ? format(startOfDay(date), 'yyyy-MM-dd') : '')}
+                              disabled={(date) => {
+                                  const issueDate = form.getValues("issueDate");
+                                  return issueDate && isValidDate(parseISO(issueDate)) ? date < parseISO(issueDate) : false;
+                              }}
+                              initialFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}

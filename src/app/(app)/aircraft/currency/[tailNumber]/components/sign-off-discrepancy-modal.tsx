@@ -95,7 +95,7 @@ export function SignOffDiscrepancyModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!isSaving) setIsOpen(open); }}>
-      <DialogContent className="sm:max-w-lg flex flex-col max-h-[calc(100vh-8rem)]"> {/* Adjusted max-h */}
+      <DialogContent className="sm:max-w-lg flex flex-col max-h-[calc(100vh-8rem)]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ShieldCheck className="h-6 w-6 text-primary" />
@@ -106,10 +106,8 @@ export function SignOffDiscrepancyModal({
           </ModalDialogDescription>
         </DialogHeader>
         
-        {/* This div will handle the scrolling */}
-        <div className="flex-1 overflow-y-auto px-4 py-2"> {/* Added padding here, overflow-y-auto */}
+        <div className="flex-1 overflow-y-auto px-4 py-2">
           <Form {...form}>
-            {/* Removed padding from form */}
             <form id="sign-off-discrepancy-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
               <FormField
                   control={form.control}
@@ -117,9 +115,7 @@ export function SignOffDiscrepancyModal({
                   render={({ field }) => (
                   <FormItem>
                       <FormLabel>Corrective Action Taken</FormLabel>
-                      <FormControl>
-                      <Textarea placeholder="e.g., Replaced #2 main tire, torqued B-nut on engine oil line..." {...field} rows={4} />
-                      </FormControl>
+                      <FormControl><Textarea placeholder="e.g., Replaced #2 main tire, torqued B-nut on engine oil line..." {...field} rows={4} /></FormControl>
                       <FormMessage />
                   </FormItem>
                   )}
@@ -130,14 +126,19 @@ export function SignOffDiscrepancyModal({
                   render={({ field }) => (
                   <FormItem className="flex flex-col">
                       <FormLabel>Date Corrected</FormLabel>
-                      <Popover modal={false}><PopoverTrigger asChild>
-                          <FormControl><Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
-                              {field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
-                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl>
+                      <FormControl>
+                        <Popover modal={false}>
+                          <PopoverTrigger asChild>
+                            <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
+                                {field.value && isValidDate(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
+                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                            </Button>
                           </PopoverTrigger>
                           <PopoverContent className="w-auto p-0 z-[100]" align="start">
                           <Calendar mode="single" selected={field.value} onSelect={(date) => field.onChange(date ? startOfDay(date): undefined)} initialFocus /></PopoverContent>
-                      </Popover><FormMessage />
+                        </Popover>
+                      </FormControl>
+                      <FormMessage />
                   </FormItem>
                   )}
               />

@@ -103,7 +103,6 @@ export function CreateBlockOutEventModal({
         </DialogHeader>
         
         <Form {...form}>
-          {/* Changed form id to avoid conflicts if this modal is ever used multiple times on one page, though unlikely here */}
           <form id="createBlockOutEventModalFormInternal" onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-2">
             <FormField
               control={form.control}
@@ -155,30 +154,30 @@ export function CreateBlockOutEventModal({
                 render={({ field }) => (
                   <FormItem className="flex flex-col">
                     <FormLabel>Start Date</FormLabel>
-                    <Popover modal={false}>
-                      <PopoverTrigger asChild>
-                        <FormControl>
-                          <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
-                            {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
-                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                          </Button>
-                        </FormControl>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0 z-[100]" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={field.value}
-                          onSelect={(date) => {
-                            field.onChange(date ? startOfDay(date) : undefined);
-                            if (date && form.getValues("endDate") < date) {
-                                form.setValue("endDate", startOfDay(date));
-                            }
-                          }}
-                          disabled={(date) => minStartDate ? date < minStartDate && !isValidDate(form.getValues("startDate")) : false}
-                          initialFocus
-                        />
-                      </PopoverContent>
-                    </Popover>
+                    <FormControl>
+                      <Popover modal={false}>
+                        <PopoverTrigger asChild>
+                            <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
+                              {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
+                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0 z-[100]" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={field.value}
+                            onSelect={(date) => {
+                              field.onChange(date ? startOfDay(date) : undefined);
+                              if (date && form.getValues("endDate") < date) {
+                                  form.setValue("endDate", startOfDay(date));
+                              }
+                            }}
+                            disabled={(date) => minStartDate ? date < minStartDate && !isValidDate(form.getValues("startDate")) : false}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -189,28 +188,28 @@ export function CreateBlockOutEventModal({
                 render={({ field }) => (
                   <FormItem className="flex flex-col">
                     <FormLabel>End Date</FormLabel>
-                    <Popover modal={false}>
-                      <PopoverTrigger asChild>
-                        <FormControl>
-                          <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
-                            {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
-                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                          </Button>
-                        </FormControl>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0 z-[100]" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={field.value}
-                          onSelect={(date) => field.onChange(date ? startOfDay(date) : undefined)}
-                          disabled={(date) => {
-                            const startDate = form.getValues("startDate");
-                            return startDate ? date < startDate : (minStartDate ? date < minStartDate : false);
-                          }}
-                          initialFocus
-                        />
-                      </PopoverContent>
-                    </Popover>
+                    <FormControl>
+                      <Popover modal={false}>
+                        <PopoverTrigger asChild>
+                            <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
+                              {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
+                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0 z-[100]" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={field.value}
+                            onSelect={(date) => field.onChange(date ? startOfDay(date) : undefined)}
+                            disabled={(date) => {
+                              const startDate = form.getValues("startDate");
+                              return startDate ? date < startDate : (minStartDate ? date < minStartDate : false);
+                            }}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -221,7 +220,6 @@ export function CreateBlockOutEventModal({
         
         <DialogFooter className="pt-4">
           <DialogClose asChild><Button type="button" variant="outline" disabled={isSaving}>Cancel</Button></DialogClose>
-          {/* Changed form id to match the form inside Form tag */}
           <Button type="submit" form="createBlockOutEventModalFormInternal" disabled={isSaving || isLoadingAircraft}>
             {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
             Save Block Out

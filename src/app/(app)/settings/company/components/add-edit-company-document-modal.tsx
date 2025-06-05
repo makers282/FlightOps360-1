@@ -199,29 +199,41 @@ export function AddEditCompanyDocumentModal({
                 <FormField control={form.control} name="effectiveDate" render={({ field }) => (
                   <FormItem className="flex flex-col">
                     <FormLabel>Effective Date (Optional)</FormLabel>
-                    <Popover modal={false}><PopoverTrigger asChild>
-                        <FormControl><Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
-                            {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
-                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0 z-[100]" align="start">
-                        <Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus /></PopoverContent>
-                    </Popover><FormMessage />
+                    <FormControl>
+                      <Popover modal={false}>
+                        <PopoverTrigger asChild>
+                            <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
+                                {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
+                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0 z-[100]" align="start">
+                          <Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus />
+                        </PopoverContent>
+                      </Popover>
+                    </FormControl>
+                    <FormMessage />
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="reviewDate" render={({ field }) => (
                   <FormItem className="flex flex-col">
                     <FormLabel>Next Review Date (Optional)</FormLabel>
-                    <Popover modal={false}><PopoverTrigger asChild>
-                        <FormControl><Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
-                            {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
-                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0 z-[100]" align="start">
-                        <Calendar mode="single" selected={field.value} onSelect={field.onChange}
-                          disabled={(date) => { const effDate = form.getValues("effectiveDate"); return effDate ? date < effDate : false; }}
-                          initialFocus /></PopoverContent>
-                    </Popover><FormMessage />
+                    <FormControl>
+                      <Popover modal={false}>
+                        <PopoverTrigger asChild>
+                            <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
+                                {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
+                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0 z-[100]" align="start">
+                          <Calendar mode="single" selected={field.value} onSelect={field.onChange}
+                            disabled={(date) => { const effDate = form.getValues("effectiveDate"); return effDate ? date < effDate : false; }}
+                            initialFocus />
+                        </PopoverContent>
+                      </Popover>
+                    </FormControl>
+                    <FormMessage />
                   </FormItem>
                 )} />
               </div>
