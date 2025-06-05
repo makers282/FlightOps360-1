@@ -101,6 +101,7 @@ export default function AllQuotesPage() {
 
   useEffect(() => {
     loadQuotes();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleDeleteClick = (quote: Quote) => {
@@ -126,47 +127,6 @@ export default function AllQuotesPage() {
     });
   };
 
-  const createTripFromQuote = async (bookedQuote: Quote): Promise<boolean> => {
-    try {
-      const newTripId = `TRP-${bookedQuote.quoteId.replace('QT-', '')}-${Date.now().toString().slice(-4)}`;
-      const tripLegs: TripLegType[] = bookedQuote.legs.map(qLeg => ({
-        origin: qLeg.origin,
-        destination: qLeg.destination,
-        departureDateTime: qLeg.departureDateTime,
-        legType: qLeg.legType,
-        passengerCount: qLeg.passengerCount,
-        originFbo: qLeg.originFbo,
-        destinationFbo: qLeg.destinationFbo,
-        flightTimeHours: qLeg.flightTimeHours,
-        blockTimeHours: qLeg.calculatedBlockTimeHours,
-      }));
-
-      const tripToSave: TripToSave = {
-        tripId: newTripId,
-        quoteId: bookedQuote.id,
-        customerId: bookedQuote.selectedCustomerId,
-        clientName: bookedQuote.clientName,
-        aircraftId: bookedQuote.aircraftId || "UNKNOWN_AC",
-        aircraftLabel: bookedQuote.aircraftLabel,
-        legs: tripLegs,
-        status: "Scheduled",
-        notes: `Trip created from Quote ${bookedQuote.quoteId}. ${bookedQuote.options.notes || ''}`.trim(),
-      };
-      await saveTrip(tripToSave);
-      toast({ 
-          title: "Trip Created!", 
-          description: `New Trip ${newTripId} created and scheduled from Quote ${bookedQuote.quoteId}.`,
-          variant: "default"
-      });
-      return true;
-    } catch (tripError) {
-      console.error("Failed to create trip from quote:", tripError);
-      toast({ title: "Error Creating Trip", description: (tripError instanceof Error ? tripError.message : "Unknown error creating trip record."), variant: "destructive" });
-      return false;
-    }
-  };
-
-
   const handleStatusChange = (quote: Quote, newStatus: typeof QuoteStatusType[number]) => {
     setQuoteToProcess(quote);
     setNewStatusForQuote(newStatus);
@@ -186,18 +146,55 @@ export default function AllQuotesPage() {
           status: newStatusForQuote,
         };
         
-        const { id: quoteDocId, createdAt: quoteCreatedAt, updatedAt: quoteUpdatedAt, ...quoteSaveData } = updatedQuoteData;
-        const savedQuote = await saveQuote(quoteSaveData as SaveQuoteInput); 
+        const { id: originalDocId, createdAt, updatedAt, ...quoteDataForSave } = updatedQuoteData;
+        const savedQuote = await saveQuote(quoteDataForSave as SaveQuoteInput); 
 
         let tripCreatedSuccessfully = false;
-        if (isNowBooking && !wasPreviouslyBooked) {
-          tripCreatedSuccessfully = await createTripFromQuote(savedQuote);
+        let tripCreationMessage = "";
+
+        if (isNowBooking && !wasPreviouslyBooked) { // Only attempt to create trip if newly booked
+            const newTripId = `TRP-${savedQuote.quoteId.replace(/^QT-/i, '')}-${Date.now().toString().slice(-5)}`;
+            const tripLegs: TripLegType[] = savedQuote.legs.map(qLeg => ({
+                origin: qLeg.origin,
+                destination: qLeg.destination,
+                departureDateTime: qLeg.departureDateTime,
+                legType: qLeg.legType,
+                passengerCount: qLeg.passengerCount,
+                originFbo: qLeg.originFbo,
+                destinationFbo: qLeg.destinationFbo,
+                flightTimeHours: qLeg.flightTimeHours,
+                blockTimeHours: qLeg.calculatedBlockTimeHours, 
+            }));
+
+            const tripToSave: TripToSave = { 
+                tripId: newTripId,
+                quoteId: savedQuote.id,
+                customerId: savedQuote.selectedCustomerId,
+                clientName: savedQuote.clientName,
+                aircraftId: savedQuote.aircraftId || "UNKNOWN_AC",
+                aircraftLabel: savedQuote.aircraftLabel,
+                legs: tripLegs,
+                status: "Scheduled", 
+                notes: `Trip created from Quote ${savedQuote.quoteId}. ${savedQuote.options.notes || ''}`.trim(),
+                assignedPilotId: undefined,
+                assignedCoPilotId: undefined,
+                assignedFlightAttendantIds: [],
+            };
+
+            try {
+                await saveTrip(tripToSave);
+                tripCreatedSuccessfully = true;
+                tripCreationMessage = ' Trip also created and scheduled.';
+            } catch (tripError) {
+                console.error("Failed to create trip from quote:", tripError);
+                tripCreationMessage = ` Trip creation FAILED: ${tripError instanceof Error ? tripError.message : "Unknown error"}`;
+            }
         }
 
         toast({ 
             title: "Quote Status Updated", 
-            description: `Quote "${savedQuote.quoteId}" status changed to ${newStatusForQuote}.${isNowBooking && !wasPreviouslyBooked && tripCreatedSuccessfully ? ' Trip also created.' : (isNowBooking && !wasPreviouslyBooked && !tripCreatedSuccessfully ? ' Trip creation FAILED.' : '') }`,
-            variant: "default"
+            description: `Quote "${savedQuote.quoteId}" status changed to ${newStatusForQuote}.${tripCreationMessage}`,
+            variant: tripCreatedSuccessfully || !isNowBooking ? "default" : "destructive"
         });
         
         setShowStatusConfirm(false);
