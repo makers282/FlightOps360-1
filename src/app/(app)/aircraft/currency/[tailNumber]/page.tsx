@@ -767,7 +767,7 @@ export default function AircraftMaintenanceDetailPage() {
                                   <TableCell className="text-right space-x-1">
                                     <Button variant="outline" size="sm" onClick={() => handleOpenEditDiscrepancyModal(disc)} disabled={isSavingDiscrepancy || isDeletingDiscrepancy || isSavingSignOff}>Edit</Button>
                                     {(disc.status === "Open" || disc.status === "Deferred") && (
-                                        <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" onClick={() => handleOpenSignOffModal(disc)} disabled={isSavingDiscrepancy || isDeletingDiscrepancy || isSavingSignOff}>Clear</Button>
+                                        <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white shadow-md" onClick={() => handleOpenSignOffModal(disc)} disabled={isSavingDiscrepancy || isDeletingDiscrepancy || isSavingSignOff}>Clear</Button>
                                     )}
                                     <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => confirmDeleteDiscrepancy(disc)} disabled={isSavingDiscrepancy || isDeletingDiscrepancy || isSavingSignOff || disc.status === "Closed"}> <Trash2 className="h-4 w-4" /> </Button>
                                   </TableCell>
@@ -917,6 +917,7 @@ export default function AircraftMaintenanceDetailPage() {
     
 
     
+
 
 
 
