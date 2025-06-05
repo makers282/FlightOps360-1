@@ -535,7 +535,6 @@ export default function AircraftMaintenanceDetailPage() {
                 aircraftTailNumber: originalDiscrepancy.aircraftTailNumber,
                 status: "Closed", 
                 dateDiscovered: originalDiscrepancy.dateDiscovered,
-                // timeDiscovered: originalDiscrepancy.timeDiscovered, // Removed
                 description: originalDiscrepancy.description,
                 discoveredBy: originalDiscrepancy.discoveredBy,
                 discoveredByCertNumber: originalDiscrepancy.discoveredByCertNumber,
@@ -755,11 +754,7 @@ export default function AircraftMaintenanceDetailPage() {
                           <HistoryIcon className="mr-2 h-4 w-4" /> View Full History for {currentAircraft.tailNumber}
                         </Link>
                       </Button>
-                      <Button asChild variant="outline" className="w-full sm:w-auto">
-                        <Link href="/aircraft/discrepancies">
-                          <ListChecks className="mr-2 h-4 w-4" /> View Global Discrepancy Log
-                        </Link>
-                      </Button>
+                      
                     </div>
                     {isLoadingDiscrepancies ? (
                         <div className="flex items-center justify-center py-6"><Loader2 className="h-6 w-6 animate-spin text-destructive" /><p className="ml-2 text-muted-foreground">Loading discrepancies...</p></div>
@@ -960,3 +955,4 @@ export default function AircraftMaintenanceDetailPage() {
 
       
     
+
