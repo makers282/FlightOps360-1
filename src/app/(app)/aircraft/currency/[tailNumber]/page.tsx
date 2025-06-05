@@ -535,7 +535,7 @@ export default function AircraftMaintenanceDetailPage() {
                 aircraftTailNumber: originalDiscrepancy.aircraftTailNumber,
                 status: "Closed", 
                 dateDiscovered: originalDiscrepancy.dateDiscovered,
-                timeDiscovered: originalDiscrepancy.timeDiscovered,
+                // timeDiscovered: originalDiscrepancy.timeDiscovered, // Removed
                 description: originalDiscrepancy.description,
                 discoveredBy: originalDiscrepancy.discoveredBy,
                 discoveredByCertNumber: originalDiscrepancy.discoveredByCertNumber,
@@ -749,13 +749,10 @@ export default function AircraftMaintenanceDetailPage() {
                       <Button onClick={handleOpenAddDiscrepancyModal} disabled={!currentAircraft || isSavingDiscrepancy} className="w-full sm:w-auto">
                         <PlusCircle className="mr-2 h-4 w-4" /> Add New Discrepancy
                       </Button>
-                      <Button 
-                        variant="outline" 
-                        onClick={() => toast({ title: "Coming Soon!", description: "A dedicated page to view and manage all discrepancies is planned."})}
-                        disabled={!currentAircraft}
-                        className="w-full sm:w-auto"
-                      >
-                        <ListChecks className="mr-2 h-4 w-4" /> View Full Discrepancy Log (Coming Soon)
+                      <Button asChild variant="outline" className="w-full sm:w-auto">
+                        <Link href="/aircraft/discrepancies">
+                          <ListChecks className="mr-2 h-4 w-4" /> View Full Discrepancy Log
+                        </Link>
                       </Button>
                     </div>
                     {isLoadingDiscrepancies ? (
@@ -954,3 +951,5 @@ export default function AircraftMaintenanceDetailPage() {
 
 
     
+
+      
