@@ -57,6 +57,9 @@ interface AddEditAircraftDocumentModalProps {
   selectedAircraftIdForNew?: string;
 }
 
+// Helper to generate a Firestore-compatible ID
+const generateFirestoreId = () => `doc_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+
 export function AddEditAircraftDocumentModal({
   isOpen, setIsOpen, onSave, initialData, isEditing, isSaving: isSavingProp,
   aircraftList, isLoadingAircraft, selectedAircraftIdForNew,
@@ -64,7 +67,7 @@ export function AddEditAircraftDocumentModal({
 
   const { toast } = useToast();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [isUploadingFile, setIsUploadingFile] = useState(false);
+  const [isProcessingFile, setIsProcessingFile] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const form = useForm<AircraftDocumentFormData>({
@@ -116,30 +119,42 @@ export function AddEditAircraftDocumentModal({
   const handleRemoveFile = () => { 
     setSelectedFile(null); 
     if (fileInputRef.current) fileInputRef.current.value = ""; 
+    if (isEditing && initialData?.fileUrl) {
+      // If editing and there was an initial fileUrl, removing means we intend to clear it
+      setValue('fileUrl', undefined);
+    }
   };
 
   const onSubmitHandler: SubmitHandler<AircraftDocumentFormData> = async (formData) => {
-    setIsUploadingFile(true); 
-    let finalFileUrl = formData.fileUrl; 
+    setIsProcessingFile(true);
+    let finalFileUrl = formData.fileUrl; // Start with existing URL or undefined
+
+    // Determine the document ID to be used for both Storage and Firestore operations.
+    const documentIdForOperations = (isEditing && initialData?.id) 
+                                    ? initialData.id 
+                                    : generateFirestoreId();
 
     if (selectedFile) {
-      if (!formData.aircraftId) { 
-        toast({ title: "Error", description: "Aircraft ID missing. Cannot upload file.", variant: "destructive" }); 
-        setIsUploadingFile(false); 
-        return; 
+      if (!formData.aircraftId) {
+        toast({ title: "Error", description: "Aircraft ID missing. Cannot upload file.", variant: "destructive" });
+        setIsProcessingFile(false);
+        return;
       }
       try {
-        const reader = new FileReader(); 
-        reader.readAsDataURL(selectedFile);
-        
+        const reader = new FileReader();
         await new Promise<void>((resolvePromise, rejectPromise) => {
           reader.onloadend = async () => {
             try {
               const fileDataUri = reader.result as string;
-              const documentIdForUpload = (isEditing && initialData?.id) || `doc_${Date.now()}_${Math.random().toString(16).slice(2)}`;
-              toast({ title: "Uploading File...", description: "Please wait. This is a simulation.", variant: "default" });
-              const uploadResult = await uploadAircraftDocument({ aircraftId: formData.aircraftId, documentId: documentIdForUpload, fileName: selectedFile.name, fileDataUri: fileDataUri });
+              toast({ title: "Uploading File...", description: `Uploading ${selectedFile.name}. Please wait.`, variant: "default" });
+              const uploadResult = await uploadAircraftDocument({
+                aircraftId: formData.aircraftId,
+                documentId: documentIdForOperations,
+                fileName: selectedFile.name,
+                fileDataUri: fileDataUri,
+              });
               finalFileUrl = uploadResult.fileUrl;
+              toast({ title: "Upload Successful", description: `${selectedFile.name} uploaded.` });
               resolvePromise();
             } catch (uploadError) {
               rejectPromise(uploadError);
@@ -149,22 +164,30 @@ export function AddEditAircraftDocumentModal({
             console.error("Error reading file:", error);
             rejectPromise(new Error("File read error"));
           };
+          reader.readAsDataURL(selectedFile);
         });
-      } catch (error) { 
-        console.error("File upload process error:", error); 
-        toast({ title: "Upload Failed", description: error instanceof Error ? error.message : "Could not upload file.", variant: "destructive" }); 
-        setIsUploadingFile(false); 
-        return; 
+      } catch (error) {
+        console.error("File upload process error:", error);
+        toast({ title: "Upload Failed", description: error instanceof Error ? error.message : "Could not upload file.", variant: "destructive" });
+        setIsProcessingFile(false);
+        return;
       }
-    } else if (isEditing && initialData?.fileUrl && !formData.fileUrl && !selectedFile) {
-        // If editing, an existing fileUrl was there, form.fileUrl is now cleared (manually or by selecting then removing a file),
-        // and no new file is selected, it implies the user wants to remove the file association.
-        finalFileUrl = undefined; 
+    } else if (isEditing && initialData?.fileUrl && !formData.fileUrl) {
+      // If editing, an existing fileUrl was there, and now formData.fileUrl is undefined (because user removed selection or cleared via UI)
+      // and no new file is selected, it implies the user wants to remove the file association.
+      finalFileUrl = undefined;
+      toast({ title: "File Removed", description: "The previously associated file will be unlinked.", variant: "default"});
     }
 
-
     const selectedAircraftMeta = aircraftList.find(ac => ac.id === formData.aircraftId);
-    const aircraftTailNumDisplay = selectedAircraftMeta ? `${selectedAircraftMeta.tailNumber || 'N/A'} - ${selectedAircraftMeta.model || 'N/A'}` : 'Unknown Aircraft';
+    let aircraftTailNumDisplay: string | undefined;
+    if (selectedAircraftMeta) {
+      aircraftTailNumDisplay = `${selectedAircraftMeta.tailNumber || 'N/A'} - ${selectedAircraftMeta.model || 'N/A'}`;
+    } else if (isEditing && initialData?.aircraftId === formData.aircraftId) {
+      aircraftTailNumDisplay = initialData.aircraftTailNumber;
+    } else {
+      aircraftTailNumDisplay = 'Unknown Aircraft';
+    }
     
     const dataToSave: SaveAircraftDocumentInput = {
       aircraftId: formData.aircraftId, 
@@ -176,13 +199,13 @@ export function AddEditAircraftDocumentModal({
       notes: formData.notes || undefined, 
       fileUrl: finalFileUrl,
     };
-    await onSave(dataToSave, isEditing && initialData ? initialData.id : undefined);
-    setIsUploadingFile(false);
+    await onSave(dataToSave, documentIdForOperations);
+    setIsProcessingFile(false);
   };
 
   const modalTitle = isEditing ? `Edit Document: ${initialData?.documentName || ''}` : 'Add New Aircraft Document';
-  const modalDescription = isEditing ? "Update document details." : "Fill in document information.";
-  const totalSaving = isSavingProp || isUploadingFile;
+  const modalDescription = isEditing ? "Update document details and file." : "Fill in document information and upload the file.";
+  const totalSavingOrProcessing = isSavingProp || isProcessingFile;
   
   const handleDialogInteractOutside = (e: Event) => {
     const target = e.target as HTMLElement;
@@ -192,7 +215,7 @@ export function AddEditAircraftDocumentModal({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => { if (!totalSaving) setIsOpen(open); }}>
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!totalSavingOrProcessing) setIsOpen(open); }}>
       <DialogContent 
         className="sm:max-w-lg overflow-visible"
         onInteractOutside={handleDialogInteractOutside}
@@ -263,13 +286,13 @@ export function AddEditAircraftDocumentModal({
                 <FormLabel className="flex items-center gap-2"><UploadCloud /> Document File</FormLabel>
                 <div className="flex items-center gap-2">
                   <FormControl>
-                    <Input id="file-upload" type="file" ref={fileInputRef} onChange={handleFileChange} className="text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20" disabled={totalSaving} />
+                    <Input id="file-upload" type="file" ref={fileInputRef} onChange={handleFileChange} className="text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20" disabled={totalSavingOrProcessing} />
                   </FormControl>
-                  {selectedFile && (<Button type="button" variant="ghost" size="icon" onClick={handleRemoveFile} className="text-destructive" disabled={totalSaving}><RemoveFileIcon /></Button>)}
+                  {(selectedFile || getValues('fileUrl')) && (<Button type="button" variant="ghost" size="icon" onClick={handleRemoveFile} className="text-destructive" disabled={totalSavingOrProcessing}><RemoveFileIcon /></Button>)}
                 </div>
                 {selectedFile && (<p className="text-xs text-muted-foreground mt-1 flex items-center gap-1"><Paperclip />Selected: {selectedFile.name} ({(selectedFile.size / 1024).toFixed(1)} KB)</p>)}
                 {!selectedFile && getValues('fileUrl') && (<p className="text-xs mt-1">Current: <a href={getValues('fileUrl')!} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline truncate max-w-xs inline-block">{getValues('fileUrl')?.split('/').pop()}</a></p>)}
-                <FormDescription className="text-xs">Max 5MB. PDF, DOCX, PNG, JPG. (Upload is simulated for now)</FormDescription>
+                <FormDescription className="text-xs">Max 5MB. PDF, DOCX, PNG, JPG recommended.</FormDescription>
                 <FormMessage />
               </FormItem>
               <FormField control={control} name="notes" render={({ field }) => (<FormItem><FormLabel>Notes</FormLabel><FormControl><Textarea placeholder="Notes about this document..." {...field} value={field.value || ''} rows={3} /></FormControl><FormMessage /></FormItem>)} />
@@ -277,9 +300,9 @@ export function AddEditAircraftDocumentModal({
           </Form>
         </ScrollArea>
         <DialogFooter className="pt-4 border-t">
-          <DialogClose asChild><Button type="button" variant="outline" disabled={totalSaving}>Cancel</Button></DialogClose>
-          <Button form="aircraft-document-form" type="submit" disabled={totalSaving || isLoadingAircraft}>
-            {totalSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+          <DialogClose asChild><Button type="button" variant="outline" disabled={totalSavingOrProcessing}>Cancel</Button></DialogClose>
+          <Button form="aircraft-document-form" type="submit" disabled={totalSavingOrProcessing || isLoadingAircraft}>
+            {totalSavingOrProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
             {isEditing ? 'Save Changes' : 'Add Document'}
           </Button>
         </DialogFooter>
@@ -287,4 +310,3 @@ export function AddEditAircraftDocumentModal({
     </Dialog>
   );
 }
-    
