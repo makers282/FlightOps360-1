@@ -10,52 +10,35 @@
 
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
-import { getStorage } from 'firebase-admin/storage';
-import { initializeApp, cert, getApps, App } from 'firebase-admin/app';
+import { initializeApp as initializeAdminApp, getApps as getAdminApps, cert as adminCert } from 'firebase-admin/app';
+import { getStorage as getAdminStorage } from 'firebase-admin/storage';
 
-// Initialize Firebase Admin SDK if not already initialized.
-// This ensures it's available for server-side operations within Genkit flows.
-// In a deployed Firebase environment (e.g., Cloud Functions), this might be automatic.
-// For local development, GOOGLE_APPLICATION_CREDENTIALS environment variable should be set.
-if (getApps().length === 0) {
-  let serviceAccount;
-  // Attempt to parse service account from environment variable if it's a JSON string
-  if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+// Initialize Firebase Admin SDK if not already initialized
+if (!getAdminApps().length) {
+  const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  const storageBucket = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
+
+  if (!storageBucket) {
+    console.error("[upload-flow] CRITICAL ERROR: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET environment variable is not set. Firebase Admin SDK cannot be initialized for Storage.");
+    // Potentially throw an error here or handle as appropriate for your app's startup
+  } else if (serviceAccountJson) {
     try {
-      serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+      const serviceAccount = JSON.parse(serviceAccountJson);
+      initializeAdminApp({
+        credential: adminCert(serviceAccount),
+        storageBucket: storageBucket,
+      });
+      console.log('[upload-flow] Firebase Admin SDK initialized using service account JSON.');
     } catch (e) {
-      console.warn("Failed to parse FIREBASE_SERVICE_ACCOUNT_JSON. Ensure it's a valid JSON string.");
+      console.error('[upload-flow] Failed to parse FIREBASE_SERVICE_ACCOUNT_JSON. Attempting default initialization.', e);
+      // Fallback to default init if JSON is bad but we might be in a GCP env
+      initializeAdminApp({ storageBucket: storageBucket });
+      console.log('[upload-flow] Firebase Admin SDK initialized using default credentials (service account parsing failed).');
     }
-  }
-
-  // Fallback to FIREBASE_SERVICE_ACCOUNT_KEY_PATH if JSON string is not available/valid
-  // This part is more for local file path based credentials, which might not work in all serverless envs.
-  // Prefer FIREBASE_SERVICE_ACCOUNT_JSON if possible for broader compatibility.
-  if (!serviceAccount && process.env.FIREBASE_SERVICE_ACCOUNT_KEY_PATH) {
-      // This line would typically require `fs` and `path` modules if loading from a file path string,
-      // but `cert()` can take an object directly.
-      // serviceAccount = require(process.env.FIREBASE_SERVICE_ACCOUNT_KEY_PATH); // Avoid require for broader compatibility
-      console.warn("FIREBASE_SERVICE_ACCOUNT_KEY_PATH is set, but direct JSON string is preferred for broader compatibility.");
-  }
-
-
-  if (serviceAccount || (process.env.GCLOUD_PROJECT && !process.env.FIREBASE_CONFIG)) {
-    // If serviceAccount is loaded or if it's a Google Cloud environment without Firebase client config (implies Admin SDK should init by default)
-    initializeApp({
-      credential: serviceAccount ? cert(serviceAccount) : undefined, // Use cert() only if serviceAccount is an object
-      storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-    });
-     console.log("Firebase Admin SDK initialized by upload-aircraft-document-flow.ts");
-  } else if (process.env.FIREBASE_CONFIG) {
-    // This case implies it might be a Firebase client-side config, which is not what Admin SDK uses for default init.
-    // However, if running in a Firebase environment (like Cloud Functions), default init often works without explicit credentials.
-    // We add a simple initializeApp() here for such cases, relying on implicit credentials.
-    initializeApp({
-        storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-    });
-    console.log("Firebase Admin SDK initialized using default credentials in a Firebase environment by upload-aircraft-document-flow.ts");
   } else {
-    console.warn("Firebase Admin SDK not explicitly initialized in upload-aircraft-document-flow.ts. Relaying on implicit initialization or pre-existing setup.");
+    // Standard initialization for environments like Cloud Functions, Cloud Run, or local dev with GOOGLE_APPLICATION_CREDENTIALS
+    initializeAdminApp({ storageBucket: storageBucket });
+    console.log('[upload-flow] Firebase Admin SDK initialized (default or GOOGLE_APPLICATION_CREDENTIALS). Storage bucket:', storageBucket);
   }
 }
 
@@ -102,17 +85,19 @@ const uploadAircraftDocumentFlow = ai.defineFlow(
     if (!bucketName) {
         throw new Error("Firebase Storage bucket name is not configured in environment variables (NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET).");
     }
-    const bucket = getStorage().bucket(bucketName);
+    // Use getAdminStorage() here
+    const bucket = getAdminStorage().bucket(bucketName);
     const file = bucket.file(filePath);
 
     await file.save(buffer, {
       metadata: { contentType: mimeType },
+      // Optionally make public here, or handle URLs differently (e.g. signed URLs)
+      // public: true, // This makes the file public directly on upload
     });
 
-    // Make the file publicly readable
-    // Note: For production, you should have stricter security rules and potentially use signed URLs.
-    // This makes the file accessible via its public URL immediately.
-    await file.makePublic();
+    // Make the file publicly readable - this is one way to get a public URL.
+    // Consider security implications; signed URLs are often better for private data.
+    await file.makePublic(); 
     
     const publicUrl = file.publicUrl();
     
