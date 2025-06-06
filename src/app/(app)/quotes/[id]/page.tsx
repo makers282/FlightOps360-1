@@ -239,7 +239,7 @@ export default function ViewQuotePage() {
             <p><strong>Phone:</strong> {quote.clientPhone || 'N/A'}</p>
             <Separator className="my-3" />
             <p><strong>Quote ID:</strong> {quote.quoteId}</p>
-            <p><strong>Status:</strong> <Badge variant={getStatusBadgeVariant(quote.status as typeof quoteStatuses[number])}>{quote.status}</Badge></p>
+            <div className="flex items-center"><strong>Status:</strong><Badge variant={getStatusBadgeVariant(quote.status as typeof quoteStatuses[number])} className="ml-2">{quote.status}</Badge></div>
             <p><strong>Aircraft:</strong> {quote.aircraftLabel || 'N/A'}</p>
             <p><strong>Created:</strong> {isValid(parseISO(quote.createdAt)) ? format(parseISO(quote.createdAt), 'PPPp') : 'Invalid Date'}</p>
             <p><strong>Updated:</strong> {isValid(parseISO(quote.updatedAt)) ? format(parseISO(quote.updatedAt), 'PPPp') : 'Invalid Date'}</p>
