@@ -88,7 +88,6 @@ export default function LandingPage() {
           </div>
         </section>
         
-        {/* Placeholder for additional sections like Testimonials or Pricing if needed */}
         <section className="py-16 sm:py-24 bg-gradient-to-b from-sky-50 to-indigo-50">
             <div className="container mx-auto px-6 text-center">
                 <h2 className="text-3xl sm:text-4xl font-bold text-foreground">Ready to Transform Your Operations?</h2>
