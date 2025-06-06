@@ -7,7 +7,7 @@ import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { List, ListItem } from '@/components/ui/list';
-import { AlertTriangle, Plane, Milestone, FileText, ShieldAlert, Bell, LayoutDashboard, Megaphone, UserCheck, CalendarClock, AlertCircle, CheckCircle2, Loader2, ExternalLink, Wrench } from 'lucide-react';
+import { AlertTriangle, Plane, Milestone, FileText, ShieldAlert, Bell, LayoutDashboard, Megaphone, UserCheck, CalendarClock, AlertCircle, CheckCircle2, Loader2, ExternalLink, Wrench, InfoIcon as InfoIconLucide } from 'lucide-react'; // Renamed InfoIcon to avoid conflict
 import { Separator } from '@/components/ui/separator';
 import {
   Table,
@@ -39,8 +39,7 @@ import { format, parseISO, isValid, addDays, differenceInCalendarDays, endOfMont
 import { fetchComponentTimesForAircraft, type AircraftComponentTimes } from '@/ai/flows/manage-component-times-flow';
 import { fetchAircraftDiscrepancies, type AircraftDiscrepancy } from '@/ai/flows/manage-aircraft-discrepancies-flow';
 import { fetchMaintenanceTasksForAircraft, type MaintenanceTask as FlowMaintenanceTask } from '@/ai/flows/manage-maintenance-tasks-flow';
-import type { DisplayMaintenanceItem } from '@/app/(app)/aircraft/currency/[tailNumber]/page';
-
+// type DisplayMaintenanceItem is not directly used from the other page, but similar logic is applied here
 
 const crewAlertData = [ 
   { id: 'CAL001', type: 'training' as 'training' | 'certification' | 'document', severity: 'warning' as 'info' | 'warning' | 'critical', title: 'Recurrency Due Soon', message: 'Capt. Ava Williams - Recurrency training due in 15 days.', icon: CalendarClock },
@@ -84,11 +83,11 @@ const getAlertIcon = (alert: typeof crewAlertData[0]) => {
   return <Icon className={`h-5 w-5 ${iconColorClass}`} />;
 }
 
-// Types for detailed aircraft status on dashboard
+// Types for detailed aircraft status (kept for calculation logic)
 interface AircraftStatusDetail {
-  icon: JSX.Element;
-  label: string;
-  colorClass: string;
+  icon: JSX.Element; // Still useful for internal logic, but might not be directly rendered on dashboard
+  label: string; // The detailed label like "Grounded", "OK", "Due Soon"
+  colorClass: string; // Color class for detailed view (might map to badge variant)
   reason?: string;
   mostUrgentTaskDescription?: string;
   toGoText?: string;
@@ -100,7 +99,13 @@ interface DashboardDisplayMaintenanceItem extends FlowMaintenanceTask {
   dueAtCycles?: number;
 }
 
-// Helper functions for dashboard aircraft status calculation
+// Simplified status type for dashboard display
+interface SimplifiedDashboardStatus {
+  label: "Active" | "Maintenance" | "Info";
+  variant: "default" | "secondary" | "destructive" | "outline";
+  details?: string;
+}
+
 const calculateDisplayFieldsForDashboardTask = (task: FlowMaintenanceTask): DashboardDisplayMaintenanceItem => {
   let dueAtDate: string | undefined = undefined;
   let dueAtHours: number | undefined = undefined;
@@ -161,12 +166,12 @@ const calculateToGoForDashboard = (
   return { text: 'N/A', numeric: Infinity, unit: 'N/A', isOverdue: false };
 };
 
-const getReleaseStatusForDashboard = (
+const getDetailedAircraftStatus = (
   toGo: { text: string; numeric: number; unit: 'days' | 'hrs' | 'cycles' | 'N/A'; isOverdue: boolean } | undefined,
   hasOpenDiscrepancies: boolean,
   hasDeferredDiscrepancies: boolean,
   task?: DashboardDisplayMaintenanceItem
-): AircraftStatusDetail => {
+): AircraftStatusDetail => { // Renamed from getReleaseStatusForDashboard for clarity
   if (hasOpenDiscrepancies) {
     return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-red-500 dark:text-red-400', label: 'Grounded', reason: '(Open Write-up)' };
   }
@@ -193,8 +198,28 @@ const getReleaseStatusForDashboard = (
     if (toGo.unit === 'hrs' && toGo.numeric < hoursAlertThreshold) return { icon: <CalendarClock className="h-5 w-5" />, colorClass: 'text-yellow-500 dark:text-yellow-400', label: 'Due Soon', reason: '(Maintenance)' };
     if (toGo.unit === 'cycles' && toGo.numeric < cyclesAlertThreshold) return { icon: <CalendarClock className="h-5 w-5" />, colorClass: 'text-yellow-500 dark:text-yellow-400', label: 'Due Soon', reason: '(Maintenance)' };
   }
-  if (toGo?.text === 'N/A' || toGo?.text === 'Invalid Date') return { icon: <InfoIcon className="h-5 w-5" />, colorClass: 'text-gray-400 dark:text-gray-500', label: 'Check Due Info' };
+  if (toGo?.text === 'N/A' || toGo?.text === 'Invalid Date') return { icon: <InfoIconLucide className="h-5 w-5" />, colorClass: 'text-gray-400 dark:text-gray-500', label: 'Check Due Info' };
   return { icon: <CheckCircle2 className="h-5 w-5" />, colorClass: 'text-green-500 dark:text-green-400', label: 'OK' };
+};
+
+const getSimplifiedDashboardStatus = (detailedStatus: AircraftStatusDetail): SimplifiedDashboardStatus => {
+    switch (detailedStatus.label) {
+        case 'Grounded':
+        case 'Overdue':
+            return { label: "Maintenance", variant: "destructive", details: detailedStatus.reason || detailedStatus.mostUrgentTaskDescription };
+        case 'Attention':
+        case 'Due Soon':
+        case 'Grace Period':
+        case 'Missing Comp. Time':
+            return { label: "Maintenance", variant: "secondary", details: detailedStatus.reason || detailedStatus.mostUrgentTaskDescription };
+        case 'OK':
+            return { label: "Active", variant: "default", details: "All Clear" };
+        case 'Not Tracked':
+        case 'Data Error':
+        case 'Check Due Info':
+        default:
+            return { label: "Info", variant: "outline", details: detailedStatus.reason || detailedStatus.label };
+    }
 };
 
 
@@ -247,10 +272,9 @@ export default function DashboardPage() {
             .slice(0, 5); 
           setBulletins(activeAndSortedBulletins);
 
-          // After fetching fleet, load detailed status for each aircraft
           const statusPromises = fetchedFleet.map(async (ac) => {
             if (!ac.isMaintenanceTracked) {
-              return [ac.id, { icon: <InfoIcon className="h-5 w-5" />, colorClass: 'text-gray-400', label: 'Not Tracked', reason: '(Maintenance Tracking Disabled)' }];
+              return [ac.id, { icon: <InfoIconLucide className="h-5 w-5" />, colorClass: 'text-gray-400', label: 'Not Tracked', reason: '(Maintenance Tracking Disabled)' }];
             }
             try {
               const [compTimes, discrepancies, tasks] = await Promise.all([
@@ -261,27 +285,29 @@ export default function DashboardPage() {
               const hasOpenDisc = discrepancies.some(d => d.status === "Open");
               const hasDeferredDisc = discrepancies.some(d => d.status === "Deferred");
               
-              if (hasOpenDisc) return [ac.id, getReleaseStatusForDashboard(undefined, true, hasDeferredDisc)];
-              if (hasDeferredDisc) return [ac.id, getReleaseStatusForDashboard(undefined, false, true)];
-
               const activeTasks = tasks.filter(t => t.isActive && t.trackType !== "Dont Alert");
-              if (activeTasks.length === 0) return [ac.id, getReleaseStatusForDashboard(undefined, false, false)];
+              
+              let mostUrgentMaintenanceTask: DashboardDisplayMaintenanceItem | undefined;
+              let toGoDataForMostUrgent: { text: string; numeric: number; unit: 'days' | 'hrs' | 'cycles' | 'N/A'; isOverdue: boolean } | undefined;
 
-              const tasksWithDisplayFields = activeTasks.map(task => calculateDisplayFieldsForDashboardTask(task));
-              const tasksWithToGo = tasksWithDisplayFields.map(task => ({
-                ...task,
-                toGoData: calculateToGoForDashboard(task, compTimes, ac.trackedComponentNames?.[0] || "Airframe"),
-              }));
+              if (activeTasks.length > 0) {
+                const tasksWithDisplayFields = activeTasks.map(task => calculateDisplayFieldsForDashboardTask(task));
+                const tasksWithToGo = tasksWithDisplayFields.map(task => ({
+                  ...task,
+                  toGoData: calculateToGoForDashboard(task, compTimes, ac.trackedComponentNames?.[0] || "Airframe"),
+                }));
+                tasksWithToGo.sort((a, b) => {
+                  if (a.toGoData.isOverdue && !b.toGoData.isOverdue) return -1;
+                  if (!a.toGoData.isOverdue && b.toGoData.isOverdue) return 1;
+                  return a.toGoData.numeric - b.toGoData.numeric;
+                });
+                mostUrgentMaintenanceTask = tasksWithToGo[0];
+                toGoDataForMostUrgent = mostUrgentMaintenanceTask.toGoData;
+              }
+              
+              const detailedStatus = getDetailedAircraftStatus(toGoDataForMostUrgent, hasOpenDisc, hasDeferredDisc, mostUrgentMaintenanceTask);
+              return [ac.id, { ...detailedStatus, mostUrgentTaskDescription: mostUrgentMaintenanceTask?.itemTitle, toGoText: toGoDataForMostUrgent?.text }];
 
-              tasksWithToGo.sort((a, b) => {
-                if (a.toGoData.isOverdue && !b.toGoData.isOverdue) return -1;
-                if (!a.toGoData.isOverdue && b.toGoData.isOverdue) return 1;
-                return a.toGoData.numeric - b.toGoData.numeric;
-              });
-
-              const mostUrgentTask = tasksWithToGo[0];
-              const statusDetail = getReleaseStatusForDashboard(mostUrgentTask.toGoData, false, false, mostUrgentTask);
-              return [ac.id, { ...statusDetail, mostUrgentTaskDescription: mostUrgentTask.itemTitle, toGoText: mostUrgentTask.toGoData.text }];
             } catch (detailError) {
               console.error(`Error fetching details for aircraft ${ac.id}:`, detailError);
               return [ac.id, { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-orange-500', label: 'Data Error', reason: '(Could not load details)' }];
@@ -452,7 +478,7 @@ export default function DashboardPage() {
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         <Card className="lg:col-span-2">
-          <CardHeader> <CardTitle className="flex items-center gap-2"><Plane className="h-5 w-5 text-primary" />Aircraft Status</CardTitle> <CardDescription>Current status of all operational aircraft.</CardDescription> </CardHeader>
+          <CardHeader> <CardTitle className="flex items-center gap-2"><Plane className="h-5 w-5 text-primary" />Aircraft Status</CardTitle> <CardDescription>High-level overview of aircraft operational readiness.</CardDescription> </CardHeader>
           <CardContent>
             {isLoadingAircraft || isLoadingAircraftStatusDetails ? ( <div className="flex items-center justify-center py-10"> <Loader2 className="h-8 w-8 animate-spin text-primary" /> <p className="ml-2 text-muted-foreground">Loading aircraft status...</p> </div>
             ) : aircraftList.length === 0 ? ( <p className="text-muted-foreground text-center py-5">No aircraft found in fleet.</p>
@@ -469,7 +495,8 @@ export default function DashboardPage() {
                 </TableHeader>
                 <TableBody>
                 {aircraftList.map((aircraft) => {
-                    const statusInfo = aircraftStatusDetails.get(aircraft.id) || { icon: <Loader2 className="h-5 w-5 animate-spin" />, label: 'Loading...', colorClass: 'text-muted-foreground' };
+                    const detailedStatusInfo = aircraftStatusDetails.get(aircraft.id) || { icon: <Loader2 className="h-5 w-5 animate-spin" />, label: 'Loading...', colorClass: 'text-muted-foreground', reason: '', mostUrgentTaskDescription: '' };
+                    const simplifiedStatus = getSimplifiedDashboardStatus(detailedStatusInfo);
                     return (
                     <TableRow key={aircraft.id}>
                         <TableCell className="font-medium">
@@ -480,16 +507,10 @@ export default function DashboardPage() {
                         <TableCell>{aircraft.model}</TableCell>
                         <TableCell>{aircraft.baseLocation || 'N/A'}</TableCell>
                         <TableCell>
-                            <div className={`flex items-center gap-1.5 ${statusInfo.colorClass}`}>
-                                {statusInfo.icon}
-                                <span className="font-semibold">{statusInfo.label}</span>
-                            </div>
-                            {statusInfo.reason && <span className="text-xs text-muted-foreground block -mt-0.5 ml-6">{statusInfo.reason}</span>}
+                            <Badge variant={simplifiedStatus.variant} className="capitalize">{simplifiedStatus.label}</Badge>
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
-                            {statusInfo.mostUrgentTaskDescription && (
-                                `${statusInfo.mostUrgentTaskDescription} (${statusInfo.toGoText || 'N/A'})`
-                            )}
+                            {simplifiedStatus.details || (detailedStatusInfo.mostUrgentTaskDescription && `${detailedStatusInfo.mostUrgentTaskDescription} (${detailedStatusInfo.toGoText || 'N/A'})`)}
                         </TableCell>
                     </TableRow>
                     );
