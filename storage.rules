@@ -1,0 +1,18 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Allow write access to authenticated users for files under their user ID
+    // Example: allow users to upload profile pictures to 'users/{userId}/profile.jpg'
+    match /users/{userId}/{allPaths=**} {
+      allow read: if request.auth != null; // Or more specific read rules
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Default deny for any path not explicitly matched
+    // Consider allowing public read for certain paths if needed
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

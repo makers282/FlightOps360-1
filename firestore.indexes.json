@@ -1,0 +1,14 @@
+{
+  "indexes": [
+    // Add your Firestore indexes here. For example:
+    // {
+    //   "collectionGroup": "yourCollection",
+    //   "queryScope": "COLLECTION",
+    //   "fields": [
+    //     { "fieldPath": "someField", "order": "ASCENDING" },
+    //     { "fieldPath": "anotherField", "order": "DESCENDING" }
+    //   ]
+    // }
+  ],
+  "fieldOverrides": []
+}
