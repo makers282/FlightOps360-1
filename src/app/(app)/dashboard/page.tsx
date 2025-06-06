@@ -1,13 +1,13 @@
 
 "use client"; 
 
-import React, { useState, useEffect } from 'react'; 
+import React, { useState, useEffect, useCallback } from 'react'; 
 import Link from 'next/link';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { List, ListItem } from '@/components/ui/list';
-import { AlertTriangle, Plane, Milestone, FileText, ShieldAlert, Bell, LayoutDashboard, Megaphone, UserCheck, CalendarClock, AlertCircle, CheckCircle2, Loader2, ExternalLink } from 'lucide-react';
+import { AlertTriangle, Plane, Milestone, FileText, ShieldAlert, Bell, LayoutDashboard, Megaphone, UserCheck, CalendarClock, AlertCircle, CheckCircle2, Loader2, ExternalLink, Wrench } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import {
   Table,
@@ -34,7 +34,12 @@ import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-
 import { fetchTrips, type Trip, type TripStatus } from '@/ai/flows/manage-trips-flow';
 import { fetchBulletins, type Bulletin, type BulletinType } from '@/ai/flows/manage-bulletins-flow'; 
 import { useToast } from '@/hooks/use-toast'; 
-import { format, parseISO, isValid, addDays } from 'date-fns';
+import { format, parseISO, isValid, addDays, differenceInCalendarDays, endOfMonth, addMonths, addYears } from 'date-fns';
+
+import { fetchComponentTimesForAircraft, type AircraftComponentTimes } from '@/ai/flows/manage-component-times-flow';
+import { fetchAircraftDiscrepancies, type AircraftDiscrepancy } from '@/ai/flows/manage-aircraft-discrepancies-flow';
+import { fetchMaintenanceTasksForAircraft, type MaintenanceTask as FlowMaintenanceTask } from '@/ai/flows/manage-maintenance-tasks-flow';
+import type { DisplayMaintenanceItem } from '@/app/(app)/aircraft/currency/[tailNumber]/page';
 
 
 const crewAlertData = [ 
@@ -44,23 +49,15 @@ const crewAlertData = [
 ];
 
 
-const getStatusBadgeVariant = (status?: TripStatus | 'Active' | 'Needs Review'): "default" | "secondary" | "outline" | "destructive" => {
+const getTripStatusBadgeVariant = (status?: TripStatus): "default" | "secondary" | "outline" | "destructive" => {
   switch (status?.toLowerCase()) {
-    case 'available':
     case 'completed':
-    case 'off duty':
-    case 'active':
     case 'confirmed':
       return 'default';
-    case 'in flight':
     case 'en route':
-    case 'on duty':
       return 'secondary';
-    case 'maintenance':
     case 'scheduled':
     case 'awaiting closeout':
-    case 'standby':
-    case 'needs review':
       return 'outline';
     case 'cancelled':
     case 'diverted':
@@ -87,6 +84,120 @@ const getAlertIcon = (alert: typeof crewAlertData[0]) => {
   return <Icon className={`h-5 w-5 ${iconColorClass}`} />;
 }
 
+// Types for detailed aircraft status on dashboard
+interface AircraftStatusDetail {
+  icon: JSX.Element;
+  label: string;
+  colorClass: string;
+  reason?: string;
+  mostUrgentTaskDescription?: string;
+  toGoText?: string;
+}
+
+interface DashboardDisplayMaintenanceItem extends FlowMaintenanceTask {
+  dueAtDate?: string;
+  dueAtHours?: number;
+  dueAtCycles?: number;
+}
+
+// Helper functions for dashboard aircraft status calculation
+const calculateDisplayFieldsForDashboardTask = (task: FlowMaintenanceTask): DashboardDisplayMaintenanceItem => {
+  let dueAtDate: string | undefined = undefined;
+  let dueAtHours: number | undefined = undefined;
+  let dueAtCycles: number | undefined = undefined;
+  const actualLastCompletedDateObj = task.lastCompletedDate && isValid(parseISO(task.lastCompletedDate)) ? parseISO(task.lastCompletedDate) : new Date();
+  const actualLastCompletedHours = Number(task.lastCompletedHours || 0);
+  const actualLastCompletedCycles = Number(task.lastCompletedCycles || 0);
+
+  if (task.trackType === "Interval") {
+    if (task.isDaysDueEnabled && task.daysDueValue && task.daysIntervalType) {
+      const intervalValue = Number(task.daysDueValue);
+      if (!isNaN(intervalValue) && intervalValue > 0) {
+        switch (task.daysIntervalType) {
+          case 'days': dueAtDate = format(addDays(actualLastCompletedDateObj, intervalValue), 'yyyy-MM-dd'); break;
+          case 'months_specific_day': dueAtDate = format(addMonths(actualLastCompletedDateObj, intervalValue), 'yyyy-MM-dd'); break;
+          case 'months_eom': dueAtDate = format(endOfMonth(addMonths(actualLastCompletedDateObj, intervalValue)), 'yyyy-MM-dd'); break;
+          case 'years_specific_day': dueAtDate = format(addYears(actualLastCompletedDateObj, intervalValue), 'yyyy-MM-dd'); break;
+        }
+      }
+    }
+    if (task.isHoursDueEnabled && typeof task.hoursDue === 'number') { dueAtHours = actualLastCompletedHours + Number(task.hoursDue); }
+    if (task.isCyclesDueEnabled && typeof task.cyclesDue === 'number') { dueAtCycles = actualLastCompletedCycles + Number(task.cyclesDue); }
+  } else if (task.trackType === "One Time") {
+    if (task.isDaysDueEnabled && task.daysDueValue && isValid(parseISO(task.daysDueValue))) { dueAtDate = task.daysDueValue; }
+    if (task.isHoursDueEnabled && typeof task.hoursDue === 'number') dueAtHours = Number(task.hoursDue);
+    if (task.isCyclesDueEnabled && typeof task.cyclesDue === 'number') dueAtCycles = Number(task.cyclesDue);
+  }
+  return { ...task, dueAtDate, dueAtHours, dueAtCycles };
+};
+
+const calculateToGoForDashboard = (
+  item: Pick<DashboardDisplayMaintenanceItem, 'dueAtDate' | 'dueAtHours' | 'dueAtCycles' | 'associatedComponent'>,
+  componentTimes: AircraftComponentTimes | null,
+  defaultComponent: string = "Airframe"
+): { text: string; numeric: number; unit: 'days' | 'hrs' | 'cycles' | 'N/A'; isOverdue: boolean } => {
+  const now = new Date();
+  if (item.dueAtDate && isValid(parseISO(item.dueAtDate))) {
+    const dueDate = parseISO(item.dueAtDate);
+    const daysRemaining = differenceInCalendarDays(dueDate, now);
+    return { text: `${daysRemaining} days`, numeric: daysRemaining, unit: 'days', isOverdue: daysRemaining < 0 };
+  }
+  const componentNameToUse = (item.associatedComponent && item.associatedComponent.trim() !== "") ? item.associatedComponent.trim() : defaultComponent;
+  const timesForComponent = componentTimes ? componentTimes[componentNameToUse] : null;
+  const currentRelevantTime = timesForComponent?.time ?? 0;
+  const currentRelevantCycles = timesForComponent?.cycles ?? 0;
+
+  if (!timesForComponent && (item.dueAtHours != null || item.dueAtCycles != null)) {
+    return { text: `N/A (No time for ${componentNameToUse})`, numeric: Infinity, unit: (item.dueAtHours != null ? 'hrs' : 'cycles'), isOverdue: false };
+  }
+  if (typeof currentRelevantTime === 'number' && item.dueAtHours != null) {
+    const hoursRemaining = parseFloat((item.dueAtHours - currentRelevantTime).toFixed(1));
+    return { text: `${hoursRemaining.toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1})} hrs`, numeric: hoursRemaining, unit: 'hrs', isOverdue: hoursRemaining < 0 };
+  }
+  if (typeof currentRelevantCycles === 'number' && item.dueAtCycles != null) {
+    const cyclesRemaining = item.dueAtCycles - currentRelevantCycles;
+    return { text: `${cyclesRemaining.toLocaleString()} cyc`, numeric: cyclesRemaining, unit: 'cycles', isOverdue: cyclesRemaining < 0 };
+  }
+  return { text: 'N/A', numeric: Infinity, unit: 'N/A', isOverdue: false };
+};
+
+const getReleaseStatusForDashboard = (
+  toGo: { text: string; numeric: number; unit: 'days' | 'hrs' | 'cycles' | 'N/A'; isOverdue: boolean } | undefined,
+  hasOpenDiscrepancies: boolean,
+  hasDeferredDiscrepancies: boolean,
+  task?: DashboardDisplayMaintenanceItem
+): AircraftStatusDetail => {
+  if (hasOpenDiscrepancies) {
+    return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-red-500 dark:text-red-400', label: 'Grounded', reason: '(Open Write-up)' };
+  }
+  if (hasDeferredDiscrepancies) {
+    return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-orange-500 dark:text-orange-400', label: 'Attention', reason: '(Deferred Item)' };
+  }
+  if (toGo?.text.startsWith('N/A (No time for') || toGo?.text.startsWith('N/A (Comp. data missing')) {
+    return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-orange-500', label: 'Missing Comp. Time' };
+  }
+  if (toGo?.isOverdue) {
+    let withinGrace = false;
+    if (task && toGo) {
+      const numericOverdueAmount = Math.abs(toGo.numeric);
+      if (toGo.unit === 'days' && typeof task.daysTolerance === 'number' && numericOverdueAmount <= task.daysTolerance) withinGrace = true;
+      else if (toGo.unit === 'hrs' && typeof task.hoursTolerance === 'number' && numericOverdueAmount <= task.hoursTolerance) withinGrace = true;
+      else if (toGo.unit === 'cycles' && typeof task.cyclesTolerance === 'number' && numericOverdueAmount <= task.cyclesTolerance) withinGrace = true;
+    }
+    if (withinGrace) return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-yellow-600 dark:text-yellow-500', label: 'Grace Period', reason: '(Maintenance)' };
+    return { icon: <Wrench className="h-5 w-5" />, colorClass: 'text-red-500 dark:text-red-400', label: 'Overdue', reason: '(Maintenance)' };
+  }
+  if (task && toGo) {
+    const daysAlertThreshold = task.alertDaysPrior ?? 30; const hoursAlertThreshold = task.alertHoursPrior ?? 25; const cyclesAlertThreshold = task.alertCyclesPrior ?? 50;
+    if (toGo.unit === 'days' && toGo.numeric < daysAlertThreshold) return { icon: <CalendarClock className="h-5 w-5" />, colorClass: 'text-yellow-500 dark:text-yellow-400', label: 'Due Soon', reason: '(Maintenance)' };
+    if (toGo.unit === 'hrs' && toGo.numeric < hoursAlertThreshold) return { icon: <CalendarClock className="h-5 w-5" />, colorClass: 'text-yellow-500 dark:text-yellow-400', label: 'Due Soon', reason: '(Maintenance)' };
+    if (toGo.unit === 'cycles' && toGo.numeric < cyclesAlertThreshold) return { icon: <CalendarClock className="h-5 w-5" />, colorClass: 'text-yellow-500 dark:text-yellow-400', label: 'Due Soon', reason: '(Maintenance)' };
+  }
+  if (toGo?.text === 'N/A' || toGo?.text === 'Invalid Date') return { icon: <InfoIcon className="h-5 w-5" />, colorClass: 'text-gray-400 dark:text-gray-500', label: 'Check Due Info' };
+  return { icon: <CheckCircle2 className="h-5 w-5" />, colorClass: 'text-green-500 dark:text-green-400', label: 'OK' };
+};
+
+
 export default function DashboardPage() {
   const [aircraftList, setAircraftList] = useState<FleetAircraft[]>([]);
   const [isLoadingAircraft, setIsLoadingAircraft] = useState(true);
@@ -101,64 +212,104 @@ export default function DashboardPage() {
 
   const [isBulletinAccordionOpen, setIsBulletinAccordionOpen] = useState(true);
   const [isTripAccordionOpen, setIsTripAccordionOpen] = useState(true);
+  
+  const [aircraftStatusDetails, setAircraftStatusDetails] = useState<Map<string, AircraftStatusDetail>>(new Map());
+  const [isLoadingAircraftStatusDetails, setIsLoadingAircraftStatusDetails] = useState(true);
 
 
   useEffect(() => {
     let isMounted = true; 
-    const loadAircraft = async () => {
+    const loadInitialDashboardData = async () => {
       setIsLoadingAircraft(true);
-      try {
-        const fleet = await fetchFleetAircraft();
-        if (isMounted) setAircraftList(fleet);
-      } catch (error) { /* ... error handling ... */ } 
-      finally { if (isMounted) setIsLoadingAircraft(false); }
-    };
-
-    const loadTrips = async () => {
       setIsLoadingTrips(true);
+      setIsLoadingBulletins(true);
+      setIsLoadingAircraftStatusDetails(true);
+
       try {
-        const fetchedTrips = await fetchTrips();
+        const [fetchedFleet, fetchedTrips, fetchedBulletins] = await Promise.all([
+          fetchFleetAircraft(),
+          fetchTrips(),
+          fetchBulletins(),
+        ]);
+
         if (isMounted) {
+          setAircraftList(fetchedFleet);
           const sortedTrips = fetchedTrips.sort((a, b) => {
             const dateA = a.legs?.[0]?.departureDateTime ? parseISO(a.legs[0].departureDateTime).getTime() : 0;
             const dateB = b.legs?.[0]?.departureDateTime ? parseISO(b.legs[0].departureDateTime).getTime() : 0;
-            return dateB - dateA;
+            return dateB - dateA; // Most recent first
           });
           setDashboardTrips(sortedTrips.slice(0, 5));
-        }
-      } catch (error) { /* ... error handling ... */ } 
-      finally { if (isMounted) setIsLoadingTrips(false); }
-    };
 
-    const loadBulletins = async () => {
-      setIsLoadingBulletins(true);
-      try {
-        const fetchedBulletins = await fetchBulletins();
-        if (isMounted) {
-          const activeAndSorted = fetchedBulletins
+          const activeAndSortedBulletins = fetchedBulletins
             .filter(b => b.isActive)
             .sort((a, b) => parseISO(b.publishedAt).getTime() - parseISO(a.publishedAt).getTime())
             .slice(0, 5); 
-          setBulletins(activeAndSorted);
-        }
-      } catch (error) {
-        if (isMounted) {
-          console.error("Failed to load bulletins for dashboard:", error);
-          toast({
-            title: "Error Loading Bulletins",
-            description: "Could not fetch company bulletins.",
-            variant: "destructive",
+          setBulletins(activeAndSortedBulletins);
+
+          // After fetching fleet, load detailed status for each aircraft
+          const statusPromises = fetchedFleet.map(async (ac) => {
+            if (!ac.isMaintenanceTracked) {
+              return [ac.id, { icon: <InfoIcon className="h-5 w-5" />, colorClass: 'text-gray-400', label: 'Not Tracked', reason: '(Maintenance Tracking Disabled)' }];
+            }
+            try {
+              const [compTimes, discrepancies, tasks] = await Promise.all([
+                fetchComponentTimesForAircraft({ aircraftId: ac.id }),
+                fetchAircraftDiscrepancies({ aircraftId: ac.id }),
+                fetchMaintenanceTasksForAircraft({ aircraftId: ac.id }),
+              ]);
+              const hasOpenDisc = discrepancies.some(d => d.status === "Open");
+              const hasDeferredDisc = discrepancies.some(d => d.status === "Deferred");
+              
+              if (hasOpenDisc) return [ac.id, getReleaseStatusForDashboard(undefined, true, hasDeferredDisc)];
+              if (hasDeferredDisc) return [ac.id, getReleaseStatusForDashboard(undefined, false, true)];
+
+              const activeTasks = tasks.filter(t => t.isActive && t.trackType !== "Dont Alert");
+              if (activeTasks.length === 0) return [ac.id, getReleaseStatusForDashboard(undefined, false, false)];
+
+              const tasksWithDisplayFields = activeTasks.map(task => calculateDisplayFieldsForDashboardTask(task));
+              const tasksWithToGo = tasksWithDisplayFields.map(task => ({
+                ...task,
+                toGoData: calculateToGoForDashboard(task, compTimes, ac.trackedComponentNames?.[0] || "Airframe"),
+              }));
+
+              tasksWithToGo.sort((a, b) => {
+                if (a.toGoData.isOverdue && !b.toGoData.isOverdue) return -1;
+                if (!a.toGoData.isOverdue && b.toGoData.isOverdue) return 1;
+                return a.toGoData.numeric - b.toGoData.numeric;
+              });
+
+              const mostUrgentTask = tasksWithToGo[0];
+              const statusDetail = getReleaseStatusForDashboard(mostUrgentTask.toGoData, false, false, mostUrgentTask);
+              return [ac.id, { ...statusDetail, mostUrgentTaskDescription: mostUrgentTask.itemTitle, toGoText: mostUrgentTask.toGoData.text }];
+            } catch (detailError) {
+              console.error(`Error fetching details for aircraft ${ac.id}:`, detailError);
+              return [ac.id, { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-orange-500', label: 'Data Error', reason: '(Could not load details)' }];
+            }
           });
+          
+          const resolvedStatuses = await Promise.all(statusPromises);
+          const newStatusMap = new Map(resolvedStatuses as [string, AircraftStatusDetail][]);
+          if(isMounted) setAircraftStatusDetails(newStatusMap);
+
         }
-      } finally {
-        if (isMounted) setIsLoadingBulletins(false);
+      } catch (error) { 
+        if (isMounted) {
+           console.error("Failed to load dashboard data:", error);
+           toast({ title: "Error Loading Dashboard", description: (error instanceof Error ? error.message : "Unknown error."), variant: "destructive" });
+        }
+      } 
+      finally { 
+        if (isMounted) {
+          setIsLoadingAircraft(false); 
+          setIsLoadingTrips(false);
+          setIsLoadingBulletins(false);
+          setIsLoadingAircraftStatusDetails(false);
+        }
       }
     };
 
-    loadAircraft();
-    loadTrips();
-    loadBulletins(); 
-
+    loadInitialDashboardData(); 
     return () => { isMounted = false; };
   }, [toast]);
 
@@ -287,7 +438,7 @@ export default function DashboardPage() {
                             </TableCell>
                             <TableCell>{getRouteDisplay(trip.legs)}</TableCell>
                             <TableCell>{trip.aircraftLabel || trip.aircraftId}</TableCell>
-                            <TableCell><Badge variant={getStatusBadgeVariant(trip.status)}>{trip.status}</Badge></TableCell>
+                            <TableCell><Badge variant={getTripStatusBadgeVariant(trip.status)}>{trip.status}</Badge></TableCell>
                             <TableCell>{formatDate(trip.legs?.[0]?.departureDateTime)}</TableCell>
                             </TableRow>
                         ))}</TableBody>
@@ -303,16 +454,47 @@ export default function DashboardPage() {
         <Card className="lg:col-span-2">
           <CardHeader> <CardTitle className="flex items-center gap-2"><Plane className="h-5 w-5 text-primary" />Aircraft Status</CardTitle> <CardDescription>Current status of all operational aircraft.</CardDescription> </CardHeader>
           <CardContent>
-            {isLoadingAircraft ? ( <div className="flex items-center justify-center py-10"> <Loader2 className="h-8 w-8 animate-spin text-primary" /> <p className="ml-2 text-muted-foreground">Loading aircraft status...</p> </div>
+            {isLoadingAircraft || isLoadingAircraftStatusDetails ? ( <div className="flex items-center justify-center py-10"> <Loader2 className="h-8 w-8 animate-spin text-primary" /> <p className="ml-2 text-muted-foreground">Loading aircraft status...</p> </div>
             ) : aircraftList.length === 0 ? ( <p className="text-muted-foreground text-center py-5">No aircraft found in fleet.</p>
             ) : (
                <Table>
-                <TableHeader><TableRow><TableHead>Tail Number</TableHead><TableHead>Model</TableHead><TableHead>Base</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
-                <TableBody>{aircraftList.map((aircraft) => (<TableRow key={aircraft.id}><TableCell className="font-medium">
-                    <Link href={`/aircraft/currency/${encodeURIComponent(aircraft.tailNumber)}`} className="text-primary hover:underline">
-                        {aircraft.tailNumber}
-                    </Link>
-                </TableCell><TableCell>{aircraft.model}</TableCell><TableCell>{aircraft.baseLocation || 'N/A'}</TableCell><TableCell><Badge variant={getStatusBadgeVariant(aircraft.isMaintenanceTracked ? 'Active' : 'Needs Review')}>{aircraft.isMaintenanceTracked ? 'Active' : 'Needs Review'}</Badge></TableCell></TableRow>))}</TableBody>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Tail Number</TableHead>
+                    <TableHead>Model</TableHead>
+                    <TableHead>Base</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Details</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                {aircraftList.map((aircraft) => {
+                    const statusInfo = aircraftStatusDetails.get(aircraft.id) || { icon: <Loader2 className="h-5 w-5 animate-spin" />, label: 'Loading...', colorClass: 'text-muted-foreground' };
+                    return (
+                    <TableRow key={aircraft.id}>
+                        <TableCell className="font-medium">
+                            <Link href={`/aircraft/currency/${encodeURIComponent(aircraft.tailNumber)}`} className="text-primary hover:underline">
+                                {aircraft.tailNumber}
+                            </Link>
+                        </TableCell>
+                        <TableCell>{aircraft.model}</TableCell>
+                        <TableCell>{aircraft.baseLocation || 'N/A'}</TableCell>
+                        <TableCell>
+                            <div className={`flex items-center gap-1.5 ${statusInfo.colorClass}`}>
+                                {statusInfo.icon}
+                                <span className="font-semibold">{statusInfo.label}</span>
+                            </div>
+                            {statusInfo.reason && <span className="text-xs text-muted-foreground block -mt-0.5 ml-6">{statusInfo.reason}</span>}
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">
+                            {statusInfo.mostUrgentTaskDescription && (
+                                `${statusInfo.mostUrgentTaskDescription} (${statusInfo.toGoText || 'N/A'})`
+                            )}
+                        </TableCell>
+                    </TableRow>
+                    );
+                })}
+                </TableBody>
               </Table>
             )}
           </CardContent>
@@ -368,4 +550,3 @@ export default function DashboardPage() {
     </>
   );
 }
-
