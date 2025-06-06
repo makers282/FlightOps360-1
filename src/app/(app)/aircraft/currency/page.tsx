@@ -37,7 +37,7 @@ interface AggregatedMaintenanceDisplayItem {
   rawTask?: DisplayMaintenanceItem; 
   _componentTimesMap?: AircraftComponentTimes | null;
   hasOpenDiscrepancies: boolean;
-  hasDeferredDiscrepancies: boolean; // New field
+  hasDeferredDiscrepancies: boolean;
 }
 
 
@@ -85,15 +85,15 @@ export const calculateToGo = (
 export const getReleaseStatus = (
   toGo: { numeric: number; unit: 'days' | 'hrs' | 'cycles' | 'N/A'; isOverdue: boolean; text: string } | undefined,
   hasOpenDiscrepancies: boolean,
-  hasDeferredDiscrepancies: boolean, // New parameter
+  hasDeferredDiscrepancies: boolean,
   task?: DisplayMaintenanceItem
-): { icon: JSX.Element; colorClass: string; label: string } => {
+): { icon: JSX.Element; colorClass: string; label: string; reason?: string } => {
   
   if (hasOpenDiscrepancies) {
-    return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-red-500 dark:text-red-400', label: 'Not Dispatchable (Open Write-up)' };
+    return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-red-500 dark:text-red-400', label: 'Grounded', reason: '(Open Write-up)' };
   }
   if (hasDeferredDiscrepancies) {
-    return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-orange-500 dark:text-orange-400', label: 'Attention (Deferred Item)' };
+    return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-orange-500 dark:text-orange-400', label: 'Attention', reason: '(Deferred Item)' };
   }
   
   if (toGo?.text.startsWith('N/A (No time for') || toGo?.text.startsWith('N/A (Comp. data missing')) {
@@ -114,10 +114,10 @@ export const getReleaseStatus = (
       }
 
       if (withinGrace) {
-        return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-yellow-600 dark:text-yellow-500', label: 'Grace Period' };
+        return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-yellow-600 dark:text-yellow-500', label: 'Grace Period', reason: '(Maintenance)' };
       }
     }
-    return { icon: <XCircleIcon className="h-5 w-5" />, colorClass: 'text-red-500 dark:text-red-400', label: 'Overdue' };
+    return { icon: <XCircleIcon className="h-5 w-5" />, colorClass: 'text-red-500 dark:text-red-400', label: 'Overdue', reason: '(Maintenance)' };
   }
   
   if (task && toGo) {
@@ -125,13 +125,13 @@ export const getReleaseStatus = (
     const hoursAlertThreshold = task.alertHoursPrior ?? 25;
     const cyclesAlertThreshold = task.alertCyclesPrior ?? 50;
     if (toGo.unit === 'days' && toGo.numeric < daysAlertThreshold) {
-      return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-yellow-500 dark:text-yellow-400', label: 'Due Soon' };
+      return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-yellow-500 dark:text-yellow-400', label: 'Due Soon', reason: '(Maintenance)' };
     }
     if (toGo.unit === 'hrs' && toGo.numeric < hoursAlertThreshold) {
-      return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-yellow-500 dark:text-yellow-400', label: 'Due Soon' };
+      return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-yellow-500 dark:text-yellow-400', label: 'Due Soon', reason: '(Maintenance)' };
     }
     if (toGo.unit === 'cycles' && toGo.numeric < cyclesAlertThreshold) { 
-      return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-yellow-500 dark:text-yellow-400', label: 'Due Soon' };
+      return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-yellow-500 dark:text-yellow-400', label: 'Due Soon', reason: '(Maintenance)' };
     }
   }
 
@@ -355,7 +355,13 @@ export default function AircraftCurrencyPage() {
                         <TableCell>{item.nextDueItemDescription}</TableCell>
                         <TableCell className="text-center">{dueAtDisplay}</TableCell>
                         <TableCell className={`text-center font-medium ${status.colorClass}`}>{toGoData?.text || 'N/A'}</TableCell>
-                        <TableCell className={`text-center ${status.colorClass}`}><div className="flex flex-col items-center">{status.icon}<span className="text-xs mt-1">{status.label}</span></div></TableCell>
+                        <TableCell className={`text-center ${status.colorClass}`}>
+                          <div className="flex flex-col items-center justify-center">
+                            {status.icon}
+                            <span className="text-xs mt-0.5 font-semibold">{status.label}</span>
+                            {status.reason && <span className="text-xs text-muted-foreground -mt-0.5">{status.reason}</span>}
+                          </div>
+                        </TableCell>
                          <TableCell className="text-center">
                           <Button variant="ghost" size="sm" asChild>
                             <Link href={`/aircraft/currency/${encodeURIComponent(item.tailNumber)}`}><Eye className="mr-1 h-4 w-4" /> View</Link>
@@ -374,3 +380,5 @@ export default function AircraftCurrencyPage() {
   );
 }
 
+
+    
