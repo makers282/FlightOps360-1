@@ -1,7 +1,7 @@
 
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Plane, LayoutDashboard } from 'lucide-react';
+import { Plane, LogIn } from 'lucide-react'; // Changed icon
 
 export default function HomePage() {
   return (
@@ -9,35 +9,31 @@ export default function HomePage() {
       <header className="mb-12">
         <div className="flex items-center justify-center gap-3 text-primary mb-4">
           <Plane className="h-12 w-12" />
-          <span className="text-5xl font-bold">SkyBase</span>
+          <span className="text-5xl font-bold">FlightOps360</span>
         </div>
         <p className="text-xl text-foreground/80">
-          Flight Operations Management Platform
+          Comprehensive Flight Operations Management
         </p>
       </header>
       
       <div className="space-y-6 bg-background/80 backdrop-blur-sm p-8 rounded-lg shadow-xl max-w-lg">
         <p className="text-lg text-foreground/90">
-          Welcome! This is the main entry point for SkyBase.
+          Welcome to FlightOps360!
         </p>
         <p className="text-md text-muted-foreground">
-          Authentication is not yet implemented. For now, you can proceed directly to the dashboard to see the application's features.
+          Authentication is currently under development. Please proceed to the login page where you'll find an option to access the dashboard directly.
         </p>
         
         <Button asChild size="lg" className="text-lg px-8 py-6 w-full">
-          <Link href="/dashboard">
-            <LayoutDashboard className="mr-2 h-5 w-5" />
-            Go to Dashboard
+          <Link href="/login">
+            <LogIn className="mr-2 h-5 w-5" />
+            Proceed to Login Page
           </Link>
         </Button>
-        
-        <p className="text-sm text-muted-foreground pt-4">
-          (The <Link href="/login" className="underline hover:text-primary">Login Page</Link> also exists but is not functional for authentication yet.)
-        </p>
       </div>
       
       <footer className="absolute bottom-8 text-center text-sm text-muted-foreground">
-        © {new Date().getFullYear()} SkyBase. All rights reserved.
+        © {new Date().getFullYear()} FlightOps360. All rights reserved.
       </footer>
     </div>
   );

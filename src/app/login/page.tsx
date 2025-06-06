@@ -1,7 +1,9 @@
 
 import { LoginForm } from './components/login-form';
-import { Plane } from 'lucide-react';
+import { Plane, LayoutDashboard } from 'lucide-react'; // Added LayoutDashboard
 import Image from 'next/image';
+import Link from 'next/link'; // Added Link
+import { Button } from '@/components/ui/button'; // Added Button
 
 export default function LoginPage() {
   return (
@@ -19,6 +21,14 @@ export default function LoginPage() {
           </p>
         </div>
         <LoginForm />
+        <div className="text-center">
+           <Button asChild variant="outline" className="mt-4">
+             <Link href="/dashboard">
+               <LayoutDashboard className="mr-2 h-4 w-4" />
+               Go to Dashboard (Bypass Login)
+             </Link>
+           </Button>
+        </div>
         <div className="relative mt-8 hidden sm:block">
            <Image
             src="https://placehold.co/600x400.png"
