@@ -1,11 +1,11 @@
 
 
-"use client"; // Mark as client component for usePathname
+"use client"; 
 
 import React from 'react';
 import type { PropsWithChildren } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation'; // Import usePathname
+import { usePathname, useRouter } from 'next/navigation'; 
 import {
   Bell,
   Calculator,
@@ -26,7 +26,7 @@ import {
   ShieldAlert,
   Users, 
   UsersRound, 
-  FileArchive as QuoteFileArchiveIcon, // Renamed to avoid conflict with FolderArchive
+  FileArchive as QuoteFileArchiveIcon, 
   SlidersHorizontal,
   PlaneTakeoff,
   Building2,
@@ -37,8 +37,8 @@ import {
   TrendingUp, 
   Users2, 
   BookOpenCheck,
-  BookOpen, // Added for MEL Log
-  FileWarning, // Added for Discrepancy Log
+  BookOpen, 
+  FileWarning, 
 } from 'lucide-react';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -67,10 +67,28 @@ import {
   SidebarMenuBadge
 } from '@/components/ui/sidebar';
 import { Icons } from '@/components/icons';
+import { auth } from '@/lib/firebase'; 
+import { signOut } from 'firebase/auth';
+import { useToast } from '@/hooks/use-toast';
 
 
 export default function AppLayout({ children }: PropsWithChildren) {
-  const pathname = usePathname(); // Get current pathname
+  const pathname = usePathname(); 
+  const router = useRouter();
+  const { toast } = useToast();
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      toast({ title: "Logged Out", description: "You have been successfully logged out." });
+      router.push('/login');
+    } catch (error) {
+      console.error("Logout error:", error);
+      toast({ title: "Logout Failed", description: "Could not log you out. Please try again.", variant: "destructive" });
+      // Even if signout fails, try to redirect to login
+      router.push('/login');
+    }
+  };
 
   return (
     <SidebarProvider defaultOpen>
@@ -297,7 +315,7 @@ export default function AppLayout({ children }: PropsWithChildren) {
               <DropdownMenuItem>Profile</DropdownMenuItem>
               <DropdownMenuItem>Billing</DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={handleLogout}>
                 <LogOut className="mr-2 h-4 w-4" />
                 Logout
               </DropdownMenuItem>
@@ -313,4 +331,3 @@ export default function AppLayout({ children }: PropsWithChildren) {
 }
 
     
-
