@@ -30,6 +30,11 @@ const FLEET_COLLECTION = 'fleet'; // To get tail number
 // Exported async functions that clients will call
 export async function saveAircraftDiscrepancy(input: SaveAircraftDiscrepancyInput): Promise<AircraftDiscrepancy> {
   const discrepancyId = input.id || doc(collection(db, DISCREPANCIES_COLLECTION)).id;
+  // Pass the full input (which might include status and id) to the flow logic
+  // The flow will use firestoreDocId for the document ID and the rest as discrepancyData.
+  // The `id` field within `input` (if present) should match `discrepancyId`.
+  // The flow's input schema `InternalSaveAircraftDiscrepancyInputSchema` expects `discrepancyData` to be `SaveAircraftDiscrepancyInputSchema.omit({ id: true })`
+  // So we need to remove `id` from the `input` before passing as `discrepancyData`.
   const { id, ...discrepancyDataForFlow } = input;
 
   return saveAircraftDiscrepancyFlow({ 
@@ -81,17 +86,24 @@ const saveAircraftDiscrepancyFlow = ai.defineFlow(
       let statusToSet: DiscrepancyStatus;
       const existingStatus = docSnap.exists() ? docSnap.data().status as DiscrepancyStatus : undefined;
 
-      if (existingStatus === "Closed") {
-        statusToSet = "Closed"; // Do not change a closed status from this simplified modal
+      // Prioritize status from input (e.g., "Closed" from sign-off)
+      if (discrepancyData.status) {
+        statusToSet = discrepancyData.status;
+      } else if (existingStatus === "Closed") {
+        statusToSet = "Closed"; // Do not change a closed status if no new status is provided
       } else if (discrepancyData.isDeferred) {
         statusToSet = "Deferred";
       } else {
         statusToSet = "Open";
       }
+      
+      // When status is "Closed", ensure isDeferred is false.
+      const isDeferredToSet = statusToSet === "Closed" ? false : discrepancyData.isDeferred;
 
       const dataToSet = {
-        ...discrepancyData, // Contains fields like isDeferred, deferralReference, deferralDate
+        ...discrepancyData,
         status: statusToSet,
+        isDeferred: isDeferredToSet, 
         aircraftTailNumber: aircraftTailNumber || discrepancyData.aircraftTailNumber, 
         updatedAt: serverTimestamp(),
         createdAt: docSnap.exists() && docSnap.data().createdAt ? docSnap.data().createdAt : serverTimestamp(),
@@ -214,3 +226,4 @@ const deleteAircraftDiscrepancyFlow = ai.defineFlow(
     }
   }
 );
+

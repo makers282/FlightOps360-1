@@ -15,14 +15,13 @@ export const AircraftDiscrepancySchema = z.object({
   status: z.enum(discrepancyStatuses).default("Open"),
   
   dateDiscovered: z.string().describe("YYYY-MM-DD format, when the discrepancy was found."),
-  // timeDiscovered: z.string().optional().describe("HH:MM format, time of discovery."), // Removed
   description: z.string().min(5, "A clear description of the discrepancy is required."),
   discoveredBy: z.string().optional(),
   discoveredByCertNumber: z.string().optional().describe("Certification number of the person who discovered it, if applicable."),
 
   isDeferred: z.boolean().default(false).describe("Is this discrepancy deferred (e.g., per MEL/NEF)?"),
-  deferralReference: z.string().optional().describe("Reference for deferral, e.g., MEL item number."), // Kept for context if deferred
-  deferralDate: z.string().optional().describe("YYYY-MM-DD format, date of deferral."), // Kept for context if deferred
+  deferralReference: z.string().optional().describe("Reference for deferral, e.g., MEL item number."),
+  deferralDate: z.string().optional().describe("YYYY-MM-DD format, date of deferral."),
 
   correctiveAction: z.string().optional().describe("Details of the corrective action taken."),
   dateCorrected: z.string().optional().describe("YYYY-MM-DD format, when the corrective action was completed."),
@@ -40,16 +39,11 @@ export const SaveAircraftDiscrepancyInputSchema = AircraftDiscrepancySchema.omit
   createdAt: true, 
   updatedAt: true,
   aircraftTailNumber: true, 
-  status: true, // Status is now determined by the flow based on isDeferred and existing status
-  // timeDiscovered: true, // Removed
-  // Fields related to sign-off are not part of this initial save/edit modal
-  correctiveAction: true,
-  dateCorrected: true,
-  correctedBy: true,
-  correctedByCertNumber: true,
+  // status: true, // Status can now be passed optionally
+  // Fields related to sign-off are part of the main schema now
 }).extend({
   id: z.string().optional(), // ID is optional for creation, can be provided for updates
-  // isDeferred is part of the base schema and will be passed.
+  status: z.enum(discrepancyStatuses).optional(), // Status is optional on input; flow will determine if not provided
 });
 export type SaveAircraftDiscrepancyInput = z.infer<typeof SaveAircraftDiscrepancyInputSchema>;
 
@@ -73,3 +67,4 @@ export const DeleteAircraftDiscrepancyOutputSchema = z.object({
 
 
     
+
