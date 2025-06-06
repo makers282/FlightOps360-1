@@ -9,7 +9,7 @@ import { List, ListItem } from '@/components/ui/list';
 import { Megaphone, Loader2, AlertTriangle, CheckCircle2, InfoIcon as InfoIconLucide, Plane, CalendarDays, LayoutDashboard, Users as UsersIcon, Settings2 } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { AlertDialog, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogCancel } from "@/components/ui/alert-dialog"; // Keep AlertDialog for bulletin modal
+import { AlertDialog, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogCancel } from "@/components/ui/alert-dialog";
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -23,7 +23,7 @@ import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-
 import { fetchComponentTimesForAircraft, type AircraftComponentTimes } from '@/ai/flows/manage-component-times-flow';
 import { fetchMaintenanceTasksForAircraft, type MaintenanceTask as FlowMaintenanceTask } from '@/ai/flows/manage-maintenance-tasks-flow';
 import { fetchAircraftDiscrepancies, type AircraftDiscrepancy } from '@/ai/flows/manage-aircraft-discrepancies-flow';
-import type { DisplayMaintenanceItem } from '@/app/(app)/aircraft/currency/[tailNumber]/page'; // Assuming this type is correctly defined here
+import type { DisplayMaintenanceItem } from '@/app/(app)/aircraft/currency/[tailNumber]/page';
 
 interface SystemAlert {
   id: string;
@@ -73,7 +73,6 @@ const calculateDisplayFieldsForDashboardTask = (task: FlowMaintenanceTask): Disp
         if (task.isHoursDueEnabled && typeof task.hoursDue === 'number') dueAtHours = Number(task.hoursDue);
         if (task.isCyclesDueEnabled && typeof task.cyclesDue === 'number') dueAtCycles = Number(task.cyclesDue);
     }
-    // This function should populate toGoData as well, or it should be done where this is called
     return { ...task, dueAtDate, dueAtHours, dueAtCycles } as DisplayMaintenanceItem;
 };
 
@@ -111,8 +110,7 @@ const calculateToGoForDashboard = (
   return { text: 'N/A', numeric: Infinity, unit: 'N/A', isOverdue: false };
 };
 
-// Helper function to get release status for dashboard
-const getReleaseStatusForDashboard = (
+const getDetailedAircraftStatus = (
   toGo: { text: string; numeric: number; unit: 'days' | 'hrs' | 'cycles' | 'N/A'; isOverdue: boolean } | undefined,
   task: DisplayMaintenanceItem | undefined,
   hasOpenDiscrepancies: boolean,
@@ -149,7 +147,6 @@ const getReleaseStatusForDashboard = (
   return { icon: <CheckCircle2 className="h-5 w-5" />, label: 'OK', colorClass: 'text-green-500 dark:text-green-400' };
 };
 
-// Helper function to get simplified dashboard status
 const getSimplifiedDashboardStatus = (detail: AircraftStatusDetail): { label: "Active" | "Maintenance" | "Info"; variant: "default" | "secondary" | "destructive" | "outline"; details?: string } => {
   if (detail.label === "Grounded" || detail.label === "Overdue") {
     return { label: "Maintenance", variant: "destructive", details: `${detail.label} ${detail.reason || ''} ${detail.mostUrgentTaskDescription ? `- ${detail.mostUrgentTaskDescription} (${detail.toGoText || 'N/A'})` : ''}`.trim() };
@@ -163,13 +160,13 @@ const getSimplifiedDashboardStatus = (detail: AircraftStatusDetail): { label: "A
   return { label: "Info", variant: "outline", details: detail.label };
 };
 
-
 export default function DashboardPage() {
   const [bulletins, setBulletins] = useState<Bulletin[]>([]);
   const [isLoadingBulletins, setIsLoadingBulletins] = useState(true);
   const [selectedBulletin, setSelectedBulletin] = useState<Bulletin | null>(null);
   const [isBulletinModalOpen, setIsBulletinModalOpen] = useState(false);
-  
+  const [isBulletinAccordionOpen, setIsBulletinAccordionOpen] = useState(true); // Keep bulletin accordion open by default
+
   const [upcomingTrips, setUpcomingTrips] = useState<Trip[]>([]);
   const [isLoadingTrips, setIsLoadingTrips] = useState(true);
   
@@ -201,7 +198,7 @@ export default function DashboardPage() {
     setIsLoadingTrips(true);
     setIsLoadingAircraft(true);
     setIsLoadingAircraftStatusDetails(true);
-    setActiveSystemAlerts([]); // Clear previous alerts
+    setActiveSystemAlerts([]);
 
     try {
       const [fetchedBulletins, fetchedTrips, fetchedFleet] = await Promise.all([
@@ -212,8 +209,7 @@ export default function DashboardPage() {
 
       const activeAndSortedBulletins = fetchedBulletins
         .filter(b => b.isActive)
-        .sort((a, b) => parseISO(b.publishedAt).getTime() - parseISO(a.publishedAt).getTime())
-        .slice(0, 5);
+        .sort((a, b) => parseISO(b.publishedAt).getTime() - parseISO(a.publishedAt).getTime());
       setBulletins(activeAndSortedBulletins);
       setIsLoadingBulletins(false);
 
@@ -264,7 +260,7 @@ export default function DashboardPage() {
             }
           }
           
-          const statusDetail = getReleaseStatusForDashboard(mostUrgentTaskToGo, mostUrgentTask, hasOpenDiscrepancies, hasDeferredDiscrepancies);
+          const statusDetail = getDetailedAircraftStatus(mostUrgentTaskToGo, mostUrgentTask, hasOpenDiscrepancies, hasDeferredDiscrepancies);
           tempAircraftStatusDetails.set(aircraft.id, {
             ...statusDetail,
             mostUrgentTaskDescription: mostUrgentTask?.itemTitle,
@@ -274,16 +270,16 @@ export default function DashboardPage() {
           if (statusDetail.label === "Grounded" || statusDetail.label === "Overdue") {
             tempSystemAlerts.push({
               id: `ac_alert_crit_${aircraft.id}`, type: 'aircraft', severity: 'critical',
-              title: `Aircraft ${statusDetail.label}: ${aircraft.tailNumber}`,
-              message: `${statusDetail.reason || ''} ${mostUrgentTask ? `- ${mostUrgentTask.itemTitle} (${mostUrgentTaskToGo?.text})` : ''}`.trim(),
+              title: `${statusDetail.label}: ${aircraft.tailNumber}`,
+              message: `${statusDetail.reason || ''} ${mostUrgentTask ? `- ${mostUrgentTask.itemTitle} (${mostUrgentTaskToGo?.text || 'N/A'})` : ''}`.trim(),
               link: `/aircraft/currency/${aircraft.tailNumber}`, icon: AlertTriangle,
               timestamp: new Date().toISOString()
             });
           } else if (statusDetail.label === "Attention" || statusDetail.label === "Due Soon" || statusDetail.label === "Grace Period" || statusDetail.label === "Missing Comp. Time") {
              tempSystemAlerts.push({
               id: `ac_alert_warn_${aircraft.id}`, type: 'aircraft', severity: 'warning',
-              title: `Aircraft Alert: ${aircraft.tailNumber} - ${statusDetail.label}`,
-              message: `${statusDetail.reason || ''} ${mostUrgentTask ? `- ${mostUrgentTask.itemTitle} (${mostUrgentTaskToGo?.text})` : ''}`.trim(),
+              title: `${statusDetail.label}: ${aircraft.tailNumber}`,
+              message: `${statusDetail.reason || ''} ${mostUrgentTask ? `- ${mostUrgentTask.itemTitle} (${mostUrgentTaskToGo?.text || 'N/A'})` : ''}`.trim(),
               link: `/aircraft/currency/${aircraft.tailNumber}`, icon: AlertTriangle,
               timestamp: new Date().toISOString()
             });
@@ -295,7 +291,7 @@ export default function DashboardPage() {
            tempSystemAlerts.push({
               id: `ac_alert_err_${aircraft.id}`, type: 'aircraft', severity: 'warning',
               title: `Data Error: ${aircraft.tailNumber}`,
-              message: "Could not load full status details for this aircraft.",
+              message: "Could not load full status details.",
               link: `/aircraft/currency/${aircraft.tailNumber}`, icon: AlertTriangle,
               timestamp: new Date().toISOString()
             });
@@ -305,9 +301,12 @@ export default function DashboardPage() {
       tempSystemAlerts.sort((a, b) => {
         if (a.severity === 'critical' && b.severity !== 'critical') return -1;
         if (a.severity !== 'critical' && b.severity === 'critical') return 1;
-        return parseISO(b.timestamp!).getTime() - parseISO(a.timestamp!).getTime();
+        if (a.timestamp && b.timestamp) {
+          return parseISO(b.timestamp).getTime() - parseISO(a.timestamp).getTime();
+        }
+        return 0;
       });
-      setActiveSystemAlerts(tempSystemAlerts.slice(0, 5));
+      setActiveSystemAlerts(tempSystemAlerts.slice(0, 5)); // Limit to top 5 alerts
 
     } catch (error) {
       console.error("Failed to load initial dashboard data:", error);
@@ -325,33 +324,36 @@ export default function DashboardPage() {
     <>
       <PageHeader title="Dashboard" description="Real-time overview of flight operations." icon={LayoutDashboard} />
       
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {/* Company Bulletin Board Card */}
-        <Card className="lg:col-span-1 mb-6 shadow-md border-primary/50">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+        {/* Company Bulletin Board Card - Spans 1 column on lg, full on smaller */}
+        <Card className="lg:col-span-1 shadow-md border-primary/50">
           <CardHeader>
-            <div className="flex items-center gap-2">
-              <Megaphone className="h-5 w-5 text-primary" />
-              <CardTitle>Company Bulletin Board</CardTitle>
-              {bulletins.length > 0 && (
-                  <Badge variant="secondary" className="ml-2">{bulletins.length}</Badge>
-              )}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Megaphone className="h-5 w-5 text-primary" />
+                <CardTitle>Company Bulletin Board</CardTitle>
+                {bulletins.length > 0 && (
+                    <Badge variant="secondary" className="ml-2">{bulletins.length}</Badge>
+                )}
+              </div>
             </div>
             <CardDescription className="mt-1">Latest news and announcements from Firestore.</CardDescription>
           </CardHeader>
           <CardContent className="pt-0">
-            <Accordion type="single" collapsible defaultValue="bulletin-item" className="w-full">
+            <Accordion
+              type="single"
+              collapsible
+              value={isBulletinAccordionOpen ? "bulletin-item" : ""}
+              onValueChange={(value) => setIsBulletinAccordionOpen(value === "bulletin-item")}
+              className="w-full"
+            >
               <AccordionItem value="bulletin-item" className="border-none">
-                <AccordionTrigger className="p-0 pt-1 hover:no-underline text-sm text-muted-foreground">
-                  <span className="flex-grow text-left">
-                    {bulletins.length > 0 ? `View ${bulletins.length} Bulletin(s)` : "No Active Bulletins"}
-                  </span>
+                <AccordionTrigger className="text-sm hover:no-underline py-2 px-1">
+                  View {bulletins.length} Bulletin(s)
                 </AccordionTrigger>
                 <AccordionContent className="pt-2">
                   {isLoadingBulletins ? (
-                    <div className="flex items-center justify-center py-5">
-                      <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                      <p className="ml-2 text-muted-foreground">Loading bulletins...</p>
-                    </div>
+                    <div className="flex items-center justify-center py-5"><Loader2 className="h-6 w-6 animate-spin text-primary" /><p className="ml-2 text-muted-foreground">Loading bulletins...</p></div>
                   ) : bulletins.length === 0 ? (
                     <p className="text-sm text-muted-foreground text-center py-3">No active company bulletins.</p>
                   ) : (
@@ -360,14 +362,13 @@ export default function DashboardPage() {
                         <React.Fragment key={item.id}>
                           <ListItem
                             className="flex flex-col sm:flex-row justify-between items-start sm:items-center py-3 cursor-pointer hover:bg-muted/50 rounded-md px-2 -mx-2"
-                            onClick={() => handleBulletinClick(item)}
-                            role="button" tabIndex={0}
+                            onClick={() => handleBulletinClick(item)} role="button" tabIndex={0}
                             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleBulletinClick(item);}}
                           >
                             <div className="flex-1 mb-2 sm:mb-0">
                               <p className="font-semibold">{item.title}
                                 <span className="text-xs text-muted-foreground font-normal ml-2">
-                                  - {item.publishedAt && isValid(parseISO(item.publishedAt)) ? format(parseISO(item.publishedAt), 'MMM d, yyyy HH:mm') : 'N/A'}
+                                  - {item.publishedAt && isValid(parseISO(item.publishedAt)) ? format(parseISO(item.publishedAt), 'MMM d, yy HH:mm') : 'N/A'}
                                 </span>
                               </p>
                               <p className="text-sm text-muted-foreground truncate max-w-prose">{item.message}</p>
@@ -385,8 +386,8 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Upcoming Trips Card */}
-        <Card className="lg:col-span-2 mb-6 shadow-md">
+        {/* Upcoming Trips Card - Spans 2 columns on lg, full on smaller */}
+        <Card className="lg:col-span-2 shadow-md">
           <CardHeader>
              <div className="flex items-center gap-2">
                 <CalendarDays className="h-5 w-5 text-primary" />
@@ -419,8 +420,8 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mt-0">
-        {/* Aircraft Status Card */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Aircraft Status Card - Spans 2 columns on lg */}
         <Card className="lg:col-span-2 shadow-md">
           <CardHeader>
             <div className="flex items-center gap-2"><Plane className="h-5 w-5 text-primary" /><CardTitle>Aircraft Status Overview</CardTitle></div>
@@ -454,7 +455,7 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Active System Alerts Card */}
+        {/* Active System Alerts Card - Spans 1 column on lg */}
         <Card className="lg:col-span-1 shadow-md">
           <CardHeader>
             <div className="flex items-center gap-2"><AlertTriangle className="h-5 w-5 text-destructive" /><CardTitle>Active System Alerts</CardTitle></div>
@@ -508,5 +509,3 @@ export default function DashboardPage() {
     </>
   );
 }
-
-    
