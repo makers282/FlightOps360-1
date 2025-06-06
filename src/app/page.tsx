@@ -3,7 +3,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Plane, CalendarDays, ShieldCheck, DollarSign, Users } from 'lucide-react';
+import { Plane, CalendarDays, ShieldCheck, DollarSign, Users, FileText } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 
 export default function LandingPage() {
