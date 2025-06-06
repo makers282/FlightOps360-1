@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useEffect, useTransition } from 'react';
+import React, { useState, useEffect, useTransition, useMemo } from 'react';
 import Link from 'next/link';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -47,6 +47,8 @@ import { saveTrip } from '@/ai/flows/manage-trips-flow';
 import type { SaveTripInput as TripToSave, TripLeg as TripLegType } from '@/ai/schemas/trip-schemas';
 import { useToast } from '@/hooks/use-toast';
 import { format, parseISO } from 'date-fns';
+import { ClientOnly } from '@/components/client-only';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const formatCurrency = (amount: number | undefined) => {
   if (amount === undefined) return 'N/A';
@@ -176,9 +178,9 @@ export default function AllQuotesPage() {
                 legs: tripLegs,
                 status: "Scheduled",
                 notes: `Trip created from Quote ${savedQuote.quoteId}. ${savedQuote.options.notes || ''}`.trim(),
-                assignedPilotId: undefined, // Explicitly undefined, flow will handle null
-                assignedCoPilotId: undefined, // Explicitly undefined, flow will handle null
-                assignedFlightAttendantIds: [], // Default to empty array
+                assignedPilotId: undefined, 
+                assignedCoPilotId: undefined, 
+                assignedFlightAttendantIds: [], 
             };
 
             try {
@@ -226,7 +228,6 @@ export default function AllQuotesPage() {
     const origin = legs[0].origin || 'UNK';
     const destination = legs[legs.length - 1].destination || 'UNK';
     if (legs.length === 1) return `${origin} → ${destination}`;
-    // Using a unicode right arrow for a cleaner look.
     return `${origin} → ... → ${destination} (${legs.length} legs)`;
   };
 
@@ -253,15 +254,18 @@ export default function AllQuotesPage() {
         <CardHeader>
           <CardTitle>Quotes Overview</CardTitle>
           <CardDescription>Review and manage all generated quotes.</CardDescription>
-           <div className="mt-2 relative">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search quotes (ID, client, route, aircraft, status)..."
-              className="pl-8 w-full sm:w-1/2 lg:w-1/3"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
+          <ClientOnly fallback={<Skeleton className="h-10 w-full sm:w-1/2 lg:w-1/3 mt-2" />}>
+            <div className="mt-2 relative">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search quotes (ID, client, route, aircraft, status)..."
+                className="pl-8 w-full sm:w-1/2 lg:w-1/3"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                disabled={isLoading || (quotesList.length === 0 && !searchTerm)}
+              />
+            </div>
+          </ClientOnly>
         </CardHeader>
         <CardContent>
           {isLoading ? (
