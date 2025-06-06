@@ -1,7 +1,7 @@
 
-"use client"; 
+"use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -14,11 +14,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from '@/components/ui/button';
-import { Wrench, CheckCircle2, XCircle as XCircleIcon, AlertTriangle, Eye, Loader2 } from 'lucide-react';
+import { Wrench, CheckCircle2, XCircle as XCircleIcon, AlertTriangle, Eye, Loader2, InfoIcon } from 'lucide-react'; // Added InfoIcon
 import { format, differenceInCalendarDays, parse, parseISO, isValid, addDays, addMonths, addYears, endOfMonth } from 'date-fns';
 import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow'; 
 import { fetchMaintenanceTasksForAircraft, type MaintenanceTask as FlowMaintenanceTask } from '@/ai/flows/manage-maintenance-tasks-flow';
 import { fetchComponentTimesForAircraft, type AircraftComponentTimes } from '@/ai/flows/manage-component-times-flow';
+import { fetchAircraftDiscrepancies } from '@/ai/flows/manage-aircraft-discrepancies-flow'; // Added
 import { useToast } from '@/hooks/use-toast';
 import type { DisplayMaintenanceItem } from './[tailNumber]/page';
 
@@ -34,7 +35,9 @@ interface AggregatedMaintenanceDisplayItem {
   dueAtCycles?: number; 
   notes?: string;
   rawTask?: DisplayMaintenanceItem; 
-  _componentTimesMap?: AircraftComponentTimes | null; // Internal use for passing to calculateToGo
+  _componentTimesMap?: AircraftComponentTimes | null;
+  hasOpenDiscrepancies: boolean;
+  hasDeferredDiscrepancies: boolean; // New field
 }
 
 
@@ -80,16 +83,25 @@ export const calculateToGo = (
 };
 
 export const getReleaseStatus = (
-  toGo: { numeric: number; unit: 'days' | 'hrs' | 'cycles' | 'N/A'; isOverdue: boolean; text: string },
-  task?: DisplayMaintenanceItem // Optional task for tolerance checking
+  toGo: { numeric: number; unit: 'days' | 'hrs' | 'cycles' | 'N/A'; isOverdue: boolean; text: string } | undefined,
+  hasOpenDiscrepancies: boolean,
+  hasDeferredDiscrepancies: boolean, // New parameter
+  task?: DisplayMaintenanceItem
 ): { icon: JSX.Element; colorClass: string; label: string } => {
   
-  if (toGo.text.startsWith('N/A (No time for') || toGo.text.startsWith('N/A (Comp. data missing')) {
+  if (hasOpenDiscrepancies) {
+    return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-red-500 dark:text-red-400', label: 'Not Dispatchable (Open Write-up)' };
+  }
+  if (hasDeferredDiscrepancies) {
+    return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-orange-500 dark:text-orange-400', label: 'Attention (Deferred Item)' };
+  }
+  
+  if (toGo?.text.startsWith('N/A (No time for') || toGo?.text.startsWith('N/A (Comp. data missing')) {
     return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-orange-500', label: 'Missing Comp. Time' };
   }
 
-  if (toGo.isOverdue) {
-    if (task) { // Check for grace period if task details are available
+  if (toGo?.isOverdue) {
+    if (task) {
       let withinGrace = false;
       const numericOverdueAmount = Math.abs(toGo.numeric);
 
@@ -105,29 +117,31 @@ export const getReleaseStatus = (
         return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-yellow-600 dark:text-yellow-500', label: 'Grace Period' };
       }
     }
-    // If not within grace or no task info for grace check, it's truly overdue
     return { icon: <XCircleIcon className="h-5 w-5" />, colorClass: 'text-red-500 dark:text-red-400', label: 'Overdue' };
   }
   
-  // Due Soon logic (remains the same)
-  if (toGo.unit === 'days' && toGo.numeric < 30) {
-    return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-yellow-500 dark:text-yellow-400', label: 'Due Soon' };
-  }
-   if (toGo.unit === 'hrs' && toGo.numeric < 25) {
-    return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-yellow-500 dark:text-yellow-400', label: 'Due Soon' };
-  }
-  if (toGo.unit === 'cycles' && toGo.numeric < 50) { 
-    return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-yellow-500 dark:text-yellow-400', label: 'Due Soon' };
+  if (task && toGo) {
+    const daysAlertThreshold = task.alertDaysPrior ?? 30;
+    const hoursAlertThreshold = task.alertHoursPrior ?? 25;
+    const cyclesAlertThreshold = task.alertCyclesPrior ?? 50;
+    if (toGo.unit === 'days' && toGo.numeric < daysAlertThreshold) {
+      return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-yellow-500 dark:text-yellow-400', label: 'Due Soon' };
+    }
+    if (toGo.unit === 'hrs' && toGo.numeric < hoursAlertThreshold) {
+      return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-yellow-500 dark:text-yellow-400', label: 'Due Soon' };
+    }
+    if (toGo.unit === 'cycles' && toGo.numeric < cyclesAlertThreshold) { 
+      return { icon: <AlertTriangle className="h-5 w-5" />, colorClass: 'text-yellow-500 dark:text-yellow-400', label: 'Due Soon' };
+    }
   }
 
-  if (toGo.text === 'N/A' || toGo.text === 'Invalid Date') {
-    return { icon: <CheckCircle2 className="h-5 w-5" />, colorClass: 'text-gray-400 dark:text-gray-500', label: 'N/A' };
+  if (toGo?.text === 'N/A' || toGo?.text === 'Invalid Date') {
+    return { icon: <InfoIcon className="h-5 w-5" />, colorClass: 'text-gray-400 dark:text-gray-500', label: 'Check Due Info' };
   }
   
   return { icon: <CheckCircle2 className="h-5 w-5" />, colorClass: 'text-green-500 dark:text-green-400', label: 'OK' };
 };
 
-// This is the function from the detail page, adapted for overview.
 const calculateDisplayFieldsForOverview = (task: FlowMaintenanceTask): DisplayMaintenanceItem => {
     let dueAtDate: string | undefined = undefined;
     let dueAtHours: number | undefined = undefined;
@@ -162,10 +176,9 @@ const calculateDisplayFieldsForOverview = (task: FlowMaintenanceTask): DisplayMa
         if (task.isDaysDueEnabled && task.daysDueValue && isValid(parseISO(task.daysDueValue))) {
             dueAtDate = task.daysDueValue;
         }
-          if (task.isHoursDueEnabled && task.hoursDue) dueAtHours = Number(task.hoursDue);
+        if (task.isHoursDueEnabled && task.hoursDue) dueAtHours = Number(task.hoursDue);
         if (task.isCyclesDueEnabled && task.cyclesDue) dueAtCycles = Number(task.cyclesDue);
     }
-    // Tolerances from FlowMaintenanceTask are directly available on 'task'
     return { ...task, dueAtDate, dueAtHours, dueAtCycles };
 };
 
@@ -200,12 +213,20 @@ export default function AircraftCurrencyPage() {
           let itemsForThisAircraft: DisplayMaintenanceItem[] = [];
           try {
             const tasksFromDb = await fetchMaintenanceTasksForAircraft({ aircraftId: fleetAc.id });
-            // Ensure calculateDisplayFieldsForOverview populates tolerances if they exist on FlowMaintenanceTask
             itemsForThisAircraft = tasksFromDb.map(task => calculateDisplayFieldsForOverview(task));
           } catch (taskError) {
              console.error(`Failed to fetch tasks for ${fleetAc.tailNumber}:`, taskError);
           }
           
+          let discrepanciesForAircraft = [];
+          try {
+            discrepanciesForAircraft = await fetchAircraftDiscrepancies({ aircraftId: fleetAc.id });
+          } catch (discError) {
+            console.warn(`Failed to fetch discrepancies for ${fleetAc.tailNumber}:`, discError);
+          }
+          const hasOpenDisc = discrepanciesForAircraft.some(d => d.status === "Open");
+          const hasDeferredDisc = discrepanciesForAircraft.some(d => d.status === "Deferred");
+
           if (itemsForThisAircraft.length > 0) {
             const sortedItems = [...itemsForThisAircraft].sort((a, b) => {
               const toGoA = calculateToGo(a, componentTimesMap, fleetAc.trackedComponentNames?.[0] || "Airframe");
@@ -215,7 +236,7 @@ export default function AircraftCurrencyPage() {
               if (toGoA.isOverdue && toGoB.isOverdue) return toGoA.numeric - toGoB.numeric; 
               return toGoA.numeric - toGoB.numeric;
             });
-            const mostUrgentItem = sortedItems[0]; // This is a DisplayMaintenanceItem
+            const mostUrgentItem = sortedItems[0];
             return {
               fleetAircraftId: fleetAc.id,
               tailNumber: fleetAc.tailNumber,
@@ -227,8 +248,10 @@ export default function AircraftCurrencyPage() {
               dueAtHours: mostUrgentItem.dueAtHours,
               dueAtCycles: mostUrgentItem.dueAtCycles,
               notes: mostUrgentItem.details,
-              rawTask: mostUrgentItem, // Pass the full task data including tolerances
-              _componentTimesMap: componentTimesMap 
+              rawTask: mostUrgentItem,
+              _componentTimesMap: componentTimesMap,
+              hasOpenDiscrepancies: hasOpenDisc,
+              hasDeferredDiscrepancies: hasDeferredDisc,
             };
           } else {
             return {
@@ -238,7 +261,9 @@ export default function AircraftCurrencyPage() {
               currentAirframeTime,
               currentAirframeCycles,
               nextDueItemDescription: 'No items tracked',
-              _componentTimesMap: componentTimesMap
+              _componentTimesMap: componentTimesMap,
+              hasOpenDiscrepancies: hasOpenDisc,
+              hasDeferredDiscrepancies: hasDeferredDisc,
             };
           }
         });
@@ -299,10 +324,13 @@ export default function AircraftCurrencyPage() {
                   </TableRow>
                 ) : (
                   aggregatedData.map((item) => {
-                    const toGoData = calculateToGo(item, item._componentTimesMap, item.rawTask?.associatedComponent || "Airframe");
-                    const status = getReleaseStatus(toGoData, item.rawTask); // Pass rawTask for tolerance checks
-                    let dueAtDisplay = 'N/A';
+                    const toGoData = item.nextDueItemDescription === 'No items tracked' || !item.rawTask
+                      ? undefined
+                      : calculateToGo(item.rawTask, item._componentTimesMap, item.rawTask.associatedComponent || "Airframe");
                     
+                    const status = getReleaseStatus(toGoData, item.hasOpenDiscrepancies, item.hasDeferredDiscrepancies, item.rawTask);
+                    
+                    let dueAtDisplay = 'N/A';
                     if (item.nextDueItemDescription === 'No items tracked') {
                         dueAtDisplay = 'N/A';
                     } else if (item.dueAtDate) {
@@ -326,7 +354,7 @@ export default function AircraftCurrencyPage() {
                         <TableCell className="text-right">{item.currentAirframeCycles.toLocaleString()}</TableCell>
                         <TableCell>{item.nextDueItemDescription}</TableCell>
                         <TableCell className="text-center">{dueAtDisplay}</TableCell>
-                        <TableCell className={`text-center font-medium ${status.colorClass}`}>{toGoData.text}</TableCell>
+                        <TableCell className={`text-center font-medium ${status.colorClass}`}>{toGoData?.text || 'N/A'}</TableCell>
                         <TableCell className={`text-center ${status.colorClass}`}><div className="flex flex-col items-center">{status.icon}<span className="text-xs mt-1">{status.label}</span></div></TableCell>
                          <TableCell className="text-center">
                           <Button variant="ghost" size="sm" asChild>
