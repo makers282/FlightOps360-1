@@ -225,8 +225,9 @@ export default function AllQuotesPage() {
     if (!legs || legs.length === 0) return 'N/A';
     const origin = legs[0].origin || 'UNK';
     const destination = legs[legs.length - 1].destination || 'UNK';
-    if (legs.length === 1) return `${origin} -> ${destination}`;
-    return `${origin} -> ... -> ${destination} (${legs.length} legs)`;
+    if (legs.length === 1) return `${origin} → ${destination}`;
+    // Using a unicode right arrow for a cleaner look.
+    return `${origin} → ... → ${destination} (${legs.length} legs)`;
   };
 
   const canBookQuote = (status?: typeof QuoteStatusType[number]) => {
@@ -294,7 +295,9 @@ export default function AllQuotesPage() {
                     <TableRow key={quote.id}>
                       <TableCell className="font-medium">{quote.quoteId}</TableCell>
                       <TableCell>{quote.clientName || 'N/A'}</TableCell>
-                      <TableCell>{getRouteDisplay(quote.legs)}</TableCell>
+                      <TableCell className="truncate max-w-xs" title={getRouteDisplay(quote.legs)}>
+                        {getRouteDisplay(quote.legs)}
+                      </TableCell>
                       <TableCell>{quote.aircraftLabel || 'N/A'}</TableCell>
                       <TableCell>
                         <Badge variant={getStatusBadgeVariant(quote.status as typeof quoteStatuses[number])}>{quote.status}</Badge>
