@@ -1,3 +1,4 @@
+
 // src/ai/flows/estimate-flight-details-flow.ts
 'use server';
 /**
@@ -37,7 +38,14 @@ const prompt = ai.definePrompt({
   output: {schema: EstimateFlightDetailsOutputSchema},
   prompt: `You are an expert flight operations assistant. Your task is to estimate flight details based on the provided information.
 
-Given an origin airport (ICAO/IATA code), a destination airport (ICAO/IATA code), and an aircraft type.
+Given an origin airport, a destination airport, and an aircraft type.
+
+Airport Code Interpretation:
+- If a 4-letter code is provided (e.g., KJFK, EGLL), assume it is an ICAO code. Use this code directly.
+- If a 3-letter code is provided (e.g., JFK, LHR), assume it is an IATA code.
+    - For US airports, prefix 'K' to the 3-letter IATA code to derive the ICAO code (e.g., JFK becomes KJFK, LAX becomes KLAX).
+    - For non-US airports, use the most common ICAO equivalent for the given IATA code (e.g., LHR becomes EGLL).
+- Perform your distance and time estimations based on these resolved ICAO codes.
 
 Aircraft Type: {{{aircraftType}}}
 Origin: {{{origin}}}
@@ -62,16 +70,16 @@ Return the data strictly in the specified JSON output format.
 Example for a similar request (KJFK to KLAX, Cessna Citation CJ3, knownCruiseSpeedKts: 410):
 {
   "estimatedMileageNM": 2150,
-  "estimatedFlightTimeHours": 5.24, 
+  "estimatedFlightTimeHours": 5.24,
   "assumedCruiseSpeedKts": 410,
   "briefExplanation": "Estimated based on a direct route and a provided cruise speed of 410 kts."
 }
-Example for a similar request (KJFK to KLAX, Cessna Citation CJ3, no knownCruiseSpeedKts):
+Example for a similar request (JFK to LAX, Cessna Citation CJ3, no knownCruiseSpeedKts):
 {
   "estimatedMileageNM": 2150,
   "estimatedFlightTimeHours": 5.18,
   "assumedCruiseSpeedKts": 415,
-  "briefExplanation": "Estimated based on a direct route and an average cruise speed of 415 kts for a Cessna Citation CJ3."
+  "briefExplanation": "Estimated based on a direct route (resolved JFK to KJFK, LAX to KLAX) and an average cruise speed of 415 kts for a Cessna Citation CJ3."
 }
 Provide realistic estimates.
 `,
