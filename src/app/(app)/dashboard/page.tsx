@@ -6,10 +6,10 @@ import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { List, ListItem } from '@/components/ui/list';
-import { Megaphone, Loader2, AlertTriangle, CheckCircle2, InfoIcon as InfoIconLucide, Plane, CalendarDays, LayoutDashboard, Users as UsersIcon } from 'lucide-react';
+import { Megaphone, Loader2, AlertTriangle, CheckCircle2, InfoIcon as InfoIconLucide, Plane, CalendarDays, LayoutDashboard, Users as UsersIcon, Settings2 } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { AlertDialog, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogCancel } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogCancel } from "@/components/ui/alert-dialog"; // Keep AlertDialog for bulletin modal
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -45,6 +45,7 @@ interface AircraftStatusDetail {
   toGoText?: string;
 }
 
+// Helper function to calculate display fields for dashboard tasks
 const calculateDisplayFieldsForDashboardTask = (task: FlowMaintenanceTask): DisplayMaintenanceItem => {
     let dueAtDate: string | undefined = undefined;
     let dueAtHours: number | undefined = undefined;
@@ -72,9 +73,11 @@ const calculateDisplayFieldsForDashboardTask = (task: FlowMaintenanceTask): Disp
         if (task.isHoursDueEnabled && typeof task.hoursDue === 'number') dueAtHours = Number(task.hoursDue);
         if (task.isCyclesDueEnabled && typeof task.cyclesDue === 'number') dueAtCycles = Number(task.cyclesDue);
     }
-    return { ...task, dueAtDate, dueAtHours, dueAtCycles };
+    // This function should populate toGoData as well, or it should be done where this is called
+    return { ...task, dueAtDate, dueAtHours, dueAtCycles } as DisplayMaintenanceItem;
 };
 
+// Helper function to calculate "to go" status for dashboard
 const calculateToGoForDashboard = (
   item: Pick<DisplayMaintenanceItem, 'dueAtDate' | 'dueAtHours' | 'dueAtCycles' | 'associatedComponent'>,
   currentComponentTimes: AircraftComponentTimes | null,
@@ -108,6 +111,7 @@ const calculateToGoForDashboard = (
   return { text: 'N/A', numeric: Infinity, unit: 'N/A', isOverdue: false };
 };
 
+// Helper function to get release status for dashboard
 const getReleaseStatusForDashboard = (
   toGo: { text: string; numeric: number; unit: 'days' | 'hrs' | 'cycles' | 'N/A'; isOverdue: boolean } | undefined,
   task: DisplayMaintenanceItem | undefined,
@@ -145,13 +149,26 @@ const getReleaseStatusForDashboard = (
   return { icon: <CheckCircle2 className="h-5 w-5" />, label: 'OK', colorClass: 'text-green-500 dark:text-green-400' };
 };
 
+// Helper function to get simplified dashboard status
+const getSimplifiedDashboardStatus = (detail: AircraftStatusDetail): { label: "Active" | "Maintenance" | "Info"; variant: "default" | "secondary" | "destructive" | "outline"; details?: string } => {
+  if (detail.label === "Grounded" || detail.label === "Overdue") {
+    return { label: "Maintenance", variant: "destructive", details: `${detail.label} ${detail.reason || ''} ${detail.mostUrgentTaskDescription ? `- ${detail.mostUrgentTaskDescription} (${detail.toGoText || 'N/A'})` : ''}`.trim() };
+  }
+  if (detail.label === "Attention" || detail.label === "Due Soon" || detail.label === "Grace Period" || detail.label === "Missing Comp. Time") {
+    return { label: "Maintenance", variant: "secondary", details: `${detail.label} ${detail.reason || ''} ${detail.mostUrgentTaskDescription ? `- ${detail.mostUrgentTaskDescription} (${detail.toGoText || 'N/A'})` : ''}`.trim() };
+  }
+  if (detail.label === "OK") {
+    return { label: "Active", variant: "default", details: "All Clear" };
+  }
+  return { label: "Info", variant: "outline", details: detail.label };
+};
+
 
 export default function DashboardPage() {
   const [bulletins, setBulletins] = useState<Bulletin[]>([]);
   const [isLoadingBulletins, setIsLoadingBulletins] = useState(true);
   const [selectedBulletin, setSelectedBulletin] = useState<Bulletin | null>(null);
   const [isBulletinModalOpen, setIsBulletinModalOpen] = useState(false);
-  const [isBulletinAccordionOpen, setIsBulletinAccordionOpen] = useState(true);
   
   const [upcomingTrips, setUpcomingTrips] = useState<Trip[]>([]);
   const [isLoadingTrips, setIsLoadingTrips] = useState(true);
@@ -179,24 +196,12 @@ export default function DashboardPage() {
     setIsBulletinModalOpen(true);
   };
 
-  const getSimplifiedDashboardStatus = (detail: AircraftStatusDetail): { label: "Active" | "Maintenance" | "Info"; variant: "default" | "secondary" | "destructive" | "outline"; details?: string } => {
-    if (detail.label === "Grounded" || detail.label === "Overdue") {
-      return { label: "Maintenance", variant: "destructive", details: `${detail.label} ${detail.reason || ''}`.trim() };
-    }
-    if (detail.label === "Attention" || detail.label === "Due Soon" || detail.label === "Grace Period" || detail.label === "Missing Comp. Time") {
-      return { label: "Maintenance", variant: "secondary", details: `${detail.label} ${detail.reason || ''}`.trim() };
-    }
-    if (detail.label === "OK") {
-      return { label: "Active", variant: "default", details: "All Clear" };
-    }
-    return { label: "Info", variant: "outline", details: detail.label };
-  };
-
   const loadInitialDashboardData = useCallback(async () => {
     setIsLoadingBulletins(true);
     setIsLoadingTrips(true);
     setIsLoadingAircraft(true);
     setIsLoadingAircraftStatusDetails(true);
+    setActiveSystemAlerts([]); // Clear previous alerts
 
     try {
       const [fetchedBulletins, fetchedTrips, fetchedFleet] = await Promise.all([
@@ -205,7 +210,6 @@ export default function DashboardPage() {
         fetchFleetAircraft(),
       ]);
 
-      // Process Bulletins
       const activeAndSortedBulletins = fetchedBulletins
         .filter(b => b.isActive)
         .sort((a, b) => parseISO(b.publishedAt).getTime() - parseISO(a.publishedAt).getTime())
@@ -213,7 +217,6 @@ export default function DashboardPage() {
       setBulletins(activeAndSortedBulletins);
       setIsLoadingBulletins(false);
 
-      // Process Trips
       const now = new Date();
       const sortedUpcomingTrips = fetchedTrips
         .filter(trip => trip.legs?.[0]?.departureDateTime && parseISO(trip.legs[0].departureDateTime) >= now)
@@ -222,15 +225,14 @@ export default function DashboardPage() {
       setUpcomingTrips(sortedUpcomingTrips);
       setIsLoadingTrips(false);
 
-      // Process Aircraft List
-      setAircraftList(fetchedFleet.filter(ac => ac.isMaintenanceTracked));
+      const trackedFleet = fetchedFleet.filter(ac => ac.isMaintenanceTracked);
+      setAircraftList(trackedFleet);
       setIsLoadingAircraft(false);
 
-      // Process Aircraft Status Details & System Alerts
       const tempAircraftStatusDetails = new Map<string, AircraftStatusDetail>();
       const tempSystemAlerts: SystemAlert[] = [];
 
-      for (const aircraft of fetchedFleet.filter(ac => ac.isMaintenanceTracked)) {
+      for (const aircraft of trackedFleet) {
         try {
           const [compTimes, discrepancies, tasks] = await Promise.all([
             fetchComponentTimesForAircraft({ aircraftId: aircraft.id }),
@@ -269,7 +271,6 @@ export default function DashboardPage() {
             toGoText: mostUrgentTaskToGo?.text
           });
 
-          // Generate System Alerts based on status
           if (statusDetail.label === "Grounded" || statusDetail.label === "Overdue") {
             tempSystemAlerts.push({
               id: `ac_alert_crit_${aircraft.id}`, type: 'aircraft', severity: 'critical',
@@ -301,13 +302,12 @@ export default function DashboardPage() {
         }
       }
       setAircraftStatusDetails(tempAircraftStatusDetails);
-      // Sort alerts: critical first, then by timestamp (newest first)
       tempSystemAlerts.sort((a, b) => {
         if (a.severity === 'critical' && b.severity !== 'critical') return -1;
         if (a.severity !== 'critical' && b.severity === 'critical') return 1;
         return parseISO(b.timestamp!).getTime() - parseISO(a.timestamp!).getTime();
       });
-      setActiveSystemAlerts(tempSystemAlerts.slice(0, 5)); // Limit to top 5
+      setActiveSystemAlerts(tempSystemAlerts.slice(0, 5));
 
     } catch (error) {
       console.error("Failed to load initial dashboard data:", error);
@@ -326,96 +326,82 @@ export default function DashboardPage() {
       <PageHeader title="Dashboard" description="Real-time overview of flight operations." icon={LayoutDashboard} />
       
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {/* Company Bulletin Board Card - Corrected Structure */}
+        {/* Company Bulletin Board Card */}
         <Card className="lg:col-span-1 mb-6 shadow-md border-primary/50">
-            <CardHeader>
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                <Megaphone className="h-5 w-5 text-primary" />
-                <CardTitle>Company Bulletin Board</CardTitle>
-                {bulletins.length > 0 && (
-                    <Badge variant="secondary" className="ml-2">{bulletins.length}</Badge>
-                )}
-                </div>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Megaphone className="h-5 w-5 text-primary" />
+              <CardTitle>Company Bulletin Board</CardTitle>
+              {bulletins.length > 0 && (
+                  <Badge variant="secondary" className="ml-2">{bulletins.length}</Badge>
+              )}
             </div>
             <CardDescription className="mt-1">Latest news and announcements from Firestore.</CardDescription>
-            </CardHeader>
-            <CardContent className="pt-0">
-            <Accordion
-                type="single"
-                collapsible
-                defaultValue="bulletin-item" 
-                className="w-full"
-            >
-                <AccordionItem value="bulletin-item" className="border-none">
+          </CardHeader>
+          <CardContent className="pt-0">
+            <Accordion type="single" collapsible defaultValue="bulletin-item" className="w-full">
+              <AccordionItem value="bulletin-item" className="border-none">
+                <AccordionTrigger className="p-0 pt-1 hover:no-underline text-sm text-muted-foreground">
+                  <span className="flex-grow text-left">
+                    {bulletins.length > 0 ? `View ${bulletins.length} Bulletin(s)` : "No Active Bulletins"}
+                  </span>
+                </AccordionTrigger>
                 <AccordionContent className="pt-2">
-                    {isLoadingBulletins ? (
+                  {isLoadingBulletins ? (
                     <div className="flex items-center justify-center py-5">
-                        <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                        <p className="ml-2 text-muted-foreground">Loading bulletins...</p>
+                      <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                      <p className="ml-2 text-muted-foreground">Loading bulletins...</p>
                     </div>
-                    ) : bulletins.length === 0 ? (
+                  ) : bulletins.length === 0 ? (
                     <p className="text-sm text-muted-foreground text-center py-3">No active company bulletins.</p>
-                    ) : (
+                  ) : (
                     <List>
-                        {bulletins.map((item, index) => (
+                      {bulletins.map((item, index) => (
                         <React.Fragment key={item.id}>
-                            <ListItem
+                          <ListItem
                             className="flex flex-col sm:flex-row justify-between items-start sm:items-center py-3 cursor-pointer hover:bg-muted/50 rounded-md px-2 -mx-2"
                             onClick={() => handleBulletinClick(item)}
-                            role="button"
-                            tabIndex={0}
+                            role="button" tabIndex={0}
                             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleBulletinClick(item);}}
-                            >
+                          >
                             <div className="flex-1 mb-2 sm:mb-0">
-                                <p className="font-semibold">{item.title}
+                              <p className="font-semibold">{item.title}
                                 <span className="text-xs text-muted-foreground font-normal ml-2">
-                                    - {item.publishedAt && isValid(parseISO(item.publishedAt)) ? format(parseISO(item.publishedAt), 'MMM d, yyyy HH:mm') : 'N/A'}
+                                  - {item.publishedAt && isValid(parseISO(item.publishedAt)) ? format(parseISO(item.publishedAt), 'MMM d, yyyy HH:mm') : 'N/A'}
                                 </span>
-                                </p>
-                                <p className="text-sm text-muted-foreground truncate max-w-prose">{item.message}</p>
+                              </p>
+                              <p className="text-sm text-muted-foreground truncate max-w-prose">{item.message}</p>
                             </div>
                             <Badge variant={getBulletinTypeBadgeVariant(item.type)} className="capitalize">{item.type}</Badge>
-                            </ListItem>
-                            {index < bulletins.length - 1 && <Separator />}
+                          </ListItem>
+                          {index < bulletins.length - 1 && <Separator />}
                         </React.Fragment>
-                        ))}
+                      ))}
                     </List>
-                    )}
+                  )}
                 </AccordionContent>
-                </AccordionItem>
+              </AccordionItem>
             </Accordion>
-            </CardContent>
+          </CardContent>
         </Card>
 
         {/* Upcoming Trips Card */}
         <Card className="lg:col-span-2 mb-6 shadow-md">
           <CardHeader>
-            <div className="flex items-center gap-2">
-              <CalendarDays className="h-5 w-5 text-primary" />
-              <CardTitle>Upcoming Trips</CardTitle>
-            </div>
+             <div className="flex items-center gap-2">
+                <CalendarDays className="h-5 w-5 text-primary" />
+                <CardTitle>Upcoming Trips</CardTitle>
+              </div>
             <CardDescription>Next 5 scheduled trips from Firestore.</CardDescription>
           </CardHeader>
           <CardContent>
             {isLoadingTrips ? (
-              <div className="flex items-center justify-center py-5">
-                <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                <p className="ml-2 text-muted-foreground">Loading upcoming trips...</p>
-              </div>
+              <div className="flex items-center justify-center py-5"><Loader2 className="h-6 w-6 animate-spin text-primary" /><p className="ml-2 text-muted-foreground">Loading trips...</p></div>
             ) : upcomingTrips.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-3">No upcoming trips scheduled.</p>
+              <p className="text-sm text-muted-foreground text-center py-3">No upcoming trips.</p>
             ) : (
               <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Trip ID</TableHead>
-                    <TableHead>Client</TableHead>
-                    <TableHead>Route</TableHead>
-                    <TableHead>Aircraft</TableHead>
-                    <TableHead>Departure</TableHead>
-                  </TableRow>
-                </TableHeader>
+                <TableHeader><TableRow><TableHead>Trip ID</TableHead><TableHead>Client</TableHead><TableHead>Route</TableHead><TableHead>Aircraft</TableHead><TableHead>Departure</TableHead></TableRow></TableHeader>
                 <TableBody>
                   {upcomingTrips.map((trip) => (
                     <TableRow key={trip.id}>
@@ -437,31 +423,17 @@ export default function DashboardPage() {
         {/* Aircraft Status Card */}
         <Card className="lg:col-span-2 shadow-md">
           <CardHeader>
-            <div className="flex items-center gap-2">
-              <Plane className="h-5 w-5 text-primary" />
-              <CardTitle>Aircraft Status Overview</CardTitle>
-            </div>
-            <CardDescription>At-a-glance summary of fleet operational readiness from Firestore.</CardDescription>
+            <div className="flex items-center gap-2"><Plane className="h-5 w-5 text-primary" /><CardTitle>Aircraft Status Overview</CardTitle></div>
+            <CardDescription>At-a-glance summary of fleet operational readiness.</CardDescription>
           </CardHeader>
           <CardContent>
             {isLoadingAircraft || isLoadingAircraftStatusDetails ? (
-              <div className="flex items-center justify-center py-5">
-                <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                <p className="ml-2 text-muted-foreground">Loading aircraft status...</p>
-              </div>
+              <div className="flex items-center justify-center py-5"><Loader2 className="h-6 w-6 animate-spin text-primary" /><p className="ml-2 text-muted-foreground">Loading aircraft status...</p></div>
             ) : aircraftList.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-3">No aircraft configured for tracking.</p>
             ) : (
               <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Tail Number</TableHead>
-                    <TableHead>Model</TableHead>
-                    <TableHead>Base</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Details</TableHead>
-                  </TableRow>
-                </TableHeader>
+                <TableHeader><TableRow><TableHead>Tail #</TableHead><TableHead>Model</TableHead><TableHead>Base</TableHead><TableHead>Status</TableHead><TableHead>Details</TableHead></TableRow></TableHeader>
                 <TableBody>
                   {aircraftList.map(ac => {
                     const statusInfo = aircraftStatusDetails.get(ac.id) || { icon: <InfoIconLucide className="h-5 w-5 text-muted-foreground" />, label: 'Loading...', colorClass: 'text-muted-foreground' };
@@ -471,12 +443,8 @@ export default function DashboardPage() {
                         <TableCell><Link href={`/aircraft/currency/${ac.tailNumber}`} className="text-primary hover:underline">{ac.tailNumber}</Link></TableCell>
                         <TableCell>{ac.model}</TableCell>
                         <TableCell>{ac.baseLocation || 'N/A'}</TableCell>
-                        <TableCell>
-                          <Badge variant={simplifiedStatus.variant} className="capitalize">{simplifiedStatus.label}</Badge>
-                        </TableCell>
-                        <TableCell className="text-xs text-muted-foreground">
-                          {simplifiedStatus.details || statusInfo.mostUrgentTaskDescription || statusInfo.reason || 'N/A'}
-                        </TableCell>
+                        <TableCell><Badge variant={simplifiedStatus.variant} className="capitalize text-xs">{simplifiedStatus.label}</Badge></TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{simplifiedStatus.details || 'N/A'}</TableCell>
                       </TableRow>
                     );
                   })}
@@ -489,23 +457,14 @@ export default function DashboardPage() {
         {/* Active System Alerts Card */}
         <Card className="lg:col-span-1 shadow-md">
           <CardHeader>
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-destructive" />
-              <CardTitle>Active System Alerts</CardTitle>
-            </div>
+            <div className="flex items-center gap-2"><AlertTriangle className="h-5 w-5 text-destructive" /><CardTitle>Active System Alerts</CardTitle></div>
             <CardDescription>Critical items needing attention.</CardDescription>
           </CardHeader>
           <CardContent>
-            {isLoadingAircraftStatusDetails ? (
-                <div className="flex items-center justify-center py-5">
-                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                    <p className="ml-2 text-muted-foreground">Loading alerts...</p>
-                </div>
+            {isLoadingAircraftStatusDetails && activeSystemAlerts.length === 0 ? (
+                <div className="flex items-center justify-center py-5"><Loader2 className="h-6 w-6 animate-spin text-primary" /><p className="ml-2 text-muted-foreground">Loading alerts...</p></div>
             ) : activeSystemAlerts.length === 0 ? (
-              <div className="text-center py-3 text-sm text-muted-foreground">
-                <CheckCircle2 className="h-8 w-8 mx-auto mb-2 text-green-500" />
-                No critical system alerts at this time.
-              </div>
+              <div className="text-center py-3 text-sm text-muted-foreground"><CheckCircle2 className="h-8 w-8 mx-auto mb-2 text-green-500" />No critical system alerts.</div>
             ) : (
               <List>
                 {activeSystemAlerts.map((alert) => (
@@ -517,11 +476,7 @@ export default function DashboardPage() {
                       <div className="flex-1">
                         <p className={`font-semibold text-sm ${alert.severity === 'critical' ? 'text-destructive-foreground' : ''}`}>{alert.title}</p>
                         <p className="text-xs text-muted-foreground">{alert.message}</p>
-                        {alert.link && (
-                          <Button variant="link" size="xs" asChild className="p-0 h-auto text-xs mt-0.5">
-                            <Link href={alert.link}>View Details</Link>
-                          </Button>
-                        )}
+                        {alert.link && (<Button variant="link" size="xs" asChild className="p-0 h-auto text-xs mt-0.5"><Link href={alert.link}>View Details</Link></Button>)}
                       </div>
                       <Badge variant={alert.severity === 'critical' ? 'destructive' : 'secondary'} className="text-xs capitalize">{alert.severity}</Badge>
                     </div>
@@ -545,17 +500,13 @@ export default function DashboardPage() {
                 Published: {selectedBulletin.publishedAt && isValid(parseISO(selectedBulletin.publishedAt)) ? format(parseISO(selectedBulletin.publishedAt), 'PPP HH:mm') : 'N/A'}
               </AlertDialogDescription>
             </AlertDialogHeader>
-            <ScrollArea className="max-h-[60vh] mt-2">
-                <div className="whitespace-pre-wrap p-1 text-sm">
-                    {selectedBulletin.message}
-                </div>
-            </ScrollArea>
-            <AlertDialogFooter className="mt-4">
-              <AlertDialogCancel onClick={() => setIsBulletinModalOpen(false)}>Close</AlertDialogCancel>
-            </AlertDialogFooter>
+            <ScrollArea className="max-h-[60vh] mt-2"><div className="whitespace-pre-wrap p-1 text-sm">{selectedBulletin.message}</div></ScrollArea>
+            <AlertDialogFooter className="mt-4"><AlertDialogCancel onClick={() => setIsBulletinModalOpen(false)}>Close</AlertDialogCancel></AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
       )}
     </>
   );
 }
+
+    
