@@ -18,7 +18,7 @@ import { useToast } from '@/hooks/use-toast';
 import { format, parseISO, isValid, addDays, differenceInCalendarDays, differenceInHours } from 'date-fns';
 
 import { fetchBulletins, type Bulletin, type BulletinType } from '@/ai/flows/manage-bulletins-flow';
-import { fetchTrips, type Trip } from '@/ai/flows/manage-trips-flow';
+import { fetchTrips, type Trip, type TripStatus } from '@/ai/flows/manage-trips-flow';
 import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
 import { fetchComponentTimesForAircraft, type AircraftComponentTimes } from '@/ai/flows/manage-component-times-flow';
 import { fetchAircraftDiscrepancies, type AircraftDiscrepancy } from '@/ai/flows/manage-aircraft-discrepancies-flow';
@@ -250,8 +250,13 @@ export default function DashboardPage() {
       setFleetList(fetchedFleetList);
 
       const now = new Date();
+      const upcomingTripStatuses: TripStatus[] = ["Scheduled", "Confirmed", "Released"];
       const sortedUpcomingTrips = fetchedTrips
-        .filter(trip => trip.legs?.[0]?.departureDateTime && parseISO(trip.legs[0].departureDateTime) >= now)
+        .filter(trip => 
+            trip.legs?.[0]?.departureDateTime && 
+            parseISO(trip.legs[0].departureDateTime) >= now &&
+            upcomingTripStatuses.includes(trip.status as TripStatus)
+        )
         .map(trip => {
           const aircraftInfo = fetchedFleetList.find(ac => ac.id === trip.aircraftId);
           return {
