@@ -13,33 +13,48 @@ import { z } from 'zod';
 import { initializeApp as initializeAdminApp, getApps as getAdminApps, cert as adminCert } from 'firebase-admin/app';
 import { getStorage as getAdminStorage } from 'firebase-admin/storage';
 
-// Initialize Firebase Admin SDK if not already initialized
+// Attempt to initialize Firebase Admin SDK if not already initialized
 if (!getAdminApps().length) {
   const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
   const storageBucket = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
 
   if (!storageBucket) {
     console.error("[upload-flow] CRITICAL ERROR: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET environment variable is not set. Firebase Admin SDK cannot be initialized for Storage.");
-    // Potentially throw an error here or handle as appropriate for your app's startup
-  } else if (serviceAccountJson) {
-    try {
-      const serviceAccount = JSON.parse(serviceAccountJson);
-      initializeAdminApp({
-        credential: adminCert(serviceAccount),
-        storageBucket: storageBucket,
-      });
-      console.log('[upload-flow] Firebase Admin SDK initialized using service account JSON.');
-    } catch (e) {
-      console.error('[upload-flow] Failed to parse FIREBASE_SERVICE_ACCOUNT_JSON. Attempting default initialization.', e);
-      // Fallback to default init if JSON is bad but we might be in a GCP env
-      initializeAdminApp({ storageBucket: storageBucket });
-      console.log('[upload-flow] Firebase Admin SDK initialized using default credentials (service account parsing failed).');
-    }
+    // Not setting adminAppInitialized = true, so flow will fail if used.
   } else {
-    // Standard initialization for environments like Cloud Functions, Cloud Run, or local dev with GOOGLE_APPLICATION_CREDENTIALS
-    initializeAdminApp({ storageBucket: storageBucket });
-    console.log('[upload-flow] Firebase Admin SDK initialized (default or GOOGLE_APPLICATION_CREDENTIALS). Storage bucket:', storageBucket);
+    if (serviceAccountJson) {
+      try {
+        const serviceAccount = JSON.parse(serviceAccountJson);
+        initializeAdminApp({
+          credential: adminCert(serviceAccount),
+          storageBucket: storageBucket,
+        });
+        console.log('[upload-flow] Firebase Admin SDK initialized using service account JSON.');
+      } catch (e:any) {
+        console.error('[upload-flow] Failed to parse FIREBASE_SERVICE_ACCOUNT_JSON. Error:', e.message);
+        console.warn('[upload-flow] File uploads will likely not work if FIREBASE_SERVICE_ACCOUNT_JSON is invalid and no other admin credentials are found (e.g., GOOGLE_APPLICATION_CREDENTIALS in a GCP environment).');
+        // adminAppInitialized remains false implicitly by not being set true.
+      }
+    } else {
+      // FIREBASE_SERVICE_ACCOUNT_JSON is not set.
+      // Try default initialization which relies on GOOGLE_APPLICATION_CREDENTIALS or a GCP environment.
+      try {
+        console.log('[upload-flow] FIREBASE_SERVICE_ACCOUNT_JSON not provided. Attempting default Firebase Admin SDK initialization...');
+        initializeAdminApp({ storageBucket: storageBucket });
+        console.log('[upload-flow] Firebase Admin SDK initialized using default credentials (e.g., GOOGLE_APPLICATION_CREDENTIALS or GCP environment). Storage bucket:', storageBucket);
+      } catch (defaultInitError: any) {
+        console.warn(
+          '[upload-flow] Firebase Admin SDK default initialization failed. ' +
+          'This is expected locally if GOOGLE_APPLICATION_CREDENTIALS is not set, is invalid, or points to a missing file, ' +
+          'and not running in a GCP environment. File uploads via this flow will not work. ' +
+          'Error details:', defaultInitError.message
+        );
+        // adminAppInitialized remains false implicitly.
+      }
+    }
   }
+} else {
+    console.log('[upload-flow] Firebase Admin SDK already initialized.');
 }
 
 
@@ -70,6 +85,15 @@ const uploadAircraftDocumentFlow = ai.defineFlow(
   async (input) => {
     const { aircraftId, documentId, fileName, fileDataUri } = input;
 
+    // Check if admin app was successfully initialized
+    if (getAdminApps().length === 0) {
+      console.error("[uploadAircraftDocumentFlow] Firebase Admin App is not initialized. Cannot proceed with file upload.");
+      throw new Error(
+        "File upload service is unavailable. Firebase Admin SDK is not initialized. " +
+        "Please ensure server environment is configured correctly with FIREBASE_SERVICE_ACCOUNT_JSON or valid GOOGLE_APPLICATION_CREDENTIALS."
+      );
+    }
+
     const filePath = `aircraft_documents/${aircraftId}/${documentId}/${fileName}`;
     console.log(`[uploadAircraftDocumentFlow] Attempting to upload to: ${filePath}`);
 
@@ -85,18 +109,24 @@ const uploadAircraftDocumentFlow = ai.defineFlow(
     if (!bucketName) {
         throw new Error("Firebase Storage bucket name is not configured in environment variables (NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET).");
     }
-    // Use getAdminStorage() here
-    const bucket = getAdminStorage().bucket(bucketName);
+    
+    let bucket;
+    try {
+      bucket = getAdminStorage().bucket(bucketName);
+    } catch (storageError: any) {
+      console.error("[uploadAircraftDocumentFlow] Failed to get Firebase Admin Storage instance. Admin SDK might not be properly initialized. Error:", storageError.message);
+      throw new Error(
+        "File upload service encountered an issue accessing storage. Firebase Admin SDK may not be properly initialized. " +
+        "Check server logs for details."
+      );
+    }
+    
     const file = bucket.file(filePath);
 
     await file.save(buffer, {
       metadata: { contentType: mimeType },
-      // Optionally make public here, or handle URLs differently (e.g. signed URLs)
-      // public: true, // This makes the file public directly on upload
     });
 
-    // Make the file publicly readable - this is one way to get a public URL.
-    // Consider security implications; signed URLs are often better for private data.
     await file.makePublic(); 
     
     const publicUrl = file.publicUrl();
