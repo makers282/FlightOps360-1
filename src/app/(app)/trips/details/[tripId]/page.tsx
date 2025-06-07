@@ -21,10 +21,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'; // Added Tooltip imports
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'; 
 import { Loader2, ArrowLeft, Plane, User, CalendarDays, DollarSign, InfoIcon, Edit3, Trash2, Send, Users as CrewIcon, FileText as FileIcon, Package as LoadManifestIcon, Save, PlaneTakeoff } from 'lucide-react';
-import { fetchTripById, deleteTrip, saveTrip } from '@/ai/flows/manage-trips-flow';
-import type { Trip, TripLeg, TripStatus, SaveTripInput } from '@/ai/schemas/trip-schemas';
+import { fetchTripById, deleteTrip, saveTrip } from '@/ai/flows/manage-trips-flow'; 
+import type { Trip, TripLeg, TripStatus, SaveTripInput } from '@/ai/schemas/trip-schemas'; 
 import { useToast } from '@/hooks/use-toast';
 import { format, parseISO, isValid } from 'date-fns';
 import { fetchCrewMembers, type CrewMember } from '@/ai/flows/manage-crew-flow';
@@ -39,8 +39,7 @@ const getStatusBadgeVariant = (status?: TripStatus): "default" | "secondary" | "
   switch (status?.toLowerCase()) {
     case 'completed': case 'confirmed': return 'default';
     case 'released': 
-    case 'en route': 
-      return 'secondary';
+      return 'secondary'; 
     case 'scheduled': case 'awaiting closeout': return 'outline';
     case 'cancelled': case 'diverted': return 'destructive';
     default: return 'outline';
@@ -154,6 +153,7 @@ export default function ViewTripDetailsPage() {
         } else {
           setError("Trip not found.");
           toast({ title: "Error", description: `Trip with ID ${id} not found.`, variant: "destructive" });
+          setIsLoadingFlightLogs(false); // Ensure loading state is cleared on error
         }
       } catch (err) {
         if (isMounted) {
@@ -266,20 +266,19 @@ export default function ViewTripDetailsPage() {
 
     const existingLog = tripFlightLogs[legIndex];
     const initialLogData = existingLog ? {
-      ...existingLog, // Spread existing log data
-      // Ensure numbers are numbers and not potentially strings from Firestore if not strictly typed there
-      taxiOutTimeMins: Number(existingLog.taxiOutTimeMins),
-      hobbsTakeOff: Number(existingLog.hobbsTakeOff),
-      hobbsLanding: Number(existingLog.hobbsLanding),
-      taxiInTimeMins: Number(existingLog.taxiInTimeMins),
+      ...existingLog, 
+      taxiOutTimeMins: Number(existingLog.taxiOutTimeMins ?? 0), // Default to 0 if undefined
+      hobbsTakeOff: existingLog.hobbsTakeOff !== undefined ? Number(existingLog.hobbsTakeOff) : undefined,
+      hobbsLanding: existingLog.hobbsLanding !== undefined ? Number(existingLog.hobbsLanding) : undefined,
+      taxiInTimeMins: Number(existingLog.taxiInTimeMins ?? 0), // Default to 0
       approaches: Number(existingLog.approaches ?? 0),
       dayLandings: Number(existingLog.dayLandings ?? 0),
       nightLandings: Number(existingLog.nightLandings ?? 0),
       nightTimeDecimal: Number(existingLog.nightTimeDecimal ?? 0.0),
       instrumentTimeDecimal: Number(existingLog.instrumentTimeDecimal ?? 0.0),
-      fobStartingFuel: Number(existingLog.fobStartingFuel),
+      fobStartingFuel: existingLog.fobStartingFuel !== undefined ? Number(existingLog.fobStartingFuel) : undefined,
       fuelPurchasedAmount: Number(existingLog.fuelPurchasedAmount ?? 0.0),
-      endingFuel: Number(existingLog.endingFuel),
+      endingFuel: existingLog.endingFuel !== undefined ? Number(existingLog.endingFuel) : undefined,
       fuelCost: Number(existingLog.fuelCost ?? 0.0),
       postLegApuTimeDecimal: Number(existingLog.postLegApuTimeDecimal ?? 0.0),
     } : undefined;
