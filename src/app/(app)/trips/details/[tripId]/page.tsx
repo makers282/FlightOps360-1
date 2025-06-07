@@ -21,25 +21,25 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'; 
-import { Loader2, ArrowLeft, Plane, User, CalendarDays, DollarSign, InfoIcon, Edit3, Trash2, Send, Users as CrewIcon, FileText as FileIcon, Package as LoadManifestIcon, Save, PlaneTakeoff } from 'lucide-react';
-import { fetchTripById, deleteTrip, saveTrip } from '@/ai/flows/manage-trips-flow'; 
-import type { Trip, TripLeg, TripStatus, SaveTripInput } from '@/ai/schemas/trip-schemas'; 
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Loader2, ArrowLeft, Plane, User, CalendarDays, DollarSign, InfoIcon, Edit3, Trash2, Send, Users as CrewIcon, FileText as FileIcon, Package as LoadManifestIcon, Save, PlaneTakeoff, CheckCircle } from 'lucide-react'; // Added CheckCircle
+import { fetchTripById, deleteTrip, saveTrip } from '@/ai/flows/manage-trips-flow';
+import type { Trip, TripLeg, TripStatus, SaveTripInput } from '@/ai/schemas/trip-schemas';
 import { useToast } from '@/hooks/use-toast';
 import { format, parseISO, isValid } from 'date-fns';
 import { fetchCrewMembers, type CrewMember } from '@/ai/flows/manage-crew-flow';
 import { cn } from "@/lib/utils";
 import { FlightLogModal } from '../../components/flight-log-modal';
 import { FlightLogSummaryCard } from './components/flight-log-summary-card';
-import type { FlightLogLeg, FlightLogLegData } from '@/ai/schemas/flight-log-schemas';
+import type { FlightLogLeg, FlightLogLegData, SaveFlightLogLegInput } from '@/ai/schemas/flight-log-schemas'; // Ensure SaveFlightLogLegInput is imported
 import { saveFlightLogLeg, fetchFlightLogForLeg } from '@/ai/flows/manage-flight-logs-flow';
 
 // Helper to get badge variant for status
 const getStatusBadgeVariant = (status?: TripStatus): "default" | "secondary" | "outline" | "destructive" => {
   switch (status?.toLowerCase()) {
     case 'completed': case 'confirmed': return 'default';
-    case 'released': 
-      return 'secondary'; 
+    case 'released':
+      return 'secondary';
     case 'scheduled': case 'awaiting closeout': return 'outline';
     case 'cancelled': case 'diverted': return 'destructive';
     default: return 'outline';
@@ -109,6 +109,7 @@ export default function ViewTripDetailsPage() {
   const [crewRosterDetails, setCrewRosterDetails] = useState<CrewMember[]>([]);
   const [isLoadingCrewRosterDetails, setIsLoadingCrewRosterDetails] = useState(true);
   const [isUpdatingStatus, startUpdatingStatusTransition] = useTransition();
+  const [isClosingTrip, startClosingTripTransition] = useTransition();
 
   const [isFlightLogModalOpen, setIsFlightLogModalOpen] = useState(false);
   const [currentLegForLog, setCurrentLegForLog] = useState<{ tripId: string; legIndex: number; origin: string; destination: string; initialData?: FlightLogLegData } | null>(null);
@@ -153,7 +154,7 @@ export default function ViewTripDetailsPage() {
         } else {
           setError("Trip not found.");
           toast({ title: "Error", description: `Trip with ID ${id} not found.`, variant: "destructive" });
-          setIsLoadingFlightLogs(false); 
+          setIsLoadingFlightLogs(false);
         }
       } catch (err) {
         if (isMounted) {
@@ -182,7 +183,7 @@ export default function ViewTripDetailsPage() {
            if (isMounted) setIsLoadingCrewRosterDetails(false);
         }
     };
-    
+
     loadTripData();
     loadCrewRoster();
 
@@ -217,11 +218,11 @@ export default function ViewTripDetailsPage() {
         ...trip,
         notes: editableNotes.trim(),
       };
-      
+
       try {
         const { id: tripDocId, createdAt, updatedAt, ...tripSaveData } = tripDataToSave;
         const savedTrip = await saveTrip({ ...tripSaveData, id: tripDocId } as SaveTripInput); // Cast to SaveTripInput
-        
+
         setTrip(savedTrip);
         setEditableNotes(savedTrip.notes || '');
         setIsEditingNotes(false);
@@ -252,6 +253,26 @@ export default function ViewTripDetailsPage() {
     });
   };
 
+  const handleCloseTrip = () => {
+    if (!trip || !canCloseTrip) return;
+    startClosingTripTransition(async () => {
+      const updatedTripData: Trip = {
+        ...trip,
+        status: "Completed",
+      };
+      try {
+        const { id: tripDocId, createdAt, updatedAt, ...tripSaveData } = updatedTripData;
+        const savedTrip = await saveTrip({ ...tripSaveData, id: tripDocId } as SaveTripInput);
+        setTrip(savedTrip);
+        toast({ title: "Trip Closed", description: `Trip ${savedTrip.tripId} is now marked as Completed.`});
+      } catch (err) {
+        console.error("Failed to close trip:", err);
+        toast({ title: "Error Closing Trip", description: (err instanceof Error ? err.message : "Unknown error"), variant: "destructive" });
+      }
+    });
+  };
+
+
   const getCrewMemberDisplay = (crewId?: string) => {
     if (!crewId) return "N/A";
     if (isLoadingCrewRosterDetails) return <Loader2 className="h-4 w-4 animate-spin inline-block" />;
@@ -266,7 +287,7 @@ export default function ViewTripDetailsPage() {
 
     const existingLog = tripFlightLogs[legIndex];
     const initialLogData = existingLog ? {
-      ...existingLog, 
+      ...existingLog,
       taxiOutTimeMins: Number(existingLog.taxiOutTimeMins ?? 0),
       hobbsTakeOff: existingLog.hobbsTakeOff !== undefined && existingLog.hobbsTakeOff !== null ? Number(existingLog.hobbsTakeOff) : undefined,
       hobbsLanding: existingLog.hobbsLanding !== undefined && existingLog.hobbsLanding !== null ? Number(existingLog.hobbsLanding) : undefined,
@@ -298,8 +319,7 @@ export default function ViewTripDetailsPage() {
     if (!currentLegForLog || !trip) return;
     startSavingFlightLogTransition(async () => {
       try {
-        // Prepare data ensuring optional number fields are correctly undefined if empty
-        const dataToSave: SaveFlightLogInput = {
+        const dataToSave: SaveFlightLogLegInput = {
             tripId: currentLegForLog.tripId,
             legIndex: currentLegForLog.legIndex,
             taxiOutTimeMins: logData.taxiOutTimeMins,
@@ -329,7 +349,6 @@ export default function ViewTripDetailsPage() {
         }));
         toast({ title: "Flight Log Saved", description: `Log for leg ${currentLegForLog.legIndex + 1} saved.` });
         setIsFlightLogModalOpen(false);
-        // TODO: In a future step, trigger aircraft component time update after this save.
       } catch (err) {
         console.error("Failed to save flight log:", err);
         toast({ title: "Error Saving Log", description: (err instanceof Error ? err.message : "Unknown error"), variant: "destructive" });
@@ -362,14 +381,21 @@ export default function ViewTripDetailsPage() {
       </>
     );
   }
-  
+
   const isReleasableStatus = trip.status === "Scheduled" || trip.status === "Confirmed";
   const isCrewAssignedForRelease = !!trip.assignedPilotId;
   const canReleaseTrip = isReleasableStatus && isCrewAssignedForRelease;
-  
-  const releaseButtonDisabledReason = 
+
+  const releaseButtonDisabledReason =
     !isReleasableStatus ? "Trip not in Scheduled/Confirmed state." :
     !isCrewAssignedForRelease ? "Pilot in Command must be assigned to release." :
+    undefined;
+
+  const allLogsEntered = trip.legs.every((_, index) => !!tripFlightLogs[index]);
+  const canCloseTrip = trip.status === "Released" && allLogsEntered;
+  const closeTripButtonDisabledReason =
+    trip.status !== "Released" ? "Trip must be 'Released' to close." :
+    !allLogsEntered ? "All flight logs must be entered to close trip." :
     undefined;
 
 
@@ -388,11 +414,11 @@ export default function ViewTripDetailsPage() {
             </Button>
             <Tooltip>
               <TooltipTrigger asChild>
-                <span> 
-                  <Button 
-                    variant="default" 
-                    onClick={handleMarkAsReleased} 
-                    disabled={!canReleaseTrip || isUpdatingStatus}
+                <span>
+                  <Button
+                    variant="default"
+                    onClick={handleMarkAsReleased}
+                    disabled={!canReleaseTrip || isUpdatingStatus || isClosingTrip}
                     className={cn(canReleaseTrip && "bg-green-600 hover:bg-green-700 text-white")}
                   >
                     {isUpdatingStatus ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <PlaneTakeoff className="mr-2 h-4 w-4" />}
@@ -403,6 +429,26 @@ export default function ViewTripDetailsPage() {
               {releaseButtonDisabledReason && (
                 <TooltipContent>
                   <p>{releaseButtonDisabledReason}</p>
+                </TooltipContent>
+              )}
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>
+                  <Button
+                    variant="default"
+                    onClick={handleCloseTrip}
+                    disabled={!canCloseTrip || isClosingTrip || isUpdatingStatus}
+                    className={cn(canCloseTrip && "bg-blue-600 hover:bg-blue-700 text-white")}
+                  >
+                    {isClosingTrip ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <CheckCircle className="mr-2 h-4 w-4" />}
+                    Close Trip
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              {closeTripButtonDisabledReason && (
+                <TooltipContent>
+                  <p>{closeTripButtonDisabledReason}</p>
                 </TooltipContent>
               )}
             </Tooltip>
@@ -444,7 +490,7 @@ export default function ViewTripDetailsPage() {
           </CardContent>
         </Card>
       </div>
-      
+
       <FlightLogSummaryCard
         tripLegs={trip.legs}
         flightLogs={tripFlightLogs}
@@ -584,3 +630,5 @@ export default function ViewTripDetailsPage() {
     </TooltipProvider>
   );
 }
+
+    
