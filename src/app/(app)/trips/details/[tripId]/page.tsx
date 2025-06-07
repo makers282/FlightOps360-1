@@ -21,19 +21,22 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'; // Added Tooltip imports
 import { Loader2, ArrowLeft, Plane, User, CalendarDays, DollarSign, InfoIcon, Edit3, Trash2, Send, Users as CrewIcon, FileText as FileIcon, Package as LoadManifestIcon, Save, PlaneTakeoff } from 'lucide-react';
 import { fetchTripById, deleteTrip, saveTrip } from '@/ai/flows/manage-trips-flow';
 import type { Trip, TripLeg, TripStatus, SaveTripInput } from '@/ai/schemas/trip-schemas';
 import { useToast } from '@/hooks/use-toast';
 import { format, parseISO, isValid } from 'date-fns';
 import { fetchCrewMembers, type CrewMember } from '@/ai/flows/manage-crew-flow';
-import { cn } from "@/lib/utils"; // Added missing import
+import { cn } from "@/lib/utils";
 
 // Helper to get badge variant for status
 const getStatusBadgeVariant = (status?: TripStatus): "default" | "secondary" | "outline" | "destructive" => {
   switch (status?.toLowerCase()) {
     case 'completed': case 'confirmed': return 'default';
-    case 'en route': return 'secondary';
+    case 'released': // Changed from 'en route'
+    case 'en route': // Keep 'en route' for backward compatibility if some data exists with it, but UI will show 'Released'
+      return 'secondary';
     case 'scheduled': case 'awaiting closeout': return 'outline';
     case 'cancelled': case 'diverted': return 'destructive';
     default: return 'outline';
@@ -128,13 +131,13 @@ export default function ViewTripDetailsPage() {
           try {
             const roster = await fetchCrewMembers();
             if (isMounted) {
-              setCrewRosterDetails(roster || []); // Ensure roster is an array
+              setCrewRosterDetails(roster || []); 
             }
           } catch (crewError) {
             if (isMounted) {
               console.error("Failed to fetch crew roster:", crewError);
               toast({ title: "Error Fetching Crew", description: "Could not load crew roster for display.", variant: "destructive" });
-              setCrewRosterDetails([]); // Set to empty array on error
+              setCrewRosterDetails([]); 
             }
           } finally {
             if (isMounted) setIsLoadingCrewRosterDetails(false);
@@ -203,17 +206,17 @@ export default function ViewTripDetailsPage() {
   };
 
   const handleMarkAsReleased = () => {
-    if (!trip || (trip.status !== "Scheduled" && trip.status !== "Confirmed")) return;
+    if (!trip || !canReleaseTrip) return; // canReleaseTrip logic will be updated
     startUpdatingStatusTransition(async () => {
       const updatedTripData: Trip = {
         ...trip,
-        status: "En Route",
+        status: "Released", // Changed from "En Route"
       };
       try {
         const { id: tripDocId, createdAt, updatedAt, ...tripSaveData } = updatedTripData;
         const savedTrip = await saveTrip({ ...tripSaveData, id: tripDocId });
         setTrip(savedTrip);
-        toast({ title: "Trip Released", description: `Trip ${savedTrip.tripId} is now En Route.`});
+        toast({ title: "Trip Released", description: `Trip ${savedTrip.tripId} is now Released.`}); // Updated message
       } catch (err) {
         console.error("Failed to mark trip as released:", err);
         toast({ title: "Error Releasing Trip", description: (err instanceof Error ? err.message : "Unknown error"), variant: "destructive" });
@@ -254,10 +257,18 @@ export default function ViewTripDetailsPage() {
     );
   }
   
-  const canReleaseTrip = trip.status === "Scheduled" || trip.status === "Confirmed";
+  const isReleasableStatus = trip.status === "Scheduled" || trip.status === "Confirmed";
+  const isCrewAssignedForRelease = !!trip.assignedPilotId;
+  const canReleaseTrip = isReleasableStatus && isCrewAssignedForRelease;
+  
+  const releaseButtonDisabledReason = 
+    !isReleasableStatus ? "Trip not in Scheduled/Confirmed state." :
+    !isCrewAssignedForRelease ? "Pilot in Command must be assigned to release." :
+    undefined;
+
 
   return (
-    <>
+    <TooltipProvider>
       <PageHeader
         title={`Trip Details: ${trip.tripId}`}
         description={`Viewing details for trip with ${trip.clientName || 'N/A'}.`}
@@ -269,15 +280,27 @@ export default function ViewTripDetailsPage() {
                     <Edit3 className="mr-2 h-4 w-4" /> Edit Trip
                 </Link>
             </Button>
-            <Button 
-              variant="default" 
-              onClick={handleMarkAsReleased} 
-              disabled={!canReleaseTrip || isUpdatingStatus}
-              className={cn(canReleaseTrip && "bg-green-600 hover:bg-green-700 text-white")}
-            >
-              {isUpdatingStatus ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <PlaneTakeoff className="mr-2 h-4 w-4" />}
-              Mark as Released
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                {/* Span needed for Tooltip when Button is disabled */}
+                <span> 
+                  <Button 
+                    variant="default" 
+                    onClick={handleMarkAsReleased} 
+                    disabled={!canReleaseTrip || isUpdatingStatus}
+                    className={cn(canReleaseTrip && "bg-green-600 hover:bg-green-700 text-white")}
+                  >
+                    {isUpdatingStatus ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <PlaneTakeoff className="mr-2 h-4 w-4" />}
+                    Mark as Released
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              {releaseButtonDisabledReason && (
+                <TooltipContent>
+                  <p>{releaseButtonDisabledReason}</p>
+                </TooltipContent>
+              )}
+            </Tooltip>
             <Button variant="outline" disabled><Send className="mr-2 h-4 w-4" /> Send Itinerary</Button>
             <Button variant="destructive" onClick={() => setShowDeleteConfirm1(true)} disabled={isDeleting}>
                 {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Trash2 className="mr-2 h-4 w-4" />}
@@ -434,6 +457,6 @@ export default function ViewTripDetailsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </>
+    </TooltipProvider>
   );
 }

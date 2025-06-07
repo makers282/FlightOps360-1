@@ -23,7 +23,7 @@ export const TripLegSchema = z.object({
 });
 export type TripLeg = z.infer<typeof TripLegSchema>;
 
-export const tripStatuses = ["Scheduled", "Confirmed", "En Route", "Completed", "Cancelled", "Diverted", "Awaiting Closeout"] as const;
+export const tripStatuses = ["Scheduled", "Confirmed", "Released", "Completed", "Cancelled", "Diverted", "Awaiting Closeout"] as const;
 export type TripStatus = typeof tripStatuses[number];
 
 export const TripSchema = z.object({
