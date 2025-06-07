@@ -5,13 +5,14 @@
   "private": true,
   "description": "FlightOps360 - Flight Operations Management Platform",
   "scripts": {
-    "dev": "next dev --turbopack -p 9002",
+    "dev": "next dev --turbopack -p 9003",
     "genkit:dev": "genkit start -- tsx src/ai/dev.ts",
     "genkit:watch": "genkit start -- tsx --watch src/ai/dev.ts",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "emulators:start": "firebase emulators:start --only auth,firestore,storage --project=dev-project"
   },
   "dependencies": {
     "@fullcalendar/core": "^6.1.15",
