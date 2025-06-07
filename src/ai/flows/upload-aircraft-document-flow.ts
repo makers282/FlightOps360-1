@@ -19,8 +19,7 @@ if (!getAdminApps().length) {
   const storageBucket = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
 
   if (!storageBucket) {
-    console.error("[upload-flow] CRITICAL ERROR: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET environment variable is not set. Firebase Admin SDK cannot be initialized for Storage.");
-    // Not setting adminAppInitialized = true, so flow will fail if used.
+    console.error("[upload-flow:INIT] CRITICAL ERROR: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET environment variable is not set. Firebase Admin SDK cannot be initialized for Storage.");
   } else {
     if (serviceAccountJson) {
       try {
@@ -29,32 +28,46 @@ if (!getAdminApps().length) {
           credential: adminCert(serviceAccount),
           storageBucket: storageBucket,
         });
-        console.log('[upload-flow] Firebase Admin SDK initialized using service account JSON.');
+        console.log('[upload-flow:INIT] Firebase Admin SDK initialized using service account JSON. Storage bucket:', storageBucket);
       } catch (e:any) {
-        console.error('[upload-flow] Failed to parse FIREBASE_SERVICE_ACCOUNT_JSON. Error:', e.message);
-        console.warn('[upload-flow] File uploads will likely not work if FIREBASE_SERVICE_ACCOUNT_JSON is invalid and no other admin credentials are found (e.g., GOOGLE_APPLICATION_CREDENTIALS in a GCP environment).');
-        // adminAppInitialized remains false implicitly by not being set true.
+        console.error('[upload-flow:INIT] Failed to parse or use FIREBASE_SERVICE_ACCOUNT_JSON. Error:', e.message);
+        console.warn('[upload-flow:INIT] File uploads will likely not work if FIREBASE_SERVICE_ACCOUNT_JSON is invalid. Attempting default initialization if applicable...');
+        // Attempt default init as a fallback if JSON parse failed but GOOGLE_APPLICATION_CREDENTIALS might be set
+        try {
+            if (!getAdminApps().length) { // Only attempt if still not initialized
+                 initializeAdminApp({ storageBucket: storageBucket });
+                 console.log('[upload-flow:INIT] Fallback: Firebase Admin SDK initialized using default credentials. Storage bucket:', storageBucket);
+            }
+        } catch (defaultInitError: any) {
+             console.warn(
+                '[upload-flow:INIT] Fallback default Firebase Admin SDK initialization failed. Error:', defaultInitError.message
+             );
+        }
       }
     } else {
       // FIREBASE_SERVICE_ACCOUNT_JSON is not set.
       // Try default initialization which relies on GOOGLE_APPLICATION_CREDENTIALS or a GCP environment.
       try {
-        console.log('[upload-flow] FIREBASE_SERVICE_ACCOUNT_JSON not provided. Attempting default Firebase Admin SDK initialization...');
+        console.log('[upload-flow:INIT] FIREBASE_SERVICE_ACCOUNT_JSON not provided. Attempting default Firebase Admin SDK initialization...');
         initializeAdminApp({ storageBucket: storageBucket });
-        console.log('[upload-flow] Firebase Admin SDK initialized using default credentials (e.g., GOOGLE_APPLICATION_CREDENTIALS or GCP environment). Storage bucket:', storageBucket);
+        console.log('[upload-flow:INIT] Firebase Admin SDK initialized using default credentials (e.g., GOOGLE_APPLICATION_CREDENTIALS or GCP environment). Storage bucket:', storageBucket);
       } catch (defaultInitError: any) {
         console.warn(
-          '[upload-flow] Firebase Admin SDK default initialization failed. ' +
+          '[upload-flow:INIT] Firebase Admin SDK default initialization failed. ' +
           'This is expected locally if GOOGLE_APPLICATION_CREDENTIALS is not set, is invalid, or points to a missing file, ' +
           'and not running in a GCP environment. File uploads via this flow will not work. ' +
           'Error details:', defaultInitError.message
         );
-        // adminAppInitialized remains false implicitly.
       }
     }
   }
+  if (getAdminApps().length === 0) {
+    console.warn("[upload-flow:INIT] POST-INIT CHECK: Firebase Admin SDK is still NOT initialized. File uploads will fail if attempted.");
+  } else {
+    console.log("[upload-flow:INIT] POST-INIT CHECK: Firebase Admin SDK appears to be initialized. Admin apps count:", getAdminApps().length);
+  }
 } else {
-    console.log('[upload-flow] Firebase Admin SDK already initialized.');
+    console.log('[upload-flow:INIT] Firebase Admin SDK already initialized. Admin apps count:', getAdminApps().length);
 }
 
 
@@ -87,11 +100,10 @@ const uploadAircraftDocumentFlow = ai.defineFlow(
 
     // Check if admin app was successfully initialized
     if (getAdminApps().length === 0) {
-      console.error("[uploadAircraftDocumentFlow] Firebase Admin App is not initialized. Cannot proceed with file upload.");
-      throw new Error(
-        "File upload service is unavailable. Firebase Admin SDK is not initialized. " +
-        "Please ensure server environment is configured correctly with FIREBASE_SERVICE_ACCOUNT_JSON or valid GOOGLE_APPLICATION_CREDENTIALS."
-      );
+      const errorMsg = "File upload service is unavailable. Firebase Admin SDK is not initialized. " +
+                       "Please ensure server environment is configured correctly with FIREBASE_SERVICE_ACCOUNT_JSON or valid GOOGLE_APPLICATION_CREDENTIALS.";
+      console.error("[uploadAircraftDocumentFlow:RUNTIME_CHECK] " + errorMsg);
+      throw new Error(errorMsg);
     }
 
     const filePath = `aircraft_documents/${aircraftId}/${documentId}/${fileName}`;
@@ -107,27 +119,37 @@ const uploadAircraftDocumentFlow = ai.defineFlow(
 
     const bucketName = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
     if (!bucketName) {
-        throw new Error("Firebase Storage bucket name is not configured in environment variables (NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET).");
+        const errorMsg = "Firebase Storage bucket name is not configured in environment variables (NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET).";
+        console.error("[uploadAircraftDocumentFlow:CONFIG_CHECK] " + errorMsg);
+        throw new Error(errorMsg);
     }
     
     let bucket;
     try {
       bucket = getAdminStorage().bucket(bucketName);
     } catch (storageError: any) {
-      console.error("[uploadAircraftDocumentFlow] Failed to get Firebase Admin Storage instance. Admin SDK might not be properly initialized. Error:", storageError.message);
-      throw new Error(
-        "File upload service encountered an issue accessing storage. Firebase Admin SDK may not be properly initialized. " +
-        "Check server logs for details."
-      );
+      const errorMsg = "File upload service encountered an issue accessing Firebase Storage. Admin SDK may not be properly initialized or storage service is unavailable.";
+      console.error("[uploadAircraftDocumentFlow:STORAGE_ACCESS_ERROR] " + errorMsg + " Details:", storageError.message);
+      throw new Error(errorMsg + " Check server logs for specific Firebase Admin SDK errors.");
     }
     
     const file = bucket.file(filePath);
 
-    await file.save(buffer, {
-      metadata: { contentType: mimeType },
-    });
+    try {
+      await file.save(buffer, {
+        metadata: { contentType: mimeType },
+      });
+    } catch (saveError: any) {
+        console.error(`[uploadAircraftDocumentFlow:SAVE_ERROR] Failed to save file to ${filePath}. Error:`, saveError.message);
+        throw new Error(`Failed to save file to storage. Details: ${saveError.message}`);
+    }
 
-    await file.makePublic(); 
+    try {
+      await file.makePublic(); 
+    } catch (makePublicError: any) {
+        console.warn(`[uploadAircraftDocumentFlow:MAKE_PUBLIC_WARN] Failed to make file public: ${filePath}. This might be okay if files are accessed via signed URLs or different permissions. Error:`, makePublicError.message);
+        // Depending on requirements, this might not be a fatal error. For now, we'll log and continue.
+    }
     
     const publicUrl = file.publicUrl();
     
@@ -139,3 +161,4 @@ const uploadAircraftDocumentFlow = ai.defineFlow(
     };
   }
 );
+    
