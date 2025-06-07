@@ -12,10 +12,10 @@ const _FlightLogLegDataBaseSchema = z.object({
   taxiOutTimeMins: z.coerce.number({ required_error: "Taxi-out time is required."}).int().min(0, "Taxi time cannot be negative."),
   takeOffTime: z.string({ required_error: "Take-off time is required." })
     .regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, "Invalid time format (HH:MM in 24-hr)."),
-  hobbsTakeOff: z.coerce.number({ required_error: "Hobbs take-off is required."}).min(0, "Hobbs time must be positive."),
+  hobbsTakeOff: z.coerce.number({ required_error: "Hobbs take-off is required."}).min(0, "Hobbs time must be positive.").optional().nullable(),
   landingTime: z.string({ required_error: "Landing time is required." })
     .regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, "Invalid time format (HH:MM in 24-hr)."),
-  hobbsLanding: z.coerce.number({ required_error: "Hobbs landing is required."}).min(0, "Hobbs time must be positive."),
+  hobbsLanding: z.coerce.number({ required_error: "Hobbs landing is required."}).min(0, "Hobbs time must be positive.").optional().nullable(),
   taxiInTimeMins: z.coerce.number({ required_error: "Taxi-in time is required."}).int().min(0, "Taxi time cannot be negative."),
 
   approaches: z.coerce.number().int().min(0).default(0),
@@ -36,8 +36,13 @@ const _FlightLogLegDataBaseSchema = z.object({
 
 // Schema for form validation, including refinements
 export const FlightLogLegDataSchema = _FlightLogLegDataBaseSchema
-  .refine(data => data.hobbsLanding > data.hobbsTakeOff, {
-    message: "Hobbs Landing must be greater than Hobbs Take-Off.",
+  .refine(data => {
+    if (data.hobbsLanding !== undefined && data.hobbsLanding !== null && data.hobbsTakeOff !== undefined && data.hobbsTakeOff !== null) {
+        return data.hobbsLanding > data.hobbsTakeOff;
+    }
+    return true;
+  }, {
+    message: "Hobbs Landing must be greater than Hobbs Take-Off if both are provided.",
     path: ["hobbsLanding"],
   })
   .refine(data => data.endingFuel <= (data.fobStartingFuel + (data.fuelPurchasedAmount || 0)), {

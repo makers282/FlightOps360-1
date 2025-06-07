@@ -153,7 +153,7 @@ export default function ViewTripDetailsPage() {
         } else {
           setError("Trip not found.");
           toast({ title: "Error", description: `Trip with ID ${id} not found.`, variant: "destructive" });
-          setIsLoadingFlightLogs(false); // Ensure loading state is cleared on error
+          setIsLoadingFlightLogs(false); 
         }
       } catch (err) {
         if (isMounted) {
@@ -220,7 +220,7 @@ export default function ViewTripDetailsPage() {
       
       try {
         const { id: tripDocId, createdAt, updatedAt, ...tripSaveData } = tripDataToSave;
-        const savedTrip = await saveTrip({ ...tripSaveData, id: tripDocId });
+        const savedTrip = await saveTrip({ ...tripSaveData, id: tripDocId } as SaveTripInput); // Cast to SaveTripInput
         
         setTrip(savedTrip);
         setEditableNotes(savedTrip.notes || '');
@@ -242,7 +242,7 @@ export default function ViewTripDetailsPage() {
       };
       try {
         const { id: tripDocId, createdAt, updatedAt, ...tripSaveData } = updatedTripData;
-        const savedTrip = await saveTrip({ ...tripSaveData, id: tripDocId });
+        const savedTrip = await saveTrip({ ...tripSaveData, id: tripDocId } as SaveTripInput); // Cast to SaveTripInput
         setTrip(savedTrip);
         toast({ title: "Trip Released", description: `Trip ${savedTrip.tripId} is now Released.`});
       } catch (err) {
@@ -267,10 +267,10 @@ export default function ViewTripDetailsPage() {
     const existingLog = tripFlightLogs[legIndex];
     const initialLogData = existingLog ? {
       ...existingLog, 
-      taxiOutTimeMins: Number(existingLog.taxiOutTimeMins ?? 0), // Default to 0 if undefined
-      hobbsTakeOff: existingLog.hobbsTakeOff !== undefined ? Number(existingLog.hobbsTakeOff) : undefined,
-      hobbsLanding: existingLog.hobbsLanding !== undefined ? Number(existingLog.hobbsLanding) : undefined,
-      taxiInTimeMins: Number(existingLog.taxiInTimeMins ?? 0), // Default to 0
+      taxiOutTimeMins: Number(existingLog.taxiOutTimeMins ?? 0),
+      hobbsTakeOff: existingLog.hobbsTakeOff !== undefined && existingLog.hobbsTakeOff !== null ? Number(existingLog.hobbsTakeOff) : undefined,
+      hobbsLanding: existingLog.hobbsLanding !== undefined && existingLog.hobbsLanding !== null ? Number(existingLog.hobbsLanding) : undefined,
+      taxiInTimeMins: Number(existingLog.taxiInTimeMins ?? 0),
       approaches: Number(existingLog.approaches ?? 0),
       dayLandings: Number(existingLog.dayLandings ?? 0),
       nightLandings: Number(existingLog.nightLandings ?? 0),
@@ -298,17 +298,38 @@ export default function ViewTripDetailsPage() {
     if (!currentLegForLog || !trip) return;
     startSavingFlightLogTransition(async () => {
       try {
-        const savedLog = await saveFlightLogLeg({
-          tripId: currentLegForLog.tripId,
-          legIndex: currentLegForLog.legIndex,
-          ...logData,
-        });
+        // Prepare data ensuring optional number fields are correctly undefined if empty
+        const dataToSave: SaveFlightLogInput = {
+            tripId: currentLegForLog.tripId,
+            legIndex: currentLegForLog.legIndex,
+            taxiOutTimeMins: logData.taxiOutTimeMins,
+            takeOffTime: logData.takeOffTime,
+            hobbsTakeOff: logData.hobbsTakeOff === null ? undefined : logData.hobbsTakeOff,
+            landingTime: logData.landingTime,
+            hobbsLanding: logData.hobbsLanding === null ? undefined : logData.hobbsLanding,
+            taxiInTimeMins: logData.taxiInTimeMins,
+            approaches: logData.approaches,
+            approachType: logData.approachType,
+            dayLandings: logData.dayLandings,
+            nightLandings: logData.nightLandings,
+            nightTimeDecimal: logData.nightTimeDecimal,
+            instrumentTimeDecimal: logData.instrumentTimeDecimal,
+            fobStartingFuel: logData.fobStartingFuel,
+            fuelPurchasedAmount: logData.fuelPurchasedAmount,
+            fuelPurchasedUnit: logData.fuelPurchasedUnit,
+            endingFuel: logData.endingFuel,
+            fuelCost: logData.fuelCost,
+            postLegApuTimeDecimal: logData.postLegApuTimeDecimal,
+        };
+
+        const savedLog = await saveFlightLogLeg(dataToSave);
         setTripFlightLogs(prevLogs => ({
           ...prevLogs,
           [currentLegForLog.legIndex]: savedLog,
         }));
         toast({ title: "Flight Log Saved", description: `Log for leg ${currentLegForLog.legIndex + 1} saved.` });
         setIsFlightLogModalOpen(false);
+        // TODO: In a future step, trigger aircraft component time update after this save.
       } catch (err) {
         console.error("Failed to save flight log:", err);
         toast({ title: "Error Saving Log", description: (err instanceof Error ? err.message : "Unknown error"), variant: "destructive" });
@@ -517,15 +538,14 @@ export default function ViewTripDetailsPage() {
           setIsOpen={setIsFlightLogModalOpen}
           tripId={currentLegForLog.tripId}
           legIndex={currentLegForLog.legIndex}
-          legOrigin={currentLegForLog.origin}
-          legDestination={currentLegForLog.destination}
+          origin={currentLegForLog.origin}
+          destination={currentLegForLog.destination}
           initialData={currentLegForLog.initialData}
           onSave={onSaveFlightLog}
           isSaving={isSavingFlightLog}
         />
       )}
 
-      {/* First Deletion Confirmation Dialog */}
       <AlertDialog open={showDeleteConfirm1} onOpenChange={setShowDeleteConfirm1}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -541,7 +561,6 @@ export default function ViewTripDetailsPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Second (Final) Deletion Confirmation Dialog */}
       <AlertDialog open={showDeleteConfirm2} onOpenChange={setShowDeleteConfirm2}>
         <AlertDialogContent>
           <AlertDialogHeader>

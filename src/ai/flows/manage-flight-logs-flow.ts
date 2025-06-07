@@ -79,12 +79,19 @@ const saveFlightLogLegFlow = ai.defineFlow(
         throw new Error("Failed to retrieve saved flight log data from Firestore.");
       }
       
+      // TODO: Add logic here to update aircraft component times based on this log.
+      // This will involve:
+      // 1. Fetching the trip to get aircraftId.
+      // 2. Fetching current component times for that aircraft.
+      // 3. Calculating flight time and cycles from `logData`.
+      // 4. Updating 'Airframe' and engine component times/cycles.
+      // 5. Saving the updated component times.
+
       return {
         ...savedData,
-        // Ensure Timestamps are converted to ISO strings for client compatibility
         createdAt: (savedData.createdAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
         updatedAt: (savedData.updatedAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
-      } as FlightLogLeg; // Cast to ensure type match for output schema
+      } as FlightLogLeg; 
 
     } catch (error) {
       console.error('Error saving flight log to Firestore:', error);
@@ -97,7 +104,7 @@ const fetchFlightLogForLegFlow = ai.defineFlow(
   {
     name: 'fetchFlightLogForLegFlow',
     inputSchema: FetchFlightLogLegInputSchema,
-    outputSchema: FetchFlightLogLegOutputSchema, // This is FlightLogLegSchema.nullable()
+    outputSchema: FetchFlightLogLegOutputSchema, 
   },
   async ({ tripId, legIndex }) => {
     const docId = getFlightLogDocId(tripId, legIndex);
@@ -132,7 +139,6 @@ const deleteFlightLogLegFlow = ai.defineFlow(
     outputSchema: DeleteFlightLogLegOutputSchema,
   },
   async ({ flightLogId }) => {
-    // Assuming flightLogId is the composite ID like 'tripId_legIndex'
     console.log('Executing deleteFlightLogLegFlow for flight log ID - Firestore:', flightLogId);
     try {
       const logDocRef = doc(db, FLIGHT_LOGS_COLLECTION, flightLogId);
