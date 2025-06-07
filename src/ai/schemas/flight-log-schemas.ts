@@ -7,7 +7,8 @@ import { z } from 'zod';
 export const approachTypes = ["ILS", "GPS", "VOR", "RNAV", "Visual", "NDB", "Other"] as const;
 export const fuelUnits = ["Lbs", "Gal", "Kgs", "Ltrs"] as const;
 
-export const FlightLogLegDataSchema = z.object({
+// Base Zod object schema without refinements
+const _FlightLogLegDataBaseSchema = z.object({
   taxiOutTimeMins: z.coerce.number({ required_error: "Taxi-out time is required."}).int().min(0, "Taxi time cannot be negative."),
   takeOffTime: z.string({ required_error: "Take-off time is required." })
     .regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, "Invalid time format (HH:MM in 24-hr)."),
@@ -31,26 +32,34 @@ export const FlightLogLegDataSchema = z.object({
   endingFuel: z.coerce.number({ required_error: "Ending fuel is required."}).min(0),
   fuelCost: z.coerce.number().min(0).optional().default(0.0),
   postLegApuTimeDecimal: z.coerce.number().min(0).optional().default(0.0),
-}).refine(data => data.hobbsLanding > data.hobbsTakeOff, {
-  message: "Hobbs Landing must be greater than Hobbs Take-Off.",
-  path: ["hobbsLanding"],
-}).refine(data => data.endingFuel <= (data.fobStartingFuel + (data.fuelPurchasedAmount || 0)), {
-  message: "Ending fuel cannot be more than starting fuel plus purchased fuel.",
-  path: ["endingFuel"],
 });
+
+// Schema for form validation, including refinements
+export const FlightLogLegDataSchema = _FlightLogLegDataBaseSchema
+  .refine(data => data.hobbsLanding > data.hobbsTakeOff, {
+    message: "Hobbs Landing must be greater than Hobbs Take-Off.",
+    path: ["hobbsLanding"],
+  })
+  .refine(data => data.endingFuel <= (data.fobStartingFuel + (data.fuelPurchasedAmount || 0)), {
+    message: "Ending fuel cannot be more than starting fuel plus purchased fuel.",
+    path: ["endingFuel"],
+  });
 
 export type FlightLogLegData = z.infer<typeof FlightLogLegDataSchema>;
 
-// Schema for saving to Firestore, including identifiers
-export const SaveFlightLogLegInputSchema = FlightLogLegDataSchema.extend({
+// Schema for saving to Firestore, including identifiers - extends the BASE schema
+export const SaveFlightLogLegInputSchema = _FlightLogLegDataBaseSchema.extend({
   tripId: z.string(),
   legIndex: z.number().int().min(0), // Or a unique legId if available
   // Timestamps will be added by the flow
 });
 export type SaveFlightLogLegInput = z.infer<typeof SaveFlightLogLegInputSchema>;
 
-export const FlightLogLegSchema = SaveFlightLogLegInputSchema.extend({
+// Full schema for a flight log entry in Firestore - extends the BASE schema
+export const FlightLogLegSchema = _FlightLogLegDataBaseSchema.extend({
   id: z.string().describe("Unique Firestore document ID for the flight log entry."),
+  tripId: z.string(),
+  legIndex: z.number().int().min(0),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
   // Calculated fields that might be stored or just used for display
