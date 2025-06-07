@@ -29,13 +29,17 @@ import { useToast } from '@/hooks/use-toast';
 import { format, parseISO, isValid } from 'date-fns';
 import { fetchCrewMembers, type CrewMember } from '@/ai/flows/manage-crew-flow';
 import { cn } from "@/lib/utils";
+import { FlightLogModal } from '../../components/flight-log-modal';
+import { FlightLogSummaryCard } from './components/flight-log-summary-card';
+import type { FlightLogLeg, FlightLogLegData } from '@/ai/schemas/flight-log-schemas';
+import { saveFlightLogLeg, fetchFlightLogForLeg } from '@/ai/flows/manage-flight-logs-flow';
 
 // Helper to get badge variant for status
 const getStatusBadgeVariant = (status?: TripStatus): "default" | "secondary" | "outline" | "destructive" => {
   switch (status?.toLowerCase()) {
     case 'completed': case 'confirmed': return 'default';
-    case 'released': // Changed from 'en route'
-    case 'en route': // Keep 'en route' for backward compatibility if some data exists with it, but UI will show 'Released'
+    case 'released': 
+    case 'en route': 
       return 'secondary';
     case 'scheduled': case 'awaiting closeout': return 'outline';
     case 'cancelled': case 'diverted': return 'destructive';
@@ -107,9 +111,15 @@ export default function ViewTripDetailsPage() {
   const [isLoadingCrewRosterDetails, setIsLoadingCrewRosterDetails] = useState(true);
   const [isUpdatingStatus, startUpdatingStatusTransition] = useTransition();
 
+  const [isFlightLogModalOpen, setIsFlightLogModalOpen] = useState(false);
+  const [currentLegForLog, setCurrentLegForLog] = useState<{ tripId: string; legIndex: number; origin: string; destination: string; initialData?: FlightLogLegData } | null>(null);
+  const [isSavingFlightLog, startSavingFlightLogTransition] = useTransition();
+  const [tripFlightLogs, setTripFlightLogs] = useState<Record<number, FlightLogLeg | null>>({});
+  const [isLoadingFlightLogs, setIsLoadingFlightLogs] = useState(true);
+
   useEffect(() => {
     let isMounted = true;
-    const loadTripAndCrew = async () => {
+    const loadTripData = async () => {
       if (!id) {
         setError("No trip ID provided in URL.");
         setIsLoading(false);
@@ -127,20 +137,19 @@ export default function ViewTripDetailsPage() {
           setTrip(tripData);
           setEditableNotes(tripData.notes || '');
 
-          setIsLoadingCrewRosterDetails(true);
-          try {
-            const roster = await fetchCrewMembers();
-            if (isMounted) {
-              setCrewRosterDetails(roster || []); 
-            }
-          } catch (crewError) {
-            if (isMounted) {
-              console.error("Failed to fetch crew roster:", crewError);
-              toast({ title: "Error Fetching Crew", description: "Could not load crew roster for display.", variant: "destructive" });
-              setCrewRosterDetails([]); 
-            }
-          } finally {
-            if (isMounted) setIsLoadingCrewRosterDetails(false);
+          // Fetch associated flight logs
+          setIsLoadingFlightLogs(true);
+          const logPromises = tripData.legs.map((leg, index) =>
+            fetchFlightLogForLeg({ tripId: tripData.id, legIndex: index })
+          );
+          const logs = await Promise.all(logPromises);
+          if (isMounted) {
+            const logsMap: Record<number, FlightLogLeg | null> = {};
+            logs.forEach((log, index) => {
+              logsMap[index] = log;
+            });
+            setTripFlightLogs(logsMap);
+            setIsLoadingFlightLogs(false);
           }
         } else {
           setError("Trip not found.");
@@ -148,16 +157,35 @@ export default function ViewTripDetailsPage() {
         }
       } catch (err) {
         if (isMounted) {
-          console.error("Failed to fetch trip:", err);
+          console.error("Failed to fetch trip or logs:", err);
           setError(err instanceof Error ? err.message : "An unknown error occurred.");
-          toast({ title: "Error Fetching Trip", description: (err instanceof Error ? err.message : "Unknown error"), variant: "destructive" });
+          toast({ title: "Error Fetching Trip Data", description: (err instanceof Error ? err.message : "Unknown error"), variant: "destructive" });
+          setIsLoadingFlightLogs(false);
         }
       } finally {
         if (isMounted) setIsLoading(false);
       }
     };
 
-    loadTripAndCrew();
+    const loadCrewRoster = async () => {
+        setIsLoadingCrewRosterDetails(true);
+        try {
+            const roster = await fetchCrewMembers();
+            if (isMounted) setCrewRosterDetails(roster || []);
+        } catch (crewError) {
+            if (isMounted) {
+                console.error("Failed to fetch crew roster:", crewError);
+                toast({ title: "Error Fetching Crew", description: "Could not load crew roster for display.", variant: "destructive" });
+                setCrewRosterDetails([]);
+            }
+        } finally {
+           if (isMounted) setIsLoadingCrewRosterDetails(false);
+        }
+    };
+    
+    loadTripData();
+    loadCrewRoster();
+
     return () => { isMounted = false; };
   }, [id, toast]);
 
@@ -206,17 +234,17 @@ export default function ViewTripDetailsPage() {
   };
 
   const handleMarkAsReleased = () => {
-    if (!trip || !canReleaseTrip) return; // canReleaseTrip logic will be updated
+    if (!trip || !canReleaseTrip) return;
     startUpdatingStatusTransition(async () => {
       const updatedTripData: Trip = {
         ...trip,
-        status: "Released", // Changed from "En Route"
+        status: "Released",
       };
       try {
         const { id: tripDocId, createdAt, updatedAt, ...tripSaveData } = updatedTripData;
         const savedTrip = await saveTrip({ ...tripSaveData, id: tripDocId });
         setTrip(savedTrip);
-        toast({ title: "Trip Released", description: `Trip ${savedTrip.tripId} is now Released.`}); // Updated message
+        toast({ title: "Trip Released", description: `Trip ${savedTrip.tripId} is now Released.`});
       } catch (err) {
         console.error("Failed to mark trip as released:", err);
         toast({ title: "Error Releasing Trip", description: (err instanceof Error ? err.message : "Unknown error"), variant: "destructive" });
@@ -229,6 +257,64 @@ export default function ViewTripDetailsPage() {
     if (isLoadingCrewRosterDetails) return <Loader2 className="h-4 w-4 animate-spin inline-block" />;
     const crewMember = crewRosterDetails.find(c => c.id === crewId);
     return crewMember ? `${crewMember.firstName} ${crewMember.lastName} (${crewMember.role})` : `Unknown (ID: ${crewId})`;
+  };
+
+  const handleOpenFlightLogModal = (legIndex: number) => {
+    if (!trip) return;
+    const leg = trip.legs[legIndex];
+    if (!leg) return;
+
+    const existingLog = tripFlightLogs[legIndex];
+    const initialLogData = existingLog ? {
+      ...existingLog, // Spread existing log data
+      // Ensure numbers are numbers and not potentially strings from Firestore if not strictly typed there
+      taxiOutTimeMins: Number(existingLog.taxiOutTimeMins),
+      hobbsTakeOff: Number(existingLog.hobbsTakeOff),
+      hobbsLanding: Number(existingLog.hobbsLanding),
+      taxiInTimeMins: Number(existingLog.taxiInTimeMins),
+      approaches: Number(existingLog.approaches ?? 0),
+      dayLandings: Number(existingLog.dayLandings ?? 0),
+      nightLandings: Number(existingLog.nightLandings ?? 0),
+      nightTimeDecimal: Number(existingLog.nightTimeDecimal ?? 0.0),
+      instrumentTimeDecimal: Number(existingLog.instrumentTimeDecimal ?? 0.0),
+      fobStartingFuel: Number(existingLog.fobStartingFuel),
+      fuelPurchasedAmount: Number(existingLog.fuelPurchasedAmount ?? 0.0),
+      endingFuel: Number(existingLog.endingFuel),
+      fuelCost: Number(existingLog.fuelCost ?? 0.0),
+      postLegApuTimeDecimal: Number(existingLog.postLegApuTimeDecimal ?? 0.0),
+    } : undefined;
+
+
+    setCurrentLegForLog({
+      tripId: trip.id,
+      legIndex: legIndex,
+      origin: leg.origin,
+      destination: leg.destination,
+      initialData: initialLogData,
+    });
+    setIsFlightLogModalOpen(true);
+  };
+
+  const onSaveFlightLog = async (logData: FlightLogLegData) => {
+    if (!currentLegForLog || !trip) return;
+    startSavingFlightLogTransition(async () => {
+      try {
+        const savedLog = await saveFlightLogLeg({
+          tripId: currentLegForLog.tripId,
+          legIndex: currentLegForLog.legIndex,
+          ...logData,
+        });
+        setTripFlightLogs(prevLogs => ({
+          ...prevLogs,
+          [currentLegForLog.legIndex]: savedLog,
+        }));
+        toast({ title: "Flight Log Saved", description: `Log for leg ${currentLegForLog.legIndex + 1} saved.` });
+        setIsFlightLogModalOpen(false);
+      } catch (err) {
+        console.error("Failed to save flight log:", err);
+        toast({ title: "Error Saving Log", description: (err instanceof Error ? err.message : "Unknown error"), variant: "destructive" });
+      }
+    });
   };
 
 
@@ -282,7 +368,6 @@ export default function ViewTripDetailsPage() {
             </Button>
             <Tooltip>
               <TooltipTrigger asChild>
-                {/* Span needed for Tooltip when Button is disabled */}
                 <span> 
                   <Button 
                     variant="default" 
@@ -339,6 +424,13 @@ export default function ViewTripDetailsPage() {
           </CardContent>
         </Card>
       </div>
+      
+      <FlightLogSummaryCard
+        tripLegs={trip.legs}
+        flightLogs={tripFlightLogs}
+        isLoadingLogs={isLoadingFlightLogs}
+        onLogActualsClick={handleOpenFlightLogModal}
+      />
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mt-6">
         <Card className="shadow-sm">
@@ -419,6 +511,20 @@ export default function ViewTripDetailsPage() {
           </CardContent>
         </Card>
       </div>
+
+      {currentLegForLog && (
+        <FlightLogModal
+          isOpen={isFlightLogModalOpen}
+          setIsOpen={setIsFlightLogModalOpen}
+          tripId={currentLegForLog.tripId}
+          legIndex={currentLegForLog.legIndex}
+          legOrigin={currentLegForLog.origin}
+          legDestination={currentLegForLog.destination}
+          initialData={currentLegForLog.initialData}
+          onSave={onSaveFlightLog}
+          isSaving={isSavingFlightLog}
+        />
+      )}
 
       {/* First Deletion Confirmation Dialog */}
       <AlertDialog open={showDeleteConfirm1} onOpenChange={setShowDeleteConfirm1}>
