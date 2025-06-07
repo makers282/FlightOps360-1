@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { List, ListItem } from '@/components/ui/list';
-import { Megaphone, Loader2, AlertTriangle, Plane, CalendarDays, LayoutDashboard, Info, UserX as UserXIcon, BarChartHorizontal3, Users, Briefcase } from 'lucide-react';
+import { Megaphone, Loader2, AlertTriangle, Plane, CalendarDays, LayoutDashboard, Info, UserX as UserXIcon, BarChartHorizontal3, Users, Briefcase, Clock } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { AlertDialog, AlertDialogContent, AlertDialogDescription as ModalAlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogCancel } from "@/components/ui/alert-dialog";
@@ -15,7 +15,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageHeader } from '@/components/page-header';
 import { useToast } from '@/hooks/use-toast';
-import { format, parseISO, isValid, addDays, differenceInCalendarDays } from 'date-fns';
+import { format, parseISO, isValid, addDays, differenceInCalendarDays, differenceInHours } from 'date-fns';
 
 import { fetchBulletins, type Bulletin, type BulletinType } from '@/ai/flows/manage-bulletins-flow';
 import { fetchTrips, type Trip } from '@/ai/flows/manage-trips-flow';
@@ -41,7 +41,7 @@ interface AircraftStatusDetail extends SimplifiedAircraftStatus {
 
 interface SystemAlert {
   id: string;
-  type: 'aircraft' | 'system' | 'maintenance';
+  type: 'aircraft' | 'system' | 'maintenance' | 'trip';
   severity: 'critical' | 'warning' | 'info';
   title: string;
   message: string;
@@ -234,7 +234,7 @@ export default function DashboardPage() {
     setIsLoadingTrips(true);
     setIsLoadingFleet(true);
     setIsLoadingAircraftStatusDetails(true);
-    setActiveSystemAlerts([]);
+    setActiveSystemAlerts([]); // Clear existing alerts before re-populating
 
     try {
       const [fetchedBulletins, fetchedTrips, fetchedFleetList] = await Promise.all([
@@ -320,6 +320,26 @@ export default function DashboardPage() {
         }
       }
       setAircraftStatusDetails(newStatusDetailsMap);
+      
+      // Add alerts for trips needing release
+      const twentyFourHoursFromNow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+      fetchedTrips.forEach(trip => {
+        if ((trip.status === "Scheduled" || trip.status === "Confirmed") && trip.legs?.[0]?.departureDateTime) {
+          const departureTime = parseISO(trip.legs[0].departureDateTime);
+          if (isValid(departureTime) && departureTime <= twentyFourHoursFromNow && departureTime >= now) {
+            tempSystemAlerts.push({
+              id: `trip_release_warn_${trip.id}`,
+              type: 'trip',
+              severity: 'warning',
+              title: `Trip Needs Release: ${trip.tripId}`,
+              message: `Aircraft: ${trip.aircraftLabel || trip.aircraftId}. Departs ${format(departureTime, 'MMM d, HH:mm')}. Status: ${trip.status}.`,
+              link: `/trips/details/${trip.id}`,
+              icon: Clock,
+            });
+          }
+        }
+      });
+
       tempSystemAlerts.sort((a, b) => {
         if (a.severity === 'critical' && b.severity !== 'critical') return -1;
         if (a.severity !== 'critical' && b.severity === 'critical') return 1;
@@ -519,7 +539,7 @@ export default function DashboardPage() {
             <CardDescription>Important system notifications requiring attention.</CardDescription>
           </CardHeader>
           <CardContent>
-             {isLoadingAircraftStatusDetails ? (
+             {isLoadingAircraftStatusDetails && isLoadingTrips ? (
                 <div className="flex items-center justify-center py-5"><Loader2 className="h-6 w-6 animate-spin text-primary" /><p className="ml-2 text-muted-foreground">Loading alerts...</p></div>
              ) : activeSystemAlerts.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-3">No critical system alerts at this time.</p>
