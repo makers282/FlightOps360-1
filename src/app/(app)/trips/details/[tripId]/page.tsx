@@ -27,6 +27,7 @@ import type { Trip, TripLeg, TripStatus, SaveTripInput } from '@/ai/schemas/trip
 import { useToast } from '@/hooks/use-toast';
 import { format, parseISO, isValid } from 'date-fns';
 import { fetchCrewMembers, type CrewMember } from '@/ai/flows/manage-crew-flow';
+import { cn } from "@/lib/utils"; // Added missing import
 
 // Helper to get badge variant for status
 const getStatusBadgeVariant = (status?: TripStatus): "default" | "secondary" | "outline" | "destructive" => {
@@ -126,11 +127,14 @@ export default function ViewTripDetailsPage() {
           setIsLoadingCrewRosterDetails(true);
           try {
             const roster = await fetchCrewMembers();
-            if (isMounted) setCrewRosterDetails(roster);
+            if (isMounted) {
+              setCrewRosterDetails(roster || []); // Ensure roster is an array
+            }
           } catch (crewError) {
             if (isMounted) {
               console.error("Failed to fetch crew roster:", crewError);
               toast({ title: "Error Fetching Crew", description: "Could not load crew roster for display.", variant: "destructive" });
+              setCrewRosterDetails([]); // Set to empty array on error
             }
           } finally {
             if (isMounted) setIsLoadingCrewRosterDetails(false);
