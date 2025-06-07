@@ -21,12 +21,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Loader2, ArrowLeft, Plane, User, CalendarDays, DollarSign, InfoIcon, Edit3, Trash2, Send, Users as CrewIcon, FileText as FileIcon, Package as LoadManifestIcon, Save } from 'lucide-react';
+import { Loader2, ArrowLeft, Plane, User, CalendarDays, DollarSign, InfoIcon, Edit3, Trash2, Send, Users as CrewIcon, FileText as FileIcon, Package as LoadManifestIcon, Save, PlaneTakeoff } from 'lucide-react';
 import { fetchTripById, deleteTrip, saveTrip } from '@/ai/flows/manage-trips-flow';
 import type { Trip, TripLeg, TripStatus, SaveTripInput } from '@/ai/schemas/trip-schemas';
 import { useToast } from '@/hooks/use-toast';
 import { format, parseISO, isValid } from 'date-fns';
-import { fetchCrewMembers, type CrewMember } from '@/ai/flows/manage-crew-flow'; 
+import { fetchCrewMembers, type CrewMember } from '@/ai/flows/manage-crew-flow';
 
 // Helper to get badge variant for status
 const getStatusBadgeVariant = (status?: TripStatus): "default" | "secondary" | "outline" | "destructive" => {
@@ -101,6 +101,7 @@ export default function ViewTripDetailsPage() {
 
   const [crewRosterDetails, setCrewRosterDetails] = useState<CrewMember[]>([]);
   const [isLoadingCrewRosterDetails, setIsLoadingCrewRosterDetails] = useState(true);
+  const [isUpdatingStatus, startUpdatingStatusTransition] = useTransition();
 
   useEffect(() => {
     let isMounted = true;
@@ -183,9 +184,8 @@ export default function ViewTripDetailsPage() {
       };
       
       try {
-        // Correctly call saveTrip with the modified Trip object
         const { id: tripDocId, createdAt, updatedAt, ...tripSaveData } = tripDataToSave;
-        const savedTrip = await saveTrip({ ...tripSaveData, id: tripDocId }); // Ensure id is correctly passed or handled
+        const savedTrip = await saveTrip({ ...tripSaveData, id: tripDocId });
         
         setTrip(savedTrip);
         setEditableNotes(savedTrip.notes || '');
@@ -194,6 +194,25 @@ export default function ViewTripDetailsPage() {
       } catch (err) {
         console.error("Failed to save notes:", err);
         toast({ title: "Error Saving Notes", description: (err instanceof Error ? err.message : "Unknown error"), variant: "destructive" });
+      }
+    });
+  };
+
+  const handleMarkAsReleased = () => {
+    if (!trip || (trip.status !== "Scheduled" && trip.status !== "Confirmed")) return;
+    startUpdatingStatusTransition(async () => {
+      const updatedTripData: Trip = {
+        ...trip,
+        status: "En Route",
+      };
+      try {
+        const { id: tripDocId, createdAt, updatedAt, ...tripSaveData } = updatedTripData;
+        const savedTrip = await saveTrip({ ...tripSaveData, id: tripDocId });
+        setTrip(savedTrip);
+        toast({ title: "Trip Released", description: `Trip ${savedTrip.tripId} is now En Route.`});
+      } catch (err) {
+        console.error("Failed to mark trip as released:", err);
+        toast({ title: "Error Releasing Trip", description: (err instanceof Error ? err.message : "Unknown error"), variant: "destructive" });
       }
     });
   };
@@ -230,6 +249,8 @@ export default function ViewTripDetailsPage() {
       </>
     );
   }
+  
+  const canReleaseTrip = trip.status === "Scheduled" || trip.status === "Confirmed";
 
   return (
     <>
@@ -243,6 +264,15 @@ export default function ViewTripDetailsPage() {
                 <Link href={`/trips/edit/${trip.id}`}>
                     <Edit3 className="mr-2 h-4 w-4" /> Edit Trip
                 </Link>
+            </Button>
+            <Button 
+              variant="default" 
+              onClick={handleMarkAsReleased} 
+              disabled={!canReleaseTrip || isUpdatingStatus}
+              className={cn(canReleaseTrip && "bg-green-600 hover:bg-green-700 text-white")}
+            >
+              {isUpdatingStatus ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <PlaneTakeoff className="mr-2 h-4 w-4" />}
+              Mark as Released
             </Button>
             <Button variant="outline" disabled><Send className="mr-2 h-4 w-4" /> Send Itinerary</Button>
             <Button variant="destructive" onClick={() => setShowDeleteConfirm1(true)} disabled={isDeleting}>
