@@ -27,7 +27,7 @@ const EstimateFlightDetailsOutputSchema = z.object({
   resolvedOriginIcao: z.string().describe('The resolved ICAO code used for the origin airport.'),
   resolvedOriginName: z.string().describe('The single, common official name of the resolved origin airport (e.g., "John F. Kennedy International Airport" or "Dayton-Wright Brothers Airport"). Must be concise and not repetitive.'),
   resolvedDestinationIcao: z.string().describe('The resolved ICAO code used for the destination airport.'),
-  resolvedDestinationName: z.string().describe('The single, common official name of the resolved destination airport (e.g., "Los Angeles International Airport"). Must be concise and not repetitive.'),
+  resolvedDestinationName: z.string().describe('The single, common official name of the resolved destination airport (e.g., "Los Angeles International Airport" or "Colorado Plains Regional Airport"). Must be concise and not repetitive.'),
   briefExplanation: z.string().describe('A very brief, one-sentence explanation of the estimation method (e.g., "Estimated based on direct route and average cruise speed for the aircraft type." or "Estimated based on direct route and provided cruise speed of X kts.").'),
 });
 export type EstimateFlightDetailsOutput = z.infer<typeof EstimateFlightDetailsOutputSchema>;
@@ -45,20 +45,19 @@ const prompt = ai.definePrompt({
   },
   prompt: `You are an expert flight operations assistant. Your task is to estimate flight details based on the provided information.
 
-Given an origin airport, a destination airport, and an aircraft type.
-
-Airport Code Interpretation:
-- If a 4-letter code is provided (e.g., KJFK, EGLL), assume it is an ICAO code. Use this code directly.
-- If a 3-letter code is provided (e.g., JFK, LHR), assume it is an IATA code.
-    - For US airports, prefix 'K' to the 3-letter IATA code to derive the ICAO code (e.g., JFK becomes KJFK, LAX becomes KLAX).
-    - For non-US airports, use the most common ICAO equivalent for the given IATA code (e.g., LHR becomes EGLL).
-- Perform your distance and time estimations based on these resolved ICAO codes.
+Airport Code Interpretation and Strict Adherence:
+- You will be given an origin airport code and a destination airport code.
+- **CRITICAL RULE: If an input airport code (origin or destination) is 4 letters long (e.g., KJFK, KAKO), you MUST assume it is an ICAO code. All your information retrieval (airport name, location for distance calculation) and subsequent calculations for that airport MUST be based SOLELY and EXACTLY on THIS GIVEN 4-LETTER ICAO CODE. Do not substitute it or get confused by similar names or other airports in similarly named cities.** For example, if the input is 'KAKO', all details and calculations must relate to KAKO (Colorado Plains Regional Airport), NOT KAKR (Akron-Fulton International Airport, Ohio). The \`resolvedOriginIcao\` and \`resolvedDestinationIcao\` fields in your output MUST match these input ICAO codes if they were 4 letters.
+- If an input airport code is 3 letters long (e.g., JFK, LHR), assume it is an IATA code.
+    - For US airports, prefix 'K' to the 3-letter IATA code to derive the ICAO code (e.g., JFK becomes KJFK, LAX becomes KLAX). Use this derived K-prefixed ICAO for all subsequent steps.
+    - For non-US airports, use the most common ICAO equivalent for the given IATA code (e.g., LHR becomes EGLL). Use this derived ICAO.
+- Perform your distance and time estimations based on these strictly determined ICAO codes.
 
 **CRITICALLY IMPORTANT FOR AIRPORT NAMES:**
-For 'resolvedOriginName' and 'resolvedDestinationName', provide **ONLY the single, most common official airport name**.
-    - Example for "JFK" input: "John F. Kennedy International Airport".
-    - Example for "MGY" input: "Dayton-Wright Brothers Airport".
-    - Example for "GDK" input: "Gardner Municipal Airport".
+For 'resolvedOriginName' and 'resolvedDestinationName', provide **ONLY the single, most common official airport name associated with the ICAO code you have determined according to the rules above.**
+    - Example for "JFK" (resolves to KJFK): "John F. Kennedy International Airport".
+    - Example for "MGY" (input is MGY, resolves to KMGY): "Dayton-Wright Brothers Airport".
+    - Example for "KAKO" (input is KAKO): "Colorado Plains Regional Airport".
     - **The name output for these fields MUST be ONLY the airport's name. Do NOT repeat the airport name, ICAO code, city, state, country, or any other descriptive text within these specific name fields.**
     - **If the input is "GDK", the output for 'resolvedOriginName' should be "Gardner Municipal Airport", and nothing more.**
 
@@ -77,13 +76,13 @@ The assumedCruiseSpeedKts in your output should be your best estimate for the ai
 {{/if}}
 
 Output fields required:
-- estimatedMileageNM: Estimated flight distance in nautical miles (NM).
-- estimatedFlightTimeHours: Estimated flight time in hours (e.g., 2.5 for 2 hours 30 minutes).
+- estimatedMileageNM: Estimated flight distance in nautical miles (NM), calculated based on the strictly determined ICAO codes.
+- estimatedFlightTimeHours: Estimated flight time in hours (e.g., 2.5 for 2 hours 30 minutes), based on the strictly determined ICAO codes and aircraft speed.
 - assumedCruiseSpeedKts: The assumed cruise speed in knots (kts) used.
-- resolvedOriginIcao: The ICAO code used for the origin.
-- resolvedOriginName: The single, common official airport name for the origin.
-- resolvedDestinationIcao: The ICAO code used for the destination.
-- resolvedDestinationName: The single, common official airport name for the destination.
+- resolvedOriginIcao: The ICAO code used for the origin, strictly adhering to the rules above.
+- resolvedOriginName: The single, common official airport name for the resolvedOriginIcao.
+- resolvedDestinationIcao: The ICAO code used for the destination, strictly adhering to the rules above.
+- resolvedDestinationName: The single, common official airport name for the resolvedDestinationIcao.
 - briefExplanation: A very brief, one-sentence explanation of the estimation method.
 
 Return the data strictly in the specified JSON output format.
@@ -98,19 +97,19 @@ Example for a request (KJFK to KLAX, Cessna Citation CJ3, knownCruiseSpeedKts: 4
   "resolvedDestinationName": "Los Angeles International Airport",
   "briefExplanation": "Estimated based on a direct route and a provided cruise speed of 410 kts."
 }
-Example for a request (MGY to KISM, Piper Archer, no knownCruiseSpeedKts):
+Example for a request (KAKO to KDEN, Piper Archer, no knownCruiseSpeedKts):
 {
-  "estimatedMileageNM": 300,
-  "estimatedFlightTimeHours": 2.5,
-  "assumedCruiseSpeedKts": 120,
-  "resolvedOriginIcao": "KMGY",
-  "resolvedOriginName": "Dayton-Wright Brothers Airport",
-  "resolvedDestinationIcao": "KISM",
-  "resolvedDestinationName": "Kissimmee Gateway Airport",
-  "briefExplanation": "Estimated based on a direct route and an average cruise speed of 120 kts for a Piper Archer."
+  "estimatedMileageNM": 75,
+  "estimatedFlightTimeHours": 0.7,
+  "assumedCruiseSpeedKts": 110,
+  "resolvedOriginIcao": "KAKO",
+  "resolvedOriginName": "Colorado Plains Regional Airport",
+  "resolvedDestinationIcao": "KDEN",
+  "resolvedDestinationName": "Denver International Airport",
+  "briefExplanation": "Estimated based on a direct route and an average cruise speed of 110 kts for a Piper Archer."
 }
 Example for GDK (Gardner Municipal Airport): If origin is GDK, resolvedOriginName must be "Gardner Municipal Airport".
-Provide realistic estimates.
+Provide realistic estimates based *only* on the correctly identified airports.
 `,
 });
 
@@ -169,7 +168,6 @@ const estimateFlightDetailsFlow = ai.defineFlow(
     }
     // Ensure the AI respects the knownCruiseSpeedKts if provided
     if (input.knownCruiseSpeedKts && output.assumedCruiseSpeedKts !== input.knownCruiseSpeedKts) {
-        // Optionally, force it or log a warning if AI deviates despite instruction.
         console.warn(`AI output assumed speed ${output.assumedCruiseSpeedKts} kts, but known speed was ${input.knownCruiseSpeedKts} kts. Overriding to known speed.`);
         output.assumedCruiseSpeedKts = input.knownCruiseSpeedKts;
     }
