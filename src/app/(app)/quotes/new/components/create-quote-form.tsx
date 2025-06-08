@@ -204,7 +204,7 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
   }, []);
 
    useEffect(() => {
-    if (fetchedCompanyProfile?.serviceFeeRates && !isEditMode) { // Only auto-populate for new quotes or when profile loads
+    if (fetchedCompanyProfile?.serviceFeeRates && !isEditMode) { 
       const activeServicesFromConfig = Object.entries(fetchedCompanyProfile.serviceFeeRates)
         .filter(([_key, rate]) => rate.isActive)
         .map(([key, rate]) => {
@@ -220,8 +220,8 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
                 unitDescription: rate.unitDescription,
                 defaultBuyRate: rate.buy,
                 defaultSellRate: rate.sell,
-                selected: false, // Default to false for new quotes
-                customSellPrice: undefined, // Default to undefined for new quotes
+                selected: false, 
+                customSellPrice: undefined, 
                 isActiveFromConfig: rate.isActive ?? true,
                 quantityInputType,
             };
@@ -291,8 +291,7 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
       }
     };
     loadInitialDropdownData();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); 
+  }, [toast]); 
 
   useEffect(() => {
     if (isEditMode && quoteIdToEdit) {
@@ -307,7 +306,7 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
             
             const initialFormOptionalServices: OptionalServiceFormData[] = 
               Object.entries(fetchedCompanyProfile?.serviceFeeRates || {})
-              .filter(([_key, rate]) => rate.isActive)
+              .filter(([_key, rate]) => rate.isActive) // Only include active services as options
               .map(([key, rate]) => {
                 const existingLineItem = (quoteData.lineItems || []).find(li => li.id === key); 
                 let quantityInputType: OptionalServiceFormData['quantityInputType'] = 'none';
@@ -637,9 +636,6 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
           estimatedOvernights: data.estimatedOvernights,
           cateringNotes: data.cateringNotes,
           notes: data.notes,
-          // The following booleans will depend on whether *any* service of that type was selected
-          // For simplicity now, let's keep them as they were or infer from selected line items.
-          // More robustly, you'd check if a specific service with a key like "MEDICS" was in lineItems.
           medicsRequested: calculatedLineItems.some(li => li.id.toUpperCase().includes("MEDICAL")),
           cateringRequested: calculatedLineItems.some(li => li.id.toUpperCase().includes("CATERING")),
           includeLandingFees: calculatedLineItems.some(li => li.id.toUpperCase().includes("LANDING")),
@@ -950,7 +946,7 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
                     </div>
                     <FormField control={control} name={`legs.${index}.departureDateTime`} render={({ field }) => (
                       <FormItem className="flex flex-col">
-                        <FormLabel>Desired Departure Date &amp; Time</FormLabel>
+                        <FormLabel>Desired Departure Date & Time</FormLabel>
                         <FormControl>
                           {isClient ? (
                             <Popover modal={false}>
@@ -1025,22 +1021,21 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
         
         <Accordion type="single" collapsible className="w-full">
           <AccordionItem value="additional-options">
-            <AccordionTrigger className="px-0 pt-0 pb-2 hover:no-underline">
-              <Card className="w-full shadow-sm hover:bg-muted/30"> {/* Mimic card header */}
+            <AccordionTrigger className="p-0 hover:no-underline -mb-2">
+              <Card className="w-full shadow-sm hover:bg-muted/30 rounded-b-none border-b-0"> 
                 <CardHeader>
                     <div className="flex items-center justify-between">
                         <CardTitle className="text-lg flex items-center gap-2">
                           <ListChecks className="h-5 w-5 text-primary" />
                           Additional Quote Options & Pricing
                         </CardTitle>
-                        {/* Chevron is added by AccordionTrigger automatically if it's the direct child */}
                     </div>
                     <CardDescription>Select desired services. Active services from Quote Configuration are listed here.</CardDescription>
                 </CardHeader>
               </Card>
             </AccordionTrigger>
             <AccordionContent className="pt-0">
-              <Card className="rounded-t-none border-t-0 shadow-sm"> {/* Content part of the card */}
+              <Card className="rounded-t-none border-t-0 shadow-sm"> 
                 <CardContent className="pt-4">
                     <div className="space-y-4">
                     {optionalServicesFields.length === 0 && !isLoadingDynamicRates && (<p className="text-sm text-muted-foreground">No active optional services configured in Quote Configuration.</p>)}
