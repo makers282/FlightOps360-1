@@ -48,6 +48,7 @@ import { quoteStatuses, legTypes } from '@/ai/schemas/quote-schemas';
 import { useRouter } from 'next/navigation';
 import { fetchCustomers, type Customer } from '@/ai/flows/manage-customers-flow';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { ClientOnly } from '@/components/client-only';
 
 
 const legSchema = z.object({
@@ -254,7 +255,7 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
     today.setHours(0, 0, 0, 0);
     setMinLegDepartureDate(today);
 
-    const loadInitialData = async () => {
+    const loadInitialDropdownData = async () => {
       setIsLoadingAircraftList(true);
       setIsLoadingDynamicRates(true);
       setIsLoadingCustomers(true);
@@ -285,8 +286,10 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
         setIsLoadingCustomers(false);
       }
     };
-    loadInitialData();
+    loadInitialDropdownData();
+  }, []); 
 
+  useEffect(() => {
     if (isEditMode && quoteIdToEdit) {
       setIsLoadingQuoteDataForEdit(true);
       fetchQuoteById({ id: quoteIdToEdit })
@@ -380,6 +383,110 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
 
 
   useEffect(() => {
+    if (currentSelectedAircraftId) {
+      setIsLoadingSelectedAcPerf(true);
+      fetchAircraftPerformance({ aircraftId: currentSelectedAircraftId })
+        .then(perfData => {
+          if (perfData) {
+             setSelectedAircraftPerformance({...perfData, aircraftId: currentSelectedAircraftId});
+          } else {
+             setSelectedAircraftPerformance(null);
+          }
+        })
+        .catch(error => {
+          console.warn(`Could not fetch performance data for aircraft ${currentSelectedAircraftId}:`, error);
+          setSelectedAircraftPerformance(null);
+        })
+        .finally(() => setIsLoadingSelectedAcPerf(false));
+    } else {
+      setSelectedAircraftPerformance(null);
+    }
+  }, [currentSelectedAircraftId]);
+
+  const handleCustomerSelect = (customerId: string | undefined) => {
+    setValue('selectedCustomerId', customerId);
+    if (!customerId) {
+      setValue('clientName', '');
+      setValue('clientEmail', '');
+      setValue('clientPhone', '');
+      return;
+    }
+    const selectedCustomer = customers.find(c => c.id === customerId);
+    if (selectedCustomer) {
+      setValue('clientName', selectedCustomer.name);
+      setValue('clientEmail', selectedCustomer.email || '');
+      setValue('clientPhone', selectedCustomer.phone || '');
+    }
+  };
+
+  const handleAddLeg = () => {
+    let newLegDefaults: Partial<LegFormData> = {
+      origin: '', destination: '', legType: 'Charter', passengerCount: 1, originTaxiTimeMinutes: 15, destinationTaxiTimeMinutes: 15, originFbo: '', destinationFbo: '', flightTimeHours: undefined,
+    };
+    if (fields.length > 0) {
+      const previousLegIndex = fields.length - 1;
+      const previousLeg = getValues(`legs.${previousLegIndex}`);
+
+      newLegDefaults.origin = previousLeg.destination;
+      newLegDefaults.passengerCount = Number(previousLeg.passengerCount || 1);
+      newLegDefaults.originTaxiTimeMinutes = Number(previousLeg.originTaxiTimeMinutes || 15);
+      newLegDefaults.destinationTaxiTimeMinutes = Number(previousLeg.destinationTaxiTimeMinutes || 15);
+      newLegDefaults.originFbo = previousLeg.destinationFbo || '';
+      newLegDefaults.destinationFbo = '';
+
+      const previousLegFlightTime = Number(previousLeg.flightTimeHours || (legEstimates[previousLegIndex]?.estimatedFlightTimeHours || 0));
+
+      if (previousLeg.departureDateTime && previousLeg.departureDateTime instanceof Date && isValidDate(previousLeg.departureDateTime) && previousLegFlightTime > 0) {
+        const previousLegDeparture = new Date(previousLeg.departureDateTime);
+        const previousLegFlightMillis = previousLegFlightTime * 60 * 60 * 1000;
+        const previousLegDestTaxiMillis = (Number(previousLeg.destinationTaxiTimeMinutes || 0)) * 60 * 1000;
+        const estimatedArrivalMillis = previousLegDeparture.getTime() + previousLegFlightMillis + previousLegDestTaxiMillis;
+        newLegDefaults.departureDateTime = new Date(estimatedArrivalMillis + (60 * 60 * 1000)); 
+      } else if (previousLeg.departureDateTime && previousLeg.departureDateTime instanceof Date && isValidDate(previousLeg.departureDateTime)) {
+         newLegDefaults.departureDateTime = new Date(previousLeg.departureDateTime.getTime() + (3 * 60 * 60 * 1000)); 
+      }
+    }
+
+    append(newLegDefaults as LegFormData);
+  };
+
+  const handleRemoveLeg = (index: number) => {
+    remove(index);
+    setLegEstimates(prev => { const newEstimates = [...prev]; newEstimates.splice(index, 1); return newEstimates; });
+  };
+
+   const findConfiguredService = useCallback((searchPhrase: string): (ServiceFeeRate & { serviceKey: string }) | null => {
+    if (!fetchedCompanyProfile || !fetchedCompanyProfile.serviceFeeRates) return null;
+    const phraseUpper = searchPhrase.toUpperCase();
+    for (const [key, service] of Object.entries(fetchedCompanyProfile.serviceFeeRates)) {
+      if (service.isActive && service.displayDescription.toUpperCase().includes(phraseUpper)) {
+        return { ...service, serviceKey: key };
+      }
+    }
+    return null;
+  }, [fetchedCompanyProfile]);
+
+  const shouldShowServiceOption = useCallback((searchPhrase: string): boolean => {
+    return !!findConfiguredService(searchPhrase);
+  }, [findConfiguredService]);
+
+  const getServiceLabel = useCallback((searchPhrase: string, fallbackLabel: string): string => {
+    const service = findConfiguredService(searchPhrase);
+    if (service) {
+      return `${service.displayDescription} (${formatCurrencyLocal(service.sell)} / ${service.unitDescription})`;
+    }
+    return fallbackLabel;
+  }, [findConfiguredService]);
+
+  const getServicePlaceholder = useCallback((searchPhrase: string, fallbackPlaceholder: string): string => {
+    const service = findConfiguredService(searchPhrase);
+    if (service) {
+      return `Default: ${formatCurrencyLocal(service.sell)}`;
+    }
+    return fallbackPlaceholder;
+  }, [findConfiguredService]);
+  
+  useEffect(() => {
     const newItems: QuoteLineItem[] = [];
     if (isLoadingDynamicRates || !currentSelectedAircraftId || !formOptionalServices) {
         setCalculatedLineItems([]);
@@ -471,86 +578,49 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
        toast({ title: "Estimation in Progress", description: `Still estimating leg ${estimatingLegIndex + 1}. Please wait.`, variant: "default" });
        return;
     }
-
     const legData = getValues(`legs.${legIndex}`);
     const selectedAircraft = aircraftSelectOptions.find(ac => ac.value === currentSelectedAircraftId);
-
-    if (!legData?.origin || legData.origin.length < 3 || !legData?.destination || legData.destination.length < 3 || !currentSelectedAircraftId || !selectedAircraft) {
-      toast({ title: "Missing Information", description: "Please provide origin, destination (min 3 chars each), and select an aircraft type before estimating.", variant: "destructive"});
+    if (!legData?.origin || !legData?.destination || !currentSelectedAircraftId || !selectedAircraft) {
+      toast({ title: "Missing Information", description: "Origin, destination, and aircraft must be selected.", variant: "destructive" });
       return;
     }
-
+    
     const aircraftModelForFlow = selectedAircraft.model;
     const knownCruiseSpeedForFlow = selectedAircraftPerformance?.cruiseSpeed;
     const currentEstimate = legEstimates[legIndex];
 
-    if (currentEstimate && !currentEstimate.error &&
-        currentEstimate.estimatedForInputs?.origin === legData.origin.toUpperCase() &&
-        currentEstimate.estimatedForInputs?.destination === legData.destination.toUpperCase() &&
-        currentEstimate.estimatedForInputs?.aircraftModel === aircraftModelForFlow &&
-        currentEstimate.estimatedForInputs?.knownCruiseSpeedKts === knownCruiseSpeedForFlow) {
-      toast({ title: "Estimate Exists", description: "Flight details already estimated for these inputs.", variant: "default" });
-      if(currentEstimate.estimatedFlightTimeHours !== undefined) {
+    const inputsChanged = !currentEstimate || 
+                          currentEstimate.error || 
+                          currentEstimate.estimatedForInputs?.origin !== legData.origin.toUpperCase() ||
+                          currentEstimate.estimatedForInputs?.destination !== legData.destination.toUpperCase() ||
+                          currentEstimate.estimatedForInputs?.aircraftModel !== aircraftModelForFlow ||
+                          currentEstimate.estimatedForInputs?.knownCruiseSpeedKts !== knownCruiseSpeedForFlow;
+
+    if (!inputsChanged && currentEstimate && currentEstimate.estimatedFlightTimeHours !== undefined) {
         setValue(`legs.${legIndex}.flightTimeHours`, currentEstimate.estimatedFlightTimeHours);
-      }
-      return;
+        toast({ title: "Using Existing Estimate", description: `Flight details for Leg ${legIndex + 1} are current.`, variant: "default" });
+        return;
     }
 
     setEstimatingLegIndex(legIndex);
-    setLegEstimates(prev => { const newEstimates = [...prev]; newEstimates[legIndex] = null; return newEstimates; });
-
     try {
       const result = await estimateFlightDetails({
-        origin: legData.origin.toUpperCase(),
-        destination: legData.destination.toUpperCase(),
-        aircraftType: aircraftModelForFlow,
-        knownCruiseSpeedKts: knownCruiseSpeedForFlow,
+        origin: legData.origin.toUpperCase(), destination: legData.destination.toUpperCase(),
+        aircraftType: aircraftModelForFlow, knownCruiseSpeedKts: knownCruiseSpeedForFlow,
       });
-
       setValue(`legs.${legIndex}.flightTimeHours`, result.estimatedFlightTimeHours);
-      const originTaxi = Number(legData.originTaxiTimeMinutes || 0);
-      const destTaxi = Number(legData.destinationTaxiTimeMinutes || 0);
-      const flightTime = Number(result.estimatedFlightTimeHours || 0);
-      const blockTimeTotalMinutes = originTaxi + (flightTime * 60) + destTaxi;
-      const blockTimeHours = parseFloat((blockTimeTotalMinutes / 60).toFixed(2));
-
-      setLegEstimates(prev => {
-        const newEstimates = [...prev];
-        newEstimates[legIndex] = {
-          ...result,
-          blockTimeHours: blockTimeHours,
-          estimatedForInputs: {
-            origin: legData.origin.toUpperCase(),
-            destination: legData.destination.toUpperCase(),
-            aircraftModel: aircraftModelForFlow,
-            knownCruiseSpeedKts: knownCruiseSpeedForFlow,
-          }
-        };
-        return newEstimates;
-      });
-      toast({ title: "Flight Details Estimated", description: `Leg ${legIndex + 1}: ${result.estimatedMileageNM} NM, ${result.estimatedFlightTimeHours} hrs flight time.` });
+      setLegEstimates(prev => { const newEstimates = [...prev]; newEstimates[legIndex] = {...result, estimatedForInputs: { origin: legData.origin.toUpperCase(), destination: legData.destination.toUpperCase(), aircraftModel: aircraftModelForFlow, knownCruiseSpeedKts: knownCruiseSpeedForFlow } }; return newEstimates; });
+      toast({ title: "Flight Details Estimated", description: `Leg ${legIndex + 1}: ${result.estimatedMileageNM} NM, ${result.estimatedFlightTimeHours} hrs.` });
     } catch (e) {
-      console.error("Error estimating flight details:", e);
       const errorMessage = e instanceof Error ? e.message : "AI failed to estimate details.";
       toast({ title: "Estimation Error", description: errorMessage, variant: "destructive" });
       setValue(`legs.${legIndex}.flightTimeHours`, undefined);
-      setLegEstimates(prev => {
-        const newEstimates = [...prev];
-        newEstimates[legIndex] = {
-          error: errorMessage,
-          estimatedForInputs: {
-            origin: legData.origin.toUpperCase(),
-            destination: legData.destination.toUpperCase(),
-            aircraftModel: aircraftModelForFlow,
-            knownCruiseSpeedKts: knownCruiseSpeedForFlow,
-          }
-        } as LegEstimate;
-        return newEstimates;
-      });
+      setLegEstimates(prev => { const newEstimates = [...prev]; newEstimates[legIndex] = { error: errorMessage, estimatedForInputs: {origin: legData.origin.toUpperCase(), destination: legData.destination.toUpperCase(), aircraftModel: aircraftModelForFlow, knownCruiseSpeedKts: knownCruiseSpeedForFlow} } as LegEstimate; return newEstimates; });
     } finally {
       setEstimatingLegIndex(null);
     }
-  }, [getValues, legEstimates, toast, estimatingLegIndex, setValue, setLegEstimates, setEstimatingLegIndex, aircraftSelectOptions, currentSelectedAircraftId, selectedAircraftPerformance]);
+  }, [getValues, toast, estimatingLegIndex, setValue, currentSelectedAircraftId, aircraftSelectOptions, selectedAircraftPerformance, legEstimates]);
+
 
   const handleSave = async (intendedStatus: typeof QuoteStatusType[number]) => {
     const isValidForm = await trigger();
@@ -664,6 +734,9 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
             }
 
         } else {
+          // If editing, re-fetch or update the local state for 'initialTripData' if needed,
+          // or simply re-set the form with the returned 'savedQuote' if it's complete enough.
+          // For now, we assume the save operation was successful and the user might navigate away or continue editing.
           const updatedQuoteData = await fetchQuoteById({ id: savedQuote.id });
           if (updatedQuoteData) {
               const initialFormOptionalServices: OptionalServiceFormData[] = 
@@ -809,58 +882,6 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
   };
 
 
-  const handleAddLeg = () => {
-    let newLegDefaults: Partial<LegFormData> = {
-      origin: '', destination: '', legType: 'Charter', passengerCount: 1, originTaxiTimeMinutes: 15, destinationTaxiTimeMinutes: 15, originFbo: '', destinationFbo: '', flightTimeHours: undefined,
-    };
-    if (fields.length > 0) {
-      const previousLegIndex = fields.length - 1;
-      const previousLeg = getValues(`legs.${previousLegIndex}`);
-
-      newLegDefaults.origin = previousLeg.destination;
-      newLegDefaults.passengerCount = Number(previousLeg.passengerCount || 1);
-      newLegDefaults.originTaxiTimeMinutes = Number(previousLeg.originTaxiTimeMinutes || 15);
-      newLegDefaults.destinationTaxiTimeMinutes = Number(previousLeg.destinationTaxiTimeMinutes || 15);
-      newLegDefaults.originFbo = previousLeg.destinationFbo || '';
-      newLegDefaults.destinationFbo = '';
-
-      const previousLegFlightTime = Number(previousLeg.flightTimeHours || (legEstimates[previousLegIndex]?.estimatedFlightTimeHours || 0));
-
-      if (previousLeg.departureDateTime && previousLeg.departureDateTime instanceof Date && isValidDate(previousLeg.departureDateTime) && previousLegFlightTime > 0) {
-        const previousLegDeparture = new Date(previousLeg.departureDateTime);
-        const previousLegFlightMillis = previousLegFlightTime * 60 * 60 * 1000;
-        const previousLegDestTaxiMillis = (Number(previousLeg.destinationTaxiTimeMinutes || 0)) * 60 * 1000;
-        const estimatedArrivalMillis = previousLegDeparture.getTime() + previousLegFlightMillis + previousLegDestTaxiMillis;
-        newLegDefaults.departureDateTime = new Date(estimatedArrivalMillis + (60 * 60 * 1000)); 
-      } else if (previousLeg.departureDateTime && previousLeg.departureDateTime instanceof Date && isValidDate(previousLeg.departureDateTime)) {
-         newLegDefaults.departureDateTime = new Date(previousLeg.departureDateTime.getTime() + (3 * 60 * 60 * 1000)); 
-      }
-    }
-
-    append(newLegDefaults as LegFormData);
-  };
-
-  const handleRemoveLeg = (index: number) => {
-    remove(index);
-    setLegEstimates(prev => { const newEstimates = [...prev]; newEstimates.splice(index, 1); return newEstimates; });
-  };
-
-  const handleCustomerSelect = (customerId: string | undefined) => {
-    setValue('selectedCustomerId', customerId);
-    if (!customerId) {
-      setValue('clientName', '');
-      setValue('clientEmail', '');
-      setValue('clientPhone', '');
-      return;
-    }
-    const selectedCustomer = customers.find(c => c.id === customerId);
-    if (selectedCustomer) {
-      setValue('clientName', selectedCustomer.name);
-      setValue('clientEmail', selectedCustomer.email || '');
-      setValue('clientPhone', selectedCustomer.phone || '');
-    }
-  };
-
   if (isEditMode && isLoadingQuoteDataForEdit) {
     return (
       <div className="space-y-6">
@@ -895,22 +916,26 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
         </Card>
         
         <Card className="shadow-sm">
-            <CardHeader><CardTitle className="text-lg">Client Information</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-                <FormField control={control} name="selectedCustomerId" render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><UserSearch className="h-4 w-4" /> Select Existing Client (Optional)</FormLabel> <Select onValueChange={(value) => { handleCustomerSelect(value); field.onChange(value); }} value={field.value || ""} disabled={isLoadingCustomers}> <FormControl><SelectTrigger><SelectValue placeholder={isLoadingCustomers ? "Loading customers..." : "Select a client or enter details manually"} /></SelectTrigger></FormControl> <SelectContent> {!isLoadingCustomers && customers.length === 0 && <SelectItem value="NO_CUSTOMERS" disabled>No customers</SelectItem>} {customers.map(c => (<SelectItem key={c.id} value={c.id}>{c.name} {c.customerType && `(${c.customerType})`}</SelectItem>))} </SelectContent> </Select> <FormDescription>Auto-fills client details if selected.</FormDescription> <FormMessage /> </FormItem> )} />
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <FormField control={control} name="clientName" render={({ field }) => ( <FormItem> <FormLabel>Client Name</FormLabel> <FormControl><Input placeholder="e.g., John Doe" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
-                <FormField control={control} name="clientEmail" render={({ field }) => ( <FormItem> <FormLabel>Client Email</FormLabel> <FormControl><Input type="email" placeholder="e.g., john.doe@example.com" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
-                </div>
-                <FormField control={control} name="clientPhone" render={({ field }) => ( <FormItem> <FormLabel>Client Phone</FormLabel> <FormControl><Input type="tel" placeholder="e.g., (555) 123-4567" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
-            </CardContent>
+          <CardHeader><CardTitle className="text-lg">Client Information</CardTitle></CardHeader>
+          <CardContent className="space-y-4">
+            <ClientOnly fallback={<Skeleton className="h-10 w-full rounded-md" />}>
+              <FormField control={control} name="selectedCustomerId" render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><UserSearch className="h-4 w-4" /> Select Existing Client (Optional)</FormLabel> <Select onValueChange={(value) => { handleCustomerSelect(value); field.onChange(value); }} value={field.value || ""} disabled={isLoadingCustomers}> <FormControl><SelectTrigger><SelectValue placeholder={isLoadingCustomers ? "Loading customers..." : "Select a client or enter details manually"} /></SelectTrigger></FormControl> <SelectContent> {!isLoadingCustomers && customers.length === 0 && <SelectItem value="NO_CUSTOMERS" disabled>No customers</SelectItem>} {customers.map(c => (<SelectItem key={c.id} value={c.id}>{c.name} {c.customerType && `(${c.customerType})`}</SelectItem>))} </SelectContent> </Select> <FormDescription>Auto-fills client details if selected.</FormDescription> <FormMessage /> </FormItem> )} />
+            </ClientOnly>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <FormField control={control} name="clientName" render={({ field }) => ( <FormItem> <FormLabel>Client Name</FormLabel> <FormControl><Input placeholder="e.g., John Doe" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
+            <FormField control={control} name="clientEmail" render={({ field }) => ( <FormItem> <FormLabel>Client Email</FormLabel> <FormControl><Input type="email" placeholder="e.g., john.doe@example.com" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
+            </div>
+            <FormField control={control} name="clientPhone" render={({ field }) => ( <FormItem> <FormLabel>Client Phone</FormLabel> <FormControl><Input type="tel" placeholder="e.g., (555) 123-4567" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
+          </CardContent>
         </Card>
         
         <Card className="shadow-sm">
-            <CardHeader><CardTitle className="text-lg">Aircraft Selection</CardTitle></CardHeader>
-            <CardContent>
-                <FormField control={control} name="aircraftId" render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><PlaneIconUI className="h-4 w-4" /> Aircraft {isLoadingSelectedAcPerf && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground ml-2" />}</FormLabel> <Select onValueChange={field.onChange} value={field.value || ""} disabled={isLoadingAircraftList}> <FormControl><SelectTrigger><SelectValue placeholder={isLoadingAircraftList ? "Loading aircraft..." : "Select an aircraft"} /></SelectTrigger></FormControl> <SelectContent> {!isLoadingAircraftList && aircraftSelectOptions.length === 0 && <SelectItem value="NO_AIRCRAFT" disabled>No aircraft in fleet</SelectItem>} {aircraftSelectOptions.map(opt => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))} </SelectContent> </Select> <FormMessage /> </FormItem> )} />
-            </CardContent>
+          <CardHeader><CardTitle className="text-lg">Aircraft Selection</CardTitle></CardHeader>
+          <CardContent>
+            <ClientOnly fallback={<Skeleton className="h-10 w-full rounded-md" />}>
+              <FormField control={control} name="aircraftId" render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><PlaneIconUI className="h-4 w-4" /> Aircraft {isLoadingSelectedAcPerf && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground ml-2" />}</FormLabel> <Select onValueChange={field.onChange} value={field.value || ""} disabled={isLoadingAircraftList}> <FormControl><SelectTrigger><SelectValue placeholder={isLoadingAircraftList ? "Loading aircraft..." : "Select an aircraft"} /></SelectTrigger></FormControl> <SelectContent> {!isLoadingAircraftList && aircraftSelectOptions.length === 0 && <SelectItem value="NO_AIRCRAFT" disabled>No aircraft in fleet</SelectItem>} {aircraftSelectOptions.map(opt => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))} </SelectContent> </Select> <FormMessage /> </FormItem> )} />
+            </ClientOnly>
+          </CardContent>
         </Card>
 
         <Card className="shadow-sm">
@@ -955,7 +980,7 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
                       </FormItem>
                     )} />
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <FormField control={control} name={`legs.${index}.legType`} render={({ field }) => ( <FormItem> <FormLabel>Leg Type</FormLabel> <Select onValueChange={field.onChange} value={field.value || ""} name={field.name}> <FormControl><SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger></FormControl><SelectContent>{legTypes.map(type => (<SelectItem key={type} value={type}>{type}</SelectItem>))}</SelectContent></Select><FormMessage /> </FormItem> )} />
+                      <FormField control={control} name={`legs.${index}.legType`} render={({ field }) => ( <FormItem> <FormLabel>Leg Type</FormLabel> <Select onValueChange={field.onChange} value={field.value || ""} name={field.name}> <FormControl><SelectTrigger><SelectValue placeholder="Select leg type" /></SelectTrigger></FormControl><SelectContent>{legTypes.map(type => (<SelectItem key={type} value={type}>{type}</SelectItem>))}</SelectContent></Select><FormMessage /> </FormItem> )} />
                       <FormField control={control} name={`legs.${index}.passengerCount`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><Users className="h-4 w-4" />Passengers</FormLabel> 
                         <FormControl>
                           <Input 
@@ -977,7 +1002,7 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
                     <Button type="button" variant="outline" size="sm" onClick={() => handleEstimateFlightDetails(index)} disabled={estimatingLegIndex === index || !currentSelectedAircraftId || isLoadingAircraftList || isLoadingSelectedAcPerf} className="w-full sm:w-auto text-xs"> {estimatingLegIndex === index || isLoadingSelectedAcPerf ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <Wand2 className="mr-2 h-3 w-3" />} Estimate Flight Details </Button>
                     {legEstimates[index] && (
                         <Alert variant={legEstimates[index]!.error ? "destructive" : "default"} className="mt-2 text-xs">
-                            <Info className={`h-4 w-4 ${legEstimates[index]!.error ? '' : 'text-primary'}`} />
+                            <InfoIcon className={`h-4 w-4 ${legEstimates[index]!.error ? '' : 'text-primary'}`} />
                             <AlertTitle className="text-sm">
                                 {legEstimates[index]!.error ? `Error Estimating Leg ${index + 1}` : `Leg ${index + 1} AI Estimate Reference`}
                             </AlertTitle>
@@ -1007,21 +1032,24 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
             <CardContent><LegsSummaryTable legs={legsArray} /></CardContent>
           </Card>
         )}
-
-        <Card className="shadow-sm">
-          <Accordion type="single" collapsible className="w-full">
-            <AccordionItem value="additional-options">
-              <AccordionTrigger className="px-6 py-4 hover:no-underline">
+        
+        <Accordion type="single" collapsible className="w-full">
+          <AccordionItem value="additional-options">
+            <AccordionTrigger className="px-0 pt-0 pb-2 hover:no-underline">
+              <div className="flex w-full items-center justify-between rounded-lg border bg-card p-4 shadow-sm hover:bg-muted/50"> {/* Mimic card header */}
                 <div className="flex items-center gap-2">
                   <ListChecks className="h-5 w-5 text-primary" />
-                  <CardTitle className="text-lg">Additional Quote Options &amp; Pricing</CardTitle>
+                  <span className="text-lg font-semibold">Additional Quote Options & Pricing</span>
                 </div>
-              </AccordionTrigger>
-              <AccordionContent className="px-6 pb-4">
-                <CardDescription className="mb-4">Select desired services. Prices are pre-filled if configured; override if needed.</CardDescription>
+                {/* Chevron is added by AccordionTrigger automatically */}
+              </div>
+            </AccordionTrigger>
+            <AccordionContent className="pt-0">
+              <div className="rounded-b-lg border border-t-0 bg-card p-6 pt-4 shadow-sm">
+                <CardDescription className="mb-4">Select desired services. Active services from Quote Configuration are listed here.</CardDescription>
                 <div className="space-y-4">
-                  {optionalServicesFields.length === 0 && !isLoadingDynamicRates && (<p className="text-sm text-muted-foreground">No active optional services configured in Quote Settings.</p>)}
-                  {optionalServicesFields.map((serviceField, index) => (
+                  {optionalServicesFields.length === 0 && !isLoadingDynamicRates && (<p className="text-sm text-muted-foreground">No active optional services configured in Quote Configuration.</p>)}
+                  {optionalServicesFields.length > 0 && optionalServicesFields.map((serviceField, index) => (
                       <div key={serviceField.id} className="space-y-2 p-3 border rounded-md hover:bg-muted/50">
                           <FormField
                               control={control} name={`optionalServices.${index}.selected`}
@@ -1051,10 +1079,10 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
                   ))}
                   <FormField control={control} name="estimatedOvernights" render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-2"><BedDouble className="h-4 w-4 text-primary"/> Estimated Overnights</FormLabel> <FormControl><Input type="number" placeholder="e.g., 0" {...field} value={(typeof field.value === 'number' && !isNaN(field.value)) ? String(field.value) : ''} onChange={e => { const valStr = e.target.value; field.onChange(valStr === '' ? undefined : parseInt(valStr, 10)); }} min="0"/></FormControl> <FormDescription>Number of overnight stays for crew/aircraft.</FormDescription> <FormMessage /> </FormItem> )} />
                  </div>
-              </AccordionContent>
-            </AccordionItem>
-          </Accordion>
-        </Card>
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
 
 
         <Card className="shadow-sm">
@@ -1092,4 +1120,3 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
     </>
   );
 }
-
