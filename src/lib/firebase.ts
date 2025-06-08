@@ -1,59 +1,56 @@
 
 // src/lib/firebase.ts
 import { initializeApp, getApps, getApp } from 'firebase/app';
+// Remove enableMultiTabIndexedDbPersistence as it's not commonly needed unless specific issues arise
 import { getFirestore } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import { getStorage } from 'firebase/storage';
 
-// Your web app's Firebase configuration
-// IMPORTANT: These should be set in your .env.local file
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID, // This will now use the .env value
   storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
-const nodeEnv = process.env.NODE_ENV;
-console.log(`[Firebase Client Init] Detected NODE_ENV: ${nodeEnv}`);
+// Log the effective project ID being used for initialization
+console.log(`[Firebase Client Init] Attempting to initialize with config from .env. Project ID from env: ${firebaseConfig.projectId}`);
 
-// Check for missing environment variables
+let missingVarsMessage = "";
 const requiredEnvVarKeys: (keyof typeof firebaseConfig)[] = [
   'apiKey',
   'authDomain',
-  'projectId', // projectId is now always required
+  'projectId',
   'storageBucket',
   'messagingSenderId',
   'appId',
 ];
 
-let missingVarsMessage = "";
-const missingVars = requiredEnvVarKeys.filter(key => !firebaseConfig[key]);
+// Check if any of the required env vars are missing or are still the placeholder "your-..."
+const missingOrPlaceholderVars = requiredEnvVarKeys.filter(key => {
+  const value = firebaseConfig[key];
+  return !value || (typeof value === 'string' && value.startsWith('your-'));
+});
 
-if (missingVars.length > 0) {
-  const envVarNames = missingVars.map(key => `NEXT_PUBLIC_FIREBASE_${key.replace(/([A-Z])/g, '_$1').toUpperCase()}`);
-  missingVarsMessage = `Firebase configuration is incomplete.
-Missing required environment variables: ${envVarNames.join(', ')}.
-Please check your .env.local file.
+if (missingOrPlaceholderVars.length > 0) {
+  const envVarNames = missingOrPlaceholderVars.map(key => `NEXT_PUBLIC_FIREBASE_${key.replace(/([A-Z])/g, '_$1').toUpperCase()}`);
+  missingVarsMessage = `Firebase configuration is incomplete or contains placeholders.
+Missing or placeholder environment variables: ${envVarNames.join(', ')}.
+Please check your .env.local file. App functionality will be affected.
 `;
   console.error("[Firebase Client Init ERROR]", missingVarsMessage);
 }
 
-// Initialize Firebase
 let app;
 if (!getApps().length) {
-  if (missingVars.length > 0) {
-    console.error("[Firebase Client Init] Halting Firebase initialization due to missing env vars. App will likely not function correctly.");
-    // Potentially throw an error here if running client-side and vars are critical
-    if (typeof window !== 'undefined') {
-        alert("Firebase configuration is missing. Please check console for details.");
-    }
+  if (missingOrPlaceholderVars.length > 0) {
+    console.error("[Firebase Client Init] Halting Firebase initialization due to missing or placeholder env vars. Firebase services will be unavailable.");
+    // app remains undefined, services will be null
   } else {
-    // Always use the configuration directly from .env.local
-    console.log("[Firebase Client Init] Initializing Firebase app with live config from .env.local for project:", firebaseConfig.projectId);
+    console.log("[Firebase Client Init] Initializing new Firebase app with live config for project:", firebaseConfig.projectId);
     app = initializeApp(firebaseConfig);
   }
 } else {
@@ -61,15 +58,15 @@ if (!getApps().length) {
   console.log("[Firebase Client Init] Using existing Firebase app. Configured for project:", app.options.projectId);
 }
 
-let db, auth, storage;
+// Initialize Firebase services if app was successfully initialized
+const db = app ? getFirestore(app) : null;
+const auth = app ? getAuth(app) : null;
+const storage = app ? getStorage(app) : null;
 
 if (app) {
-  db = getFirestore(app);
-  auth = getAuth(app);
-  storage = getStorage(app);
-  console.log(`[Firebase Client Init] Successfully configured Firebase. Attempting to connect to live services for project: ${firebaseConfig.projectId}`);
+  console.log(`[Firebase Client Init] Firebase app configured for project: ${firebaseConfig.projectId}. Firestore: ${!!db}, Auth: ${!!auth}, Storage: ${!!storage}`);
 } else {
-  console.error("[Firebase Client Init] Firebase app could not be initialized. Firebase services (db, auth, storage) will be unavailable.");
+  console.error("[Firebase Client Init] Firebase app object is undefined. Services (db, auth, storage) are NOT initialized.");
 }
 
 export { db, app, auth, storage };
