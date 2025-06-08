@@ -14,7 +14,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
-import { CalendarIcon, Loader2, Users, Briefcase, Utensils, Landmark, BedDouble, PlaneTakeoff, PlaneLanding, PlusCircle, Trash2, GripVertical, Wand2, Info, Eye, Send, Building, UserSearch, DollarSign, Fuel, SaveIcon, ListChecks, Plane as PlaneIconUI, Edit3 } from 'lucide-react'; // Renamed Plane to PlaneIconUI
+import { CalendarIcon, Loader2, Users, Briefcase, Utensils, Landmark, BedDouble, PlaneTakeoff, PlaneLanding, PlusCircle, Trash2, GripVertical, Wand2, Info, Eye, Send, Building, UserSearch, DollarSign, Fuel, SaveIcon, ListChecks, Plane as PlaneIconUI, Edit3 } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { format, isValid as isValidDate, parseISO } from "date-fns";
 import { useToast } from '@/hooks/use-toast';
@@ -47,6 +47,7 @@ import type { Quote, SaveQuoteInput, QuoteLeg, QuoteLineItem, quoteStatuses as Q
 import { quoteStatuses, legTypes } from '@/ai/schemas/quote-schemas';
 import { useRouter } from 'next/navigation';
 import { fetchCustomers, type Customer } from '@/ai/flows/manage-customers-flow';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
 
 const legSchema = z.object({
@@ -71,7 +72,7 @@ const optionalServiceSchema = z.object({
   selected: z.boolean().default(false),
   customSellPrice: z.coerce.number().optional(),
   isActiveFromConfig: z.boolean(),
-  quantityInputType: z.enum(["none", "nights", "legs", "block_hours"]).optional().default("none"), // For specific quantity logic
+  quantityInputType: z.enum(["none", "legs", "nights", "block_hours"]).optional().default("none"),
 });
 type OptionalServiceFormData = z.infer<typeof optionalServiceSchema>;
 
@@ -85,8 +86,8 @@ const formSchema = z.object({
   legs: z.array(legSchema).min(1, "At least one flight leg is required."),
   aircraftId: z.string().min(1, "Aircraft selection is required.").optional(),
   
-  estimatedOvernights: z.coerce.number().int().min(0).optional().default(0), // Kept for services that use "Per Night"
-  optionalServices: z.array(optionalServiceSchema).optional().default([]), // Dynamic services
+  estimatedOvernights: z.coerce.number().int().min(0).optional().default(0),
+  optionalServices: z.array(optionalServiceSchema).optional().default([]),
 
   cateringNotes: z.string().optional(),
   notes: z.string().optional(),
@@ -218,8 +219,8 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
                 unitDescription: rate.unitDescription,
                 defaultBuyRate: rate.buy,
                 defaultSellRate: rate.sell,
-                selected: false, // Default to unselected
-                customSellPrice: undefined, // Start with no override
+                selected: false, 
+                customSellPrice: undefined, 
                 isActiveFromConfig: rate.isActive ?? true,
                 quantityInputType,
             };
@@ -293,9 +294,6 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
           if (quoteData) {
             const existingOptionalServicesMap = new Map<string, QuoteLineItem>();
             (quoteData.lineItems || []).forEach(item => {
-                // Assuming serviceKey might be part of description or a custom field on lineItem if saved that way previously.
-                // This part needs careful mapping based on how dynamic services were stored.
-                // For now, let's assume lineItem.id might contain the serviceKey if it's a dynamic service.
                 existingOptionalServicesMap.set(item.id, item);
             });
             
@@ -303,7 +301,7 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
               Object.entries(fetchedCompanyProfile?.serviceFeeRates || {})
               .filter(([_key, rate]) => rate.isActive)
               .map(([key, rate]) => {
-                const existingLineItem = (quoteData.lineItems || []).find(li => li.id === key); // Use key if that's how it's stored
+                const existingLineItem = (quoteData.lineItems || []).find(li => li.id === key); 
                 let quantityInputType: OptionalServiceFormData['quantityInputType'] = 'none';
                 const unitDescUpper = rate.unitDescription.toUpperCase();
                 if (unitDescUpper.includes("PER LEG") || unitDescUpper.includes("LANDING")) quantityInputType = "legs";
@@ -590,13 +588,10 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
             calculatedBlockTimeHours: blockTimeHours,
           };
         }),
-        options: { // Options related to services are now primarily driven by lineItems
+        options: { 
           estimatedOvernights: data.estimatedOvernights,
           cateringNotes: data.cateringNotes,
           notes: data.notes,
-          // These direct sell prices are less critical if using dynamic optional services,
-          // but we can still save what's in the form if those specific fields were ever directly used.
-          // For the dynamic model, these would be mostly deprecated in favor of what's in optionalServices -> lineItems.
           medicsRequested: formOptionalServices.find(s => s.displayDescription.toUpperCase().includes("MEDICAL") && s.selected)?.selected || false,
           cateringRequested: formOptionalServices.find(s => s.displayDescription.toUpperCase().includes("CATERING") && s.selected)?.selected || false,
           includeLandingFees: formOptionalServices.find(s => s.displayDescription.toUpperCase().includes("LANDING FEE") && s.selected)?.selected || false,
@@ -645,12 +640,11 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
             legs: [{ origin: '', destination: '', legType: 'Charter', departureDateTime: undefined, passengerCount: 1, originFbo: '', destinationFbo: '', originTaxiTimeMinutes: 15, destinationTaxiTimeMinutes: 15, flightTimeHours: undefined }],
             aircraftId: undefined,
             estimatedOvernights: 0,
-            optionalServices: [], // Reset dynamic services
+            optionalServices: [],
             cateringNotes: "", notes: '',
           });
           setLegEstimates([]);
           setCalculatedLineItems([]);
-          // Re-initialize optionalServices from company profile for a truly new form
             if (fetchedCompanyProfile?.serviceFeeRates) {
                 const activeServicesFromConfig = Object.entries(fetchedCompanyProfile.serviceFeeRates)
                     .filter(([_key, rate]) => rate.isActive)
@@ -794,7 +788,7 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
             </div>
           </div>
           
-          {data.optionalServices.some(s => s.selected && s.displayDescription.toUpperCase().includes("CATERING")) && data.cateringNotes &&
+          {formOptionalServices.some(s => s.selected && s.displayDescription.toUpperCase().includes("CATERING")) && data.cateringNotes &&
             <div className="py-1"><h4 className="font-medium text-sm">Catering Notes:</h4><p className="whitespace-pre-wrap bg-muted/20 p-1.5 rounded-md">{data.cateringNotes}</p></div>
           }
           {data.notes && <div className="py-1"><h4 className="font-medium text-sm">General Notes:</h4><p className="whitespace-pre-wrap bg-muted/20 p-1.5 rounded-md">{data.notes}</p></div>}
@@ -869,21 +863,17 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
 
   if (isEditMode && isLoadingQuoteDataForEdit) {
     return (
-      <Card className="shadow-lg max-w-4xl mx-auto">
-        <CardHeader>
-          <Skeleton className="h-8 w-3/4 mb-2" />
-          <Skeleton className="h-4 w-1/2" />
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <Skeleton className="h-10 w-full" />
-          <Skeleton className="h-20 w-full" />
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4"> <Skeleton className="h-24 w-full" /> <Skeleton className="h-24 w-full" /> </div>
-          <Skeleton className="h-40 w-full" />
-        </CardContent>
-        <CardFooter>
-          <Skeleton className="h-10 w-32" />
-        </CardFooter>
-      </Card>
+      <div className="space-y-6">
+        <Card className="shadow-sm">
+          <CardHeader> <Skeleton className="h-8 w-3/4 mb-2" /> <Skeleton className="h-4 w-1/2" /> </CardHeader>
+          <CardContent className="space-y-4"> <Skeleton className="h-10 w-full" /> <Skeleton className="h-10 w-full" /> </CardContent>
+        </Card>
+        <Card className="shadow-sm">
+          <CardHeader> <Skeleton className="h-8 w-1/4 mb-2" /> </CardHeader>
+          <CardContent className="space-y-4"> <Skeleton className="h-20 w-full" /> <Skeleton className="h-10 w-1/3" /> </CardContent>
+        </Card>
+        <CardFooter><Skeleton className="h-10 w-32" /></CardFooter>
+      </div>
     );
   }
 
@@ -894,21 +884,37 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
       <form>
         <div className="space-y-6">
         <Card className="shadow-sm">
-            <CardHeader><CardTitle>{isEditMode ? `Editing Quote: ${getValues('quoteId')}` : "Core Quote Details"}</CardTitle></CardHeader>
+            <CardHeader>
+                <CardTitle className="text-lg">
+                    {isEditMode ? `Editing Quote: ${getValues('quoteId')}` : "Core Quote Details"}
+                </CardTitle>
+            </CardHeader>
             <CardContent className="space-y-4">
                 <FormField control={control} name="quoteId" render={({ field }) => ( <FormItem> <FormLabel>Quote ID</FormLabel> <FormControl><Input {...field} value={field.value || ''} readOnly={isEditMode} className={isEditMode ? "bg-muted/30 cursor-not-allowed" : "bg-muted/30"} /></FormControl> <FormMessage /> </FormItem> )} />
+            </CardContent>
+        </Card>
+        
+        <Card className="shadow-sm">
+            <CardHeader><CardTitle className="text-lg">Client Information</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
                 <FormField control={control} name="selectedCustomerId" render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><UserSearch className="h-4 w-4" /> Select Existing Client (Optional)</FormLabel> <Select onValueChange={(value) => { handleCustomerSelect(value); field.onChange(value); }} value={field.value || ""} disabled={isLoadingCustomers}> <FormControl><SelectTrigger><SelectValue placeholder={isLoadingCustomers ? "Loading customers..." : "Select a client or enter details manually"} /></SelectTrigger></FormControl> <SelectContent> {!isLoadingCustomers && customers.length === 0 && <SelectItem value="NO_CUSTOMERS" disabled>No customers</SelectItem>} {customers.map(c => (<SelectItem key={c.id} value={c.id}>{c.name} {c.customerType && `(${c.customerType})`}</SelectItem>))} </SelectContent> </Select> <FormDescription>Auto-fills client details if selected.</FormDescription> <FormMessage /> </FormItem> )} />
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <FormField control={control} name="clientName" render={({ field }) => ( <FormItem> <FormLabel>Client Name</FormLabel> <FormControl><Input placeholder="e.g., John Doe" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
                 <FormField control={control} name="clientEmail" render={({ field }) => ( <FormItem> <FormLabel>Client Email</FormLabel> <FormControl><Input type="email" placeholder="e.g., john.doe@example.com" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
                 </div>
                 <FormField control={control} name="clientPhone" render={({ field }) => ( <FormItem> <FormLabel>Client Phone</FormLabel> <FormControl><Input type="tel" placeholder="e.g., (555) 123-4567" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
+            </CardContent>
+        </Card>
+        
+        <Card className="shadow-sm">
+            <CardHeader><CardTitle className="text-lg">Aircraft Selection</CardTitle></CardHeader>
+            <CardContent>
                 <FormField control={control} name="aircraftId" render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><PlaneIconUI className="h-4 w-4" /> Aircraft {isLoadingSelectedAcPerf && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground ml-2" />}</FormLabel> <Select onValueChange={field.onChange} value={field.value || ""} disabled={isLoadingAircraftList}> <FormControl><SelectTrigger><SelectValue placeholder={isLoadingAircraftList ? "Loading aircraft..." : "Select an aircraft"} /></SelectTrigger></FormControl> <SelectContent> {!isLoadingAircraftList && aircraftSelectOptions.length === 0 && <SelectItem value="NO_AIRCRAFT" disabled>No aircraft in fleet</SelectItem>} {aircraftSelectOptions.map(opt => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))} </SelectContent> </Select> <FormMessage /> </FormItem> )} />
             </CardContent>
         </Card>
 
         <Card className="shadow-sm">
-            <CardHeader><CardTitle>Flight Legs</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-lg">Flight Legs</CardTitle></CardHeader>
             <CardContent className="space-y-4">
             {fields.map((legItem, index) => (
                 <Card key={legItem.id} className="p-4 border rounded-lg shadow-inner bg-background/80">
@@ -929,7 +935,7 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
                     </div>
                     <FormField control={control} name={`legs.${index}.departureDateTime`} render={({ field }) => (
                       <FormItem className="flex flex-col">
-                        <FormLabel>Desired Departure Date & Time</FormLabel>
+                        <FormLabel>Desired Departure Date &amp; Time</FormLabel>
                         <FormControl>
                           {isClient ? (
                             <Popover modal={false}>
@@ -950,7 +956,18 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
                     )} />
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       <FormField control={control} name={`legs.${index}.legType`} render={({ field }) => ( <FormItem> <FormLabel>Leg Type</FormLabel> <Select onValueChange={field.onChange} value={field.value || ""} name={field.name}> <FormControl><SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger></FormControl><SelectContent>{legTypes.map(type => (<SelectItem key={type} value={type}>{type}</SelectItem>))}</SelectContent></Select><FormMessage /> </FormItem> )} />
-                      <FormField control={control} name={`legs.${index}.passengerCount`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><Users className="h-4 w-4" />Pax</FormLabel> <FormControl><Input type="number" placeholder="1" value={String(field.value ?? '')} onChange={e => field.onChange(e.target.value === '' ? undefined : parseInt(e.target.value,10))} onBlur={field.onBlur} name={field.name} ref={field.ref} min="0" /></FormControl> <FormMessage /> </FormItem> )} />
+                      <FormField control={control} name={`legs.${index}.passengerCount`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><Users className="h-4 w-4" />Passengers</FormLabel> 
+                        <FormControl>
+                          <Input 
+                            type="number" 
+                            placeholder="1" 
+                            value={String(field.value ?? '')} 
+                            onChange={e => field.onChange(e.target.value === '' ? undefined : parseInt(e.target.value,10))} 
+                            onBlur={field.onBlur} name={field.name} ref={field.ref} 
+                            min="0"
+                          />
+                        </FormControl> 
+                      <FormMessage /> </FormItem> )} />
                     </div>
                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                       <FormField control={control} name={`legs.${index}.originTaxiTimeMinutes`} render={({ field }) => ( <FormItem> <FormLabel>Orig. Taxi (min)</FormLabel> <FormControl><Input type="number" placeholder="15" value={String(field.value ?? '')} onChange={e => field.onChange(e.target.value === '' ? undefined : parseInt(e.target.value,10))} onBlur={field.onBlur} name={field.name} ref={field.ref} min="0" /></FormControl> </FormItem> )} />
@@ -958,7 +975,24 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
                       <FormField control={control} name={`legs.${index}.destinationTaxiTimeMinutes`} render={({ field }) => ( <FormItem> <FormLabel>Dest. Taxi (min)</FormLabel> <FormControl><Input type="number" placeholder="15" value={String(field.value ?? '')} onChange={e => field.onChange(e.target.value === '' ? undefined : parseInt(e.target.value,10))} onBlur={field.onBlur} name={field.name} ref={field.ref} min="0" /></FormControl> </FormItem> )} />
                     </div>
                     <Button type="button" variant="outline" size="sm" onClick={() => handleEstimateFlightDetails(index)} disabled={estimatingLegIndex === index || !currentSelectedAircraftId || isLoadingAircraftList || isLoadingSelectedAcPerf} className="w-full sm:w-auto text-xs"> {estimatingLegIndex === index || isLoadingSelectedAcPerf ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <Wand2 className="mr-2 h-3 w-3" />} Estimate Flight Details </Button>
-                    {legEstimates[index] && (<Alert variant={legEstimates[index]!.error ? "destructive" : "default"} className="mt-2 text-xs"><Info className={`h-4 w-4 ${legEstimates[index]!.error ? '' : 'text-primary'}`} /><AlertTitle className="text-sm">{legEstimates[index]!.error ? `Error Estimating Leg ${index + 1}` : `Leg ${index + 1} AI Estimate Reference`}</AlertTitle><AlertDescription>{legEstimates[index]!.error ? ( <p>{legEstimates[index]!.error}</p> ) : (<><p><strong>AI Est. Distance:</strong> {legEstimates[index]!.estimatedMileageNM?.toLocaleString()} NM</p><p><strong>AI Est. Flight Time:</strong> {legEstimates[index]!.estimatedFlightTimeHours?.toFixed(1)} hours</p><p><strong>Assumed Speed (AI):</strong> {legEstimates[index]!.assumedCruiseSpeedKts?.toLocaleString()} kts</p><p className="mt-1"><em>AI Explanation: {legEstimates[index]!.briefExplanation}</em></p></>)}</AlertDescription></Alert>)}
+                    {legEstimates[index] && (
+                        <Alert variant={legEstimates[index]!.error ? "destructive" : "default"} className="mt-2 text-xs">
+                            <Info className={`h-4 w-4 ${legEstimates[index]!.error ? '' : 'text-primary'}`} />
+                            <AlertTitle className="text-sm">
+                                {legEstimates[index]!.error ? `Error Estimating Leg ${index + 1}` : `Leg ${index + 1} AI Estimate Reference`}
+                            </AlertTitle>
+                            <AlertDescription>
+                                {legEstimates[index]!.error ? ( <p>{legEstimates[index]!.error}</p> ) : (
+                                <>
+                                    <p><strong>AI Est. Distance:</strong> {legEstimates[index]!.estimatedMileageNM?.toLocaleString()} NM</p>
+                                    <p><strong>AI Est. Flight Time:</strong> {legEstimates[index]!.estimatedFlightTimeHours?.toFixed(1)} hours</p>
+                                    <p><strong>Assumed Speed (AI):</strong> {legEstimates[index]!.assumedCruiseSpeedKts?.toLocaleString()} kts</p>
+                                    <p className="mt-1"><em>AI Explanation: {legEstimates[index]!.briefExplanation}</em></p>
+                                </>
+                                )}
+                            </AlertDescription>
+                        </Alert>
+                    )}
                   </CardContent>
                 </Card>
               ))}
@@ -969,49 +1003,62 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
 
         {legsArray && legsArray.length > 0 && (
           <Card className="shadow-sm">
-            <CardHeader><CardTitle>Itinerary Summary</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-lg">Itinerary Summary</CardTitle></CardHeader>
             <CardContent><LegsSummaryTable legs={legsArray} /></CardContent>
           </Card>
         )}
 
         <Card className="shadow-sm">
-            <CardHeader><CardTitle>Additional Quote Options & Pricing</CardTitle><CardDescription>Select desired services. Prices are pre-filled if configured; override if needed.</CardDescription></CardHeader>
-            <CardContent className="space-y-4">
-            {optionalServicesFields.length === 0 && !isLoadingDynamicRates && (<p className="text-sm text-muted-foreground">No active optional services configured in Quote Settings.</p>)}
-            {optionalServicesFields.map((serviceField, index) => (
-                <div key={serviceField.id} className="space-y-2 p-3 border rounded-md hover:bg-muted/50">
-                    <FormField
-                        control={control} name={`optionalServices.${index}.selected`}
-                        render={({ field }) => (
-                            <FormItem className="flex flex-row items-center space-x-3 space-y-0">
-                                <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl>
-                                <FormLabel className="font-normal flex items-center gap-2">
-                                    {serviceField.displayDescription}
-                                    <span className="text-xs text-muted-foreground">({formatCurrencyLocal(serviceField.customSellPrice ?? serviceField.defaultSellRate)} / {serviceField.unitDescription})</span>
-                                </FormLabel>
-                            </FormItem>
-                        )}
-                    />
-                    {formOptionalServices[index]?.selected && (
-                        <FormField
-                            control={control} name={`optionalServices.${index}.customSellPrice`}
-                            render={({ field }) => (
-                                <FormItem className="pl-10">
-                                    <FormLabel className="text-xs">Override Sell Price (per {serviceField.unitDescription})</FormLabel>
-                                    <FormControl><Input type="number" placeholder={`Default: ${formatCurrencyLocal(serviceField.defaultSellRate)}`} {...field} value={(typeof field.value === 'number' && !isNaN(field.value)) ? String(field.value) : ''} onChange={e => { const valStr = e.target.value; field.onChange(valStr === '' ? undefined : parseFloat(valStr)); }} /></FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
-                    )}
+          <Accordion type="single" collapsible className="w-full">
+            <AccordionItem value="additional-options">
+              <AccordionTrigger className="px-6 py-4 hover:no-underline">
+                <div className="flex items-center gap-2">
+                  <ListChecks className="h-5 w-5 text-primary" />
+                  <CardTitle className="text-lg">Additional Quote Options &amp; Pricing</CardTitle>
                 </div>
-            ))}
-            <FormField control={control} name="estimatedOvernights" render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-2"><BedDouble className="h-4 w-4 text-primary"/> Estimated Overnights</FormLabel> <FormControl><Input type="number" placeholder="e.g., 0" {...field} value={(typeof field.value === 'number' && !isNaN(field.value)) ? String(field.value) : ''} onChange={e => { const valStr = e.target.value; field.onChange(valStr === '' ? undefined : parseInt(valStr, 10)); }} min="0"/></FormControl> <FormDescription>Number of overnight stays for crew/aircraft.</FormDescription> <FormMessage /> </FormItem> )} />
-            </CardContent>
+              </AccordionTrigger>
+              <AccordionContent className="px-6 pb-4">
+                <CardDescription className="mb-4">Select desired services. Prices are pre-filled if configured; override if needed.</CardDescription>
+                <div className="space-y-4">
+                  {optionalServicesFields.length === 0 && !isLoadingDynamicRates && (<p className="text-sm text-muted-foreground">No active optional services configured in Quote Settings.</p>)}
+                  {optionalServicesFields.map((serviceField, index) => (
+                      <div key={serviceField.id} className="space-y-2 p-3 border rounded-md hover:bg-muted/50">
+                          <FormField
+                              control={control} name={`optionalServices.${index}.selected`}
+                              render={({ field }) => (
+                                  <FormItem className="flex flex-row items-center space-x-3 space-y-0">
+                                      <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                                      <FormLabel className="font-normal flex items-center gap-2">
+                                          {serviceField.displayDescription}
+                                          <span className="text-xs text-muted-foreground">({formatCurrencyLocal(serviceField.customSellPrice ?? serviceField.defaultSellRate)} / {serviceField.unitDescription})</span>
+                                      </FormLabel>
+                                  </FormItem>
+                              )}
+                          />
+                          {formOptionalServices[index]?.selected && (
+                              <FormField
+                                  control={control} name={`optionalServices.${index}.customSellPrice`}
+                                  render={({ field }) => (
+                                      <FormItem className="pl-10">
+                                          <FormLabel className="text-xs">Override Sell Price (per {serviceField.unitDescription})</FormLabel>
+                                          <FormControl><Input type="number" placeholder={`Default: ${formatCurrencyLocal(serviceField.defaultSellRate)}`} {...field} value={(typeof field.value === 'number' && !isNaN(field.value)) ? String(field.value) : ''} onChange={e => { const valStr = e.target.value; field.onChange(valStr === '' ? undefined : parseFloat(valStr)); }} /></FormControl>
+                                          <FormMessage />
+                                      </FormItem>
+                                  )}
+                              />
+                          )}
+                      </div>
+                  ))}
+                  <FormField control={control} name="estimatedOvernights" render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-2"><BedDouble className="h-4 w-4 text-primary"/> Estimated Overnights</FormLabel> <FormControl><Input type="number" placeholder="e.g., 0" {...field} value={(typeof field.value === 'number' && !isNaN(field.value)) ? String(field.value) : ''} onChange={e => { const valStr = e.target.value; field.onChange(valStr === '' ? undefined : parseInt(valStr, 10)); }} min="0"/></FormControl> <FormDescription>Number of overnight stays for crew/aircraft.</FormDescription> <FormMessage /> </FormItem> )} />
+                 </div>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
         </Card>
 
+
         <Card className="shadow-sm">
-            <CardHeader><CardTitle>Notes</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-lg">Notes</CardTitle></CardHeader>
             <CardContent className="space-y-4">
                 <FormField control={control} name="cateringNotes" render={({ field }) => ( <FormItem> <FormLabel>Catering Notes (Optional)</FormLabel> <FormControl><Textarea placeholder="Specify catering details if requested..." {...field} value={field.value || ''} rows={3} /></FormControl> <FormMessage /> </FormItem> )} />
                 <FormField control={control} name="notes" render={({ field }) => ( <FormItem> <FormLabel>General Quote Notes (Optional)</FormLabel> <FormControl><Textarea placeholder="e.g., Specific client preferences, discount applied..." {...field} value={field.value || ''} rows={4} /></FormControl> <FormMessage /> </FormItem> )} />
@@ -1045,3 +1092,4 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
     </>
   );
 }
+
