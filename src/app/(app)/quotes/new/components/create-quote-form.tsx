@@ -14,7 +14,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
-import { CalendarIcon, Loader2, Users, Briefcase, Utensils, Landmark, BedDouble, PlaneTakeoff, PlaneLanding, PlusCircle, Trash2, GripVertical, Wand2, Info, Eye, Send, Building, UserSearch, DollarSign, Fuel, SaveIcon } from 'lucide-react';
+import { CalendarIcon, Loader2, Users, Briefcase, Utensils, Landmark, BedDouble, PlaneTakeoff, PlaneLanding, PlusCircle, Trash2, GripVertical, Wand2, Info, Eye, Send, Building, UserSearch, DollarSign, Fuel, SaveIcon, ListChecks, Plane as PlaneIconUI, Edit3 } from 'lucide-react'; // Renamed Plane to PlaneIconUI
 import { cn } from "@/lib/utils";
 import { format, isValid as isValidDate, parseISO } from "date-fns";
 import { useToast } from '@/hooks/use-toast';
@@ -62,6 +62,20 @@ const legSchema = z.object({
   flightTimeHours: z.coerce.number().min(0).optional(),
 });
 
+const optionalServiceSchema = z.object({
+  serviceKey: z.string(),
+  displayDescription: z.string(),
+  unitDescription: z.string(),
+  defaultBuyRate: z.number(),
+  defaultSellRate: z.number(),
+  selected: z.boolean().default(false),
+  customSellPrice: z.coerce.number().optional(),
+  isActiveFromConfig: z.boolean(),
+  quantityInputType: z.enum(["none", "nights", "legs", "block_hours"]).optional().default("none"), // For specific quantity logic
+});
+type OptionalServiceFormData = z.infer<typeof optionalServiceSchema>;
+
+
 const formSchema = z.object({
   quoteId: z.string().min(3, "Quote ID must be at least 3 characters."),
   selectedCustomerId: z.string().optional(),
@@ -70,18 +84,9 @@ const formSchema = z.object({
   clientPhone: z.string().min(7, "Phone number seems too short.").optional().or(z.literal('')),
   legs: z.array(legSchema).min(1, "At least one flight leg is required."),
   aircraftId: z.string().min(1, "Aircraft selection is required.").optional(),
-
-  medicsRequested: z.boolean().optional().default(false),
-  cateringRequested: z.boolean().optional().default(false),
-  includeLandingFees: z.boolean().optional().default(false),
-  estimatedOvernights: z.coerce.number().int().min(0).optional().default(0),
-  fuelSurchargeRequested: z.boolean().optional().default(false),
-
-  sellPriceFuelSurchargePerHour: z.coerce.number().optional(),
-  sellPriceMedics: z.coerce.number().optional(),
-  sellPriceCatering: z.coerce.number().optional(),
-  sellPriceLandingFeePerLeg: z.coerce.number().optional(),
-  sellPriceOvernight: z.coerce.number().optional(),
+  
+  estimatedOvernights: z.coerce.number().int().min(0).optional().default(0), // Kept for services that use "Per Night"
+  optionalServices: z.array(optionalServiceSchema).optional().default([]), // Dynamic services
 
   cateringNotes: z.string().optional(),
   notes: z.string().optional(),
@@ -101,14 +106,6 @@ interface AircraftSelectOption {
   label: string;
   model: string;
 }
-
-// Define constants for service key phrases to avoid typos
-const PHRASE_FUEL_SURCHARGE = "FUEL SURCHARGE";
-const PHRASE_MEDICAL_SERVICE = "MEDICAL";
-const PHRASE_CATERING_SERVICE = "CATERING";
-const PHRASE_LANDING_FEE = "LANDING FEE"; // Catches "LANDING FEES" too
-const PHRASE_OVERNIGHT_FEE = "OVERNIGHT";
-
 
 const DEFAULT_AIRCRAFT_RATE_FALLBACK: Pick<AircraftRate, 'buy' | 'sell'> = {
   buy: 3500,
@@ -174,18 +171,10 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
         flightTimeHours: undefined,
       }],
       aircraftId: undefined,
-      medicsRequested: false,
-      cateringRequested: false,
-      includeLandingFees: false,
       estimatedOvernights: 0,
-      fuelSurchargeRequested: false,
+      optionalServices: [],
       cateringNotes: "",
       notes: '',
-      sellPriceFuelSurchargePerHour: undefined,
-      sellPriceMedics: undefined,
-      sellPriceCatering: undefined,
-      sellPriceLandingFeePerLeg: undefined,
-      sellPriceOvernight: undefined,
     },
   });
 
@@ -193,79 +182,51 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
 
   const legsArray = useWatch({ control, name: "legs", defaultValue: [] });
   const currentSelectedAircraftId = useWatch({ control, name: "aircraftId" });
-  const fuelSurchargeRequested = useWatch({ control, name: "fuelSurchargeRequested" });
-  const sellPriceFuelSurchargePerHour = useWatch({ control, name: "sellPriceFuelSurchargePerHour" });
-  const medicsRequested = useWatch({ control, name: "medicsRequested" });
-  const sellPriceMedics = useWatch({ control, name: "sellPriceMedics" });
-  const cateringRequested = useWatch({ control, name: "cateringRequested" });
-  const sellPriceCatering = useWatch({ control, name: "sellPriceCatering" });
-  const includeLandingFees = useWatch({ control, name: "includeLandingFees" });
-  const sellPriceLandingFeePerLeg = useWatch({ control, name: "sellPriceLandingFeePerLeg" });
+  const formOptionalServices = useWatch({ control, name: "optionalServices", defaultValue: [] });
   const currentEstimatedOvernights = useWatch({ control, name: "estimatedOvernights" });
-  const sellPriceOvernight = useWatch({ control, name: "sellPriceOvernight" });
+
 
   const { fields, append, remove, replace } = useFieldArray({
     control,
     name: "legs",
   });
+  
+  const { fields: optionalServicesFields, replace: replaceOptionalServices } = useFieldArray({
+    control,
+    name: "optionalServices",
+  });
+
 
   const generateNewQuoteId = useCallback(() => {
     return `QT-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
   }, []);
 
- const findConfiguredService = useCallback((searchPhrase: string): ServiceFeeRate | undefined => {
-    if (!fetchedCompanyProfile?.serviceFeeRates) return undefined;
-    const upperSearchPhrase = searchPhrase.toUpperCase();
+   useEffect(() => {
+    if (fetchedCompanyProfile?.serviceFeeRates) {
+      const activeServicesFromConfig = Object.entries(fetchedCompanyProfile.serviceFeeRates)
+        .filter(([_key, rate]) => rate.isActive)
+        .map(([key, rate]) => {
+            let quantityInputType: OptionalServiceFormData['quantityInputType'] = 'none';
+            const unitDescUpper = rate.unitDescription.toUpperCase();
+            if (unitDescUpper.includes("PER LEG") || unitDescUpper.includes("LANDING")) quantityInputType = "legs";
+            else if (unitDescUpper.includes("PER NIGHT") || unitDescUpper.includes("OVERNIGHT")) quantityInputType = "nights";
+            else if (unitDescUpper.includes("HOUR")) quantityInputType = "block_hours";
 
-    for (const [_key, rate] of Object.entries(fetchedCompanyProfile.serviceFeeRates)) {
-        // Match if active and description contains the search phrase
-        if (rate.isActive && rate.displayDescription.toUpperCase().includes(upperSearchPhrase)) {
-            return rate;
-        }
+            return {
+                serviceKey: key,
+                displayDescription: rate.displayDescription,
+                unitDescription: rate.unitDescription,
+                defaultBuyRate: rate.buy,
+                defaultSellRate: rate.sell,
+                selected: false, // Default to unselected
+                customSellPrice: undefined, // Start with no override
+                isActiveFromConfig: rate.isActive ?? true,
+                quantityInputType,
+            };
+        });
+      replaceOptionalServices(activeServicesFromConfig);
     }
-    return undefined;
-  }, [fetchedCompanyProfile]);
-
-  const shouldShowServiceOption = useCallback((searchPhrase: string) => {
-    return !!findConfiguredService(searchPhrase);
-  }, [findConfiguredService]);
-  
-  const getServiceFormPriceFieldKey = useCallback((searchPhrase: string): keyof FullQuoteFormData | undefined => {
-    const upperPhrase = searchPhrase.toUpperCase();
-    if (upperPhrase === PHRASE_FUEL_SURCHARGE) return 'sellPriceFuelSurchargePerHour';
-    if (upperPhrase === PHRASE_MEDICAL_SERVICE) return 'sellPriceMedics';
-    if (upperPhrase === PHRASE_CATERING_SERVICE) return 'sellPriceCatering';
-    if (upperPhrase === PHRASE_LANDING_FEE) return 'sellPriceLandingFeePerLeg';
-    if (upperPhrase === PHRASE_OVERNIGHT_FEE) return 'sellPriceOvernight';
-    return undefined;
-  }, []);
-
-  const getServiceLabel = useCallback((searchPhrase: string, defaultLabel: string, unitDescriptionOverride?: string) => {
-    const serviceConfig = findConfiguredService(searchPhrase);
-    let label = serviceConfig?.displayDescription || defaultLabel;
-    let displaySellRate: number | undefined;
-
-    const formPriceFieldKey = getServiceFormPriceFieldKey(searchPhrase);
-    const formValue = formPriceFieldKey ? getValues(formPriceFieldKey) : undefined;
-
-    if (formValue !== undefined && formValue !== null && !isNaN(Number(formValue))) {
-      displaySellRate = Number(formValue);
-    } else if (serviceConfig?.sell !== undefined) {
-      displaySellRate = serviceConfig.sell;
-    }
-
-    if (displaySellRate !== undefined) {
-      label += ` (${formatCurrencyLocal(displaySellRate)}`;
-      const unit = unitDescriptionOverride || serviceConfig?.unitDescription || 'Service';
-      label += `/${unit})`;
-    }
-    return label;
-  }, [findConfiguredService, getValues, getServiceFormPriceFieldKey]);
-
-  const getServicePlaceholder = useCallback((searchPhrase: string) => {
-    const serviceConfig = findConfiguredService(searchPhrase);
-    return serviceConfig?.sell !== undefined ? `Default: ${formatCurrencyLocal(serviceConfig.sell)}` : 'Enter sell price';
-  }, [findConfiguredService]);
+  }, [fetchedCompanyProfile, replaceOptionalServices]);
 
 
   useEffect(() => {
@@ -330,6 +291,39 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
       fetchQuoteById({ id: quoteIdToEdit })
         .then(quoteData => {
           if (quoteData) {
+            const existingOptionalServicesMap = new Map<string, QuoteLineItem>();
+            (quoteData.lineItems || []).forEach(item => {
+                // Assuming serviceKey might be part of description or a custom field on lineItem if saved that way previously.
+                // This part needs careful mapping based on how dynamic services were stored.
+                // For now, let's assume lineItem.id might contain the serviceKey if it's a dynamic service.
+                existingOptionalServicesMap.set(item.id, item);
+            });
+            
+            const initialFormOptionalServices: OptionalServiceFormData[] = 
+              Object.entries(fetchedCompanyProfile?.serviceFeeRates || {})
+              .filter(([_key, rate]) => rate.isActive)
+              .map(([key, rate]) => {
+                const existingLineItem = (quoteData.lineItems || []).find(li => li.id === key); // Use key if that's how it's stored
+                let quantityInputType: OptionalServiceFormData['quantityInputType'] = 'none';
+                const unitDescUpper = rate.unitDescription.toUpperCase();
+                if (unitDescUpper.includes("PER LEG") || unitDescUpper.includes("LANDING")) quantityInputType = "legs";
+                else if (unitDescUpper.includes("PER NIGHT") || unitDescUpper.includes("OVERNIGHT")) quantityInputType = "nights";
+                else if (unitDescUpper.includes("HOUR")) quantityInputType = "block_hours";
+
+                return {
+                    serviceKey: key,
+                    displayDescription: rate.displayDescription,
+                    unitDescription: rate.unitDescription,
+                    defaultBuyRate: rate.buy,
+                    defaultSellRate: rate.sell,
+                    selected: !!existingLineItem,
+                    customSellPrice: existingLineItem?.sellRate,
+                    isActiveFromConfig: rate.isActive ?? true,
+                    quantityInputType,
+                };
+            });
+
+
             const formDataToReset: FullQuoteFormData = {
               quoteId: quoteData.quoteId,
               selectedCustomerId: quoteData.selectedCustomerId,
@@ -344,16 +338,8 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
                 destinationTaxiTimeMinutes: leg.destinationTaxiTimeMinutes === undefined ? 15 : leg.destinationTaxiTimeMinutes,
               })),
               aircraftId: quoteData.aircraftId,
-              medicsRequested: quoteData.options.medicsRequested || false,
-              cateringRequested: quoteData.options.cateringRequested || false,
-              includeLandingFees: quoteData.options.includeLandingFees || false,
               estimatedOvernights: quoteData.options.estimatedOvernights || 0,
-              fuelSurchargeRequested: quoteData.options.fuelSurchargeRequested || false,
-              sellPriceFuelSurchargePerHour: quoteData.options.sellPriceFuelSurchargePerHour,
-              sellPriceMedics: quoteData.options.sellPriceMedics,
-              sellPriceCatering: quoteData.options.sellPriceCatering,
-              sellPriceLandingFeePerLeg: quoteData.options.sellPriceLandingFeePerLeg,
-              sellPriceOvernight: quoteData.options.sellPriceOvernight,
+              optionalServices: initialFormOptionalServices,
               cateringNotes: quoteData.options.cateringNotes || "",
               notes: quoteData.options.notes || '',
             };
@@ -377,32 +363,7 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
         setValue('quoteId', generateNewQuoteId());
       }
     }
-  }, [isEditMode, quoteIdToEdit, reset, toast, router, setValue, getValues, generateNewQuoteId]);
-
-  useEffect(() => {
-    if (!isEditMode && fetchedCompanyProfile) {
-        const configuredFuelSurcharge = findConfiguredService(PHRASE_FUEL_SURCHARGE);
-        if (configuredFuelSurcharge?.sell !== undefined && getValues('sellPriceFuelSurchargePerHour') === undefined) {
-            setValue('sellPriceFuelSurchargePerHour', configuredFuelSurcharge.sell);
-        }
-        const configuredMedics = findConfiguredService(PHRASE_MEDICAL_SERVICE);
-        if (configuredMedics?.sell !== undefined && getValues('sellPriceMedics') === undefined) {
-            setValue('sellPriceMedics', configuredMedics.sell);
-        }
-        const configuredCatering = findConfiguredService(PHRASE_CATERING_SERVICE);
-        if (configuredCatering?.sell !== undefined && getValues('sellPriceCatering') === undefined) {
-            setValue('sellPriceCatering', configuredCatering.sell);
-        }
-        const configuredLandingFees = findConfiguredService(PHRASE_LANDING_FEE);
-        if (configuredLandingFees?.sell !== undefined && getValues('sellPriceLandingFeePerLeg') === undefined) {
-            setValue('sellPriceLandingFeePerLeg', configuredLandingFees.sell);
-        }
-        const configuredOvernights = findConfiguredService(PHRASE_OVERNIGHT_FEE);
-        if (configuredOvernights?.sell !== undefined && getValues('sellPriceOvernight') === undefined) {
-            setValue('sellPriceOvernight', configuredOvernights.sell);
-        }
-    }
-  }, [fetchedCompanyProfile, isEditMode, setValue, getValues, findConfiguredService]);
+  }, [isEditMode, quoteIdToEdit, reset, toast, router, setValue, getValues, generateNewQuoteId, fetchedCompanyProfile]);
 
 
   useEffect(() => {
@@ -422,7 +383,7 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
 
   useEffect(() => {
     const newItems: QuoteLineItem[] = [];
-    if (isLoadingDynamicRates || !currentSelectedAircraftId) {
+    if (isLoadingDynamicRates || !currentSelectedAircraftId || !formOptionalServices) {
         setCalculatedLineItems([]);
         return;
     }
@@ -450,13 +411,12 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
             totalRevenueFlightHours += flightTime;
         } else if (flightTime > 0 && ["Positioning", "Ferry", "Maintenance"].includes(leg.legType)) {
             totalFlightTimeBuyCost += flightTime * aircraftBuyRate;
-            totalFlightTimeSellCost += flightTime * aircraftBuyRate; // Sell at buy rate for non-revenue legs
+            totalFlightTimeSellCost += flightTime * aircraftBuyRate; 
         }
     });
 
     const selectedAircraftInfo = aircraftSelectOptions.find(ac => ac.value === currentSelectedAircraftId);
     const aircraftDisplayName = selectedAircraftInfo ? selectedAircraftInfo.label : "Selected Aircraft";
-
     const billableHoursForAircraft = totalRevenueFlightHours > 0 ? totalRevenueFlightHours : (totalBlockHours > 0 ? totalBlockHours : 0);
 
     if (billableHoursForAircraft > 0) {
@@ -472,86 +432,39 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
         });
     }
 
-    if (fuelSurchargeRequested) {
-      const serviceConfig = findConfiguredService(PHRASE_FUEL_SURCHARGE);
-      if (serviceConfig && totalBlockHours > 0) {
-        const buyRate = serviceConfig.buy;
-        const sellRate = sellPriceFuelSurchargePerHour ?? serviceConfig.sell;
-        newItems.push({
-          id: 'fuelSurcharge', description: serviceConfig.displayDescription,
-          buyRate, sellRate, unitDescription: serviceConfig.unitDescription || "Block Hour",
-          quantity: parseFloat(totalBlockHours.toFixed(2)),
-          buyTotal: buyRate * totalBlockHours, sellTotal: sellRate * totalBlockHours,
-        });
+    formOptionalServices.forEach(service => {
+      if (service.selected && service.isActiveFromConfig) {
+        let quantity = 1;
+        const unitDescUpper = service.unitDescription.toUpperCase();
+        if (service.quantityInputType === "legs" || unitDescUpper.includes("PER LEG") || unitDescUpper.includes("LANDING")) {
+            quantity = legsArray.filter(leg => leg.origin && leg.destination && leg.origin.length >= 3 && leg.destination.length >= 3).length || 0;
+        } else if (service.quantityInputType === "nights" || unitDescUpper.includes("PER NIGHT") || unitDescUpper.includes("OVERNIGHT")) {
+            quantity = Number(currentEstimatedOvernights || 0);
+        } else if (service.quantityInputType === "block_hours" || unitDescUpper.includes("HOUR")) {
+            quantity = parseFloat(totalBlockHours.toFixed(2));
+        }
+        
+        if (quantity > 0) {
+            const sellRateToUse = typeof service.customSellPrice === 'number' ? service.customSellPrice : service.defaultSellRate;
+            newItems.push({
+                id: service.serviceKey,
+                description: service.displayDescription,
+                buyRate: service.defaultBuyRate,
+                sellRate: sellRateToUse,
+                unitDescription: service.unitDescription,
+                quantity: quantity,
+                buyTotal: service.defaultBuyRate * quantity,
+                sellTotal: sellRateToUse * quantity,
+            });
+        }
       }
-    }
+    });
 
-    if (medicsRequested) {
-      const serviceConfig = findConfiguredService(PHRASE_MEDICAL_SERVICE);
-      if (serviceConfig) {
-          const buyRate = serviceConfig.buy;
-          const sellRate = sellPriceMedics ?? serviceConfig.sell;
-          newItems.push({
-            id: 'medicsFee', description: serviceConfig.displayDescription,
-            buyRate, sellRate, unitDescription: serviceConfig.unitDescription || "Service",
-            quantity: 1, buyTotal: buyRate, sellTotal: sellRate,
-          });
-      }
-    }
-
-    if (cateringRequested) {
-      const serviceConfig = findConfiguredService(PHRASE_CATERING_SERVICE);
-      if (serviceConfig) {
-          const buyRate = serviceConfig.buy;
-          const sellRate = sellPriceCatering ?? serviceConfig.sell;
-          newItems.push({
-            id: 'cateringFee', description: serviceConfig.displayDescription,
-            buyRate, sellRate, unitDescription: serviceConfig.unitDescription || "Service",
-            quantity: 1, buyTotal: buyRate, sellTotal: sellRate,
-          });
-      }
-    }
-
-    const validLegsCount = legsArray.filter(leg => leg.origin && leg.destination && leg.origin.length >=3 && leg.destination.length >=3).length;
-    if (includeLandingFees && validLegsCount > 0) {
-      const serviceConfig = findConfiguredService(PHRASE_LANDING_FEE);
-      if (serviceConfig) {
-          const buyRate = serviceConfig.buy;
-          const sellRate = sellPriceLandingFeePerLeg ?? serviceConfig.sell;
-          newItems.push({
-            id: 'landingFees', description: serviceConfig.displayDescription,
-            buyRate, sellRate, unitDescription: serviceConfig.unitDescription || "Per Leg",
-            quantity: validLegsCount,
-            buyTotal: buyRate * validLegsCount, sellTotal: sellRate * validLegsCount,
-          });
-      }
-    }
-
-    const numericEstimatedOvernights = Number(currentEstimatedOvernights || 0);
-    if (numericEstimatedOvernights > 0) {
-      const serviceConfig = findConfiguredService(PHRASE_OVERNIGHT_FEE);
-      if (serviceConfig) {
-          const buyRate = serviceConfig.buy;
-          const sellRate = sellPriceOvernight ?? serviceConfig.sell;
-          newItems.push({
-            id: 'overnightFees', description: serviceConfig.displayDescription,
-            buyRate, sellRate, unitDescription: serviceConfig.unitDescription || "Per Night",
-            quantity: numericEstimatedOvernights,
-            buyTotal: buyRate * numericEstimatedOvernights, sellTotal: sellRate * numericEstimatedOvernights,
-          });
-      }
-    }
     setCalculatedLineItems(newItems);
 
   }, [
     legsArray, currentSelectedAircraftId, aircraftSelectOptions,
-    fetchedAircraftRates, fetchedCompanyProfile,
-    fuelSurchargeRequested, sellPriceFuelSurchargePerHour,
-    medicsRequested, sellPriceMedics,
-    cateringRequested, sellPriceCatering,
-    includeLandingFees, sellPriceLandingFeePerLeg,
-    currentEstimatedOvernights, sellPriceOvernight,
-    isLoadingDynamicRates, findConfiguredService
+    fetchedAircraftRates, isLoadingDynamicRates, formOptionalServices, currentEstimatedOvernights
   ]);
 
   const handleEstimateFlightDetails = useCallback(async (legIndex: number) => {
@@ -677,19 +590,17 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
             calculatedBlockTimeHours: blockTimeHours,
           };
         }),
-        options: {
-          medicsRequested: data.medicsRequested,
-          cateringRequested: data.cateringRequested,
-          includeLandingFees: data.includeLandingFees,
+        options: { // Options related to services are now primarily driven by lineItems
           estimatedOvernights: data.estimatedOvernights,
-          fuelSurchargeRequested: data.fuelSurchargeRequested,
-          cateringNotes: data.cateringRequested ? data.cateringNotes : undefined,
+          cateringNotes: data.cateringNotes,
           notes: data.notes,
-          sellPriceFuelSurchargePerHour: data.sellPriceFuelSurchargePerHour,
-          sellPriceMedics: data.sellPriceMedics,
-          sellPriceCatering: data.sellPriceCatering,
-          sellPriceLandingFeePerLeg: data.sellPriceLandingFeePerLeg,
-          sellPriceOvernight: data.sellPriceOvernight,
+          // These direct sell prices are less critical if using dynamic optional services,
+          // but we can still save what's in the form if those specific fields were ever directly used.
+          // For the dynamic model, these would be mostly deprecated in favor of what's in optionalServices -> lineItems.
+          medicsRequested: formOptionalServices.find(s => s.displayDescription.toUpperCase().includes("MEDICAL") && s.selected)?.selected || false,
+          cateringRequested: formOptionalServices.find(s => s.displayDescription.toUpperCase().includes("CATERING") && s.selected)?.selected || false,
+          includeLandingFees: formOptionalServices.find(s => s.displayDescription.toUpperCase().includes("LANDING FEE") && s.selected)?.selected || false,
+          fuelSurchargeRequested: formOptionalServices.find(s => s.displayDescription.toUpperCase().includes("FUEL SURCHARGE") && s.selected)?.selected || false,
         },
         lineItems: calculatedLineItems,
         totalBuyCost,
@@ -733,19 +644,51 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
             clientName: '', clientEmail: '', clientPhone: '',
             legs: [{ origin: '', destination: '', legType: 'Charter', departureDateTime: undefined, passengerCount: 1, originFbo: '', destinationFbo: '', originTaxiTimeMinutes: 15, destinationTaxiTimeMinutes: 15, flightTimeHours: undefined }],
             aircraftId: undefined,
-            medicsRequested: false, cateringRequested: false, includeLandingFees: false, estimatedOvernights: 0, fuelSurchargeRequested: false,
+            estimatedOvernights: 0,
+            optionalServices: [], // Reset dynamic services
             cateringNotes: "", notes: '',
-            sellPriceFuelSurchargePerHour: findConfiguredService(PHRASE_FUEL_SURCHARGE)?.sell,
-            sellPriceMedics: findConfiguredService(PHRASE_MEDICAL_SERVICE)?.sell,
-            sellPriceCatering: findConfiguredService(PHRASE_CATERING_SERVICE)?.sell,
-            sellPriceLandingFeePerLeg: findConfiguredService(PHRASE_LANDING_FEE)?.sell,
-            sellPriceOvernight: findConfiguredService(PHRASE_OVERNIGHT_FEE)?.sell,
           });
           setLegEstimates([]);
           setCalculatedLineItems([]);
+          // Re-initialize optionalServices from company profile for a truly new form
+            if (fetchedCompanyProfile?.serviceFeeRates) {
+                const activeServicesFromConfig = Object.entries(fetchedCompanyProfile.serviceFeeRates)
+                    .filter(([_key, rate]) => rate.isActive)
+                    .map(([key, rate]) => {
+                         let quantityInputType: OptionalServiceFormData['quantityInputType'] = 'none';
+                        const unitDescUpper = rate.unitDescription.toUpperCase();
+                        if (unitDescUpper.includes("PER LEG") || unitDescUpper.includes("LANDING")) quantityInputType = "legs";
+                        else if (unitDescUpper.includes("PER NIGHT") || unitDescUpper.includes("OVERNIGHT")) quantityInputType = "nights";
+                        else if (unitDescUpper.includes("HOUR")) quantityInputType = "block_hours";
+                        return {
+                            serviceKey: key, displayDescription: rate.displayDescription, unitDescription: rate.unitDescription,
+                            defaultBuyRate: rate.buy, defaultSellRate: rate.sell, selected: false, customSellPrice: undefined,
+                            isActiveFromConfig: rate.isActive ?? true, quantityInputType,
+                        };
+                    });
+                replaceOptionalServices(activeServicesFromConfig);
+            }
+
         } else {
           const updatedQuoteData = await fetchQuoteById({ id: savedQuote.id });
           if (updatedQuoteData) {
+              const initialFormOptionalServices: OptionalServiceFormData[] = 
+                Object.entries(fetchedCompanyProfile?.serviceFeeRates || {})
+                .filter(([_key, rate]) => rate.isActive)
+                .map(([key, rate]) => {
+                    const existingLineItem = (updatedQuoteData.lineItems || []).find(li => li.id === key);
+                    let quantityInputType: OptionalServiceFormData['quantityInputType'] = 'none';
+                    const unitDescUpper = rate.unitDescription.toUpperCase();
+                    if (unitDescUpper.includes("PER LEG") || unitDescUpper.includes("LANDING")) quantityInputType = "legs";
+                    else if (unitDescUpper.includes("PER NIGHT") || unitDescUpper.includes("OVERNIGHT")) quantityInputType = "nights";
+                    else if (unitDescUpper.includes("HOUR")) quantityInputType = "block_hours";
+                    return {
+                        serviceKey: key, displayDescription: rate.displayDescription, unitDescription: rate.unitDescription,
+                        defaultBuyRate: rate.buy, defaultSellRate: rate.sell, selected: !!existingLineItem, customSellPrice: existingLineItem?.sellRate,
+                        isActiveFromConfig: rate.isActive ?? true, quantityInputType,
+                    };
+                });
+
             const formDataToReset: FullQuoteFormData = {
               quoteId: updatedQuoteData.quoteId,
               selectedCustomerId: updatedQuoteData.selectedCustomerId,
@@ -760,16 +703,8 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
                 destinationTaxiTimeMinutes: leg.destinationTaxiTimeMinutes === undefined ? 15 : leg.destinationTaxiTimeMinutes,
               })),
               aircraftId: updatedQuoteData.aircraftId,
-              medicsRequested: updatedQuoteData.options.medicsRequested || false,
-              cateringRequested: updatedQuoteData.options.cateringRequested || false,
-              includeLandingFees: updatedQuoteData.options.includeLandingFees || false,
               estimatedOvernights: updatedQuoteData.options.estimatedOvernights || 0,
-              fuelSurchargeRequested: updatedQuoteData.options.fuelSurchargeRequested || false,
-              sellPriceFuelSurchargePerHour: updatedQuoteData.options.sellPriceFuelSurchargePerHour,
-              sellPriceMedics: updatedQuoteData.options.sellPriceMedics,
-              sellPriceCatering: updatedQuoteData.options.sellPriceCatering,
-              sellPriceLandingFeePerLeg: updatedQuoteData.options.sellPriceLandingFeePerLeg,
-              sellPriceOvernight: updatedQuoteData.options.sellPriceOvernight,
+              optionalServices: initialFormOptionalServices,
               cateringNotes: updatedQuoteData.options.cateringNotes || "",
               notes: updatedQuoteData.options.notes || '',
             };
@@ -858,11 +793,10 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
               <span>(Margin: {formatCurrencyLocal(marginAmount)} / {marginPercentage.toFixed(1)}%)</span>
             </div>
           </div>
-
-          {(data.notes || data.cateringNotes || data.medicsRequested) && <Separator />}
-          {data.medicsRequested && <div className="py-1"><p><strong>Medics Requested:</strong> Yes</p></div>}
-          {data.cateringRequested && <div className="py-1"><p><strong>Catering Requested:</strong> Yes</p></div>}
-          {data.cateringNotes && <div className="py-1"><h4 className="font-medium text-sm">Catering Notes:</h4><p className="whitespace-pre-wrap bg-muted/20 p-1.5 rounded-md">{data.cateringNotes}</p></div>}
+          
+          {data.optionalServices.some(s => s.selected && s.displayDescription.toUpperCase().includes("CATERING")) && data.cateringNotes &&
+            <div className="py-1"><h4 className="font-medium text-sm">Catering Notes:</h4><p className="whitespace-pre-wrap bg-muted/20 p-1.5 rounded-md">{data.cateringNotes}</p></div>
+          }
           {data.notes && <div className="py-1"><h4 className="font-medium text-sm">General Notes:</h4><p className="whitespace-pre-wrap bg-muted/20 p-1.5 rounded-md">{data.notes}</p></div>}
         </div>
       </ScrollArea>
@@ -903,9 +837,9 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
         const previousLegFlightMillis = previousLegFlightTime * 60 * 60 * 1000;
         const previousLegDestTaxiMillis = (Number(previousLeg.destinationTaxiTimeMinutes || 0)) * 60 * 1000;
         const estimatedArrivalMillis = previousLegDeparture.getTime() + previousLegFlightMillis + previousLegDestTaxiMillis;
-        newLegDefaults.departureDateTime = new Date(estimatedArrivalMillis + (60 * 60 * 1000)); // Add 1hr turnaround
+        newLegDefaults.departureDateTime = new Date(estimatedArrivalMillis + (60 * 60 * 1000)); 
       } else if (previousLeg.departureDateTime && previousLeg.departureDateTime instanceof Date && isValidDate(previousLeg.departureDateTime)) {
-         newLegDefaults.departureDateTime = new Date(previousLeg.departureDateTime.getTime() + (3 * 60 * 60 * 1000)); // Default to 3hr after previous departure if no flight time
+         newLegDefaults.departureDateTime = new Date(previousLeg.departureDateTime.getTime() + (3 * 60 * 60 * 1000)); 
       }
     }
 
@@ -933,20 +867,21 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
     }
   };
 
-  if (isLoadingQuoteDataForEdit) {
+  if (isEditMode && isLoadingQuoteDataForEdit) {
     return (
       <Card className="shadow-lg max-w-4xl mx-auto">
         <CardHeader>
-          <Skeleton className="h-8 w-1/2" />
-          <Skeleton className="h-4 w-3/4" />
+          <Skeleton className="h-8 w-3/4 mb-2" />
+          <Skeleton className="h-4 w-1/2" />
         </CardHeader>
-        <CardContent className="space-y-8">
+        <CardContent className="space-y-6">
           <Skeleton className="h-10 w-full" />
           <Skeleton className="h-20 w-full" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4"> <Skeleton className="h-24 w-full" /> <Skeleton className="h-24 w-full" /> </div>
           <Skeleton className="h-40 w-full" />
         </CardContent>
         <CardFooter>
-          <Skeleton className="h-10 w-24" />
+          <Skeleton className="h-10 w-32" />
         </CardFooter>
       </Card>
     );
@@ -955,104 +890,42 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
 
   return (
     <>
-    <Card className="shadow-lg max-w-4xl mx-auto">
-      <CardHeader>
-        <CardTitle>{isEditMode ? `Editing Quote: ${getValues('quoteId')}` : "New Quote Details"}</CardTitle>
-        <CardDescription>{isEditMode ? "Modify the details of this existing quote." : "Fill in the client and trip information to generate a quote."}</CardDescription>
-      </CardHeader>
-      <Form {...form}>
-        <form>
-          <CardContent className="space-y-8">
-            <FormField control={control} name="quoteId" render={({ field }) => ( <FormItem className="mb-6"> <FormLabel>Quote ID</FormLabel> <FormControl><Input placeholder="e.g., QT-ABCDE" {...field} value={field.value || ''} readOnly={isEditMode} className={isEditMode ? "bg-muted/50 cursor-not-allowed" : "bg-muted/50"} /></FormControl> <FormMessage /> </FormItem> )} />
-
-            <section>
-              <CardTitle className="text-xl border-b pb-2 mb-4">Client Information</CardTitle>
-              <FormField
-                control={control}
-                name="selectedCustomerId"
-                render={({ field }) => (
-                  <FormItem className="mb-4">
-                    <FormLabel className="flex items-center gap-1"><UserSearch className="h-4 w-4" /> Select Existing Client (Optional)</FormLabel>
-                    <Select
-                      onValueChange={(value) => { handleCustomerSelect(value); field.onChange(value); }}
-                      value={field.value || ""}
-                      name={field.name}
-                      disabled={isLoadingCustomers}
-                    >
-                      <FormControl><SelectTrigger><SelectValue placeholder={isLoadingCustomers ? "Loading customers..." : "Select a client"} /></SelectTrigger></FormControl>
-                      <SelectContent>
-                        {!isLoadingCustomers && customers.length === 0 && <SelectItem value="NO_CUSTOMERS_PLACEHOLDER" disabled>No customers found</SelectItem>}
-                        {customers.map(customer => (<SelectItem key={customer.id} value={customer.id}>{customer.name} {customer.customerType && `(${customer.customerType})`}</SelectItem>))}
-                      </SelectContent>
-                    </Select>
-                    <FormDescription>Choosing a client will auto-populate their details below.</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 mb-4">
+    <Form {...form}>
+      <form>
+        <div className="space-y-6">
+        <Card className="shadow-sm">
+            <CardHeader><CardTitle>{isEditMode ? `Editing Quote: ${getValues('quoteId')}` : "Core Quote Details"}</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+                <FormField control={control} name="quoteId" render={({ field }) => ( <FormItem> <FormLabel>Quote ID</FormLabel> <FormControl><Input {...field} value={field.value || ''} readOnly={isEditMode} className={isEditMode ? "bg-muted/30 cursor-not-allowed" : "bg-muted/30"} /></FormControl> <FormMessage /> </FormItem> )} />
+                <FormField control={control} name="selectedCustomerId" render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><UserSearch className="h-4 w-4" /> Select Existing Client (Optional)</FormLabel> <Select onValueChange={(value) => { handleCustomerSelect(value); field.onChange(value); }} value={field.value || ""} disabled={isLoadingCustomers}> <FormControl><SelectTrigger><SelectValue placeholder={isLoadingCustomers ? "Loading customers..." : "Select a client or enter details manually"} /></SelectTrigger></FormControl> <SelectContent> {!isLoadingCustomers && customers.length === 0 && <SelectItem value="NO_CUSTOMERS" disabled>No customers</SelectItem>} {customers.map(c => (<SelectItem key={c.id} value={c.id}>{c.name} {c.customerType && `(${c.customerType})`}</SelectItem>))} </SelectContent> </Select> <FormDescription>Auto-fills client details if selected.</FormDescription> <FormMessage /> </FormItem> )} />
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <FormField control={control} name="clientName" render={({ field }) => ( <FormItem> <FormLabel>Client Name</FormLabel> <FormControl><Input placeholder="e.g., John Doe" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
                 <FormField control={control} name="clientEmail" render={({ field }) => ( <FormItem> <FormLabel>Client Email</FormLabel> <FormControl><Input type="email" placeholder="e.g., john.doe@example.com" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
-              </div>
-              <FormField control={control} name="clientPhone" render={({ field }) => ( <FormItem> <FormLabel>Client Phone</FormLabel> <FormControl><Input type="tel" placeholder="e.g., (555) 123-4567" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
-            </section>
+                </div>
+                <FormField control={control} name="clientPhone" render={({ field }) => ( <FormItem> <FormLabel>Client Phone</FormLabel> <FormControl><Input type="tel" placeholder="e.g., (555) 123-4567" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
+                <FormField control={control} name="aircraftId" render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><PlaneIconUI className="h-4 w-4" /> Aircraft {isLoadingSelectedAcPerf && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground ml-2" />}</FormLabel> <Select onValueChange={field.onChange} value={field.value || ""} disabled={isLoadingAircraftList}> <FormControl><SelectTrigger><SelectValue placeholder={isLoadingAircraftList ? "Loading aircraft..." : "Select an aircraft"} /></SelectTrigger></FormControl> <SelectContent> {!isLoadingAircraftList && aircraftSelectOptions.length === 0 && <SelectItem value="NO_AIRCRAFT" disabled>No aircraft in fleet</SelectItem>} {aircraftSelectOptions.map(opt => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))} </SelectContent> </Select> <FormMessage /> </FormItem> )} />
+            </CardContent>
+        </Card>
 
-            <Separator />
-            <section>
-              <CardTitle className="text-xl border-b pb-2 mb-4">General Quote Options</CardTitle>
-              <div className="grid grid-cols-1 gap-6 mb-6">
-                <FormField
-                    control={control}
-                    name="aircraftId"
-                    render={({ field }) => (
-                        <FormItem>
-                            <FormLabel>Aircraft</FormLabel>
-                            <Select
-                                onValueChange={field.onChange}
-                                value={field.value || ""}
-                                name={field.name}
-                                disabled={isLoadingAircraftList || isLoadingDynamicRates}
-                            >
-                                <FormControl>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder={isLoadingAircraftList ? "Loading aircraft..." : "Select an aircraft"} />
-                                    </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                    {!isLoadingAircraftList && aircraftSelectOptions.length === 0 && <SelectItem value="NO_AIRCRAFT_CONFIGURED_PLACEHOLDER" disabled>No aircraft configured in fleet</SelectItem>}
-                                    {aircraftSelectOptions.map(aircraft => (
-                                        <SelectItem key={aircraft.value} value={aircraft.value}>
-                                            {aircraft.label}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                            <FormMessage />
-                        </FormItem>
-                    )}
-                />
-              </div>
-            </section>
-            <Separator />
-
-            <section>
-              <CardTitle className="text-xl border-b pb-2 mb-6">Flight Legs</CardTitle>
-              {fields.map((legItem, index) => (
-                <Card key={legItem.id} className="mb-6 p-4 border rounded-lg shadow-sm bg-background/50">
-                  <CardHeader className="p-0 pb-4">
+        <Card className="shadow-sm">
+            <CardHeader><CardTitle>Flight Legs</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+            {fields.map((legItem, index) => (
+                <Card key={legItem.id} className="p-4 border rounded-lg shadow-inner bg-background/80">
+                  <CardHeader className="p-0 pb-3">
                     <div className="flex justify-between items-center">
-                      <CardTitle className="text-lg flex items-center gap-2"><GripVertical className="h-5 w-5 text-muted-foreground" /> Leg {index + 1}</CardTitle>
+                      <CardTitle className="text-md flex items-center gap-2"><GripVertical className="h-5 w-5 text-muted-foreground cursor-grab" /> Leg {index + 1}</CardTitle>
                       {fields.length > 1 && (<Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveLeg(index)} className="text-destructive hover:text-destructive"><Trash2 className="h-4 w-4" /><span className="sr-only">Remove Leg</span></Button>)}
                     </div>
                   </CardHeader>
-                  <CardContent className="p-0 space-y-4">
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                      <FormField control={control} name={`legs.${index}.origin`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><PlaneTakeoff className="h-4 w-4" />Origin Airport</FormLabel> <FormControl><Input placeholder="e.g., KJFK" {...field} onChange={(e) => { field.onChange(e.target.value.toUpperCase()); trigger(`legs.${index}.origin`); }} /></FormControl> <FormMessage /> </FormItem> )} />
-                      <FormField control={control} name={`legs.${index}.destination`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><PlaneLanding className="h-4 w-4" />Destination Airport</FormLabel> <FormControl><Input placeholder="e.g., KLAX" {...field} onChange={(e) => { field.onChange(e.target.value.toUpperCase()); trigger(`legs.${index}.destination`); }} /></FormControl> <FormMessage /> </FormItem> )} />
+                  <CardContent className="p-0 space-y-3">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <FormField control={control} name={`legs.${index}.origin`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><PlaneTakeoff className="h-4 w-4" />Origin</FormLabel> <FormControl><Input placeholder="KJFK" value={field.value || ''} onChange={(e) => field.onChange(e.target.value.toUpperCase())} onBlur={field.onBlur} name={field.name} ref={field.ref}/></FormControl> <FormMessage /> </FormItem> )} />
+                      <FormField control={control} name={`legs.${index}.destination`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><PlaneLanding className="h-4 w-4" />Destination</FormLabel> <FormControl><Input placeholder="KLAX" value={field.value || ''} onChange={(e) => field.onChange(e.target.value.toUpperCase())} onBlur={field.onBlur} name={field.name} ref={field.ref} /></FormControl> <FormMessage /> </FormItem> )} />
                     </div>
-                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <FormField control={control} name={`legs.${index}.originFbo`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><Building className="h-4 w-4" />Origin FBO (Optional)</FormLabel> <FormControl><Input placeholder="e.g., Signature, Atlantic" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
-                        <FormField control={control} name={`legs.${index}.destinationFbo`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><Building className="h-4 w-4" />Destination FBO (Optional)</FormLabel> <FormControl><Input placeholder="e.g., Signature, Atlantic" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
+                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <FormField control={control} name={`legs.${index}.originFbo`} render={({ field }) => ( <FormItem> <FormLabel><Building className="inline h-4 w-4 mr-1"/>Origin FBO</FormLabel> <FormControl><Input placeholder="Optional" value={field.value || ''} onChange={field.onChange} onBlur={field.onBlur} name={field.name} ref={field.ref}/></FormControl> </FormItem> )} />
+                        <FormField control={control} name={`legs.${index}.destinationFbo`} render={({ field }) => ( <FormItem> <FormLabel><Building className="inline h-4 w-4 mr-1"/>Destination FBO</FormLabel> <FormControl><Input placeholder="Optional" value={field.value || ''} onChange={field.onChange} onBlur={field.onBlur} name={field.name} ref={field.ref}/></FormControl> </FormItem> )} />
                     </div>
                     <FormField control={control} name={`legs.${index}.departureDateTime`} render={({ field }) => (
                       <FormItem className="flex flex-col">
@@ -1061,239 +934,99 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
                           {isClient ? (
                             <Popover modal={false}>
                               <PopoverTrigger asChild>
-                                <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !(field.value && field.value instanceof Date && isValidDate(field.value)) && "text-muted-foreground")}>
+                                <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !(field.value && field.value instanceof Date && isValidDate(field.value)) && "text-muted-foreground")}>
+                                  <CalendarIcon className="mr-2 h-4 w-4" />
                                   <span>{field.value && field.value instanceof Date && isValidDate(field.value) ? format(field.value, "PPP HH:mm") : "Pick a date and time"}</span>
-                                  <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
                                 </Button>
                               </PopoverTrigger>
                               <PopoverContent className="w-auto p-0 z-[100]" align="start">
                                 <Calendar mode="single" selected={field.value && field.value instanceof Date && isValidDate(field.value) ? field.value : undefined} onSelect={field.onChange} disabled={(date) => minLegDepartureDate ? date < minLegDepartureDate : true} initialFocus />
-                                <div className="p-2 border-t border-border">
-                                  <Input type="time" defaultValue={field.value && field.value instanceof Date && isValidDate(field.value) ? format(field.value, "HH:mm") : ""} onChange={(e) => { const time = e.target.value; const [hours, minutes] = time.split(':').map(Number); let newDate = field.value && field.value instanceof Date && isValidDate(field.value) ? new Date(field.value) : new Date(); if (!isValidDate(newDate)) newDate = new Date(); newDate.setHours(hours, minutes,0,0); field.onChange(newDate); }} />
-                                </div>
+                                <div className="p-2 border-t"><Input type="time" defaultValue={field.value && field.value instanceof Date && isValidDate(field.value) ? format(field.value, "HH:mm") : ""} onChange={(e) => { const time = e.target.value; const [hours, minutes] = time.split(':').map(Number); let newDate = field.value && field.value instanceof Date && isValidDate(field.value) ? new Date(field.value) : new Date(); if (!isValidDate(newDate)) newDate = new Date(); newDate.setHours(hours, minutes,0,0); field.onChange(newDate); }} /></div>
                               </PopoverContent>
                             </Popover>
                           ) : ( <Skeleton className="h-10 w-full" /> )}
-                        </FormControl>
-                        <FormMessage />
+                        </FormControl><FormMessage />
                       </FormItem>
                     )} />
-
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <FormField control={control} name={`legs.${index}.legType`} render={({ field }) => ( <FormItem> <FormLabel>Leg Type</FormLabel> <Select onValueChange={field.onChange} value={field.value || ""} name={field.name}> <FormControl><SelectTrigger><SelectValue placeholder="Select leg type" /></SelectTrigger></FormControl> <SelectContent>{legTypes.map(type => (<SelectItem key={type} value={type}>{type}</SelectItem>))}</SelectContent> </Select> <FormMessage /> </FormItem> )} />
-                        <FormField control={control} name={`legs.${index}.passengerCount`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><Users className="h-4 w-4" />Passengers</FormLabel>
-                          <FormControl>
-                            <Input
-                              type="number"
-                              placeholder="e.g., 1"
-                              {...field}
-                              value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : field.value}
-                              onChange={e => {
-                                const val = parseInt(e.target.value, 10);
-                                field.onChange(isNaN(val) ? undefined : val);
-                              }}
-                              min="0"
-                            />
-                          </FormControl>
-                        <FormMessage /> </FormItem> )} />
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <FormField control={control} name={`legs.${index}.legType`} render={({ field }) => ( <FormItem> <FormLabel>Leg Type</FormLabel> <Select onValueChange={field.onChange} value={field.value || ""} name={field.name}> <FormControl><SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger></FormControl><SelectContent>{legTypes.map(type => (<SelectItem key={type} value={type}>{type}</SelectItem>))}</SelectContent></Select><FormMessage /> </FormItem> )} />
+                      <FormField control={control} name={`legs.${index}.passengerCount`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><Users className="h-4 w-4" />Pax</FormLabel> <FormControl><Input type="number" placeholder="1" value={String(field.value ?? '')} onChange={e => field.onChange(e.target.value === '' ? undefined : parseInt(e.target.value,10))} onBlur={field.onBlur} name={field.name} ref={field.ref} min="0" /></FormControl> <FormMessage /> </FormItem> )} />
                     </div>
-                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                        <FormField control={control} name={`legs.${index}.originTaxiTimeMinutes`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1">Origin Taxi (mins)</FormLabel>
-                          <FormControl>
-                            <Input
-                              type="number"
-                              placeholder="e.g., 15"
-                              {...field}
-                              value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : String(field.value)}
-                              onChange={e => {
-                                const valStr = e.target.value;
-                                if (valStr === '') field.onChange(undefined);
-                                else { const num = parseInt(valStr, 10); field.onChange(isNaN(num) ? undefined : num); }
-                              }}
-                              min="0"
-                            />
-                          </FormControl>
-                        <FormMessage /> </FormItem> )} />
-                        <FormField control={control} name={`legs.${index}.flightTimeHours`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1"><PlaneTakeoff className="h-4 w-4" />Flight Time (hrs)</FormLabel>
-                          <FormControl>
-                            <Input
-                              type="number"
-                              step="0.1"
-                              placeholder="e.g., 2.5"
-                              {...field}
-                              value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : String(field.value)}
-                              onChange={e => {
-                                const valStr = e.target.value;
-                                if (valStr === '') field.onChange(undefined);
-                                else { const num = parseFloat(valStr); field.onChange(isNaN(num) ? undefined : num); }
-                              }}
-                            />
-                          </FormControl>
-                        <FormDescription className="text-xs">Populated by AI, editable.</FormDescription><FormMessage /> </FormItem> )} />
-                        <FormField control={control} name={`legs.${index}.destinationTaxiTimeMinutes`} render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-1">Dest. Taxi (mins)</FormLabel>
-                          <FormControl>
-                            <Input
-                              type="number"
-                              placeholder="e.g., 15"
-                              {...field}
-                              value={(typeof field.value === 'number' && isNaN(field.value)) || field.value === undefined ? '' : String(field.value)}
-                              onChange={e => {
-                                const valStr = e.target.value;
-                                if (valStr === '') field.onChange(undefined);
-                                else { const num = parseInt(valStr, 10); field.onChange(isNaN(num) ? undefined : num); }
-                              }}
-                              min="0"
-                            />
-                          </FormControl>
-                        <FormMessage /> </FormItem> )} />
+                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                      <FormField control={control} name={`legs.${index}.originTaxiTimeMinutes`} render={({ field }) => ( <FormItem> <FormLabel>Orig. Taxi (min)</FormLabel> <FormControl><Input type="number" placeholder="15" value={String(field.value ?? '')} onChange={e => field.onChange(e.target.value === '' ? undefined : parseInt(e.target.value,10))} onBlur={field.onBlur} name={field.name} ref={field.ref} min="0" /></FormControl> </FormItem> )} />
+                      <FormField control={control} name={`legs.${index}.flightTimeHours`} render={({ field }) => ( <FormItem> <FormLabel>Flight Time (hr)</FormLabel> <FormControl><Input type="number" step="0.1" placeholder="e.g., 2.5" value={String(field.value ?? '')} onChange={e => field.onChange(e.target.value === '' ? undefined : parseFloat(e.target.value))} onBlur={field.onBlur} name={field.name} ref={field.ref} /></FormControl> </FormItem> )} />
+                      <FormField control={control} name={`legs.${index}.destinationTaxiTimeMinutes`} render={({ field }) => ( <FormItem> <FormLabel>Dest. Taxi (min)</FormLabel> <FormControl><Input type="number" placeholder="15" value={String(field.value ?? '')} onChange={e => field.onChange(e.target.value === '' ? undefined : parseInt(e.target.value,10))} onBlur={field.onBlur} name={field.name} ref={field.ref} min="0" /></FormControl> </FormItem> )} />
                     </div>
-
-                    <Button type="button" variant="outline" size="sm" onClick={() => handleEstimateFlightDetails(index)} disabled={estimatingLegIndex === index || !currentSelectedAircraftId || isLoadingDynamicRates || isLoadingSelectedAcPerf} className="w-full sm:w-auto"> {estimatingLegIndex === index || isLoadingSelectedAcPerf ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />} Estimate Flight Details </Button>
-                    {(!currentSelectedAircraftId && !isLoadingDynamicRates) && <FormDescription className="text-xs text-destructive">Select an aircraft to enable estimation.</FormDescription>}
-                    {(isLoadingDynamicRates || isLoadingAircraftList) && <FormDescription className="text-xs">Loading aircraft & rate data...</FormDescription>}
-                    {isLoadingSelectedAcPerf && <FormDescription className="text-xs">Loading performance data for selected aircraft...</FormDescription>}
-
-
-                    {legEstimates[index] && (() => {
-                      const estimate = legEstimates[index]!;
-                      const legData = getValues(`legs.${index}`);
-                      let formattedArrivalTime = 'N/A';
-                      let formattedBlockTime = 'N/A';
-
-                      const legDepartureDateTime = legData.departureDateTime;
-                      const legFlightTimeHours = Number(legData.flightTimeHours || 0);
-
-                      if (legDepartureDateTime && legDepartureDateTime instanceof Date && isValidDate(legDepartureDateTime) && legFlightTimeHours > 0) {
-                        const departureTime = new Date(legDepartureDateTime);
-                        const flightTimeMillis = legFlightTimeHours * 60 * 60 * 1000;
-                        const arrivalTimeMillis = departureTime.getTime() + flightTimeMillis;
-                        if (!isNaN(arrivalTimeMillis)) {
-                           formattedArrivalTime = format(new Date(arrivalTimeMillis), "PPP HH:mm");
-                        }
-                      }
-
-                      const originTaxiMins = Number(legData.originTaxiTimeMinutes || 0);
-                      const destTaxiMins = Number(legData.destinationTaxiTimeMinutes || 0);
-
-                      if (legFlightTimeHours > 0 || originTaxiMins > 0 || destTaxiMins > 0) {
-                        const blockTimeTotalMinutes = originTaxiMins + (legFlightTimeHours * 60) + destTaxiMins;
-                        const blockHours = Math.floor(blockTimeTotalMinutes / 60);
-                        const blockMinutes = Math.round(blockTimeTotalMinutes % 60);
-                        formattedBlockTime = `${String(blockHours).padStart(2, '0')}:${String(blockMinutes).padStart(2, '0')} hrs`;
-                      }
-
-                      return (
-                        <Alert variant={estimate.error ? "destructive" : "default"} className="mt-4 text-xs">
-                          <Info className={`h-4 w-4 ${estimate.error ? '' : 'text-primary'}`} />
-                          <AlertTitle className="text-sm">{estimate.error ? `Error Estimating Leg ${index + 1}` : `Leg ${index + 1} AI Estimate Reference`}</AlertTitle>
-                          <AlertDescription>
-                            {estimate.error ? ( <p>{estimate.error}</p> ) : (
-                              <>
-                                <p><strong>AI Est. Distance:</strong> {estimate.estimatedMileageNM?.toLocaleString()} NM</p>
-                                <p><strong>AI Est. Flight Time:</strong> {estimate.estimatedFlightTimeHours?.toFixed(1)} hours (Populated editable field above)</p>
-                                {(legDepartureDateTime && legDepartureDateTime instanceof Date && isValidDate(legDepartureDateTime)) && <p><strong>Calc. Arrival Time:</strong> {formattedArrivalTime}</p>}
-                                <p><strong>Calc. Block Time:</strong> {formattedBlockTime} (based on current taxi/flight times)</p>
-                                <p><strong>Assumed Speed (AI):</strong> {estimate.assumedCruiseSpeedKts?.toLocaleString()} kts</p>
-                                <p className="mt-1"><em>AI Explanation: {estimate.briefExplanation}</em></p>
-                              </>
-                            )}
-                          </AlertDescription>
-                        </Alert>
-                      );
-                    })()}
+                    <Button type="button" variant="outline" size="sm" onClick={() => handleEstimateFlightDetails(index)} disabled={estimatingLegIndex === index || !currentSelectedAircraftId || isLoadingAircraftList || isLoadingSelectedAcPerf} className="w-full sm:w-auto text-xs"> {estimatingLegIndex === index || isLoadingSelectedAcPerf ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <Wand2 className="mr-2 h-3 w-3" />} Estimate Flight Details </Button>
+                    {legEstimates[index] && (<Alert variant={legEstimates[index]!.error ? "destructive" : "default"} className="mt-2 text-xs"><Info className={`h-4 w-4 ${legEstimates[index]!.error ? '' : 'text-primary'}`} /><AlertTitle className="text-sm">{legEstimates[index]!.error ? `Error Estimating Leg ${index + 1}` : `Leg ${index + 1} AI Estimate Reference`}</AlertTitle><AlertDescription>{legEstimates[index]!.error ? ( <p>{legEstimates[index]!.error}</p> ) : (<><p><strong>AI Est. Distance:</strong> {legEstimates[index]!.estimatedMileageNM?.toLocaleString()} NM</p><p><strong>AI Est. Flight Time:</strong> {legEstimates[index]!.estimatedFlightTimeHours?.toFixed(1)} hours</p><p><strong>Assumed Speed (AI):</strong> {legEstimates[index]!.assumedCruiseSpeedKts?.toLocaleString()} kts</p><p className="mt-1"><em>AI Explanation: {legEstimates[index]!.briefExplanation}</em></p></>)}</AlertDescription></Alert>)}
                   </CardContent>
                 </Card>
               ))}
-              <Button type="button" variant="outline" onClick={handleAddLeg} className="w-full sm:w-auto"> <PlusCircle className="mr-2 h-4 w-4" /> Add New Leg </Button>
-              {errors.legs && typeof errors.legs === 'object' && !Array.isArray(errors.legs) && ( <FormMessage>{(errors.legs as any).message}</FormMessage> )}
-            </section>
+            <Button type="button" variant="outline" onClick={handleAddLeg} className="w-full sm:w-auto mt-2"> <PlusCircle className="mr-2 h-4 w-4" /> Add New Leg </Button>
+            {form.formState.errors.legs && typeof form.formState.errors.legs === 'object' && !Array.isArray(form.formState.errors.legs) && ( <FormMessage>{(form.formState.errors.legs as any).message}</FormMessage> )}
+            </CardContent>
+        </Card>
 
-            <Separator />
-            {fields.length > 0 && ( <section> <CardTitle className="text-xl border-b pb-2 mb-4">Itinerary Summary</CardTitle> <LegsSummaryTable legs={legsArray} /> </section> )}
-            <Separator />
+        {legsArray && legsArray.length > 0 && (
+          <Card className="shadow-sm">
+            <CardHeader><CardTitle>Itinerary Summary</CardTitle></CardHeader>
+            <CardContent><LegsSummaryTable legs={legsArray} /></CardContent>
+          </Card>
+        )}
 
-            <section>
-                <CardTitle className="text-xl border-b pb-2 mb-4">Additional Quote Options & Pricing</CardTitle>
-                <div className="space-y-6">
-                    {shouldShowServiceOption(PHRASE_FUEL_SURCHARGE) && (
-                        <div className="space-y-2">
-                          <FormField control={control} name="fuelSurchargeRequested" render={({ field }) => ( <FormItem className="flex flex-row items-center space-x-3 space-y-0 p-3 border rounded-md hover:bg-muted/50"> <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl> <div className="space-y-1 leading-none"><FormLabel className="flex items-center gap-2"><Fuel className="h-4 w-4 text-primary" /> {getServiceLabel(PHRASE_FUEL_SURCHARGE, "Include Fuel Surcharge", "Block Hr")}</FormLabel></div> </FormItem> )} />
-                          {fuelSurchargeRequested && <FormField control={control} name="sellPriceFuelSurchargePerHour" render={({ field }) => (<FormItem className="pl-10 mt-2"> <FormLabel>Fuel Surcharge Sell Price (per Block Hour)</FormLabel> <FormControl><Input type="number" placeholder={getServicePlaceholder(PHRASE_FUEL_SURCHARGE)} {...field} value={(typeof field.value === 'number' && !isNaN(field.value)) ? String(field.value) : ''} onChange={e => { const valStr = e.target.value; field.onChange(valStr === '' ? undefined : parseFloat(valStr)); }} /></FormControl> <FormMessage /> </FormItem> )} />}
-                        </div>
-                    )}
-
-                    {shouldShowServiceOption(PHRASE_MEDICAL_SERVICE) && (
-                        <div className="space-y-2">
-                          <FormField control={control} name="medicsRequested" render={({ field }) => ( <FormItem className="flex flex-row items-center space-x-3 space-y-0 p-3 border rounded-md hover:bg-muted/50"> <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl> <div className="space-y-1 leading-none"><FormLabel className="flex items-center gap-2"><Users className="h-4 w-4 text-primary" /> {getServiceLabel(PHRASE_MEDICAL_SERVICE, "Medics Requested")}</FormLabel></div> </FormItem> )} />
-                          {medicsRequested && <FormField control={control} name="sellPriceMedics" render={({ field }) => (<FormItem className="pl-10 mt-2"> <FormLabel>Medics Fee Sell Price</FormLabel> <FormControl><Input type="number" placeholder={getServicePlaceholder(PHRASE_MEDICAL_SERVICE)}  {...field} value={(typeof field.value === 'number' && !isNaN(field.value)) ? String(field.value) : ''} onChange={e => { const valStr = e.target.value; field.onChange(valStr === '' ? undefined : parseFloat(valStr)); }} /></FormControl> <FormMessage /> </FormItem> )} />}
-                        </div>
-                    )}
-
-                    {shouldShowServiceOption(PHRASE_CATERING_SERVICE) && (
-                        <div className="space-y-2">
-                            <FormField control={control} name="cateringRequested" render={({ field }) => ( <FormItem className="flex flex-row items-center space-x-3 space-y-0 p-3 border rounded-md hover:bg-muted/50"> <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl> <div className="space-y-1 leading-none"><FormLabel className="flex items-center gap-2"><Utensils className="h-4 w-4 text-primary" /> {getServiceLabel(PHRASE_CATERING_SERVICE, "Catering Requested")}</FormLabel></div> </FormItem> )} />
-                            {cateringRequested && (
-                                <div className="pl-10 mt-2 space-y-2">
-                                    <FormField control={control} name="cateringNotes" render={({ field }) => ( <FormItem> <FormLabel>Catering Notes</FormLabel> <FormControl><Textarea placeholder="Specify catering details..." {...field} value={field.value || ''} rows={3} /></FormControl> <FormMessage /> </FormItem> )} />
-                                    <FormField control={control} name="sellPriceCatering" render={({ field }) => (<FormItem> <FormLabel>Catering Fee Sell Price</FormLabel> <FormControl><Input type="number" placeholder={getServicePlaceholder(PHRASE_CATERING_SERVICE)} {...field} value={(typeof field.value === 'number' && !isNaN(field.value)) ? String(field.value) : ''} onChange={e => { const valStr = e.target.value; field.onChange(valStr === '' ? undefined : parseFloat(valStr)); }} /></FormControl> <FormMessage /> </FormItem> )} />
-                                </div>
+        <Card className="shadow-sm">
+            <CardHeader><CardTitle>Additional Quote Options & Pricing</CardTitle><CardDescription>Select desired services. Prices are pre-filled if configured; override if needed.</CardDescription></CardHeader>
+            <CardContent className="space-y-4">
+            {optionalServicesFields.length === 0 && !isLoadingDynamicRates && (<p className="text-sm text-muted-foreground">No active optional services configured in Quote Settings.</p>)}
+            {optionalServicesFields.map((serviceField, index) => (
+                <div key={serviceField.id} className="space-y-2 p-3 border rounded-md hover:bg-muted/50">
+                    <FormField
+                        control={control} name={`optionalServices.${index}.selected`}
+                        render={({ field }) => (
+                            <FormItem className="flex flex-row items-center space-x-3 space-y-0">
+                                <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                                <FormLabel className="font-normal flex items-center gap-2">
+                                    {serviceField.displayDescription}
+                                    <span className="text-xs text-muted-foreground">({formatCurrencyLocal(serviceField.customSellPrice ?? serviceField.defaultSellRate)} / {serviceField.unitDescription})</span>
+                                </FormLabel>
+                            </FormItem>
+                        )}
+                    />
+                    {formOptionalServices[index]?.selected && (
+                        <FormField
+                            control={control} name={`optionalServices.${index}.customSellPrice`}
+                            render={({ field }) => (
+                                <FormItem className="pl-10">
+                                    <FormLabel className="text-xs">Override Sell Price (per {serviceField.unitDescription})</FormLabel>
+                                    <FormControl><Input type="number" placeholder={`Default: ${formatCurrencyLocal(serviceField.defaultSellRate)}`} {...field} value={(typeof field.value === 'number' && !isNaN(field.value)) ? String(field.value) : ''} onChange={e => { const valStr = e.target.value; field.onChange(valStr === '' ? undefined : parseFloat(valStr)); }} /></FormControl>
+                                    <FormMessage />
+                                </FormItem>
                             )}
-                        </div>
-                    )}
-                    
-                    {shouldShowServiceOption(PHRASE_LANDING_FEE) && (
-                        <div className="space-y-2">
-                          <FormField control={control} name="includeLandingFees" render={({ field }) => ( <FormItem className="flex flex-row items-center space-x-3 space-y-0 p-3 border rounded-md hover:bg-muted/50"> <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl> <div className="space-y-1 leading-none"><FormLabel className="flex items-center gap-2"><Landmark className="h-4 w-4 text-primary" /> {getServiceLabel(PHRASE_LANDING_FEE, "Include Landing Fees", "Leg")}</FormLabel></div> </FormItem> )} />
-                          {includeLandingFees && <FormField control={control} name="sellPriceLandingFeePerLeg" render={({ field }) => (<FormItem className="pl-10 mt-2"> <FormLabel>Landing Fee Sell Price (per Leg)</FormLabel> <FormControl><Input type="number" placeholder={getServicePlaceholder(PHRASE_LANDING_FEE)} {...field} value={(typeof field.value === 'number' && !isNaN(field.value)) ? String(field.value) : ''} onChange={e => { const valStr = e.target.value; field.onChange(valStr === '' ? undefined : parseFloat(valStr)); }} /></FormControl> <FormMessage /> </FormItem> )} />}
-                        </div>
-                    )}
-
-                    {shouldShowServiceOption(PHRASE_OVERNIGHT_FEE) && (
-                        <div className="space-y-2">
-                          <FormField control={control} name="estimatedOvernights" render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-2"><BedDouble className="h-4 w-4 text-primary"/> {getServiceLabel(PHRASE_OVERNIGHT_FEE, "Estimated Overnights", "Night")}</FormLabel> <FormControl><Input type="number" placeholder="e.g., 0" {...field} value={(typeof field.value === 'number' && !isNaN(field.value)) ? String(field.value) : ''} onChange={e => { const valStr = e.target.value; field.onChange(valStr === '' ? undefined : parseInt(valStr, 10)); }} min="0"/></FormControl> <FormDescription>Number of overnight stays for crew/aircraft.</FormDescription> <FormMessage /> </FormItem> )} />
-                          {Number(currentEstimatedOvernights || 0) > 0 && <FormField control={control} name="sellPriceOvernight" render={({ field }) => (<FormItem className="pl-10 mt-2"> <FormLabel>Overnight Fee Sell Price (per Night)</FormLabel> <FormControl><Input type="number" placeholder={getServicePlaceholder(PHRASE_OVERNIGHT_FEE)} {...field} value={(typeof field.value === 'number' && !isNaN(field.value)) ? String(field.value) : ''} onChange={e => { const valStr = e.target.value; field.onChange(valStr === '' ? undefined : parseFloat(valStr)); }}/></FormControl> <FormMessage /> </FormItem> )} />}
-                        </div>
+                        />
                     )}
                 </div>
-            </section>
+            ))}
+            <FormField control={control} name="estimatedOvernights" render={({ field }) => ( <FormItem> <FormLabel className="flex items-center gap-2"><BedDouble className="h-4 w-4 text-primary"/> Estimated Overnights</FormLabel> <FormControl><Input type="number" placeholder="e.g., 0" {...field} value={(typeof field.value === 'number' && !isNaN(field.value)) ? String(field.value) : ''} onChange={e => { const valStr = e.target.value; field.onChange(valStr === '' ? undefined : parseInt(valStr, 10)); }} min="0"/></FormControl> <FormDescription>Number of overnight stays for crew/aircraft.</FormDescription> <FormMessage /> </FormItem> )} />
+            </CardContent>
+        </Card>
 
-            <Separator />
-            <FormField control={control} name="notes" render={({ field }) => ( <FormItem> <FormLabel>General Quote Notes (Optional)</FormLabel> <FormControl><Textarea placeholder="e.g., Specific client preferences, discount applied..." {...field} value={field.value || ''} rows={4} /></FormControl> <FormMessage /> </FormItem> )} />
+        <Card className="shadow-sm">
+            <CardHeader><CardTitle>Notes</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+                <FormField control={control} name="cateringNotes" render={({ field }) => ( <FormItem> <FormLabel>Catering Notes (Optional)</FormLabel> <FormControl><Textarea placeholder="Specify catering details if requested..." {...field} value={field.value || ''} rows={3} /></FormControl> <FormMessage /> </FormItem> )} />
+                <FormField control={control} name="notes" render={({ field }) => ( <FormItem> <FormLabel>General Quote Notes (Optional)</FormLabel> <FormControl><Textarea placeholder="e.g., Specific client preferences, discount applied..." {...field} value={field.value || ''} rows={4} /></FormControl> <FormMessage /> </FormItem> )} />
+            </CardContent>
+        </Card>
 
-            <Separator className="my-6" />
-            <CostsSummaryDisplay lineItems={calculatedLineItems} />
-
-          </CardContent>
-          <CardFooter className="flex flex-col sm:flex-row justify-end gap-2 pt-6">
+        <CostsSummaryDisplay lineItems={calculatedLineItems} />
+        </div>
+        <CardFooter className="flex flex-col sm:flex-row justify-end gap-2 pt-6 mt-6 border-t">
             <Button type="button" variant="outline" onClick={handlePreviewQuote} disabled={isSaving}> <Eye className="mr-2 h-4 w-4" /> Preview Quote </Button>
-            <Button
-                type="button"
-                variant="secondary"
-                onClick={() => handleSave("Draft")}
-                disabled={isSaving}
-            >
-              {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <SaveIcon className="mr-2 h-4 w-4" />}
-              {isEditMode ? "Save Draft Updates" : "Save as Draft"}
-            </Button>
-            <Button
-                type="button"
-                onClick={async () => {
-                    if (isEditMode && quoteIdToEdit) {
-                        const currentQuote = await fetchQuoteById({ id: quoteIdToEdit });
-                        handleSave(currentQuote?.status || "Sent");
-                    } else {
-                        handleSave("Sent");
-                    }
-                }}
-                disabled={isSaving}
-            >
-              {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
-              {isEditMode ? "Update & Send Quote" : "Save & Send Quote"}
-            </Button>
-          </CardFooter>
+            <Button type="button" variant="secondary" onClick={() => handleSave("Draft")} disabled={isSaving}> {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <SaveIcon className="mr-2 h-4 w-4" />} {isEditMode ? "Save Draft Updates" : "Save as Draft"} </Button>
+            <Button type="button" onClick={async () => { if (isEditMode && quoteIdToEdit) { const currentQuote = await fetchQuoteById({ id: quoteIdToEdit }); handleSave(currentQuote?.status || "Sent"); } else { handleSave("Sent"); } }} disabled={isSaving}> {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />} {isEditMode ? "Update & Send Quote" : "Save & Send Quote"} </Button>
+        </CardFooter>
         </form>
-      </Form>
-    </Card>
+    </Form>
 
     {showPreviewAlert && (
         <AlertDialog open={showPreviewAlert} onOpenChange={setShowPreviewAlert}>
