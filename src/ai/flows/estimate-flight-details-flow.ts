@@ -114,6 +114,48 @@ Provide realistic estimates.
 `,
 });
 
+function cleanupAirportName(name: string): string {
+  if (!name) return 'N/A';
+  let cleanedName = name;
+
+  // Attempt to get the part before " - " if it exists and looks substantial
+  const hyphenIndex = cleanedName.indexOf(" - ");
+  if (hyphenIndex !== -1) {
+    const partBeforeHyphen = cleanedName.substring(0, hyphenIndex).trim();
+    if (partBeforeHyphen.length > 3) { // Heuristic: avoid just codes
+      cleanedName = partBeforeHyphen;
+    }
+  }
+
+  // If the name still contains parentheses, take the part before the first one
+  const parenthesisIndex = cleanedName.indexOf(" (");
+  if (parenthesisIndex !== -1) {
+    cleanedName = cleanedName.substring(0, parenthesisIndex).trim();
+  }
+  
+  // Additional cleanup: if it ends with " Airport Airport", remove the duplicate " Airport"
+  if (cleanedName.endsWith(" Airport Airport")) {
+    cleanedName = cleanedName.substring(0, cleanedName.length - " Airport".length);
+  }
+
+  // Fallback for excessively long names that might have slipped through
+  if (cleanedName.length > 70) {
+    const firstSentenceEnd = cleanedName.indexOf(". ");
+    if (firstSentenceEnd !== -1 && firstSentenceEnd < 70) {
+        cleanedName = cleanedName.substring(0, firstSentenceEnd);
+    } else {
+        // Try to find a comma if no period
+        const firstCommaEnd = cleanedName.indexOf(", ");
+         if (firstCommaEnd !== -1 && firstCommaEnd < 70) {
+            cleanedName = cleanedName.substring(0, firstCommaEnd);
+        } else {
+            cleanedName = cleanedName.substring(0, 67) + "...";
+        }
+    }
+  }
+  return cleanedName.trim() || 'N/A';
+}
+
 const estimateFlightDetailsFlow = ai.defineFlow(
   {
     name: 'estimateFlightDetailsFlow',
@@ -128,9 +170,14 @@ const estimateFlightDetailsFlow = ai.defineFlow(
     // Ensure the AI respects the knownCruiseSpeedKts if provided
     if (input.knownCruiseSpeedKts && output.assumedCruiseSpeedKts !== input.knownCruiseSpeedKts) {
         // Optionally, force it or log a warning if AI deviates despite instruction.
-        // For now, we assume the prompt is strong enough.
-        console.warn(`AI output assumed speed ${output.assumedCruiseSpeedKts} kts, but known speed was ${input.knownCruiseSpeedKts} kts.`);
+        console.warn(`AI output assumed speed ${output.assumedCruiseSpeedKts} kts, but known speed was ${input.knownCruiseSpeedKts} kts. Overriding to known speed.`);
+        output.assumedCruiseSpeedKts = input.knownCruiseSpeedKts;
     }
+
+    // Post-process airport names for conciseness
+    output.resolvedOriginName = cleanupAirportName(output.resolvedOriginName);
+    output.resolvedDestinationName = cleanupAirportName(output.resolvedDestinationName);
+    
     return output;
   }
 );
