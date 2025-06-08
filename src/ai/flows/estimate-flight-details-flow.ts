@@ -25,9 +25,9 @@ const EstimateFlightDetailsOutputSchema = z.object({
   estimatedFlightTimeHours: z.number().describe('The estimated flight time in hours, as a decimal (e.g., 2.5 for 2 hours and 30 minutes).'),
   assumedCruiseSpeedKts: z.number().describe('The assumed cruise speed in knots (kts) used for the estimation. This should be the knownCruiseSpeedKts if it was provided in the input.'),
   resolvedOriginIcao: z.string().describe('The resolved ICAO code used for the origin airport.'),
-  resolvedOriginName: z.string().describe('The full name of the resolved origin airport, including city and country if applicable.'),
+  resolvedOriginName: z.string().describe('The single, common official name of the resolved origin airport (e.g., "John F. Kennedy International Airport").'),
   resolvedDestinationIcao: z.string().describe('The resolved ICAO code used for the destination airport.'),
-  resolvedDestinationName: z.string().describe('The full name of the resolved destination airport, including city and country if applicable.'),
+  resolvedDestinationName: z.string().describe('The single, common official name of the resolved destination airport (e.g., "Los Angeles International Airport").'),
   briefExplanation: z.string().describe('A very brief, one-sentence explanation of the estimation method (e.g., "Estimated based on direct route and average cruise speed for the aircraft type." or "Estimated based on direct route and provided cruise speed of X kts.").'),
 });
 export type EstimateFlightDetailsOutput = z.infer<typeof EstimateFlightDetailsOutputSchema>;
@@ -52,7 +52,7 @@ Airport Code Interpretation:
 - If a 3-letter code is provided (e.g., JFK, LHR), assume it is an IATA code.
     - For US airports, prefix 'K' to the 3-letter IATA code to derive the ICAO code (e.g., JFK becomes KJFK, LAX becomes KLAX).
     - For non-US airports, use the most common ICAO equivalent for the given IATA code (e.g., LHR becomes EGLL).
-- Determine the full airport name for the resolved ICAO codes.
+- Determine the single, common official airport name for the resolved ICAO codes. Avoid listing multiple variations or excessive city/state/country details unless part of the official airport name.
 - Perform your distance and time estimations based on these resolved ICAO codes.
 
 Aircraft Type: {{{aircraftType}}}
@@ -74,9 +74,9 @@ Output fields required:
 - estimatedFlightTimeHours: Estimated flight time in hours (e.g., 2.5 for 2 hours 30 minutes).
 - assumedCruiseSpeedKts: The assumed cruise speed in knots (kts) used.
 - resolvedOriginIcao: The ICAO code used for the origin.
-- resolvedOriginName: The full airport name for the origin (e.g., "John F. Kennedy International Airport").
+- resolvedOriginName: The single, common official airport name for the origin (e.g., "John F. Kennedy International Airport"). Do NOT include city/state/country unless part of the official name.
 - resolvedDestinationIcao: The ICAO code used for the destination.
-- resolvedDestinationName: The full airport name for the destination (e.g., "Los Angeles International Airport").
+- resolvedDestinationName: The single, common official airport name for the destination (e.g., "Los Angeles International Airport"). Do NOT include city/state/country unless part of the official name.
 - briefExplanation: A very brief, one-sentence explanation of the estimation method.
 
 Return the data strictly in the specified JSON output format.
