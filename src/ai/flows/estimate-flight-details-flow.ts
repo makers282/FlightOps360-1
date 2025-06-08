@@ -24,6 +24,10 @@ const EstimateFlightDetailsOutputSchema = z.object({
   estimatedMileageNM: z.number().describe('The estimated flight distance in nautical miles (NM).'),
   estimatedFlightTimeHours: z.number().describe('The estimated flight time in hours, as a decimal (e.g., 2.5 for 2 hours and 30 minutes).'),
   assumedCruiseSpeedKts: z.number().describe('The assumed cruise speed in knots (kts) used for the estimation. This should be the knownCruiseSpeedKts if it was provided in the input.'),
+  resolvedOriginIcao: z.string().describe('The resolved ICAO code used for the origin airport.'),
+  resolvedOriginName: z.string().describe('The full name of the resolved origin airport, including city and country if applicable.'),
+  resolvedDestinationIcao: z.string().describe('The resolved ICAO code used for the destination airport.'),
+  resolvedDestinationName: z.string().describe('The full name of the resolved destination airport, including city and country if applicable.'),
   briefExplanation: z.string().describe('A very brief, one-sentence explanation of the estimation method (e.g., "Estimated based on direct route and average cruise speed for the aircraft type." or "Estimated based on direct route and provided cruise speed of X kts.").'),
 });
 export type EstimateFlightDetailsOutput = z.infer<typeof EstimateFlightDetailsOutputSchema>;
@@ -48,11 +52,12 @@ Airport Code Interpretation:
 - If a 3-letter code is provided (e.g., JFK, LHR), assume it is an IATA code.
     - For US airports, prefix 'K' to the 3-letter IATA code to derive the ICAO code (e.g., JFK becomes KJFK, LAX becomes KLAX).
     - For non-US airports, use the most common ICAO equivalent for the given IATA code (e.g., LHR becomes EGLL).
+- Determine the full airport name for the resolved ICAO codes.
 - Perform your distance and time estimations based on these resolved ICAO codes.
 
 Aircraft Type: {{{aircraftType}}}
-Origin: {{{origin}}}
-Destination: {{{destination}}}
+Origin Input: {{{origin}}}
+Destination Input: {{{destination}}}
 
 {{#if knownCruiseSpeedKts}}
 A specific cruise speed of {{{knownCruiseSpeedKts}}} knots has been provided for this aircraft. Please use this speed for your calculations.
@@ -64,24 +69,37 @@ Your brief explanation should reflect this. For example: "Estimated based on a d
 The assumedCruiseSpeedKts in your output should be your best estimate for the aircraft type.
 {{/if}}
 
-- Provide the estimated flight distance in nautical miles (NM).
-- Provide the estimated flight time in hours (e.g., 2.5 for 2 hours 30 minutes).
-- State the assumed cruise speed in knots (kts) that you used for the calculation.
-- Provide a very brief, one-sentence explanation of your estimation method.
+Output fields required:
+- estimatedMileageNM: Estimated flight distance in nautical miles (NM).
+- estimatedFlightTimeHours: Estimated flight time in hours (e.g., 2.5 for 2 hours 30 minutes).
+- assumedCruiseSpeedKts: The assumed cruise speed in knots (kts) used.
+- resolvedOriginIcao: The ICAO code used for the origin.
+- resolvedOriginName: The full airport name for the origin (e.g., "John F. Kennedy International Airport").
+- resolvedDestinationIcao: The ICAO code used for the destination.
+- resolvedDestinationName: The full airport name for the destination (e.g., "Los Angeles International Airport").
+- briefExplanation: A very brief, one-sentence explanation of the estimation method.
 
 Return the data strictly in the specified JSON output format.
-Example for a similar request (KJFK to KLAX, Cessna Citation CJ3, knownCruiseSpeedKts: 410):
+Example for a request (KJFK to KLAX, Cessna Citation CJ3, knownCruiseSpeedKts: 410):
 {
   "estimatedMileageNM": 2150,
   "estimatedFlightTimeHours": 5.24,
   "assumedCruiseSpeedKts": 410,
+  "resolvedOriginIcao": "KJFK",
+  "resolvedOriginName": "John F. Kennedy International Airport",
+  "resolvedDestinationIcao": "KLAX",
+  "resolvedDestinationName": "Los Angeles International Airport",
   "briefExplanation": "Estimated based on a direct route and a provided cruise speed of 410 kts."
 }
-Example for a similar request (JFK to LAX, Cessna Citation CJ3, no knownCruiseSpeedKts):
+Example for a request (JFK to LAX, Cessna Citation CJ3, no knownCruiseSpeedKts):
 {
   "estimatedMileageNM": 2150,
   "estimatedFlightTimeHours": 5.18,
   "assumedCruiseSpeedKts": 415,
+  "resolvedOriginIcao": "KJFK",
+  "resolvedOriginName": "John F. Kennedy International Airport",
+  "resolvedDestinationIcao": "KLAX",
+  "resolvedDestinationName": "Los Angeles International Airport",
   "briefExplanation": "Estimated based on a direct route (resolved JFK to KJFK, LAX to KLAX) and an average cruise speed of 415 kts for a Cessna Citation CJ3."
 }
 Provide realistic estimates.

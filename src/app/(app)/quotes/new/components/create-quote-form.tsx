@@ -584,7 +584,7 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
       });
       setValue(`legs.${legIndex}.flightTimeHours`, result.estimatedFlightTimeHours);
       setLegEstimates(prev => { const newEstimates = [...prev]; newEstimates[legIndex] = {...result, estimatedForInputs: { origin: legData.origin.toUpperCase(), destination: legData.destination.toUpperCase(), aircraftModel: aircraftModelForFlow, knownCruiseSpeedKts: knownCruiseSpeedForFlow } }; return newEstimates; });
-      toast({ title: "Flight Details Estimated", description: `Leg ${legIndex + 1}: ${result.estimatedMileageNM} NM, ${result.estimatedFlightTimeHours} hrs.` });
+      toast({ title: "Flight Details Estimated", description: `Leg ${legIndex + 1}: ${result.estimatedMileageNM} NM, ${result.estimatedFlightTimeHours} hrs (${result.resolvedOriginName} to ${result.resolvedDestinationName}).` });
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : "AI failed to estimate details.";
       toast({ title: "Estimation Error", description: errorMessage, variant: "destructive" });
@@ -992,9 +992,11 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
                             <AlertTitle className="text-sm">
                                 {legEstimates[index]!.error ? `Error Estimating Leg ${index + 1}` : `Leg ${index + 1} AI Estimate Reference`}
                             </AlertTitle>
-                            <AlertDescription>
+                            <AlertDescription className="space-y-1">
                                 {legEstimates[index]!.error ? ( <p>{legEstimates[index]!.error}</p> ) : (
                                 <>
+                                    <p><strong>Origin:</strong> {legEstimates[index]!.resolvedOriginName} ({legEstimates[index]!.resolvedOriginIcao})</p>
+                                    <p><strong>Destination:</strong> {legEstimates[index]!.resolvedDestinationName} ({legEstimates[index]!.resolvedDestinationIcao})</p>
                                     <p><strong>AI Est. Distance:</strong> {legEstimates[index]!.estimatedMileageNM?.toLocaleString()} NM</p>
                                     <p><strong>AI Est. Flight Time:</strong> {legEstimates[index]!.estimatedFlightTimeHours?.toFixed(1)} hours</p>
                                     <p><strong>Assumed Speed (AI):</strong> {legEstimates[index]!.assumedCruiseSpeedKts?.toLocaleString()} kts</p>
