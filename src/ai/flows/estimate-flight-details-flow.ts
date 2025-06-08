@@ -25,7 +25,7 @@ const EstimateFlightDetailsOutputSchema = z.object({
   estimatedFlightTimeHours: z.number().describe('The estimated flight time in hours, as a decimal (e.g., 2.5 for 2 hours and 30 minutes).'),
   assumedCruiseSpeedKts: z.number().describe('The assumed cruise speed in knots (kts) used for the estimation. This should be the knownCruiseSpeedKts if it was provided in the input.'),
   resolvedOriginIcao: z.string().describe('The resolved ICAO code used for the origin airport.'),
-  resolvedOriginName: z.string().describe('The single, common official name of the resolved origin airport (e.g., "John F. Kennedy International Airport").'),
+  resolvedOriginName: z.string().describe('The single, common official name of the resolved origin airport (e.g., "John F. Kennedy International Airport" or "Dayton-Wright Brothers Airport").'),
   resolvedDestinationIcao: z.string().describe('The resolved ICAO code used for the destination airport.'),
   resolvedDestinationName: z.string().describe('The single, common official name of the resolved destination airport (e.g., "Los Angeles International Airport").'),
   briefExplanation: z.string().describe('A very brief, one-sentence explanation of the estimation method (e.g., "Estimated based on direct route and average cruise speed for the aircraft type." or "Estimated based on direct route and provided cruise speed of X kts.").'),
@@ -52,7 +52,10 @@ Airport Code Interpretation:
 - If a 3-letter code is provided (e.g., JFK, LHR), assume it is an IATA code.
     - For US airports, prefix 'K' to the 3-letter IATA code to derive the ICAO code (e.g., JFK becomes KJFK, LAX becomes KLAX).
     - For non-US airports, use the most common ICAO equivalent for the given IATA code (e.g., LHR becomes EGLL).
-- Determine the single, common official airport name for the resolved ICAO codes. Avoid listing multiple variations or excessive city/state/country details unless part of the official airport name.
+- For 'resolvedOriginName' and 'resolvedDestinationName', provide ONLY the single, common official airport name.
+    - Example for "JFK" input: "John F. Kennedy International Airport".
+    - Example for "MGY" input: "Dayton-Wright Brothers Airport".
+    - The name MUST be concise. Do NOT include extra details like "General Aviation Airport for...", city/state (unless part of the official name like "Dallas/Fort Worth International Airport"), "formerly known as...", or any other variations. JUST the primary official name.
 - Perform your distance and time estimations based on these resolved ICAO codes.
 
 Aircraft Type: {{{aircraftType}}}
@@ -74,9 +77,9 @@ Output fields required:
 - estimatedFlightTimeHours: Estimated flight time in hours (e.g., 2.5 for 2 hours 30 minutes).
 - assumedCruiseSpeedKts: The assumed cruise speed in knots (kts) used.
 - resolvedOriginIcao: The ICAO code used for the origin.
-- resolvedOriginName: The single, common official airport name for the origin (e.g., "John F. Kennedy International Airport"). Do NOT include city/state/country unless part of the official name.
+- resolvedOriginName: The single, common official airport name for the origin. (e.g., "John F. Kennedy International Airport" or "Dayton-Wright Brothers Airport")
 - resolvedDestinationIcao: The ICAO code used for the destination.
-- resolvedDestinationName: The single, common official airport name for the destination (e.g., "Los Angeles International Airport"). Do NOT include city/state/country unless part of the official name.
+- resolvedDestinationName: The single, common official airport name for the destination. (e.g., "Los Angeles International Airport")
 - briefExplanation: A very brief, one-sentence explanation of the estimation method.
 
 Return the data strictly in the specified JSON output format.
@@ -91,16 +94,16 @@ Example for a request (KJFK to KLAX, Cessna Citation CJ3, knownCruiseSpeedKts: 4
   "resolvedDestinationName": "Los Angeles International Airport",
   "briefExplanation": "Estimated based on a direct route and a provided cruise speed of 410 kts."
 }
-Example for a request (JFK to LAX, Cessna Citation CJ3, no knownCruiseSpeedKts):
+Example for a request (MGY to KISM, Piper Archer, no knownCruiseSpeedKts):
 {
-  "estimatedMileageNM": 2150,
-  "estimatedFlightTimeHours": 5.18,
-  "assumedCruiseSpeedKts": 415,
-  "resolvedOriginIcao": "KJFK",
-  "resolvedOriginName": "John F. Kennedy International Airport",
-  "resolvedDestinationIcao": "KLAX",
-  "resolvedDestinationName": "Los Angeles International Airport",
-  "briefExplanation": "Estimated based on a direct route (resolved JFK to KJFK, LAX to KLAX) and an average cruise speed of 415 kts for a Cessna Citation CJ3."
+  "estimatedMileageNM": 300,
+  "estimatedFlightTimeHours": 2.5,
+  "assumedCruiseSpeedKts": 120,
+  "resolvedOriginIcao": "KMGY",
+  "resolvedOriginName": "Dayton-Wright Brothers Airport",
+  "resolvedDestinationIcao": "KISM",
+  "resolvedDestinationName": "Kissimmee Gateway Airport",
+  "briefExplanation": "Estimated based on a direct route and an average cruise speed of 120 kts for a Piper Archer."
 }
 Provide realistic estimates.
 `,
@@ -126,3 +129,4 @@ const estimateFlightDetailsFlow = ai.defineFlow(
     return output;
   }
 );
+
