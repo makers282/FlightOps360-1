@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { DollarSign, Edit, PlusCircle, Trash2, Save, XCircle, Loader2, Percent } from 'lucide-react';
+import { DollarSign, Edit, PlusCircle, Trash2, Save, XCircle, Loader2, Percent, CheckSquare, Square } from 'lucide-react'; // Added CheckSquare, Square
 import { useToast } from '@/hooks/use-toast';
 import { fetchAircraftRates, saveAircraftRate, deleteAircraftRate } from '@/ai/flows/manage-aircraft-rates-flow';
 import type { AircraftRate } from '@/ai/schemas/aircraft-rate-schemas'; 
@@ -25,6 +25,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { fetchCompanyProfile, saveCompanyProfile, type CompanyProfile, type ServiceFeeRate } from '@/ai/flows/manage-company-profile-flow';
+import { Checkbox } from '@/components/ui/checkbox'; // Added Checkbox
 
 const formatCurrency = (amount: number) => {
   return amount.toLocaleString(undefined, { style: "currency", currency: "USD" });
@@ -62,6 +63,7 @@ export default function QuoteConfigPage() {
   const [newServiceUnit, setNewServiceUnit] = useState('');
   const [newServiceBuyRateLocal, setNewServiceBuyRateLocal] = useState('');
   const [newServiceSellRateLocal, setNewServiceSellRateLocal] = useState('');
+  const [newServiceIsActive, setNewServiceIsActive] = useState(true); // New state for isActive
   const [editingServiceKey, setEditingServiceKey] = useState<string | null>(null);
   const [serviceFeeToDeleteKey, setServiceFeeToDeleteKey] = useState<string | null>(null);
   const [showDeleteServiceFeeConfirm, setShowDeleteServiceFeeConfirm] = useState(false);
@@ -81,9 +83,15 @@ export default function QuoteConfigPage() {
       setFleet(fetchedFleet);
       if (fetchedProfile) {
         setCurrentCompanyProfile(fetchedProfile);
-        setServiceFeeRates(fetchedProfile.serviceFeeRates || {});
+        // Ensure isActive defaults to true for existing items if not present
+        const processedRates = Object.fromEntries(
+          Object.entries(fetchedProfile.serviceFeeRates || {}).map(([key, rate]) => [
+            key,
+            { ...rate, isActive: rate.isActive ?? true },
+          ])
+        );
+        setServiceFeeRates(processedRates);
       } else {
-        // Initialize with empty profile if none exists
         const defaultProfile = { 
           id: 'main', 
           companyName: "Default Company", 
@@ -198,6 +206,7 @@ export default function QuoteConfigPage() {
       setNewServiceUnit(serviceToEdit.unitDescription);
       setNewServiceBuyRateLocal(String(serviceToEdit.buy));
       setNewServiceSellRateLocal(String(serviceToEdit.sell));
+      setNewServiceIsActive(serviceToEdit.isActive ?? true); // Set isActive state
       setShowAddServiceForm(true);
     }
   };
@@ -246,7 +255,8 @@ export default function QuoteConfigPage() {
             displayDescription: newServiceDisplayDescription.trim(),
             buy: buyRateNum, 
             sell: sellRateNum, 
-            unitDescription: newServiceUnit.trim() 
+            unitDescription: newServiceUnit.trim(),
+            isActive: newServiceIsActive, // Include isActive
         }
     };
 
@@ -280,6 +290,7 @@ export default function QuoteConfigPage() {
     setNewServiceUnit('');
     setNewServiceBuyRateLocal('');
     setNewServiceSellRateLocal('');
+    setNewServiceIsActive(true); // Reset isActive
     setShowAddServiceForm(false);
   };
 
@@ -324,7 +335,7 @@ export default function QuoteConfigPage() {
   return (
     <>
       <PageHeader 
-        title="Quote Pricing Configuration" 
+        title="Quote Configuration" 
         description="Manage default hourly rates for aircraft and standard rates for services & fees used in quotes."
         icon={DollarSign}
       />
@@ -483,7 +494,7 @@ export default function QuoteConfigPage() {
                     <CardDescription>Default buy and sell rates for various services and fees used in quotes. (Saved to Company Profile)</CardDescription>
                 </div>
                 {!showAddServiceForm && (
-                  <Button variant="outline" size="sm" onClick={() => { setEditingServiceKey(null); setShowAddServiceForm(true); setNewServiceDisplayDescription(''); setNewServiceUnit(''); setNewServiceBuyRateLocal(''); setNewServiceSellRateLocal(''); }}>
+                  <Button variant="outline" size="sm" onClick={() => { setEditingServiceKey(null); setShowAddServiceForm(true); setNewServiceDisplayDescription(''); setNewServiceUnit(''); setNewServiceBuyRateLocal(''); setNewServiceSellRateLocal(''); setNewServiceIsActive(true); }}>
                       <PlusCircle className="mr-2 h-4 w-4" /> Add Service/Fee
                   </Button>
                 )}
@@ -515,7 +526,13 @@ export default function QuoteConfigPage() {
                                 <Input id="newServiceSellRateLocal" type="number" value={newServiceSellRateLocal} onChange={(e) => setNewServiceSellRateLocal(e.target.value)} placeholder="e.g., 250" min="0"/>
                             </div>
                         </div>
-                        <div className="flex gap-2">
+                        <div className="flex items-center space-x-2 pt-1">
+                            <Checkbox id="newServiceIsActive" checked={newServiceIsActive} onCheckedChange={(checked) => setNewServiceIsActive(Boolean(checked))} />
+                            <Label htmlFor="newServiceIsActive" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                                Active (Use for default pricing on new quotes)
+                            </Label>
+                        </div>
+                        <div className="flex gap-2 pt-2">
                           <Button onClick={handleAddOrUpdateServiceFee} size="sm" disabled={isSavingServiceFee || isLoadingCompanyProfile}>
                             {isSavingServiceFee ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4"/>}
                             {editingServiceKey ? 'Update Service/Fee' : 'Save New Service/Fee'}
@@ -538,6 +555,7 @@ export default function QuoteConfigPage() {
                 <TableRow>
                   <TableHead>Service / Fee Description</TableHead>
                   <TableHead>Unit</TableHead>
+                  <TableHead className="text-center">Active</TableHead>
                   <TableHead className="text-right">Default Buy Rate</TableHead>
                   <TableHead className="text-right">Default Sell Rate</TableHead>
                   <TableHead className="text-right">Default Margin</TableHead>
@@ -547,7 +565,7 @@ export default function QuoteConfigPage() {
               <TableBody>
                 {Object.entries(serviceFeeRates).length === 0 && (
                     <TableRow>
-                        <TableCell colSpan={6} className="text-center text-muted-foreground py-4">No service or fee rates configured yet.</TableCell>
+                        <TableCell colSpan={7} className="text-center text-muted-foreground py-4">No service or fee rates configured yet.</TableCell>
                     </TableRow>
                 )}
                 {Object.entries(serviceFeeRates).map(([key, rates]) => {
@@ -557,6 +575,9 @@ export default function QuoteConfigPage() {
                     <TableRow key={key}>
                       <TableCell className="font-medium">{rates.displayDescription}</TableCell>
                       <TableCell>{rates.unitDescription}</TableCell>
+                      <TableCell className="text-center">
+                        {rates.isActive ? <CheckSquare className="h-5 w-5 text-green-500 inline-block" /> : <Square className="h-5 w-5 text-muted-foreground inline-block" />}
+                      </TableCell>
                       <TableCell className="text-right">{formatCurrency(rates.buy)}</TableCell>
                       <TableCell className="text-right">{formatCurrency(rates.sell)}</TableCell>
                       <TableCell className="text-right">
@@ -626,5 +647,3 @@ export default function QuoteConfigPage() {
     </>
   );
 }
-
-    

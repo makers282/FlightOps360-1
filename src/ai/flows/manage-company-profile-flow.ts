@@ -1,3 +1,4 @@
+
 'use server';
 /**
  * @fileOverview Genkit flows for managing the company profile information using Firestore.
@@ -7,8 +8,8 @@
  * - saveCompanyProfile - Saves (adds or updates) the company profile.
  */
 
-import {ai} from '@/ai/genkit';
-import {z} from 'genkit';
+import {ai}from '@/ai/genkit';
+import {z}from 'genkit';
 import { db } from '@/lib/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 
@@ -18,6 +19,7 @@ const ServiceFeeRateSchema = z.object({
   buy: z.number().min(0, "Buy rate must be non-negative."),
   sell: z.number().min(0, "Sell rate must be non-negative."),
   unitDescription: z.string().min(1, "Unit description is required (e.g., Per Leg, Per Service)."),
+  isActive: z.boolean().optional().default(true).describe("Indicates if this service/fee is active and should be considered for default pricing on new quotes."),
 });
 export type ServiceFeeRate = z.infer<typeof ServiceFeeRateSchema>;
 
@@ -74,13 +76,22 @@ const fetchCompanyProfileFlow = ai.defineFlow(
       const docSnap = await getDoc(profileDocRef);
       if (docSnap.exists()) {
         const data = docSnap.data();
+        const processedServiceFeeRates: Record<string, ServiceFeeRate> = {};
+        if (data.serviceFeeRates) {
+          for (const key in data.serviceFeeRates) {
+            processedServiceFeeRates[key] = {
+              ...data.serviceFeeRates[key],
+              isActive: data.serviceFeeRates[key].isActive ?? true, // Default to true if missing
+            };
+          }
+        }
         const result: CompanyProfile = {
             id: COMPANY_PROFILE_DOC_ID,
             companyName: data.companyName,
             companyAddress: data.companyAddress,
             companyEmail: data.companyEmail,
             companyPhone: data.companyPhone,
-            serviceFeeRates: data.serviceFeeRates || {}, // Ensure serviceFeeRates is an object
+            serviceFeeRates: processedServiceFeeRates,
         };
         console.log('Fetched company profile from Firestore:', result);
         return result;
@@ -114,10 +125,20 @@ const saveCompanyProfileFlow = ai.defineFlow(
     try {
       const profileDocRef = doc(db, COMPANY_PROFILE_COLLECTION, COMPANY_PROFILE_DOC_ID);
       const { id, ...dataToSet } = profileData; // Exclude 'id' from document fields
-      // Ensure serviceFeeRates is part of dataToSet, even if empty
+      
+      const finalServiceFeeRates: Record<string, ServiceFeeRate> = {};
+      if (dataToSet.serviceFeeRates) {
+        for (const key in dataToSet.serviceFeeRates) {
+          finalServiceFeeRates[key] = {
+            ...dataToSet.serviceFeeRates[key],
+            isActive: dataToSet.serviceFeeRates[key].isActive ?? true, // Ensure isActive is set, defaulting to true
+          };
+        }
+      }
+
       const finalDataToSet = {
         ...dataToSet,
-        serviceFeeRates: dataToSet.serviceFeeRates || {},
+        serviceFeeRates: finalServiceFeeRates,
       };
       await setDoc(profileDocRef, finalDataToSet, { merge: true }); 
       console.log('Saved company profile in Firestore.');

@@ -73,9 +73,9 @@ const formSchema = z.object({
 
   medicsRequested: z.boolean().optional().default(false),
   cateringRequested: z.boolean().optional().default(false),
-  includeLandingFees: z.boolean().optional().default(true),
+  includeLandingFees: z.boolean().optional().default(false), // Default changed to false
   estimatedOvernights: z.coerce.number().int().min(0).optional().default(0),
-  fuelSurchargeRequested: z.boolean().optional().default(true),
+  fuelSurchargeRequested: z.boolean().optional().default(false), // Default changed to false
 
   sellPriceFuelSurchargePerHour: z.coerce.number().optional(),
   sellPriceMedics: z.coerce.number().optional(),
@@ -114,12 +114,12 @@ const DEFAULT_AIRCRAFT_RATE_FALLBACK: Pick<AircraftRate, 'buy' | 'sell'> = {
 };
 
 // These defaults are primarily for UI placeholders if company profile data is missing.
-const UI_DEFAULT_SERVICE_RATES: Record<string, Pick<ServiceFeeRate, 'sell'>> = {
-  [SERVICE_KEY_FUEL_SURCHARGE]: { sell: 400 },
-  [SERVICE_KEY_LANDING_FEES]: { sell: 500 },
-  [SERVICE_KEY_OVERNIGHT_FEES]: { sell: 1300},
-  [SERVICE_KEY_MEDICS]: { sell: 2500 },
-  [SERVICE_KEY_CATERING]: { sell: 500 },
+const UI_DEFAULT_SERVICE_RATES: Record<string, Pick<ServiceFeeRate, 'sell' | 'isActive'>> = {
+  [SERVICE_KEY_FUEL_SURCHARGE]: { sell: 400, isActive: true },
+  [SERVICE_KEY_LANDING_FEES]: { sell: 500, isActive: true },
+  [SERVICE_KEY_OVERNIGHT_FEES]: { sell: 1300, isActive: true},
+  [SERVICE_KEY_MEDICS]: { sell: 2500, isActive: true },
+  [SERVICE_KEY_CATERING]: { sell: 500, isActive: true },
 };
 
 interface CreateQuoteFormProps {
@@ -162,7 +162,7 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
 
   const form = useForm<FullQuoteFormData>({
     resolver: zodResolver(formSchema),
-    defaultValues: {
+    defaultValues: { // Default values now reflect toggles being off
       quoteId: '',
       selectedCustomerId: undefined,
       clientName: '',
@@ -183,9 +183,9 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
       aircraftId: undefined,
       medicsRequested: false,
       cateringRequested: false,
-      includeLandingFees: true,
+      includeLandingFees: false, 
       estimatedOvernights: 0,
-      fuelSurchargeRequested: true,
+      fuelSurchargeRequested: false,
       cateringNotes: "",
       notes: '',
       sellPriceFuelSurchargePerHour: undefined,
@@ -267,6 +267,27 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
         setFetchedCompanyProfile(profileData);
         setCustomers(customersData);
 
+        // Set default sell prices from active company profile services AFTER profile data is loaded
+        if (profileData && profileData.serviceFeeRates) {
+            const activeRates = profileData.serviceFeeRates;
+            if (activeRates[SERVICE_KEY_FUEL_SURCHARGE]?.isActive && activeRates[SERVICE_KEY_FUEL_SURCHARGE]?.sell !== undefined) {
+              form.setValue('sellPriceFuelSurchargePerHour', activeRates[SERVICE_KEY_FUEL_SURCHARGE].sell);
+            }
+            if (activeRates[SERVICE_KEY_MEDICS]?.isActive && activeRates[SERVICE_KEY_MEDICS]?.sell !== undefined) {
+              form.setValue('sellPriceMedics', activeRates[SERVICE_KEY_MEDICS].sell);
+            }
+            if (activeRates[SERVICE_KEY_CATERING]?.isActive && activeRates[SERVICE_KEY_CATERING]?.sell !== undefined) {
+              form.setValue('sellPriceCatering', activeRates[SERVICE_KEY_CATERING].sell);
+            }
+            if (activeRates[SERVICE_KEY_LANDING_FEES]?.isActive && activeRates[SERVICE_KEY_LANDING_FEES]?.sell !== undefined) {
+              form.setValue('sellPriceLandingFeePerLeg', activeRates[SERVICE_KEY_LANDING_FEES].sell);
+            }
+            if (activeRates[SERVICE_KEY_OVERNIGHT_FEES]?.isActive && activeRates[SERVICE_KEY_OVERNIGHT_FEES]?.sell !== undefined) {
+              form.setValue('sellPriceOvernight', activeRates[SERVICE_KEY_OVERNIGHT_FEES].sell);
+            }
+        }
+
+
       } catch (error) {
         console.error("Failed to load initial data for quote form:", error);
         toast({ title: "Error Loading Configuration", description: "Could not load aircraft, pricing, or customer data. Using defaults where possible.", variant: "destructive" });
@@ -299,9 +320,9 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
               aircraftId: quoteData.aircraftId,
               medicsRequested: quoteData.options.medicsRequested || false,
               cateringRequested: quoteData.options.cateringRequested || false,
-              includeLandingFees: quoteData.options.includeLandingFees === undefined ? true : quoteData.options.includeLandingFees,
+              includeLandingFees: quoteData.options.includeLandingFees || false, // Reflects default to false
               estimatedOvernights: quoteData.options.estimatedOvernights || 0,
-              fuelSurchargeRequested: quoteData.options.fuelSurchargeRequested === undefined ? true : quoteData.options.fuelSurchargeRequested,
+              fuelSurchargeRequested: quoteData.options.fuelSurchargeRequested || false, // Reflects default to false
               sellPriceFuelSurchargePerHour: quoteData.options.sellPriceFuelSurchargePerHour,
               sellPriceMedics: quoteData.options.sellPriceMedics,
               sellPriceCatering: quoteData.options.sellPriceCatering,
@@ -330,7 +351,7 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
         setValue('quoteId', generateNewQuoteId());
       }
     }
-  }, [isEditMode, quoteIdToEdit, reset, toast, router, setValue, getValues, generateNewQuoteId]);
+  }, [isEditMode, quoteIdToEdit, reset, toast, router, setValue, getValues, generateNewQuoteId, form]);
 
 
   useEffect(() => {
@@ -359,10 +380,23 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
       return fetchedCompanyProfile?.serviceFeeRates?.[key]?.displayDescription ?? defaultDisplay;
   }, [fetchedCompanyProfile]);
 
+  const getServiceIsActive = useCallback((key: string) => {
+    return fetchedCompanyProfile?.serviceFeeRates?.[key]?.isActive ?? UI_DEFAULT_SERVICE_RATES[key]?.isActive ?? false;
+  }, [fetchedCompanyProfile]);
+
   const getServiceLabel = useCallback((serviceKey: string, defaultLabel: string, unitDescription?: string) => {
     const serviceConfig = fetchedCompanyProfile?.serviceFeeRates?.[serviceKey];
     let label = serviceConfig?.displayDescription || defaultLabel;
-    const effectiveSellRate = (form.getValues() as any)[`sellPrice${serviceKey.charAt(0).toUpperCase() + serviceKey.slice(1).replace(/_/g, '').replace(/PER.*/, '')}`] ?? serviceConfig?.sell ?? UI_DEFAULT_SERVICE_RATES[serviceKey]?.sell;
+    const effectiveSellRateFromForm = (form.getValues() as any)[`sellPrice${serviceKey.charAt(0).toUpperCase() + serviceKey.slice(1).replace(/_/g, '').replace(/PER.*/, '')}`];
+
+    let effectiveSellRate: number | undefined;
+    if (effectiveSellRateFromForm !== undefined && effectiveSellRateFromForm !== null && !isNaN(Number(effectiveSellRateFromForm))) {
+        effectiveSellRate = Number(effectiveSellRateFromForm);
+    } else if (serviceConfig?.isActive && serviceConfig?.sell !== undefined) {
+        effectiveSellRate = serviceConfig.sell;
+    } else if (UI_DEFAULT_SERVICE_RATES[serviceKey]?.isActive && UI_DEFAULT_SERVICE_RATES[serviceKey]?.sell !== undefined){
+        effectiveSellRate = UI_DEFAULT_SERVICE_RATES[serviceKey].sell;
+    }
 
 
     if (effectiveSellRate !== undefined) {
@@ -377,8 +411,16 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
   }, [fetchedCompanyProfile, form]);
 
   const getServicePlaceholder = useCallback((serviceKey: string) => {
-    const defaultSellRate = fetchedCompanyProfile?.serviceFeeRates?.[serviceKey]?.sell ?? UI_DEFAULT_SERVICE_RATES[serviceKey]?.sell ?? 0;
-    return `Default: ${formatCurrencyLocal(defaultSellRate)}`;
+    const serviceConfig = fetchedCompanyProfile?.serviceFeeRates?.[serviceKey];
+    let defaultSellRate: number | undefined;
+
+    if (serviceConfig?.isActive && serviceConfig?.sell !== undefined) {
+        defaultSellRate = serviceConfig.sell;
+    } else if (UI_DEFAULT_SERVICE_RATES[serviceKey]?.isActive && UI_DEFAULT_SERVICE_RATES[serviceKey]?.sell !== undefined) {
+        defaultSellRate = UI_DEFAULT_SERVICE_RATES[serviceKey].sell;
+    }
+
+    return defaultSellRate !== undefined ? `Default: ${formatCurrencyLocal(defaultSellRate)}` : 'Enter sell price';
   }, [fetchedCompanyProfile]);
 
 
@@ -436,7 +478,7 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
 
     if (fuelSurchargeRequested && totalBlockHours > 0) {
       const buyRate = getServiceRate(SERVICE_KEY_FUEL_SURCHARGE, 'buy', 300);
-      const sellRate = sellPriceFuelSurchargePerHour ?? getServiceRate(SERVICE_KEY_FUEL_SURCHARGE, 'sell', UI_DEFAULT_SERVICE_RATES[SERVICE_KEY_FUEL_SURCHARGE].sell);
+      const sellRate = sellPriceFuelSurchargePerHour ?? (getServiceIsActive(SERVICE_KEY_FUEL_SURCHARGE) ? getServiceRate(SERVICE_KEY_FUEL_SURCHARGE, 'sell', UI_DEFAULT_SERVICE_RATES[SERVICE_KEY_FUEL_SURCHARGE].sell) : 0);
       newItems.push({
         id: 'fuelSurcharge', description: getServiceDisplay(SERVICE_KEY_FUEL_SURCHARGE, "Fuel Surcharge"),
         buyRate, sellRate, unitDescription: getServiceUnit(SERVICE_KEY_FUEL_SURCHARGE, "Block Hour"),
@@ -447,7 +489,7 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
 
     if (medicsRequested) {
       const buyRate = getServiceRate(SERVICE_KEY_MEDICS, 'buy', 1800);
-      const sellRate = sellPriceMedics ?? getServiceRate(SERVICE_KEY_MEDICS, 'sell', UI_DEFAULT_SERVICE_RATES[SERVICE_KEY_MEDICS].sell);
+      const sellRate = sellPriceMedics ?? (getServiceIsActive(SERVICE_KEY_MEDICS) ? getServiceRate(SERVICE_KEY_MEDICS, 'sell', UI_DEFAULT_SERVICE_RATES[SERVICE_KEY_MEDICS].sell) : 0);
       newItems.push({
         id: 'medicsFee', description: getServiceDisplay(SERVICE_KEY_MEDICS, "Medical Team"),
         buyRate, sellRate, unitDescription: getServiceUnit(SERVICE_KEY_MEDICS, "Service"),
@@ -457,7 +499,7 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
 
     if (cateringRequested) {
       const buyRate = getServiceRate(SERVICE_KEY_CATERING, 'buy', 350);
-      const sellRate = sellPriceCatering ?? getServiceRate(SERVICE_KEY_CATERING, 'sell', UI_DEFAULT_SERVICE_RATES[SERVICE_KEY_CATERING].sell);
+      const sellRate = sellPriceCatering ?? (getServiceIsActive(SERVICE_KEY_CATERING) ? getServiceRate(SERVICE_KEY_CATERING, 'sell', UI_DEFAULT_SERVICE_RATES[SERVICE_KEY_CATERING].sell) : 0);
       newItems.push({
         id: 'cateringFee', description: getServiceDisplay(SERVICE_KEY_CATERING, "Catering"),
         buyRate, sellRate, unitDescription: getServiceUnit(SERVICE_KEY_CATERING, "Service"),
@@ -468,7 +510,7 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
     const validLegsCount = legsArray.filter(leg => leg.origin && leg.destination && leg.origin.length >=3 && leg.destination.length >=3).length;
     if (includeLandingFees && validLegsCount > 0) {
       const buyRate = getServiceRate(SERVICE_KEY_LANDING_FEES, 'buy', 400);
-      const sellRate = sellPriceLandingFeePerLeg ?? getServiceRate(SERVICE_KEY_LANDING_FEES, 'sell', UI_DEFAULT_SERVICE_RATES[SERVICE_KEY_LANDING_FEES].sell);
+      const sellRate = sellPriceLandingFeePerLeg ?? (getServiceIsActive(SERVICE_KEY_LANDING_FEES) ? getServiceRate(SERVICE_KEY_LANDING_FEES, 'sell', UI_DEFAULT_SERVICE_RATES[SERVICE_KEY_LANDING_FEES].sell) : 0);
       newItems.push({
         id: 'landingFees', description: getServiceDisplay(SERVICE_KEY_LANDING_FEES, "Landing Fees"),
         buyRate, sellRate, unitDescription: getServiceUnit(SERVICE_KEY_LANDING_FEES, "Per Leg"),
@@ -480,7 +522,7 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
     const numericEstimatedOvernights = Number(currentEstimatedOvernights || 0);
     if (numericEstimatedOvernights > 0) {
       const buyRate = getServiceRate(SERVICE_KEY_OVERNIGHT_FEES, 'buy', 1000);
-      const sellRate = sellPriceOvernight ?? getServiceRate(SERVICE_KEY_OVERNIGHT_FEES, 'sell', UI_DEFAULT_SERVICE_RATES[SERVICE_KEY_OVERNIGHT_FEES].sell);
+      const sellRate = sellPriceOvernight ?? (getServiceIsActive(SERVICE_KEY_OVERNIGHT_FEES) ? getServiceRate(SERVICE_KEY_OVERNIGHT_FEES, 'sell', UI_DEFAULT_SERVICE_RATES[SERVICE_KEY_OVERNIGHT_FEES].sell) : 0);
       newItems.push({
         id: 'overnightFees', description: getServiceDisplay(SERVICE_KEY_OVERNIGHT_FEES, "Overnight Fees"),
         buyRate, sellRate, unitDescription: getServiceUnit(SERVICE_KEY_OVERNIGHT_FEES, "Per Night"),
@@ -499,7 +541,7 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
     cateringRequested, sellPriceCatering,
     includeLandingFees, sellPriceLandingFeePerLeg,
     currentEstimatedOvernights, sellPriceOvernight,
-    isLoadingDynamicRates, getServiceRate, getServiceDisplay, getServiceUnit
+    isLoadingDynamicRates, getServiceRate, getServiceDisplay, getServiceUnit, getServiceIsActive
   ]);
 
   const handleEstimateFlightDetails = useCallback(async (legIndex: number) => {
@@ -680,9 +722,14 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
             clientName: '', clientEmail: '', clientPhone: '',
             legs: [{ origin: '', destination: '', legType: 'Charter', departureDateTime: undefined, passengerCount: 1, originFbo: '', destinationFbo: '', originTaxiTimeMinutes: 15, destinationTaxiTimeMinutes: 15, flightTimeHours: undefined }],
             aircraftId: undefined,
-            medicsRequested: false, cateringRequested: false, includeLandingFees: true, estimatedOvernights: 0, fuelSurchargeRequested: true,
+            medicsRequested: false, cateringRequested: false, includeLandingFees: false, estimatedOvernights: 0, fuelSurchargeRequested: false, // Toggles off
             cateringNotes: "", notes: '',
-            sellPriceFuelSurchargePerHour: undefined, sellPriceMedics: undefined, sellPriceCatering: undefined, sellPriceLandingFeePerLeg: undefined, sellPriceOvernight: undefined,
+            // Keep sell prices as they were (or re-fetch defaults if company profile changed)
+            sellPriceFuelSurchargePerHour: getValues('sellPriceFuelSurchargePerHour'),
+            sellPriceMedics: getValues('sellPriceMedics'),
+            sellPriceCatering: getValues('sellPriceCatering'),
+            sellPriceLandingFeePerLeg: getValues('sellPriceLandingFeePerLeg'),
+            sellPriceOvernight: getValues('sellPriceOvernight'),
           });
           setLegEstimates([]);
           setCalculatedLineItems([]);
@@ -705,9 +752,9 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
               aircraftId: updatedQuoteData.aircraftId,
               medicsRequested: updatedQuoteData.options.medicsRequested || false,
               cateringRequested: updatedQuoteData.options.cateringRequested || false,
-              includeLandingFees: updatedQuoteData.options.includeLandingFees === undefined ? true : updatedQuoteData.options.includeLandingFees,
+              includeLandingFees: updatedQuoteData.options.includeLandingFees || false,
               estimatedOvernights: updatedQuoteData.options.estimatedOvernights || 0,
-              fuelSurchargeRequested: updatedQuoteData.options.fuelSurchargeRequested === undefined ? true : updatedQuoteData.options.fuelSurchargeRequested,
+              fuelSurchargeRequested: updatedQuoteData.options.fuelSurchargeRequested || false,
               sellPriceFuelSurchargePerHour: updatedQuoteData.options.sellPriceFuelSurchargePerHour,
               sellPriceMedics: updatedQuoteData.options.sellPriceMedics,
               sellPriceCatering: updatedQuoteData.options.sellPriceCatering,
@@ -904,8 +951,9 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
         <CardDescription>{isEditMode ? "Modify the details of this existing quote." : "Fill in the client and trip information to generate a quote."}</CardDescription>
       </CardHeader>
       <Form {...form}>
-        <CardContent className="space-y-8">
-          <FormField control={control} name="quoteId" render={({ field }) => ( <FormItem className="mb-6"> <FormLabel>Quote ID</FormLabel> <FormControl><Input placeholder="e.g., QT-ABCDE" {...field} value={field.value || ''} readOnly={isEditMode} className={isEditMode ? "bg-muted/50 cursor-not-allowed" : "bg-muted/50"} /></FormControl> <FormMessage /> </FormItem> )} />
+        <form> {/* Removed onSubmit from form tag; buttons handle submission */}
+          <CardContent className="space-y-8">
+            <FormField control={control} name="quoteId" render={({ field }) => ( <FormItem className="mb-6"> <FormLabel>Quote ID</FormLabel> <FormControl><Input placeholder="e.g., QT-ABCDE" {...field} value={field.value || ''} readOnly={isEditMode} className={isEditMode ? "bg-muted/50 cursor-not-allowed" : "bg-muted/50"} /></FormControl> <FormMessage /> </FormItem> )} />
 
             <section>
               <CardTitle className="text-xl border-b pb-2 mb-4">Client Information</CardTitle>
@@ -1228,6 +1276,7 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
               {isEditMode ? "Update & Send Quote" : "Save & Send Quote"}
             </Button>
           </CardFooter>
+        </form>
       </Form>
     </Card>
 
