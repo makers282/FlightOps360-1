@@ -36,7 +36,7 @@ const prompt = ai.definePrompt({
   name: 'estimateFlightDetailsPrompt',
   input: {schema: EstimateFlightDetailsInputSchema},
   output: {schema: EstimateFlightDetailsOutputSchema},
-  config: { // Added config to set temperature
+  config: {
     temperature: 0.1, 
   },
   prompt: `You are an expert flight operations assistant. Your task is to estimate flight details based on the provided information.
@@ -56,7 +56,7 @@ Destination: {{{destination}}}
 
 {{#if knownCruiseSpeedKts}}
 A specific cruise speed of {{{knownCruiseSpeedKts}}} knots has been provided for this aircraft. Please use this speed for your calculations.
-Your brief explanation should reflect this. For example: "Estimated based on direct route and a provided cruise speed of {{{knownCruiseSpeedKts}}} kts."
+Your brief explanation should reflect this. For example: "Estimated based on a direct route and a provided cruise speed of {{{knownCruiseSpeedKts}}} kts."
 The assumedCruiseSpeedKts in your output MUST be {{{knownCruiseSpeedKts}}}.
 {{else}}
 Consider typical cruise speeds for the given aircraft type if no specific cruise speed is provided.
