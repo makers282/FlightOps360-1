@@ -282,8 +282,8 @@ export default function AppLayout({ children }: PropsWithChildren) {
                 <SidebarMenuSubButton href="/settings/roles" isActive={pathname === '/settings/roles'}>
                   <Users /> User Roles
                 </SidebarMenuSubButton>
-                <SidebarMenuSubButton href="/settings/quote-config" tooltip="Pricing Configuration" isActive={pathname === '/settings/quote-config'}>
-                  <DollarSign /> Pricing Configuration
+                <SidebarMenuSubButton href="/settings/quote-config" tooltip="Quote Configuration" isActive={pathname === '/settings/quote-config'}>
+                  <DollarSign /> Quote Configuration
                 </SidebarMenuSubButton>
                  <SidebarMenuSubButton href="/settings/aircraft-performance" isActive={pathname === '/settings/aircraft-performance'}>
                   <PlaneTakeoff /> Aircraft Performance
@@ -331,3 +331,4 @@ export default function AppLayout({ children }: PropsWithChildren) {
 }
 
     
+
