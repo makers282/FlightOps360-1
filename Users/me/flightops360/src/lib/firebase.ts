@@ -13,11 +13,11 @@ const firebaseConfig = {
   storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID, // Keep it here, will be undefined if not set
+  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
 // Log the effective project ID being used for initialization
-console.log(`[Firebase Client Init] Attempting to initialize with Firebase config. Project ID from env: ${firebaseConfig.projectId}. Intended project: ${firebaseConfig.projectId || 'NOT SET'}.`);
+console.log(`[Firebase Client Init] Attempting to initialize with Firebase config. Project ID from env: ${firebaseConfig.projectId}.`);
 
 let missingVarsMessage = "";
 // Define which keys are absolutely required for the app to function.
@@ -39,9 +39,10 @@ const missingOrPlaceholderVars = requiredEnvVarKeys.filter(key => {
 
 if (missingOrPlaceholderVars.length > 0) {
   const envVarNames = missingOrPlaceholderVars.map(key => `NEXT_PUBLIC_FIREBASE_${key.replace(/([A-Z])/g, '_$1').toUpperCase()}`);
+  const targetProjectName = firebaseConfig.projectId || "TARGET Firebase project";
   missingVarsMessage = `Firebase configuration is incomplete or contains placeholders.
 Missing or placeholder environment variables: ${envVarNames.join(', ')}.
-Ensure these are set in your .env file for the '${firebaseConfig.projectId || "TARGET Firebase"}' project. App functionality will be affected.
+Ensure these are set in your .env file for the '${targetProjectName}'. App functionality will be affected.
 `;
   console.error("[Firebase Client Init ERROR]", missingVarsMessage);
 }
@@ -72,4 +73,3 @@ if (app) {
 }
 
 export { db, app, auth, storage };
-
