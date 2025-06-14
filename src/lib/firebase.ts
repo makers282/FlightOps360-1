@@ -9,7 +9,7 @@ import { getStorage } from 'firebase/storage';
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID, // This will now use the .env value
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
   storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
@@ -17,7 +17,7 @@ const firebaseConfig = {
 };
 
 // Log the effective project ID being used for initialization
-console.log(`[Firebase Client Init] Attempting to initialize with config from .env. Project ID from env: ${firebaseConfig.projectId}`);
+console.log(`[Firebase Client Init] Attempting to initialize with Firebase config. Project ID from env: ${firebaseConfig.projectId}. Intended project: Skypath.`);
 
 let missingVarsMessage = "";
 const requiredEnvVarKeys: (keyof typeof firebaseConfig)[] = [
@@ -39,7 +39,7 @@ if (missingOrPlaceholderVars.length > 0) {
   const envVarNames = missingOrPlaceholderVars.map(key => `NEXT_PUBLIC_FIREBASE_${key.replace(/([A-Z])/g, '_$1').toUpperCase()}`);
   missingVarsMessage = `Firebase configuration is incomplete or contains placeholders.
 Missing or placeholder environment variables: ${envVarNames.join(', ')}.
-Please check your .env.local file. App functionality will be affected.
+Ensure these are set in your .env file for the 'Skypath' project. App functionality will be affected.
 `;
   console.error("[Firebase Client Init ERROR]", missingVarsMessage);
 }
