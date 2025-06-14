@@ -468,9 +468,8 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
     }
 
     let totalFlightTimeBuyCost = 0;
-    let totalFlightTimeSellCost = 0;
+    let totalBillableFlightHoursForAircraftLineItem = 0;
     let totalBlockHours = 0;
-    let totalRevenueFlightHours = 0;
 
     const selectedAircraftRateProfile = fetchedAircraftRates.find(r => r.id === currentSelectedAircraftId);
     const aircraftBuyRate = selectedAircraftRateProfile?.buy ?? DEFAULT_AIRCRAFT_RATE_FALLBACK.buy;
@@ -484,37 +483,56 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
         const currentLegBlockHours = parseFloat((legBlockMinutes / 60).toFixed(2));
         totalBlockHours += currentLegBlockHours;
 
-        if (flightTime > 0 && ["Charter", "Owner", "Ambulance", "Cargo"].includes(leg.legType)) {
+        if (flightTime > 0) {
             totalFlightTimeBuyCost += flightTime * aircraftBuyRate;
-            totalFlightTimeSellCost += flightTime * aircraftSellRate;
-            totalRevenueFlightHours += flightTime;
-        } else if (flightTime > 0 && ["Positioning", "Ferry", "Maintenance"].includes(leg.legType)) {
-            totalFlightTimeBuyCost += flightTime * aircraftBuyRate;
-            totalFlightTimeSellCost += flightTime * aircraftBuyRate; 
+            
+            // All leg types with flight time are considered billable at sell rate for the aircraft time line item.
+            const billableAtSellRateLegTypes: LegFormData['legType'][] = [
+                "Charter", "Owner", "Ambulance", "Cargo", "Positioning", "Ferry", "Maintenance"
+            ];
+            
+            if (billableAtSellRateLegTypes.includes(leg.legType)) {
+                totalBillableFlightHoursForAircraftLineItem += flightTime;
+            }
         }
     });
 
+    const totalFlightTimeSellPriceForAircraftLineItem = totalBillableFlightHoursForAircraftLineItem * aircraftSellRate;
+
     const selectedAircraftInfo = aircraftSelectOptions.find(ac => ac.value === currentSelectedAircraftId);
     const aircraftDisplayName = selectedAircraftInfo ? selectedAircraftInfo.label : "Selected Aircraft";
-    const billableHoursForAircraft = totalRevenueFlightHours > 0 ? totalRevenueFlightHours : (totalBlockHours > 0 ? totalBlockHours : 0);
 
-    if (billableHoursForAircraft > 0) {
+    if (totalBillableFlightHoursForAircraftLineItem > 0) {
         newItems.push({
             id: 'aircraftFlightTimeCost',
             description: `Aircraft Time (${aircraftDisplayName})`,
             buyRate: aircraftBuyRate,
             sellRate: aircraftSellRate,
-            unitDescription: 'Hour (Std.)',
-            quantity: parseFloat(billableHoursForAircraft.toFixed(2)),
+            unitDescription: 'Hour (Flight)',
+            quantity: parseFloat(totalBillableFlightHoursForAircraftLineItem.toFixed(2)),
+            buyTotal: totalFlightTimeBuyCost, 
+            sellTotal: totalFlightTimeSellPriceForAircraftLineItem,
+        });
+    } else if (totalFlightTimeBuyCost > 0 && totalBlockHours > 0) {
+         // Fallback if no "billable at sell rate" hours, but there's still operational cost.
+         // This might be for purely internal non-revenue flights not intended for client billing.
+        newItems.push({
+            id: 'aircraftFlightTimeCost_NonRevenue',
+            description: `Aircraft Operational Time (${aircraftDisplayName})`,
+            buyRate: aircraftBuyRate,
+            sellRate: aircraftBuyRate, // Sell at buy rate (no margin)
+            unitDescription: 'Hour (Flight)',
+            quantity: parseFloat(legsArray.reduce((sum, leg) => sum + Number(leg.flightTimeHours || 0), 0).toFixed(2)),
             buyTotal: totalFlightTimeBuyCost,
-            sellTotal: totalFlightTimeSellCost,
+            sellTotal: totalFlightTimeBuyCost,
         });
     }
-
+    
     formOptionalServices.forEach(service => {
       if (service.selected && service.isActiveFromConfig) {
         let quantity = 1;
         const unitDescUpper = service.unitDescription.toUpperCase();
+
         if (service.quantityInputType === "legs" || unitDescUpper.includes("PER LEG") || unitDescUpper.includes("LANDING")) {
             quantity = legsArray.filter(leg => leg.origin && leg.destination && leg.origin.length >= 3 && leg.destination.length >= 3).length || 0;
         } else if (service.quantityInputType === "nights" || unitDescUpper.includes("PER NIGHT") || unitDescUpper.includes("OVERNIGHT")) {
@@ -542,8 +560,8 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
     setCalculatedLineItems(newItems);
 
   }, [
-    legsArray, currentSelectedAircraftId, aircraftSelectOptions,
-    fetchedAircraftRates, isLoadingDynamicRates, formOptionalServices, currentEstimatedOvernights
+    legsArray, currentSelectedAircraftId, aircraftSelectOptions, fetchedAircraftRates, 
+    isLoadingDynamicRates, formOptionalServices, currentEstimatedOvernights
   ]);
 
   const handleEstimateFlightDetails = useCallback(async (legIndex: number) => {
@@ -584,12 +602,12 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
       });
       setValue(`legs.${legIndex}.flightTimeHours`, result.estimatedFlightTimeHours);
       setLegEstimates(prev => { const newEstimates = [...prev]; newEstimates[legIndex] = {...result, estimatedForInputs: { origin: legData.origin.toUpperCase(), destination: legData.destination.toUpperCase(), aircraftModel: aircraftModelForFlow, knownCruiseSpeedKts: knownCruiseSpeedForFlow } }; return newEstimates; });
-      toast({ title: "Flight Details Estimated", description: `Leg ${legIndex + 1}: ${result.estimatedMileageNM} NM, ${result.estimatedFlightTimeHours} hrs (${result.resolvedOriginName} to ${result.resolvedDestinationName}).` });
+      toast({ title: "Flight Details Estimated", description: `Leg ${legIndex + 1}: ${result.resolvedOriginName} to ${result.resolvedDestinationName}. ${result.estimatedMileageNM} NM, ${result.estimatedFlightTimeHours} hrs.` });
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : "AI failed to estimate details.";
       toast({ title: "Estimation Error", description: errorMessage, variant: "destructive" });
       setValue(`legs.${legIndex}.flightTimeHours`, undefined);
-      setLegEstimates(prev => { const newEstimates = [...prev]; newEstimates[legIndex] = { error: errorMessage, estimatedForInputs: {origin: legData.origin.toUpperCase(), destination: legData.destination.toUpperCase(), aircraftModel: aircraftModelForFlow, knownCruiseSpeedKts: knownCruiseSpeedForFlow} } as LegEstimate; return newEstimates; });
+      setLegEstimates(prev => { const newEstimates = [...prev]; newEstimates[legIndex] = { ...newEstimates[legIndex]!, error: errorMessage, estimatedForInputs: {origin: legData.origin.toUpperCase(), destination: legData.destination.toUpperCase(), aircraftModel: aircraftModelForFlow, knownCruiseSpeedKts: knownCruiseSpeedForFlow} } as LegEstimate; return newEstimates; });
     } finally {
       setEstimatingLegIndex(null);
     }
