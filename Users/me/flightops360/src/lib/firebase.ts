@@ -17,7 +17,7 @@ const firebaseConfig = {
 };
 
 // Log the effective project ID being used for initialization
-console.log(`[Firebase Client Init] Attempting to initialize with Firebase config. Project ID from env: ${firebaseConfig.projectId}.`);
+console.log(`[Firebase Client Init] Attempting to initialize with Firebase config. Project ID from env: ${firebaseConfig.projectId || '(Not Set)'}.`);
 
 let missingVarsMessage = "";
 // Define which keys are absolutely required for the app to function.
@@ -39,7 +39,7 @@ const missingOrPlaceholderVars = requiredEnvVarKeys.filter(key => {
 
 if (missingOrPlaceholderVars.length > 0) {
   const envVarNames = missingOrPlaceholderVars.map(key => `NEXT_PUBLIC_FIREBASE_${key.replace(/([A-Z])/g, '_$1').toUpperCase()}`);
-  const targetProjectName = firebaseConfig.projectId || "TARGET Firebase project";
+  const targetProjectName = firebaseConfig.projectId || "the TARGET Firebase project"; // Use projectId if available, otherwise generic
   missingVarsMessage = `Firebase configuration is incomplete or contains placeholders.
 Missing or placeholder environment variables: ${envVarNames.join(', ')}.
 Ensure these are set in your .env file for the '${targetProjectName}'. App functionality will be affected.
