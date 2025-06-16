@@ -1,6 +1,4 @@
 
-"use client"; // Added "use client" as it uses Link and Button, and for consistency
-
 import { PageHeader } from '@/components/page-header';
 import { Clock, ExternalLink, CalendarCheck2 } from 'lucide-react'; // Added CalendarCheck2 import
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
