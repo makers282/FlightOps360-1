@@ -1,10 +1,10 @@
 
-"use client";
+'use client';
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { PageHeader } from '@/components/page-header'; // Keep if DiscrepanciesClient renders it
+import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
   Table,
@@ -18,7 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { FileWarning, Search, Eye, Loader2, Filter as FilterIcon, ArrowUpDown, ArrowDown, ArrowUp } from 'lucide-react';
+import { FileWarning, Eye, Loader2, ArrowUpDown, ArrowDown, ArrowUp } from 'lucide-react';
 import { format, parseISO, isValid } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { fetchAllAircraftDiscrepancies, type AircraftDiscrepancy } from '@/ai/flows/manage-aircraft-discrepancies-flow';
@@ -82,85 +82,62 @@ export default function DiscrepanciesClient() {
 
   const getAircraftDisplayLabel = useCallback((aircraftId: string): string => {
     const aircraft = fleetList.find(ac => ac.id === aircraftId);
-    if (aircraft) {
-      return `${aircraft.tailNumber || 'Unknown Tail'} - ${aircraft.model || 'Unknown Model'}`;
-    }
-    return aircraftId; 
+    return aircraft
+      ? `${aircraft.tailNumber || 'Unknown Tail'} – ${aircraft.model || 'Unknown Model'}`
+      : aircraftId;
   }, [fleetList]);
 
   const filteredAndSortedDiscrepancies = useMemo(() => {
-    let processedDiscrepancies = allDiscrepancies.map(disc => ({
-      ...disc,
-      aircraftDisplayLabel: disc.aircraftTailNumber || getAircraftDisplayLabel(disc.aircraftId),
+    let list = allDiscrepancies.map(d => ({
+      ...d,
+      aircraftDisplayLabel: d.aircraftTailNumber || getAircraftDisplayLabel(d.aircraftId),
     }));
 
     if (statusFilter !== 'all') {
-      processedDiscrepancies = processedDiscrepancies.filter(d => d.status === statusFilter);
+      list = list.filter(d => d.status === statusFilter);
     }
     if (aircraftIdFilter !== 'all') {
-      processedDiscrepancies = processedDiscrepancies.filter(d => d.aircraftId === aircraftIdFilter);
+      list = list.filter(d => d.aircraftId === aircraftIdFilter);
     }
     if (searchTerm) {
-      const lowerSearchTerm = searchTerm.toLowerCase();
-      processedDiscrepancies = processedDiscrepancies.filter(d =>
-        d.aircraftDisplayLabel.toLowerCase().includes(lowerSearchTerm) ||
-        d.description.toLowerCase().includes(lowerSearchTerm) ||
-        (d.deferralReference && d.deferralReference.toLowerCase().includes(lowerSearchTerm))
+      const term = searchTerm.toLowerCase();
+      list = list.filter(d =>
+        d.aircraftDisplayLabel.toLowerCase().includes(term) ||
+        d.description.toLowerCase().includes(term) ||
+        (d.deferralReference?.toLowerCase().includes(term) ?? false)
       );
     }
 
-    if (sortConfig.key) {
-      processedDiscrepancies.sort((a, b) => {
-        const valA = a[sortConfig.key];
-        const valB = b[sortConfig.key];
+    list.sort((a, b) => {
+      let cmp = 0;
+      const valA = a[sortConfig.key], valB = b[sortConfig.key];
+      if (!valA) cmp = 1;
+      else if (!valB) cmp = -1;
+      else if (sortConfig.key === 'dateDiscovered') {
+        cmp = parseISO(valA as string).getTime() - parseISO(valB as string).getTime();
+      } else if (typeof valA === 'string' && typeof valB === 'string') {
+        cmp = valA.localeCompare(valB);
+      }
+      return sortConfig.direction === 'ascending' ? cmp : -cmp;
+    });
 
-        let comparison = 0;
-        if (valA === null || valA === undefined) comparison = 1;
-        else if (valB === null || valB === undefined) comparison = -1;
-        else if (typeof valA === 'string' && typeof valB === 'string') {
-          comparison = valA.toLowerCase().localeCompare(valB.toLowerCase());
-        } else if (typeof valA === 'number' && typeof valB === 'number') {
-          comparison = valA - valB;
-        } else if (sortConfig.key === 'dateDiscovered') {
-            const dateA = parseISO(valA as string).getTime();
-            const dateB = parseISO(valB as string).getTime();
-            comparison = dateA - dateB;
-        }
-        return sortConfig.direction === 'ascending' ? comparison : -comparison;
-      });
-    }
-    return processedDiscrepancies;
+    return list;
   }, [allDiscrepancies, getAircraftDisplayLabel, statusFilter, aircraftIdFilter, searchTerm, sortConfig]);
 
   const requestSort = (key: SortKey) => {
-    let direction: 'ascending' | 'descending' = 'ascending';
-    if (sortConfig.key === key && sortConfig.direction === 'ascending') {
-      direction = 'descending';
-    }
+    const direction = sortConfig.key === key && sortConfig.direction === 'ascending'
+      ? 'descending'
+      : 'ascending';
     setSortConfig({ key, direction });
   };
 
-  const getSortIcon = (key: SortKey) => {
-    if (sortConfig.key !== key) {
-      return <ArrowUpDown className="ml-2 h-3 w-3 opacity-30 group-hover:opacity-100" />;
-    }
-    return sortConfig.direction === 'ascending' ? <ArrowUp className="ml-2 h-3 w-3" /> : <ArrowDown className="ml-2 h-3 w-3" />;
-  };
-
-  const formatDateForDisplay = (dateString?: string): string => {
-    if (!dateString) return 'N/A';
-    try {
-      const date = parseISO(dateString);
-      return isValid(date) ? format(date, 'MM/dd/yyyy') : 'Invalid Date';
-    } catch {
-      return 'N/A';
-    }
+  const formatDate = (d?: string) => {
+    if (!d) return 'N/A';
+    const date = parseISO(d);
+    return isValid(date) ? format(date, 'MM/dd/yyyy') : 'Invalid Date';
   };
 
   return (
-    // The PageHeader is typically part of the page layout, not inside the Suspense boundary unless it also uses client hooks.
-    // For this refactor, we assume PageHeader can be outside the component using useSearchParams.
-    // If PageHeader needs to be dynamic based on searchParams, it would also need to be part of DiscrepanciesClient.
     <>
       <PageHeader
         title="Global Aircraft Discrepancy Log"
@@ -176,13 +153,17 @@ export default function DiscrepanciesClient() {
               <Input
                 placeholder="Search by Aircraft, Description, Ref..."
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={e => setSearchTerm(e.target.value)}
                 className="w-full"
                 disabled={isLoading}
               />
             </ClientOnly>
             <ClientOnly fallback={<Skeleton className="h-10 w-full" />}>
-              <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as DiscrepancyStatus | 'all')} disabled={isLoading}>
+              <Select
+                value={statusFilter}
+                onValueChange={v => setStatusFilter(v as DiscrepancyStatus | 'all')}
+                disabled={isLoading}
+              >
                 <SelectTrigger><SelectValue placeholder="Filter by Status" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Statuses</SelectItem>
@@ -191,11 +172,19 @@ export default function DiscrepanciesClient() {
               </Select>
             </ClientOnly>
             <ClientOnly fallback={<Skeleton className="h-10 w-full" />}>
-              <Select value={aircraftIdFilter} onValueChange={(value) => setAircraftIdFilter(value as string)} disabled={isLoading || fleetList.length === 0}>
+              <Select
+                value={aircraftIdFilter}
+                onValueChange={v => setAircraftIdFilter(v as string)}
+                disabled={isLoading || fleetList.length === 0}
+              >
                 <SelectTrigger><SelectValue placeholder="Filter by Aircraft" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Aircraft</SelectItem>
-                  {fleetList.map(ac => <SelectItem key={ac.id} value={ac.id}>{ac.tailNumber} - {ac.model}</SelectItem>)}
+                  {fleetList.map(ac => (
+                    <SelectItem key={ac.id} value={ac.id}>
+                      {ac.tailNumber} – {ac.model}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </ClientOnly>
@@ -205,25 +194,29 @@ export default function DiscrepanciesClient() {
           {isLoading ? (
             <div className="flex items-center justify-center py-10">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <p className="ml-2 text-muted-foreground">Loading discrepancies...</p>
+              <span className="ml-2 text-muted-foreground">Loading discrepancies...</span>
             </div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>
-                    <Button variant="ghost" size="sm" onClick={() => requestSort('aircraftDisplayLabel')} className="px-1 -ml-2 group">
-                      Aircraft {getSortIcon('aircraftDisplayLabel')}
+                    <Button variant="ghost" size="sm" onClick={() => requestSort('aircraftDisplayLabel')} className="group">
+                      Aircraft {<ArrowUpDown className="ml-2 h-3 w-3 opacity-30 group-hover:opacity-100" />}
                     </Button>
                   </TableHead>
                   <TableHead>
-                    <Button variant="ghost" size="sm" onClick={() => requestSort('dateDiscovered')} className="px-1 group">
-                      Date Disc. {getSortIcon('dateDiscovered')}
+                    <Button variant="ghost" size="sm" onClick={() => requestSort('dateDiscovered')} className="group">
+                      Date Disc. {sortConfig.key === 'dateDiscovered'
+                        ? (sortConfig.direction === 'ascending' ? <ArrowUp /> : <ArrowDown />)
+                        : <ArrowUpDown className="ml-2 h-3 w-3 opacity-30 group-hover:opacity-100" />}
                     </Button>
                   </TableHead>
                   <TableHead>
-                     <Button variant="ghost" size="sm" onClick={() => requestSort('status')} className="px-1 group">
-                      Status {getSortIcon('status')}
+                    <Button variant="ghost" size="sm" onClick={() => requestSort('status')} className="group">
+                      Status {sortConfig.key === 'status'
+                        ? (sortConfig.direction === 'ascending' ? <ArrowUp /> : <ArrowDown />)
+                        : <ArrowUpDown className="ml-2 h-3 w-3 opacity-30 group-hover:opacity-100" />}
                     </Button>
                   </TableHead>
                   <TableHead>Description</TableHead>
@@ -233,17 +226,23 @@ export default function DiscrepanciesClient() {
               <TableBody>
                 {filteredAndSortedDiscrepancies.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center text-muted-foreground py-10">
-                      No discrepancies found{allDiscrepancies.length > 0 ? " matching your criteria" : ". No discrepancies in the system yet."}
+                    <TableCell colSpan={5} className="text-center py-10 text-muted-foreground">
+                      {allDiscrepancies.length
+                        ? "No discrepancies match your criteria."
+                        : "No discrepancies in the system yet."}
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredAndSortedDiscrepancies.map((item) => (
+                  filteredAndSortedDiscrepancies.map(item => (
                     <TableRow key={item.id}>
                       <TableCell className="font-medium text-xs">{item.aircraftDisplayLabel}</TableCell>
-                      <TableCell className="text-xs">{formatDateForDisplay(item.dateDiscovered)}</TableCell>
-                      <TableCell><Badge variant={getStatusBadgeVariant(item.status)}>{item.status}</Badge></TableCell>
-                      <TableCell className="text-xs max-w-md truncate" title={item.description}>{item.description}</TableCell>
+                      <TableCell className="text-xs">{formatDate(item.dateDiscovered)}</TableCell>
+                      <TableCell>
+                        <Badge variant={getStatusBadgeVariant(item.status)}>{item.status}</Badge>
+                      </TableCell>
+                      <TableCell className="text-xs max-w-md truncate" title={item.description}>
+                        {item.description}
+                      </TableCell>
                       <TableCell className="text-right">
                         <Button variant="ghost" size="sm" asChild>
                           <Link href={`/aircraft/currency/${item.aircraftId}`}>

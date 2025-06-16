@@ -1,6 +1,7 @@
 
 // src/lib/firebase.ts
 import { initializeApp, getApps, getApp } from 'firebase/app';
+// Remove enableMultiTabIndexedDbPersistence as it's not commonly needed unless specific issues arise
 import { getFirestore } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import { getStorage } from 'firebase/storage';
@@ -40,6 +41,7 @@ const missingOrPlaceholderVars = requiredEnvVarKeys.filter(key => {
 
 if (missingOrPlaceholderVars.length > 0) {
   const envVarNames = missingOrPlaceholderVars.map(key => `NEXT_PUBLIC_FIREBASE_${key.replace(/([A-Z])/g, '_$1').toUpperCase()}`);
+  // Use the projectId from env if available, otherwise a generic placeholder.
   const targetProjectName = firebaseConfig.projectId || "the TARGET Firebase project";
   missingVarsMessage = `Firebase configuration is incomplete or contains placeholders.
 Missing or placeholder environment variables: ${envVarNames.join(', ')}.
