@@ -1,6 +1,7 @@
 
 // src/lib/firebase.ts
 import { initializeApp, getApps, getApp } from 'firebase/app';
+// Remove enableMultiTabIndexedDbPersistence as it's not commonly needed unless specific issues arise
 import { getFirestore } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import { getStorage } from 'firebase/storage';
@@ -12,11 +13,13 @@ const firebaseConfig = {
   storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
+  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID, // Optional
 };
 
+// Log the effective project ID being used for initialization
 const effectiveProjectId = firebaseConfig.projectId || '(Not Set)';
-console.log(`[Firebase Client Init] Attempting to initialize Firebase. Project ID from env: ${effectiveProjectId}.`);
+console.log(`[Firebase Client Init] Attempting to initialize with Firebase config. Project ID from env: ${effectiveProjectId}.`);
+
 
 let missingVarsMessage = "";
 // Define which keys are absolutely required for the app to function.

@@ -1,4 +1,4 @@
+
 // This file is no longer needed as the content has been moved
-// directly into src/app/(app)/aircraft/discrepancies/page.tsx
-// which is now a client component.
+// into the new src/app/(app)/aircraft/discrepancies/components/discrepancies-client.tsx
 // This file can be safely deleted.
