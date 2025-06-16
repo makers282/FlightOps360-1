@@ -1,7 +1,6 @@
 
 // src/lib/firebase.ts
 import { initializeApp, getApps, getApp } from 'firebase/app';
-// Remove enableMultiTabIndexedDbPersistence as it's not commonly needed unless specific issues arise
 import { getFirestore } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import { getStorage } from 'firebase/storage';
@@ -17,8 +16,8 @@ const firebaseConfig = {
 };
 
 // Log the effective project ID being used for initialization
-const effectiveProjectId = firebaseConfig.projectId || '(Not Set)';
-console.log(`[Firebase Client Init] Attempting to initialize with Firebase config. Project ID from env: ${effectiveProjectId}.`);
+const effectiveProjectIdFromEnv = firebaseConfig.projectId || '(Not Set)';
+console.log(`[Firebase Client Init] Attempting to initialize with Firebase config. Project ID from env: ${effectiveProjectIdFromEnv}.`);
 
 
 let missingVarsMessage = "";
@@ -41,7 +40,7 @@ const missingOrPlaceholderVars = requiredEnvVarKeys.filter(key => {
 
 if (missingOrPlaceholderVars.length > 0) {
   const envVarNames = missingOrPlaceholderVars.map(key => `NEXT_PUBLIC_FIREBASE_${key.replace(/([A-Z])/g, '_$1').toUpperCase()}`);
-  const targetProjectName = firebaseConfig.projectId || "the TARGET Firebase project"; // Use projectId if available, otherwise generic
+  const targetProjectName = firebaseConfig.projectId || "the TARGET Firebase project";
   missingVarsMessage = `Firebase configuration is incomplete or contains placeholders.
 Missing or placeholder environment variables: ${envVarNames.join(', ')}.
 Ensure these are set in your .env file for the '${targetProjectName}'. App functionality will be affected.

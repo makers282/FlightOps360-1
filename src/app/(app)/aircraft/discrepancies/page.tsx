@@ -21,7 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { FileWarning, Search, Eye, Loader2, Filter as FilterIcon, ArrowUpDown, ArrowDown, ArrowUp } from 'lucide-react';
 import { format, parseISO, isValid } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
-import { fetchAllAircraftDiscrepancies, type AircraftDiscrepancy } from '@/ai/flows/manage-aircraft-discrepancies-flow';
+import { fetchAllAircraftDiscrepancies, type <A:link></A:link>AircraftDiscrepancy } from '@/ai/flows/manage-aircraft-discrepancies-flow';
 import { discrepancyStatuses, type DiscrepancyStatus } from '@/ai/schemas/aircraft-discrepancy-schemas';
 import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
 import { ClientOnly } from '@/components/client-only';
