@@ -1,7 +1,6 @@
 
 // src/lib/firebase.ts
 import { initializeApp, getApps, getApp } from 'firebase/app';
-// Remove enableMultiTabIndexedDbPersistence as it's not commonly needed unless specific issues arise
 import { getFirestore } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import { getStorage } from 'firebase/storage';
