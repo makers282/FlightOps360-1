@@ -15,8 +15,8 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
-// Log the effective project ID being used for initialization
-console.log(`[Firebase Client Init] Attempting to initialize with Firebase config. Project ID from env: ${firebaseConfig.projectId || '(Not Set)'}.`);
+const effectiveProjectId = firebaseConfig.projectId || '(Not Set)';
+console.log(`[Firebase Client Init] Attempting to initialize Firebase. Project ID from env: ${effectiveProjectId}.`);
 
 let missingVarsMessage = "";
 // Define which keys are absolutely required for the app to function.
@@ -72,5 +72,3 @@ if (app) {
 }
 
 export { db, app, auth, storage };
-
-    
