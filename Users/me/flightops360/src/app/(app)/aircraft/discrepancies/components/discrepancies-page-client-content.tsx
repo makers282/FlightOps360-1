@@ -42,8 +42,9 @@ interface SortConfig {
   direction: 'ascending' | 'descending';
 }
 
+// This component now contains all the client-side logic
 export function DiscrepanciesPageClientContent() {
-  const searchParams = useSearchParams();
+  const searchParams = useSearchParams(); // This hook requires this component to be client-side
   const aircraftIdFromQuery = searchParams.get('aircraftId');
 
   const [allDiscrepancies, setAllDiscrepancies] = useState<AircraftDiscrepancy[]>([]);
@@ -259,3 +260,5 @@ export function DiscrepanciesPageClientContent() {
     </>
   );
 }
+
+    
