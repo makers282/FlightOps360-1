@@ -1,0 +1,36 @@
+
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Default deny all reads and writes to all paths
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+
+    // Allow public read access for aircraft documents, as they are made public by the flow
+    match /aircraft_documents/{aircraftId}/{documentId}/{fileName} {
+      allow read: if true;
+      // Write access should be restricted to authenticated users, typically through a backend flow
+      // that validates the upload.
+      allow write: if request.auth != null;
+    }
+
+    // Example: Allow authenticated users to write to a user-specific folder.
+    // match /user_uploads/{userId}/{allPaths=**} {
+    //   allow write: if request.auth != null && request.auth.uid == userId;
+    //   allow read: if request.auth != null && request.auth.uid == userId; // Or more permissive if needed
+    // }
+
+    // Add other specific paths as needed for your application:
+    // match /company_documents/{documentId}/{fileName} {
+    //   allow read: if request.auth != null; // Or public if needed
+    //   allow write: if request.auth != null; // Or more restricted
+    // }
+    //
+    // match /crew_documents/{crewMemberId}/{documentId}/{fileName} {
+    //   allow read: if request.auth != null; // Or public if needed
+    //   allow write: if request.auth != null; // Or more restricted
+    // }
+  }
+}
