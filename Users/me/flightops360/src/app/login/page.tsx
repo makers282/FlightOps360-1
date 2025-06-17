@@ -1,6 +1,6 @@
 
 import { LoginForm } from './components/login-form';
-import { Plane } from 'lucide-react'; 
+import { Plane } from 'lucide-react';
 import Image from 'next/image';
 
 export default function LoginPage() {
