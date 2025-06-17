@@ -1,6 +1,7 @@
+"use client";
 
 import { PageHeader } from '@/components/page-header';
-import { Clock, ExternalLink } from 'lucide-react';
+import { Clock, CalendarCheck2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
