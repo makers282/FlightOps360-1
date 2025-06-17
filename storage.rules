@@ -2,17 +2,37 @@ rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
-    // Allow write access to authenticated users for files under their user ID
-    // Example: allow users to upload profile pictures to 'users/{userId}/profile.jpg'
-    match /users/{userId}/{allPaths=**} {
-      allow read: if request.auth != null; // Or more specific read rules
-      allow write: if request.auth != null && request.auth.uid == userId;
-    }
-
-    // Default deny for any path not explicitly matched
-    // Consider allowing public read for certain paths if needed
+    // Default deny all reads and writes if no other rules match
     match /{allPaths=**} {
       allow read, write: if false;
     }
+
+    // Aircraft-specific documents
+    // The uploadAircraftDocument flow makes these files public after upload.
+    // Allow public read.
+    // Allow authenticated users to write (upload).
+    match /aircraft_documents/{aircraftId}/{documentId}/{fileName} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
+    // Example: User-specific files (e.g., profile pictures, private user uploads)
+    // Only the authenticated user can read or write their own files.
+    // match /user_uploads/{userId}/{allPaths=**} {
+    //   allow read, write: if request.auth != null && request.auth.uid == userId;
+    // }
+
+    // Example: Company-wide documents that are not public but accessible to any authenticated user
+    // match /company_documents_internal/{allPaths=**} {
+    //   allow read: if request.auth != null;
+    //   // Allow write only by admin (example, requires admin claim or role check)
+    //   // allow write: if request.auth != null && request.auth.token.admin == true;
+    // }
+
+    // Example: Public assets like images for the app UI (if stored in Storage)
+    // match /public_assets/{allPaths=**} {
+    //   allow read: if true;
+    //   allow write: if false; // Typically only admins/deploy process would write these
+    // }
   }
 }
