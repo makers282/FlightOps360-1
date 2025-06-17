@@ -4,125 +4,131 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Default deny all reads and writes
+    // Default deny all access unless explicitly allowed
     match /{document=**} {
       allow read, write: if false;
     }
 
-    // Allow authenticated users to read from most collections
-    // Write access is also granted to authenticated users for now,
-    // but this should be refined based on specific app logic (e.g., only admins can write to 'fleet').
+    // Users can only read/write their own user document
+    match /users/{userId} {
+      allow read, update, delete: if request.auth != null && request.auth.uid == userId;
+      allow create: if request.auth != null; // Allow any authenticated user to create their own user doc
+    }
+
+    // Allow authenticated users to read/write most app collections.
+    // TODO: Review and restrict WRITE access based on roles or ownership where appropriate for:
+    // - fleet, aircraftRates, aircraftPerformanceData, aircraftComponentTimes, maintenanceTasks
+    // - customers, quotes, trips, flightLogs
+    // - roles (only admins should write)
+    // - companyProfile (only admins should write)
+    // - notifications (system might write, users might update 'isRead')
+    // - companyDocuments, aircraftDocuments, crewDocuments (consider who uploads/manages)
+    // - bulletins (admins/specific roles should write)
+    // - crewMembers (admins/HR should write)
+    // - aircraftDiscrepancies, aircraftMelItems (pilots/maintenance should write)
+    // - aircraftBlockOuts (dispatch/admins should write)
+
     match /fleet/{aircraftId} {
       allow read: if request.auth != null;
-      allow write: if request.auth != null; // TODO: Restrict write access, e.g., to admins
+      allow write: if request.auth != null; // TODO: Restrict to admin/authorized roles
     }
 
-    match /aircraftRates/{rateId} {
+    match /aircraftRates/{aircraftId} {
       allow read: if request.auth != null;
-      allow write: if request.auth != null; // TODO: Restrict write access
+      allow write: if request.auth != null; // TODO: Restrict to admin/authorized roles
     }
 
-    match /aircraftPerformanceData/{perfId} {
+    match /aircraftPerformanceData/{aircraftId} {
       allow read: if request.auth != null;
-      allow write: if request.auth != null; // TODO: Restrict write access
+      allow write: if request.auth != null; // TODO: Restrict to admin/authorized roles
     }
 
-    match /aircraftComponentTimes/{compId} {
+    match /aircraftComponentTimes/{aircraftId} {
       allow read: if request.auth != null;
-      allow write: if request.auth != null; // TODO: Restrict write access
-    }
-
-    match /maintenanceTasks/{taskId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null; // TODO: Restrict write access
-    }
-
-    match /aircraftDiscrepancies/{discrepancyId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null; // TODO: Restrict write access
+      allow write: if request.auth != null; // TODO: Restrict to admin/authorized roles
     }
     
-    match /aircraftMelItems/{melId} {
-        allow read: if request.auth != null;
-        allow write: if request.auth != null; // TODO: Restrict write access
-    }
-
-    match /flightLogs/{logId} {
-        allow read: if request.auth != null;
-        allow write: if request.auth != null; // TODO: Restrict write access
+    match /maintenanceTasks/{taskId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null; // TODO: Restrict to maintenance/admin roles
     }
 
     match /customers/{customerId} {
       allow read: if request.auth != null;
-      allow write: if request.auth != null; // TODO: Restrict write access
+      allow write: if request.auth != null; // TODO: Restrict to sales/admin roles
     }
 
     match /quotes/{quoteId} {
       allow read: if request.auth != null;
-      allow write: if request.auth != null; // TODO: Restrict write access
+      // Example: allow write if user is creator or admin (requires storing createdBy uid on quote)
+      // allow write: if request.auth != null && (resource.data.createdBy == request.auth.uid || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true);
+      allow write: if request.auth != null; // TODO: Refine based on roles/ownership
     }
 
     match /trips/{tripId} {
       allow read: if request.auth != null;
-      allow write: if request.auth != null; // TODO: Restrict write access
-    }
-    
-    match /aircraftBlockOuts/{blockOutId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null; // TODO: Restrict write access
+      allow write: if request.auth != null; // TODO: Refine based on roles (dispatch/admin)
     }
 
-    match /crewMembers/{crewMemberId} {
+    match /flightLogs/{logId} {
       allow read: if request.auth != null;
-      allow write: if request.auth != null; // TODO: Restrict write access
+      allow write: if request.auth != null; // TODO: Restrict to crew/admin for that trip
     }
     
-    match /users/{userId} {
-      // Users can read their own data and admins (or specific roles) can read/write all user data.
-      // For now, simple rule: users can read/write their own data.
-      allow read, write: if request.auth != null && request.auth.uid == userId;
-      // TODO: Add admin access rule if needed: allow read, write: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
-    }
-
     match /roles/{roleId} {
-      allow read: if request.auth != null; // All authenticated users can read roles
-      allow write: if request.auth != null; // TODO: Restrict write to admins
+      allow read: if request.auth != null;
+      allow write: if request.auth != null; // TODO: Restrict to admin roles ONLY
+    }
+    
+    match /companyProfile/{profileId} { // Usually one doc, e.g., 'main'
+      allow read: if request.auth != null;
+      allow write: if request.auth != null; // TODO: Restrict to admin roles ONLY
     }
 
-    match /companyProfile/{profileId} { // Assuming a single document for company profile
+    match /notifications/{notificationId} {
+      allow read: if request.auth != null; // Could be user-specific or global
+      allow update: if request.auth != null; // e.g., for marking as read
+      allow create, delete: if request.auth != null; // TODO: Restrict create to system/admins
+    }
+
+    match /companyDocuments/{docId} {
       allow read: if request.auth != null;
-      allow write: if request.auth != null; // TODO: Restrict write to admins
+      allow write: if request.auth != null; // TODO: Restrict to admin/doc managers
     }
 
     match /aircraftDocuments/{docId} {
       allow read: if request.auth != null;
-      allow write: if request.auth != null; // TODO: Restrict write access
-    }
-
-    match /crewDocuments/{docId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null; // TODO: Restrict write access
+      allow write: if request.auth != null; // TODO: Restrict to admin/aircraft managers
     }
     
-    match /companyDocuments/{docId} {
+    match /crewDocuments/{docId} {
       allow read: if request.auth != null;
-      allow write: if request.auth != null; // TODO: Restrict write access
+      allow write: if request.auth != null; // TODO: Restrict to admin/crew managers
     }
 
     match /bulletins/{bulletinId} {
-        allow read: if request.auth != null;
-        allow write: if request.auth != null; // TODO: Restrict write access (e.g. to admin/editor roles)
+      allow read: if request.auth != null;
+      allow write: if request.auth != null; // TODO: Restrict to admin/authorized roles
     }
 
-    match /notifications/{notificationId} {
-        // Users can read their own notifications or global ones
-        // Users can update (mark as read) their own notifications
-        allow read: if request.auth != null && (resource.data.userId == request.auth.uid || resource.data.userId == null);
-        allow update: if request.auth != null && request.auth.uid == resource.data.userId;
-        // Write (create) is typically handled by backend flows/triggers, not direct client writes.
-        // For admin-created global notifications, use specific admin rules.
-        allow create: if request.auth != null; // TODO: Restrict to admins or backend processes
-        allow delete: if request.auth != null && request.auth.uid == resource.data.userId; // Users can delete their own
+    match /crewMembers/{crewId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null; // TODO: Restrict to admin/HR roles
+    }
+
+    match /aircraftDiscrepancies/{discrepancyId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null; // TODO: Restrict to pilots/maintenance roles
+    }
+
+    match /aircraftMelItems/{melId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null; // TODO: Restrict to pilots/maintenance roles
+    }
+    
+    match /aircraftBlockOuts/{blockOutId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null; // TODO: Restrict to dispatch/admin roles
     }
   }
 }

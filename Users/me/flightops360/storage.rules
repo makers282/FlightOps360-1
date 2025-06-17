@@ -3,34 +3,35 @@ rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
-    // Default deny all reads and writes to all paths
+    // Default deny all reads and writes
     match /{allPaths=**} {
       allow read, write: if false;
     }
 
-    // Allow public read access for aircraft documents, as they are made public by the flow
+    // Aircraft documents are made public by the upload flow for now.
+    // TODO: Consider if these should be restricted and served via signed URLs
+    // if they contain sensitive information.
     match /aircraft_documents/{aircraftId}/{documentId}/{fileName} {
-      allow read: if true;
-      // Write access should be restricted to authenticated users, typically through a backend flow
-      // that validates the upload.
-      allow write: if request.auth != null;
+      allow read: if true; // Publicly readable
+      allow write: if request.auth != null; // Only authenticated users can upload
+                                          // (Assumes backend flow validates before making public)
     }
 
-    // Example: Allow authenticated users to write to a user-specific folder.
+    // Example: User-specific private files
     // match /user_uploads/{userId}/{allPaths=**} {
-    //   allow write: if request.auth != null && request.auth.uid == userId;
-    //   allow read: if request.auth != null && request.auth.uid == userId; // Or more permissive if needed
+    //   allow read, write: if request.auth != null && request.auth.uid == userId;
     // }
 
-    // Add other specific paths as needed for your application:
-    // match /company_documents/{documentId}/{fileName} {
-    //   allow read: if request.auth != null; // Or public if needed
-    //   allow write: if request.auth != null; // Or more restricted
+    // Example: Company documents (restricted read/write)
+    // match /company_documents/{docId}/{fileName} {
+    //  allow read: if request.auth != null; // Or more specific role check
+    //  allow write: if request.auth != null; // TODO: Restrict to admin/doc managers
     // }
-    //
-    // match /crew_documents/{crewMemberId}/{documentId}/{fileName} {
-    //   allow read: if request.auth != null; // Or public if needed
-    //   allow write: if request.auth != null; // Or more restricted
+    
+    // Example: Crew documents (restricted based on crew or admin)
+    // match /crew_documents/{crewMemberId}/{docId}/{fileName} {
+    //   allow read: if request.auth != null && (request.auth.uid == crewMemberId || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true);
+    //   allow write: if request.auth != null; // TODO: Restrict to admin or specific crew member for their own docs
     // }
   }
 }
