@@ -17,8 +17,7 @@ const firebaseConfig = {
 };
 
 // Log the effective project ID being used for initialization
-const effectiveProjectIdFromEnv = firebaseConfig.projectId || '(Not Set)';
-console.log(`[Firebase Client Init] Attempting to initialize with Firebase config. Project ID from env: ${effectiveProjectIdFromEnv}. Intended project: SkyBase.`);
+console.log(`[Firebase Client Init] Attempting to initialize with Firebase config. Project ID from env: ${firebaseConfig.projectId}. Intended project: SkyBase.`);
 
 
 let missingVarsMessage = "";
