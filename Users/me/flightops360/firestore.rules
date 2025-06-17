@@ -4,154 +4,133 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Default deny all reads and writes
+    // Default deny all access
     match /{document=**} {
       allow read, write: if false;
     }
 
-    // Users collection:
-    // Users can only read and write their own document.
+    // Users can only read and write their own user document
     match /users/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 
-    // Roles collection:
-    // Allow authenticated users to read roles.
-    // TODO: Restrict write access to admins only.
+    // Company Profile: Public read, authenticated write (likely admin only in future)
+    match /companyProfile/{profileId} {
+      allow read: if true; // Publicly readable
+      allow write: if request.auth != null; // TODO: Restrict to admin
+    }
+
+    // Fleet: Public read, authenticated write
+    match /fleet/{aircraftId} {
+      allow read: if true; // Temporarily public for dashboard functionality
+      allow write: if request.auth != null; // TODO: Restrict to admin/authorized roles
+    }
+
+    // Aircraft Rates: Public read, authenticated write
+    match /aircraftRates/{rateId} {
+      allow read: if true; // Temporarily public
+      allow write: if request.auth != null; // TODO: Restrict to admin
+    }
+
+    // Aircraft Performance Data: Public read, authenticated write
+    match /aircraftPerformanceData/{perfId} {
+      allow read: if true; // Temporarily public
+      allow write: if request.auth != null; // TODO: Restrict to admin/authorized roles
+    }
+
+    // Component Times: Public read, authenticated write
+    match /aircraftComponentTimes/{compTimeId} {
+      allow read: if true; // Temporarily public for dashboard functionality
+      allow write: if request.auth != null; // TODO: Restrict to authorized roles or system
+    }
+
+    // Maintenance Tasks: Public read, authenticated write
+    match /maintenanceTasks/{taskId} {
+      allow read: if true; // Temporarily public for dashboard functionality
+      allow write: if request.auth != null; // TODO: Restrict to authorized roles
+    }
+
+    // Aircraft Discrepancies: Public read, authenticated write
+    match /aircraftDiscrepancies/{discrepancyId} {
+      allow read: if true; // Temporarily public for dashboard functionality
+      allow write: if request.auth != null; // TODO: Restrict to authorized roles
+    }
+
+    // MEL Items: Public read, authenticated write
+    match /aircraftMelItems/{melId} {
+      allow read: if true; // Temporarily public for dashboard functionality
+      allow write: if request.auth != null; // TODO: Restrict to authorized roles
+    }
+
+    // Aircraft Block Outs: Public read, authenticated write
+    match /aircraftBlockOuts/{blockOutId} {
+        allow read: if true; // Public for calendar display
+        allow write: if request.auth != null; // TODO: Restrict to authorized roles
+    }
+
+    // Quotes: Authenticated read/write
+    match /quotes/{quoteId} {
+      allow read, write: if request.auth != null; // TODO: Refine - who can read/write specific quotes?
+    }
+
+    // Customers: Authenticated read/write
+    match /customers/{customerId} {
+      allow read, write: if request.auth != null; // TODO: Refine based on roles
+    }
+
+    // Trips: Public read, authenticated write
+    match /trips/{tripId} {
+      allow read: if true; // Temporarily public for dashboard functionality
+      allow write: if request.auth != null; // TODO: Refine based on roles
+    }
+
+    // Flight Logs: Public read, authenticated write
+    match /flightLogs/{flightLogId} {
+      allow read: if true; // Temporarily public for dashboard/trip details
+      allow write: if request.auth != null; // TODO: Refine - who can write flight logs?
+    }
+
+    // Crew Members: Public read, authenticated write
+    match /crewMembers/{crewMemberId} {
+      allow read: if true; // Temporarily public for dashboard functionality
+      allow write: if request.auth != null; // TODO: Restrict to admin/authorized roles
+    }
+
+    // Roles: Authenticated read, restricted write (e.g., admin only)
     match /roles/{roleId} {
       allow read: if request.auth != null;
-      allow write: if request.auth != null; // TODO: Refine this, e.g., only admins
+      allow write: if request.auth != null; // TODO: CRITICAL - Restrict to admin roles for creating/modifying roles
+      // Example for admin only write:
+      // allow write: if get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
-    // Company Profile collection:
-    // Generally, company profile might be readable by authenticated users,
-    // writable only by admins.
-    match /companyProfile/{profileId} { // profileId is usually 'main'
-      allow read: if true; // Public read for dashboard
-      allow write: if request.auth != null; // TODO: Refine to admins
-    }
-
-    // Fleet collection:
-    // Aircraft data
-    match /fleet/{aircraftId} {
-      allow read: if true; // Public read for dashboard
-      allow write: if request.auth != null; // TODO: Refine to admins or specific roles
-    }
-    
-    // Aircraft Rates collection:
-    // Rates associated with aircraft
-    match /aircraftRates/{aircraftId} {
-      allow read: if true; // Public read for dashboard
-      allow write: if request.auth != null; // TODO: Refine to admins or specific roles
-    }
-
-    // Aircraft Performance Data collection:
-    match /aircraftPerformanceData/{aircraftId} {
-      allow read: if true; // Public read for dashboard
-      allow write: if request.auth != null; // TODO: Refine to admins
-    }
-    
-    // Aircraft Component Times collection
-    match /aircraftComponentTimes/{aircraftId} {
-        allow read: if true; // Public read for dashboard
-        allow write: if request.auth != null; // Or specific roles like maintenance
-    }
-
-    // Maintenance Tasks collection
-    match /maintenanceTasks/{taskId} {
-        allow read: if true; // Public read for dashboard
-        // Allow write if the user is authenticated (e.g., maintenance personnel)
-        // TODO: Consider more granular control, e.g., only allow creating tasks for aircraft they manage
-        allow write: if request.auth != null; 
-    }
-    
-    // Aircraft Discrepancies collection
-    match /aircraftDiscrepancies/{discrepancyId} {
-      allow read: if true; // Public read for dashboard
-      allow write: if request.auth != null; // TODO: Refine, e.g., pilots, maintenance
-    }
-
-    // Aircraft MEL Items collection
-    match /aircraftMelItems/{melItemId} {
-      allow read: if true; // Public read for dashboard
-      allow write: if request.auth != null; // TODO: Refine
-    }
-
-    // Customers collection:
-    // Customers might be viewable by sales/admin, writable by sales/admin
-    match /customers/{customerId} {
-      allow read: if true; // Public read for dashboard/quotes
-      allow write: if request.auth != null; // TODO: Refine to sales/admin
-    }
-
-    // Quotes collection:
-    match /quotes/{quoteId} {
-      allow read: if true; // Public read for dashboard
-      allow write: if request.auth != null; // TODO: Refine (e.g., sales can create/update their quotes)
-    }
-
-    // Trips collection:
-    match /trips/{tripId} {
-      allow read: if true; // Public read for dashboard
-      allow write: if request.auth != null; // TODO: Refine (e.g., dispatch, admins)
-    }
-
-    // Crew Members collection:
-    match /crewMembers/{crewMemberId} {
-      allow read: if true; // Public read for dashboard and scheduling
-      allow write: if request.auth != null; // TODO: Refine (e.g., HR, admins)
-    }
-    
-    // Flight Logs collection
-    match /flightLogs/{flightLogId} {
-      allow read: if request.auth != null; // Only authenticated users can read logs
-      allow write: if request.auth != null; // Only authenticated users can write logs (e.g., pilots for their flights)
-      // TODO: Refine to ensure pilots can only write to logs for trips they are assigned to.
-    }
-
-    // Aircraft Block Outs collection
-    match /aircraftBlockOuts/{blockOutId} {
-      allow read: if true; // Public read for calendar display
-      allow write: if request.auth != null; // TODO: Refine (e.g., dispatch, admins)
-    }
-
-    // Bulletins collection:
-    // Bulletins might be publicly readable, but only writable by admins.
-    match /bulletins/{bulletinId} {
-      allow read: if true; // Publicly readable for dashboard
-      allow write: if request.auth != null; // TODO: Refine to admins
-    }
-    
-    // Notifications collection
-    // Users can read their own notifications, and create them (implicitly through other actions).
-    // Direct write might be limited.
-    match /notifications/{notificationId} {
-      allow read: if request.auth != null; // Allow authenticated users to read notifications (can be further refined to target user)
-      allow update: if request.auth != null; // Allow marking as read/unread
-      allow create, delete: if false; // Typically created by backend flows, deletion might be admin only or automatic
-    }
-
-    // Company Documents collection
-    match /companyDocuments/{documentId} {
-      allow read: if request.auth != null; // Authenticated users can read company docs
-      allow write: if request.auth != null; // TODO: Refine to admins or specific roles
-    }
-
-    // Aircraft Documents collection
-    // Rules are more complex here due to public file URLs from Storage.
-    // The Firestore document itself might just store metadata.
-    match /aircraftDocuments/{documentId} {
-      allow read: if true; // Metadata might be publicly readable if fileURL is public
-      allow write: if request.auth != null; // TODO: Refine who can manage these document records
-    }
-
-    // Crew Documents collection
+    // Crew Documents: Authenticated read/write
     match /crewDocuments/{documentId} {
-      allow read: if request.auth != null; // Authenticated users can read (e.g., their own, or admins read all)
-      // TODO: Implement user-specific read/write rules or role-based access.
-      // Example: allow read, write: if request.auth.uid == resource.data.crewMemberId || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
-      allow write: if request.auth != null;
+        allow read, write: if request.auth != null; // TODO: Allow specific crew/admins to read/write
     }
 
+    // Aircraft Documents: Authenticated read/write (Storage rules handle public file access)
+    match /aircraftDocuments/{documentId} {
+        allow read, write: if request.auth != null; // TODO: Allow specific crew/admins to read/write
+    }
+     // Company Documents: Authenticated read/write (Storage rules can handle public file access if needed)
+    match /companyDocuments/{documentId} {
+        allow read, write: if request.auth != null; // TODO: Define roles for managing these
+    }
+
+    // Bulletins: Public read, authenticated write
+    match /bulletins/{bulletinId} {
+      allow read: if true; // Publicly readable for dashboard display
+      allow write: if request.auth != null; // TODO: Restrict to admin/authorized roles for creating/editing
+    }
+
+    // Notifications: User-specific or role-based
+    match /notifications/{notificationId} {
+      allow read, write: if request.auth != null; // TODO: Restrict to specific user or roles
+      // Example for user-specific:
+      // allow read, write: if request.auth != null && resource.data.userId == request.auth.uid;
+    }
   }
 }
+
+    
