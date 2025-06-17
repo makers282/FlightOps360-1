@@ -4,122 +4,136 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Default deny all access
+    // Default deny all reads and writes
     match /{document=**} {
       allow read, write: if false;
     }
 
-    // Users can only read/write their own document
+    // Users: Users can only read/write their own document
     match /users/{userId} {
-      allow read, update, delete: if request.auth != null && request.auth.uid == userId;
-      allow create: if request.auth != null; // Or more specific rules if needed
+      allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 
-    // Bulletins are publicly readable, only authenticated can write (for now)
+    // Company Profile: Public read for dashboard, restricted write
+    match /companyProfile/{profileId} {
+      allow read: if true;
+      allow write: if request.auth != null; // TODO: Restrict to admin role
+    }
+
+    // Aircraft Fleet: Public read for dashboard, restricted write
+    match /fleet/{aircraftId} {
+      allow read: if true;
+      allow write: if request.auth != null; // TODO: Restrict to admin/maintenance roles
+    }
+
+    // Aircraft Rates: Read by authenticated, restricted write
+    match /aircraftRates/{aircraftId} {
+      allow read: if request.auth != null; // Assumes rates are not strictly public
+      allow write: if request.auth != null; // TODO: Restrict to admin role
+    }
+
+    // Aircraft Performance Data: Read by authenticated, restricted write
+    match /aircraftPerformanceData/{aircraftId} {
+      allow read: if request.auth != null; // Assumes performance data is not strictly public
+      allow write: if request.auth != null; // TODO: Restrict to admin/maintenance roles
+    }
+
+    // Component Times: Public read for dashboard, restricted write
+    match /aircraftComponentTimes/{aircraftId} {
+      allow read: if true;
+      allow write: if request.auth != null; // TODO: Probably should be restricted to system/admin or specific flows
+    }
+
+    // Maintenance Tasks: Public read for dashboard, restricted write
+    match /maintenanceTasks/{taskId} {
+      allow read: if true;
+      allow write: if request.auth != null; // TODO: Restrict to maintenance roles
+    }
+    
+    // Aircraft Discrepancies: Public read for dashboard status, restricted write
+    match /aircraftDiscrepancies/{discrepancyId} {
+      allow read: if true;
+      allow write: if request.auth != null; // TODO: Refine based on who can log/update discrepancies
+    }
+
+    // Aircraft MEL Items: Public read for dashboard status, restricted write
+    match /aircraftMelItems/{melItemId} {
+      allow read: if true;
+      allow write: if request.auth != null; // TODO: Refine based on who can log/update MEL items
+    }
+
+    // Aircraft Block Outs: Public read for calendar, restricted write
+    match /aircraftBlockOuts/{blockOutId} {
+      allow read: if true;
+      allow write: if request.auth != null; // TODO: Refine based on who can schedule block outs
+    }
+
+    // Customers: Read by authenticated, restricted write
+    match /customers/{customerId} {
+      allow read: if request.auth != null; // TODO: Refine based on roles
+      allow write: if request.auth != null; // TODO: Refine based on roles
+    }
+
+    // Quotes: Read by authenticated, restricted write
+    match /quotes/{quoteId} {
+      allow read: if request.auth != null; // TODO: More granular (e.g., user who created it, or admins)
+      allow write: if request.auth != null; // TODO: Refine based on roles
+    }
+
+    // Trips: Public read for dashboard, restricted write
+    match /trips/{tripId} {
+      allow read: if true;
+      allow write: if request.auth != null; // TODO: Refine based on roles (dispatch, admin)
+    }
+
+    // Flight Logs: Read by authenticated, restricted write
+    match /flightLogs/{flightLogId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+
+    // Roles: Read by authenticated, restricted write
+    match /roles/{roleId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null; // TODO: Restrict to admin role ONLY
+    }
+    
+    // Company Documents: Public read, restricted write
+    match /companyDocuments/{documentId} {
+      allow read: if true;
+      allow write: if request.auth != null; // TODO: Restrict to admin or specific roles
+    }
+
+    // Aircraft Documents: Public read (metadata), restricted write
+    match /aircraftDocuments/{documentId} {
+      allow read: if true;
+      allow write: if request.auth != null; // TODO: Restrict to admin or specific roles
+    }
+    
+    // Crew Documents: Read by authenticated, restricted write
+    match /crewDocuments/{documentId} {
+      allow read: if request.auth != null; // TODO: Granular access based on crewMemberId field and user's role/ID
+      allow write: if request.auth != null; // TODO: Granular access
+    }
+
+    // Crew Members: Read by authenticated, restricted write
+    match /crewMembers/{crewMemberId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null; // TODO: Restrict to admin/HR roles
+    }
+
+    // Bulletins: Public read, restricted write
     match /bulletins/{bulletinId} {
       allow read: if true;
-      allow write: if request.auth != null; // TODO: Refine: who can create/update/delete bulletins? (e.g., admins)
+      allow write: if request.auth != null; // TODO: Restrict to admin role
     }
 
-    // Trips - Made publicly readable to fix current error, writes restricted
-    match /trips/{tripId} {
-      allow read: if true; // Authenticated users can read (was request.auth != null) - CHANGED FOR PUBLIC READ
-      allow write: if request.auth != null; // TODO: Refine - who can create/update trips?
-      // allow delete: if request.auth != null; // TODO: Refine - who can delete trips?
-    }
-
-    // Quotes - Only authenticated users can access for now
-    match /quotes/{quoteId} {
-      allow read, write: if request.auth != null; // TODO: Refine: specific user/role access for quotes
-    }
-
-    // Customers - Only authenticated users can access for now
-    match /customers/{customerId} {
-      allow read, write: if request.auth != null; // TODO: Refine: who can manage customers?
-    }
-
-    // Fleet - Only authenticated users can access for now
-    match /fleet/{aircraftId} {
-      allow read, write: if request.auth != null; // TODO: Refine: Only admins should manage fleet
-    }
-
-    // Aircraft Rates - Only authenticated users can access for now
-    match /aircraftRates/{aircraftId} {
-      allow read, write: if request.auth != null; // TODO: Refine: Only admins should manage rates
-    }
-    
-    // Aircraft Performance Data - Only authenticated users can access for now
-    match /aircraftPerformanceData/{aircraftId} {
-      allow read, write: if request.auth != null; // TODO: Refine: Who manages this?
-    }
-    
-    // Aircraft Component Times - Only authenticated users can access for now
-    match /aircraftComponentTimes/{aircraftId} {
-        allow read, write: if request.auth != null; // TODO: Refine: Usually updated by system/specific roles
-    }
-
-    // Maintenance Tasks - Only authenticated users can access for now
-    match /maintenanceTasks/{taskId} {
-        allow read, write: if request.auth != null; // TODO: Refine: Access by aircraft association or role
-    }
-    
-    // Aircraft Discrepancies - Only authenticated users can access for now
-    match /aircraftDiscrepancies/{discrepancyId} {
-        allow read, write: if request.auth != null; // TODO: Refine
-    }
-
-    // Aircraft MEL Items - Only authenticated users can access for now
-    match /aircraftMelItems/{melItemId} {
-        allow read, write: if request.auth != null; // TODO: Refine
-    }
-
-    // Flight Logs - Only authenticated users can access for now
-    match /flightLogs/{flightLogId} {
-        allow read, write: if request.auth != null; // TODO: Refine
-    }
-
-    // Company Profile - Authenticated users can read, specific roles should write
-    match /companyProfile/{profileId} {
-        allow read: if request.auth != null;
-        allow write: if request.auth != null; // TODO: Refine: Only admins or designated roles
-    }
-    
-    // Roles - Only authenticated users can read for now
-    match /roles/{roleId} {
-        allow read: if request.auth != null;
-        allow write: if request.auth != null; // TODO: Refine: Only admins should manage roles
-    }
-
-    // Notifications - Users can read/update their own notifications
+    // Notifications: Public read for now (for dashboard alerts), restricted write
     match /notifications/{notificationId} {
-      allow read, update: if request.auth != null; // TODO: If notifications have a userId field: request.auth.uid == resource.data.userId
-                                                // Or allow admins to read all
-      allow create, delete: if request.auth != null; // TODO: Who can create/delete? System or specific roles
-    }
-
-    // Aircraft Documents - Authenticated users can manage
-    match /aircraftDocuments/{documentId} {
-      allow read, write: if request.auth != null; // TODO: Refine based on roles or aircraft ownership/assignment
-    }
-
-    // Company Documents - Authenticated users can manage
-    match /companyDocuments/{documentId} {
-      allow read, write: if request.auth != null; // TODO: Refine, e.g. read all, write by role
-    }
-
-    // Crew Documents - Authenticated users can manage
-    match /crewDocuments/{documentId} {
-      allow read, write: if request.auth != null; // TODO: Refine, e.g. crew read their own, HR/Admin write
-    }
-    
-    // Crew Members - Authenticated users can manage for now
-    match /crewMembers/{crewMemberId} {
-      allow read, write: if request.auth != null; // TODO: Refine, HR/Admin write, crew read own/limited public view
-    }
-    
-    // Aircraft Block Outs - Authenticated users can manage for now
-    match /aircraftBlockOuts/{blockOutId} {
-      allow read, write: if request.auth != null; // TODO: Refine, e.g. dispatch/admin write
+      allow read: if true;
+      allow write: if request.auth != null; // TODO: Highly refine based on userId field in notification or roles
     }
   }
 }
+
+    

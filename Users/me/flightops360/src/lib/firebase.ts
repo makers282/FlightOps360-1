@@ -13,12 +13,12 @@ const firebaseConfig = {
   storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID, // Optional
+  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
 // Log the effective project ID being used for initialization
 const effectiveProjectIdFromEnv = firebaseConfig.projectId || '(Not Set)';
-console.log(`[Firebase Client Init] Attempting to initialize with Firebase config. Project ID from env: ${effectiveProjectIdFromEnv}.`);
+console.log(`[Firebase Client Init] Attempting to initialize with Firebase config. Project ID from env: ${effectiveProjectIdFromEnv}. Intended project: SkyBase.`);
 
 
 let missingVarsMessage = "";
@@ -77,3 +77,4 @@ if (app) {
 
 export { db, app, auth, storage };
 
+    
