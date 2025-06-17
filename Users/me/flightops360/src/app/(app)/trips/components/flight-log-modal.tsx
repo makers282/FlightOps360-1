@@ -49,6 +49,28 @@ const decimalToHHMM = (decimalHours: number): string => {
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 };
 
+// Static default values for the form
+const staticDefaultFormValues: FlightLogLegData = {
+  taxiOutTimeMins: 15,
+  takeOffTime: "12:00",
+  hobbsTakeOff: undefined,
+  landingTime: "13:00",
+  hobbsLanding: undefined,
+  taxiInTimeMins: 15,
+  approaches: 0,
+  approachType: undefined,
+  dayLandings: 0,
+  nightLandings: 0,
+  nightTimeDecimal: 0.0,
+  instrumentTimeDecimal: 0.0,
+  fobStartingFuel: undefined,
+  fuelPurchasedAmount: 0.0,
+  fuelPurchasedUnit: "Lbs",
+  endingFuel: undefined,
+  fuelCost: 0.0,
+  postLegApuTimeDecimal: 0.0,
+};
+
 export function FlightLogModal({
   isOpen,
   setIsOpen,
@@ -63,48 +85,10 @@ export function FlightLogModal({
 
   const form = useForm<FlightLogLegData>({
     resolver: zodResolver(FlightLogLegDataSchema),
-    defaultValues: {
-      taxiOutTimeMins: 15,
-      takeOffTime: "12:00",
-      hobbsTakeOff: undefined,
-      landingTime: "13:00",
-      hobbsLanding: undefined,
-      taxiInTimeMins: 15,
-      approaches: 0,
-      approachType: undefined,
-      dayLandings: 0,
-      nightLandings: 0,
-      nightTimeDecimal: 0.0,
-      instrumentTimeDecimal: 0.0,
-      fobStartingFuel: undefined, 
-      fuelPurchasedAmount: 0.0,
-      fuelPurchasedUnit: "Lbs",
-      endingFuel: undefined, 
-      fuelCost: 0.0,
-      postLegApuTimeDecimal: 0.0,
-      // Spread initialData last to override defaults if provided
-      ...(initialData ? {
-        ...initialData,
-        // Explicitly handle coercion or defaults for number fields from potentially stringy initialData
-        taxiOutTimeMins: initialData.taxiOutTimeMins !== undefined ? Number(initialData.taxiOutTimeMins) : 15,
-        hobbsTakeOff: initialData.hobbsTakeOff !== undefined && initialData.hobbsTakeOff !== null ? Number(initialData.hobbsTakeOff) : undefined,
-        hobbsLanding: initialData.hobbsLanding !== undefined && initialData.hobbsLanding !== null ? Number(initialData.hobbsLanding) : undefined,
-        taxiInTimeMins: initialData.taxiInTimeMins !== undefined ? Number(initialData.taxiInTimeMins) : 15,
-        approaches: initialData.approaches !== undefined ? Number(initialData.approaches) : 0,
-        dayLandings: initialData.dayLandings !== undefined ? Number(initialData.dayLandings) : 0,
-        nightLandings: initialData.nightLandings !== undefined ? Number(initialData.nightLandings) : 0,
-        nightTimeDecimal: initialData.nightTimeDecimal !== undefined ? Number(initialData.nightTimeDecimal) : 0.0,
-        instrumentTimeDecimal: initialData.instrumentTimeDecimal !== undefined ? Number(initialData.instrumentTimeDecimal) : 0.0,
-        fobStartingFuel: initialData.fobStartingFuel !== undefined && initialData.fobStartingFuel !== null ? Number(initialData.fobStartingFuel) : undefined,
-        fuelPurchasedAmount: initialData.fuelPurchasedAmount !== undefined ? Number(initialData.fuelPurchasedAmount) : 0.0,
-        endingFuel: initialData.endingFuel !== undefined && initialData.endingFuel !== null ? Number(initialData.endingFuel) : undefined,
-        fuelCost: initialData.fuelCost !== undefined ? Number(initialData.fuelCost) : 0.0,
-        postLegApuTimeDecimal: initialData.postLegApuTimeDecimal !== undefined ? Number(initialData.postLegApuTimeDecimal) : 0.0,
-      } : {}),
-    },
+    defaultValues: staticDefaultFormValues, // Use static defaults
   });
 
-  const { control, handleSubmit, watch, setValue, formState: { errors } } = form;
+  const { control, handleSubmit, watch, setValue, formState: { errors }, reset } = form;
 
   const [
     takeOffTimeStr, landingTimeStr, 
@@ -148,42 +132,41 @@ export function FlightLogModal({
     return parseFloat(((startFuel + purchased) - endFuel).toFixed(1));
   }, [fobStartingFuel, fuelPurchasedAmount, endingFuel]);
 
-
+  // Helper to safely convert to number or return undefined
+  const safeNumber = (value: any, defaultValue: number | undefined = undefined): number | undefined => {
+    if (value === undefined || value === null || String(value).trim() === '') return defaultValue;
+    const num = Number(value);
+    return isNaN(num) ? defaultValue : num;
+  };
+  
   useEffect(() => {
     if (isOpen) {
       if (initialData) {
-        form.reset({
-          taxiOutTimeMins: initialData.taxiOutTimeMins !== undefined ? Number(initialData.taxiOutTimeMins) : 15,
-          takeOffTime: initialData.takeOffTime || "12:00",
-          hobbsTakeOff: initialData.hobbsTakeOff !== undefined && initialData.hobbsTakeOff !== null ? Number(initialData.hobbsTakeOff) : undefined,
-          landingTime: initialData.landingTime || "13:00",
-          hobbsLanding: initialData.hobbsLanding !== undefined && initialData.hobbsLanding !== null ? Number(initialData.hobbsLanding) : undefined,
-          taxiInTimeMins: initialData.taxiInTimeMins !== undefined ? Number(initialData.taxiInTimeMins) : 15,
-          approaches: initialData.approaches !== undefined ? Number(initialData.approaches) : 0,
-          approachType: initialData.approachType || undefined,
-          dayLandings: initialData.dayLandings !== undefined ? Number(initialData.dayLandings) : 0,
-          nightLandings: initialData.nightLandings !== undefined ? Number(initialData.nightLandings) : 0,
-          nightTimeDecimal: initialData.nightTimeDecimal !== undefined ? Number(initialData.nightTimeDecimal) : 0.0,
-          instrumentTimeDecimal: initialData.instrumentTimeDecimal !== undefined ? Number(initialData.instrumentTimeDecimal) : 0.0,
-          fobStartingFuel: initialData.fobStartingFuel !== undefined && initialData.fobStartingFuel !== null ? Number(initialData.fobStartingFuel) : undefined,
-          fuelPurchasedAmount: initialData.fuelPurchasedAmount !== undefined ? Number(initialData.fuelPurchasedAmount) : 0.0,
-          fuelPurchasedUnit: initialData.fuelPurchasedUnit || "Lbs",
-          endingFuel: initialData.endingFuel !== undefined && initialData.endingFuel !== null ? Number(initialData.endingFuel) : undefined,
-          fuelCost: initialData.fuelCost !== undefined ? Number(initialData.fuelCost) : 0.0,
-          postLegApuTimeDecimal: initialData.postLegApuTimeDecimal !== undefined ? Number(initialData.postLegApuTimeDecimal) : 0.0,
+        reset({
+          taxiOutTimeMins: safeNumber(initialData.taxiOutTimeMins, staticDefaultFormValues.taxiOutTimeMins),
+          takeOffTime: initialData.takeOffTime || staticDefaultFormValues.takeOffTime,
+          hobbsTakeOff: safeNumber(initialData.hobbsTakeOff, staticDefaultFormValues.hobbsTakeOff),
+          landingTime: initialData.landingTime || staticDefaultFormValues.landingTime,
+          hobbsLanding: safeNumber(initialData.hobbsLanding, staticDefaultFormValues.hobbsLanding),
+          taxiInTimeMins: safeNumber(initialData.taxiInTimeMins, staticDefaultFormValues.taxiInTimeMins),
+          approaches: safeNumber(initialData.approaches, staticDefaultFormValues.approaches),
+          approachType: initialData.approachType || staticDefaultFormValues.approachType,
+          dayLandings: safeNumber(initialData.dayLandings, staticDefaultFormValues.dayLandings),
+          nightLandings: safeNumber(initialData.nightLandings, staticDefaultFormValues.nightLandings),
+          nightTimeDecimal: safeNumber(initialData.nightTimeDecimal, staticDefaultFormValues.nightTimeDecimal),
+          instrumentTimeDecimal: safeNumber(initialData.instrumentTimeDecimal, staticDefaultFormValues.instrumentTimeDecimal),
+          fobStartingFuel: safeNumber(initialData.fobStartingFuel, staticDefaultFormValues.fobStartingFuel),
+          fuelPurchasedAmount: safeNumber(initialData.fuelPurchasedAmount, staticDefaultFormValues.fuelPurchasedAmount),
+          fuelPurchasedUnit: initialData.fuelPurchasedUnit || staticDefaultFormValues.fuelPurchasedUnit,
+          endingFuel: safeNumber(initialData.endingFuel, staticDefaultFormValues.endingFuel),
+          fuelCost: safeNumber(initialData.fuelCost, staticDefaultFormValues.fuelCost),
+          postLegApuTimeDecimal: safeNumber(initialData.postLegApuTimeDecimal, staticDefaultFormValues.postLegApuTimeDecimal),
         });
       } else {
-        form.reset({ // Reset to defaults for "add new"
-            taxiOutTimeMins: 15, takeOffTime: "12:00", hobbsTakeOff: undefined, landingTime: "13:00",
-            hobbsLanding: undefined, taxiInTimeMins: 15, approaches: 0, approachType: undefined,
-            dayLandings: 0, nightLandings: 0, nightTimeDecimal: 0.0, instrumentTimeDecimal: 0.0,
-            fobStartingFuel: undefined, fuelPurchasedAmount: 0.0, fuelPurchasedUnit: "Lbs",
-            endingFuel: undefined, fuelCost: 0.0, postLegApuTimeDecimal: 0.0,
-        });
+        reset(staticDefaultFormValues); // Reset to static defaults for "add new"
       }
     }
-  }, [isOpen, initialData, form]);
-
+  }, [isOpen, initialData, reset]);
 
   const onSubmitHandler: SubmitHandler<FlightLogLegData> = async (data) => {
     await onSave(data);
@@ -270,3 +253,4 @@ export function FlightLogModal({
   );
 }
 
+    
