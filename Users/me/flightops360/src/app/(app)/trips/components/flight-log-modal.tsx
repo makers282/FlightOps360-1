@@ -31,15 +31,9 @@ interface FlightLogModalProps {
   legOrigin: string;
   legDestination: string;
   initialData?: Partial<FlightLogLegData> | null;
-  onSave: (data: FlightLogLegData) => Promise<void>; 
+  onSave: (data: FlightLogLegData) => Promise<void>;
   isSaving: boolean;
 }
-
-const timeToDecimal = (timeStr: string): number => {
-  if (!timeStr || !timeStr.includes(':')) return 0;
-  const [hours, minutes] = timeStr.split(':').map(Number);
-  return hours + minutes / 60;
-};
 
 const decimalToHHMM = (decimalHours: number): string => {
   if (isNaN(decimalHours) || decimalHours < 0) return "00:00";
@@ -49,32 +43,32 @@ const decimalToHHMM = (decimalHours: number): string => {
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 };
 
-// Static default values for the form
-const staticDefaultFormValues: FlightLogLegData = {
+// Define default values for the form, ensuring numeric fields are numbers or null.
+const refinedStaticDefaultFormValues: FlightLogLegData = {
   taxiOutTimeMins: 15,
   takeOffTime: "12:00",
-  hobbsTakeOff: undefined,
+  hobbsTakeOff: null, // Zod: optional().nullable()
   landingTime: "13:00",
-  hobbsLanding: undefined,
+  hobbsLanding: null, // Zod: optional().nullable()
   taxiInTimeMins: 15,
-  approaches: 0,
-  approachType: undefined,
-  dayLandings: 0,
-  nightLandings: 0,
-  nightTimeDecimal: 0.0,
-  instrumentTimeDecimal: 0.0,
-  fobStartingFuel: undefined,
-  fuelPurchasedAmount: 0.0,
-  fuelPurchasedUnit: "Lbs",
-  endingFuel: undefined,
-  fuelCost: 0.0,
-  postLegApuTimeDecimal: 0.0,
+  approaches: 0,       // Zod: default(0)
+  approachType: undefined, // Zod: optional()
+  dayLandings: 0,      // Zod: default(0)
+  nightLandings: 0,    // Zod: default(0)
+  nightTimeDecimal: 0.0, // Zod: optional().default(0.0)
+  instrumentTimeDecimal: 0.0, // Zod: optional().default(0.0)
+  fobStartingFuel: 0, // Zod: required number
+  fuelPurchasedAmount: 0.0, // Zod: optional().default(0.0)
+  fuelPurchasedUnit: "Lbs", // Zod: default("Lbs")
+  endingFuel: 0, // Zod: required number
+  fuelCost: 0.0, // Zod: optional().default(0.0)
+  postLegApuTimeDecimal: 0.0, // Zod: optional().default(0.0)
 };
 
 export function FlightLogModal({
   isOpen,
   setIsOpen,
-  tripId, 
+  tripId,
   legIndex,
   legOrigin,
   legDestination,
@@ -85,18 +79,18 @@ export function FlightLogModal({
 
   const form = useForm<FlightLogLegData>({
     resolver: zodResolver(FlightLogLegDataSchema),
-    defaultValues: staticDefaultFormValues, // Use static defaults
+    defaultValues: refinedStaticDefaultFormValues,
   });
 
   const { control, handleSubmit, watch, setValue, formState: { errors }, reset } = form;
 
   const [
-    takeOffTimeStr, landingTimeStr, 
-    hobbsTakeOff, hobbsLanding, 
+    takeOffTimeStr, landingTimeStr,
+    hobbsTakeOff, hobbsLanding,
     taxiOutTimeMins, taxiInTimeMins,
     fobStartingFuel, fuelPurchasedAmount, endingFuel
   ] = watch([
-    "takeOffTime", "landingTime", 
+    "takeOffTime", "landingTime",
     "hobbsTakeOff", "hobbsLanding",
     "taxiOutTimeMins", "taxiInTimeMins",
     "fobStartingFuel", "fuelPurchasedAmount", "endingFuel"
@@ -109,7 +103,7 @@ export function FlightLogModal({
         }
         const takeOff = parseTime(takeOffTimeStr, "HH:mm", new Date());
         const landing = parseTime(landingTimeStr, "HH:mm", new Date());
-        if (takeOff > landing) landing.setDate(landing.getDate() + 1); 
+        if (takeOff > landing) landing.setDate(landing.getDate() + 1);
         const diffMins = differenceInMinutes(landing, takeOff);
         return parseFloat((diffMins / 60).toFixed(1));
     } catch (e) {
@@ -132,52 +126,68 @@ export function FlightLogModal({
     return parseFloat(((startFuel + purchased) - endFuel).toFixed(1));
   }, [fobStartingFuel, fuelPurchasedAmount, endingFuel]);
 
-  // Helper to safely convert to number or return undefined
-  const safeNumber = (value: any, defaultValue: number | undefined = undefined): number | undefined => {
-    if (value === undefined || value === null || String(value).trim() === '') return defaultValue;
-    const num = Number(value);
-    return isNaN(num) ? defaultValue : num;
+  // Helper to safely convert to number or return null, respecting schema defaults for reset
+  const safeResetNumberField = (
+    fieldName: keyof FlightLogLegData,
+    valueFromInitialData: any
+  ): number | null => {
+    const schemaDefault = refinedStaticDefaultFormValues[fieldName];
+    if (valueFromInitialData === undefined || valueFromInitialData === null || String(valueFromInitialData).trim() === '') {
+      return schemaDefault !== undefined ? (schemaDefault as number | null) : null;
+    }
+    const num = Number(valueFromInitialData);
+    return isNaN(num) ? (schemaDefault !== undefined ? (schemaDefault as number | null) : null) : num;
   };
   
   useEffect(() => {
     if (isOpen) {
       if (initialData) {
-        reset({
-          taxiOutTimeMins: safeNumber(initialData.taxiOutTimeMins, staticDefaultFormValues.taxiOutTimeMins),
-          takeOffTime: initialData.takeOffTime || staticDefaultFormValues.takeOffTime,
-          hobbsTakeOff: safeNumber(initialData.hobbsTakeOff, staticDefaultFormValues.hobbsTakeOff),
-          landingTime: initialData.landingTime || staticDefaultFormValues.landingTime,
-          hobbsLanding: safeNumber(initialData.hobbsLanding, staticDefaultFormValues.hobbsLanding),
-          taxiInTimeMins: safeNumber(initialData.taxiInTimeMins, staticDefaultFormValues.taxiInTimeMins),
-          approaches: safeNumber(initialData.approaches, staticDefaultFormValues.approaches),
-          approachType: initialData.approachType || staticDefaultFormValues.approachType,
-          dayLandings: safeNumber(initialData.dayLandings, staticDefaultFormValues.dayLandings),
-          nightLandings: safeNumber(initialData.nightLandings, staticDefaultFormValues.nightLandings),
-          nightTimeDecimal: safeNumber(initialData.nightTimeDecimal, staticDefaultFormValues.nightTimeDecimal),
-          instrumentTimeDecimal: safeNumber(initialData.instrumentTimeDecimal, staticDefaultFormValues.instrumentTimeDecimal),
-          fobStartingFuel: safeNumber(initialData.fobStartingFuel, staticDefaultFormValues.fobStartingFuel),
-          fuelPurchasedAmount: safeNumber(initialData.fuelPurchasedAmount, staticDefaultFormValues.fuelPurchasedAmount),
-          fuelPurchasedUnit: initialData.fuelPurchasedUnit || staticDefaultFormValues.fuelPurchasedUnit,
-          endingFuel: safeNumber(initialData.endingFuel, staticDefaultFormValues.endingFuel),
-          fuelCost: safeNumber(initialData.fuelCost, staticDefaultFormValues.fuelCost),
-          postLegApuTimeDecimal: safeNumber(initialData.postLegApuTimeDecimal, staticDefaultFormValues.postLegApuTimeDecimal),
+        form.reset({
+          taxiOutTimeMins: safeResetNumberField("taxiOutTimeMins", initialData.taxiOutTimeMins),
+          takeOffTime: initialData.takeOffTime || refinedStaticDefaultFormValues.takeOffTime,
+          hobbsTakeOff: safeResetNumberField("hobbsTakeOff", initialData.hobbsTakeOff),
+          landingTime: initialData.landingTime || refinedStaticDefaultFormValues.landingTime,
+          hobbsLanding: safeResetNumberField("hobbsLanding", initialData.hobbsLanding),
+          taxiInTimeMins: safeResetNumberField("taxiInTimeMins", initialData.taxiInTimeMins),
+          approaches: safeResetNumberField("approaches", initialData.approaches),
+          approachType: initialData.approachType || refinedStaticDefaultFormValues.approachType,
+          dayLandings: safeResetNumberField("dayLandings", initialData.dayLandings),
+          nightLandings: safeResetNumberField("nightLandings", initialData.nightLandings),
+          nightTimeDecimal: safeResetNumberField("nightTimeDecimal", initialData.nightTimeDecimal),
+          instrumentTimeDecimal: safeResetNumberField("instrumentTimeDecimal", initialData.instrumentTimeDecimal),
+          fobStartingFuel: safeResetNumberField("fobStartingFuel", initialData.fobStartingFuel),
+          fuelPurchasedAmount: safeResetNumberField("fuelPurchasedAmount", initialData.fuelPurchasedAmount),
+          fuelPurchasedUnit: initialData.fuelPurchasedUnit || refinedStaticDefaultFormValues.fuelPurchasedUnit,
+          endingFuel: safeResetNumberField("endingFuel", initialData.endingFuel),
+          fuelCost: safeResetNumberField("fuelCost", initialData.fuelCost),
+          postLegApuTimeDecimal: safeResetNumberField("postLegApuTimeDecimal", initialData.postLegApuTimeDecimal),
         });
       } else {
-        reset(staticDefaultFormValues); // Reset to static defaults for "add new"
+        form.reset(refinedStaticDefaultFormValues);
       }
     }
-  }, [isOpen, initialData, reset]);
+  }, [isOpen, initialData, form.reset]); // form.reset is stable, no need to list individual fields from refinedStaticDefaultFormValues
 
   const onSubmitHandler: SubmitHandler<FlightLogLegData> = async (data) => {
-    await onSave(data);
+    // Ensure data sent to onSave has numbers where expected, not nulls if Zod expects number
+    const processedData: FlightLogLegData = {
+        ...data,
+        hobbsTakeOff: data.hobbsTakeOff === null ? undefined : data.hobbsTakeOff, // Zod optional() means undefined
+        hobbsLanding: data.hobbsLanding === null ? undefined : data.hobbsLanding, // Zod optional() means undefined
+        // For required numbers that might have been `null` in form state from clearing, Zod `coerce` will handle it.
+        // Or ensure they are numbers before calling onSave if coerce is not sufficient for all cases.
+        fobStartingFuel: data.fobStartingFuel === null ? 0 : data.fobStartingFuel,
+        endingFuel: data.endingFuel === null ? 0 : data.endingFuel,
+    };
+    await onSave(processedData);
   };
   
   const handleNumberInputChange = (field: any, value: string, isInt = false) => {
-    if (value === '') {
-      field.onChange(undefined);
+    if (value.trim() === '') {
+      field.onChange(null); // Pass null to RHF; Zod coerce will handle to 0 if it's a required number.
     } else {
       const num = isInt ? parseInt(value, 10) : parseFloat(value);
-      field.onChange(isNaN(num) ? undefined : num);
+      field.onChange(isNaN(num) ? null : num); // Pass null if NaN, RHF can then use Zod default or it's caught by validation
     }
   };
 
@@ -252,5 +262,3 @@ export function FlightLogModal({
     </Dialog>
   );
 }
-
-    
