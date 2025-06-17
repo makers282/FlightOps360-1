@@ -2,10 +2,6 @@
 import { LoginForm } from './components/login-form';
 import { Plane } from 'lucide-react'; 
 import Image from 'next/image';
-// Removed Link and Button imports as they are no longer used for bypass
-// import Link from 'next/link';
-// import { Button } from '@/components/ui/button';
-// import { LayoutDashboard } from 'lucide-react'; // No longer needed
 
 export default function LoginPage() {
   return (
@@ -23,7 +19,7 @@ export default function LoginPage() {
           </p>
         </div>
         <LoginForm />
-        {/* Removed the bypass login button section */}
+        {/* The bypass login button section has been removed */}
         <div className="relative mt-8 hidden sm:block">
            <Image
             src="https://placehold.co/600x400.png"
@@ -39,4 +35,3 @@ export default function LoginPage() {
     </div>
   );
 }
-
