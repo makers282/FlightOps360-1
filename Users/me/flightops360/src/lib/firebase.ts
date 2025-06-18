@@ -1,9 +1,10 @@
 
 // src/lib/firebase.ts
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
-import { getAuth, connectAuthEmulator } from 'firebase/auth';
-import { getStorage, connectStorageEmulator } from 'firebase/storage';
+// Remove enableMultiTabIndexedDbPersistence as it's not commonly needed unless specific issues arise
+import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore'; // Added connectFirestoreEmulator
+import { getAuth, connectAuthEmulator } from 'firebase/auth'; // Added connectAuthEmulator
+import { getStorage, connectStorageEmulator } from 'firebase/storage'; // Added connectStorageEmulator
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -15,6 +16,7 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
+// Log the effective project ID being used for initialization
 console.log(`[Firebase Client Init] Attempting to initialize with Firebase config. Project ID from env: ${firebaseConfig.projectId}. Intended project: SkyBase.`);
 
 let missingVarsMessage = "";
@@ -27,6 +29,7 @@ const requiredEnvVarKeys: (keyof typeof firebaseConfig)[] = [
   'appId',
 ];
 
+// Check if any of the required env vars are missing or are still the placeholder "your-..."
 const missingOrPlaceholderVars = requiredEnvVarKeys.filter(key => {
   const value = firebaseConfig[key];
   return !value || (typeof value === 'string' && value.startsWith('your-'));
@@ -45,6 +48,7 @@ let app;
 if (!getApps().length) {
   if (missingOrPlaceholderVars.length > 0) {
     console.error("[Firebase Client Init] Halting Firebase initialization due to missing or placeholder env vars. Firebase services will be unavailable.");
+    // app remains undefined, services will be null
   } else {
     console.log("[Firebase Client Init] Initializing new Firebase app with live config for project:", firebaseConfig.projectId);
     app = initializeApp(firebaseConfig);
@@ -54,6 +58,7 @@ if (!getApps().length) {
   console.log("[Firebase Client Init] Using existing Firebase app. Configured for project:", app.options.projectId);
 }
 
+// Initialize Firebase services if app was successfully initialized
 const db = app ? getFirestore(app) : null;
 const auth = app ? getAuth(app) : null;
 const storage = app ? getStorage(app) : null;
