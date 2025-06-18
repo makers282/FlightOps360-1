@@ -1,6 +1,6 @@
 
 import { LoginForm } from './components/login-form';
-import { Plane } from 'lucide-react'; // LayoutDashboard, Link, Button imports specific to bypass removed
+import { Plane } from 'lucide-react'; 
 import Image from 'next/image';
 
 export default function LoginPage() {
