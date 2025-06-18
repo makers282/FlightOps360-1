@@ -4,6 +4,8 @@ import { Plane } from 'lucide-react';
 import Image from 'next/image';
 
 export default function LoginPage() {
+  // LOGIN PAGE v2 - Confirmed update
+  console.log('LOGIN PAGE v2 - Confirmed update');
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-sky-100 via-indigo-50 to-purple-100 p-4">
       <div className="w-full max-w-md space-y-8">
