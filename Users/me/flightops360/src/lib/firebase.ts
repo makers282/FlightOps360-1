@@ -1,9 +1,8 @@
-
 // src/lib/firebase.ts
 import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
-import { getAuth, onAuthStateChanged } from 'firebase/auth'; // Added onAuthStateChanged
-import { getStorage } from 'firebase/storage';
+import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
+import { getAuth, onAuthStateChanged, connectAuthEmulator } from 'firebase/auth';
+import { getStorage, connectStorageEmulator } from 'firebase/storage';
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -66,8 +65,37 @@ if (!getApps().length) {
 }
 
 const db = app ? getFirestore(app) : null;
-const authInstance = app ? getAuth(app) : null; // Renamed to authInstance to avoid conflict
+const authInstance = app ? getAuth(app) : null;
 const storage = app ? getStorage(app) : null;
+
+// Connect to emulators if in development and app was initialized
+if (app && process.env.NODE_ENV === 'development') {
+  console.log("[Firebase Client Init] Development mode detected. Attempting to connect to emulators.");
+  if (db) {
+    try {
+      connectFirestoreEmulator(db, '127.0.0.1', 8081); // Port from firebase.json
+      console.log("[Firebase Client Init] Connected to Firestore Emulator on port 8081.");
+    } catch (e) {
+      console.warn("[Firebase Client Init] Error connecting to Firestore Emulator:", e);
+    }
+  }
+  if (authInstance) {
+    try {
+      connectAuthEmulator(authInstance, 'http://127.0.0.1:9100', { disableWarnings: true }); // Port from firebase.json
+      console.log("[Firebase Client Init] Connected to Auth Emulator on port 9100.");
+    } catch (e) {
+      console.warn("[Firebase Client Init] Error connecting to Auth Emulator:", e);
+    }
+  }
+  if (storage) {
+    try {
+      connectStorageEmulator(storage, '127.0.0.1', 9200); // Port from firebase.json
+      console.log("[Firebase Client Init] Connected to Storage Emulator on port 9200.");
+    } catch (e) {
+      console.warn("[Firebase Client Init] Error connecting to Storage Emulator:", e);
+    }
+  }
+}
 
 if (app) {
   console.log(`[Firebase Client Init DEBUG] Firebase app object IS ${app ? 'defined' : 'UNDEFINED'}.`);
@@ -87,4 +115,4 @@ if (app) {
   console.error("[Firebase Client Init DEBUG] Firebase app object is UNDEFINED. Services (db, auth, storage) are NOT initialized.");
 }
 
-export { db, app, authInstance as auth, storage }; // Exporting authInstance as auth
+export { db, app, authInstance as auth, storage };
