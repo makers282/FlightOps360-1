@@ -1,8 +1,9 @@
+
 // src/lib/firebase.ts
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
-import { getAuth } from 'firebase/auth';
-import { getStorage } from 'firebase/storage';
+import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
+import { getAuth, connectAuthEmulator } from 'firebase/auth';
+import { getStorage, connectStorageEmulator } from 'firebase/storage';
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -57,6 +58,35 @@ const db = app ? getFirestore(app) : null;
 const auth = app ? getAuth(app) : null;
 const storage = app ? getStorage(app) : null;
 
+// Connect to emulators if in development and app was initialized
+if (app && process.env.NODE_ENV === 'development') {
+  console.log("[Firebase Client Init] Development mode detected. Attempting to connect to emulators.");
+  if (db) {
+    try {
+      connectFirestoreEmulator(db, '127.0.0.1', 8081); // Port from firebase.json
+      console.log("[Firebase Client Init] Connected to Firestore Emulator on port 8081.");
+    } catch (e) {
+      console.warn("[Firebase Client Init] Error connecting to Firestore Emulator:", e);
+    }
+  }
+  if (auth) {
+    try {
+      connectAuthEmulator(auth, 'http://127.0.0.1:9100', { disableWarnings: true }); // Port from firebase.json
+      console.log("[Firebase Client Init] Connected to Auth Emulator on port 9100.");
+    } catch (e) {
+      console.warn("[Firebase Client Init] Error connecting to Auth Emulator:", e);
+    }
+  }
+  if (storage) {
+    try {
+      connectStorageEmulator(storage, '127.0.0.1', 9200); // Port from firebase.json
+      console.log("[Firebase Client Init] Connected to Storage Emulator on port 9200.");
+    } catch (e) {
+      console.warn("[Firebase Client Init] Error connecting to Storage Emulator:", e);
+    }
+  }
+}
+
 if (app) {
   console.log(`[Firebase Client Init] Firebase app configured for project: ${firebaseConfig.projectId}. Firestore: ${!!db}, Auth: ${!!auth}, Storage: ${!!storage}`);
 } else {
@@ -64,5 +94,3 @@ if (app) {
 }
 
 export { db, app, auth, storage };
-
-    
