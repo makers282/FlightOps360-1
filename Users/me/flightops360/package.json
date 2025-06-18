@@ -12,7 +12,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "emulators:start": "firebase emulators:start --only auth,firestore,storage --project=skybase-nguee"
+    "emulators:start": "firebase emulators:start --only auth,firestore,storage --project=SkyBase"
   },
   "dependencies": {
     "@fullcalendar/core": "^6.1.15",
