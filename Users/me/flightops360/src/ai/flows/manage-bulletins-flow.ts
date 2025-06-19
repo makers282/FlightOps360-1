@@ -9,7 +9,7 @@
  */
 
 import { ai } from '@/ai/genkit';
-import { adminDb as db } from '@/lib/firebase-admin'; // USE ADMIN DB
+import { adminDb as db } from '@/lib/firebase-admin'; // UPDATED: Use adminDb from firebase-admin
 import { collection, doc, setDoc, getDoc, getDocs, serverTimestamp, Timestamp, deleteDoc, query, orderBy } from 'firebase/firestore';
 import { z } from 'zod';
 import type { Bulletin, SaveBulletinInput } from '@/ai/schemas/bulletin-schemas';
