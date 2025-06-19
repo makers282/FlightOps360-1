@@ -1,9 +1,9 @@
-
 // src/lib/firebase-admin.ts
 import { initializeApp, getApps, App, cert, ServiceAccount } from 'firebase-admin/app';
 import { getFirestore, Firestore } from 'firebase-admin/firestore';
 import { getStorage, Storage } from 'firebase-admin/storage';
-import serviceAccountCredentials from '../../serviceAccountKey.json';
+// Import the raw JSON. The 'cert' function will handle its structure.
+import serviceAccountCredentialsJson from '../../serviceAccountKey.json';
 
 let adminApp: App | undefined = undefined;
 let adminDb: Firestore | null = null;
@@ -12,25 +12,33 @@ let adminStorage: Storage | null = null;
 console.log('[firebase-admin] MODULE LOAD: Starting firebase-admin.ts execution.');
 
 try {
-  const serviceAccount = serviceAccountCredentials as ServiceAccount;
+  // Use the raw JSON for checking project_id before casting or passing to cert()
+  const rawServiceAccount = serviceAccountCredentialsJson as any;
 
-  if (!serviceAccount?.project_id) {
-    console.error('[firebase-admin] INIT ERROR: Service account credentials (serviceAccountKey.json) are missing or malformed (missing project_id). Cannot initialize Admin SDK.');
+  if (!rawServiceAccount?.project_id) {
+    console.error('[firebase-admin] INIT ERROR: Service account JSON (serviceAccountKey.json) is missing or malformed (missing project_id property). Cannot initialize Admin SDK.');
   } else {
+    // Cast to ServiceAccount type for passing to cert()
+    const serviceAccount = serviceAccountCredentialsJson as ServiceAccount;
+
     if (getApps().length === 0) {
-      console.log(`[firebase-admin] INIT ATTEMPT: No existing admin apps. Initializing new one for project: ${serviceAccount.project_id}.`);
-      if (serviceAccount.project_id !== 'skybase-nguee') { // Explicit check
-          console.warn(`[firebase-admin] WARNING: Service account project_id ('${serviceAccount.project_id}') does NOT match expected 'skybase-nguee'. This is likely the issue.`);
+      console.log(`[firebase-admin] INIT ATTEMPT: No existing admin apps. Initializing new one for project: ${rawServiceAccount.project_id}.`);
+      // Log the projectId that the typed ServiceAccount object *would* have, for TS conformity.
+      // The cert() function will correctly process the underlying snake_case from the JSON.
+      if (serviceAccount.projectId && serviceAccount.projectId !== 'skybase-nguee') {
+         console.warn(`[firebase-admin] WARNING: ServiceAccount type's 'projectId' ('${serviceAccount.projectId}') does NOT match expected 'skybase-nguee' from raw JSON's 'project_id' ('${rawServiceAccount.project_id}'). This is usually fine as cert() handles the JSON.`);
+      } else if (rawServiceAccount.project_id !== 'skybase-nguee') {
+         console.warn(`[firebase-admin] WARNING: Raw JSON project_id ('${rawServiceAccount.project_id}') does NOT match expected 'skybase-nguee'. This is likely the issue if initialization fails related to project ID.`);
       }
+
       try {
         adminApp = initializeApp({
-          credential: cert(serviceAccount),
+          credential: cert(serviceAccount), // Pass the typed serviceAccount here
           storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
         });
         console.log(`[firebase-admin] INIT SUCCESS: Firebase Admin SDK initialized for project: ${adminApp.options?.projectId}.`);
       } catch (initError: any) {
-        console.error(`[firebase-admin] INIT FAILURE: CRITICAL ERROR initializing Firebase Admin SDK for project ${serviceAccount.project_id}. Error: ${initError.message}`, initError);
-        adminApp = undefined; // Ensure adminApp is undefined on failure
+        console.error(`[firebase-admin] INIT FAILURE: CRITICAL ERROR initializing Firebase Admin SDK for project ${rawServiceAccount.project_id}. Error: ${initError.message}`, initError);
       }
     } else {
       adminApp = getApps().find(app => app.name === '[DEFAULT]') || getApps()[0];
@@ -53,7 +61,7 @@ try {
         }
       } catch (serviceError: any) {
         console.error(`[firebase-admin] SERVICE INIT ERROR: Error getting Firestore/Storage service from adminApp. Error: ${serviceError.message}`, serviceError);
-        adminDb = null; 
+        adminDb = null;
         adminStorage = null;
       }
     } else {
