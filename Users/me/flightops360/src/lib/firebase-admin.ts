@@ -1,3 +1,4 @@
+
 // src/lib/firebase-admin.ts
 import { initializeApp, getApps, App, cert, ServiceAccount } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
@@ -27,15 +28,16 @@ if (!serviceAccount?.project_id) {
     }
   } catch (error: any) {
     console.error(`[firebase-admin] CRITICAL ERROR initializing Firebase Admin SDK for project ${serviceAccount.project_id}:`, error.message);
+    // adminApp will remain undefined, so adminDb and adminStorage will remain null
   }
 } else {
   adminApp = getApps()[0];
   console.log(`[firebase-admin] Firebase Admin SDK already initialized for project: ${adminApp.options?.projectId || 'unknown'}.`);
   // Ensure db and storage are assigned if app already exists
-  if (adminApp) {
+  if (adminApp) { // Check adminApp before using
     adminDb = getFirestore(adminApp);
-    if (process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET) {
-      adminStorage = getStorage(adminApp);
+    if (process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET) { // Check env var again
+        adminStorage = getStorage(adminApp);
     }
   }
 }

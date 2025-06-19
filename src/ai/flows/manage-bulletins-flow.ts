@@ -9,7 +9,7 @@
  */
 
 import { ai } from '@/ai/genkit';
-import { db } from '@/lib/firebase';
+import { adminDb as db } from '@/lib/firebase-admin'; // UPDATED: Use adminDb from firebase-admin
 import { collection, doc, setDoc, getDoc, getDocs, serverTimestamp, Timestamp, deleteDoc, query, orderBy } from 'firebase/firestore';
 import { z } from 'zod';
 import type { Bulletin, SaveBulletinInput } from '@/ai/schemas/bulletin-schemas';
@@ -20,7 +20,7 @@ import {
     DeleteBulletinInputSchema,
     DeleteBulletinOutputSchema,
 } from '@/ai/schemas/bulletin-schemas';
-import { createNotification } from '@/ai/flows/manage-notifications-flow'; // Added import
+import { createNotification } from '@/ai/flows/manage-notifications-flow';
 
 const BULLETINS_COLLECTION = 'bulletins';
 
@@ -90,7 +90,6 @@ const saveBulletinFlow = ai.defineFlow(
           console.log(`Notification created for bulletin: ${savedData.title}`);
         } catch (notificationError) {
           console.error('Failed to create notification for bulletin:', notificationError);
-          // Optionally, rethrow or handle this error more gracefully if notification creation is critical
         }
       }
 
@@ -116,7 +115,6 @@ const fetchBulletinsFlow = ai.defineFlow(
   async () => {
     try {
       const bulletinsCollectionRef = collection(db, BULLETINS_COLLECTION);
-      // Order by publishedAt descending to get latest bulletins first
       const q = query(bulletinsCollectionRef, orderBy("publishedAt", "desc"));
       const snapshot = await getDocs(q);
       const bulletinsList = snapshot.docs.map(docSnapshot => {
@@ -154,4 +152,3 @@ const deleteBulletinFlow = ai.defineFlow(
     }
   }
 );
-
