@@ -1,4 +1,3 @@
-
 // src/lib/firebase-admin.ts
 import { initializeApp, getApps, App, cert, ServiceAccount } from 'firebase-admin/app';
 import { getFirestore, Firestore } from 'firebase-admin/firestore'; // Explicitly import Firestore type
@@ -58,6 +57,7 @@ try {
     }
   }
 } catch (e: any) {
+    // This catch block would handle errors from importing serviceAccountCredentials if the file doesn't exist or is malformed JSON
     console.error('[firebase-admin] TOP-LEVEL ERROR: Error during firebase-admin.ts execution (likely serviceAccountKey.json import issue):', e.message, e);
 }
 
