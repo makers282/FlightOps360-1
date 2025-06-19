@@ -3,8 +3,7 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     // Allow read/write access to all users if they are authenticated
-    // This rule is generally used for development with emulators.
-    // For production, implement more granular security rules.
+    // WARNING: This rule is insecure for production environments.
     match /{document=**} {
       allow read, write: if request.auth != null;
     }
