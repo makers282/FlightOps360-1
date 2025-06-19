@@ -1,16 +1,16 @@
 
 'use server';
 /**
- * @fileOverview Genkit flows for managing company bulletins using Firestore via the Admin SDK.
+ * @fileOverview Genkit flows for managing company bulletins using Firestore.
  *
- * - saveBulletin – Adds or updates a bulletin.
- * - fetchBulletins – Pulls all bulletins, sorted newest first.
- * - deleteBulletin – Removes a bulletin.
+ * - saveBulletin - Saves (adds or updates) a bulletin.
+ * - fetchBulletins - Fetches all bulletins, ordered by published date.
+ * - deleteBulletin - Deletes a bulletin.
  */
 
 import { ai } from '@/ai/genkit';
-import { adminDb as db } from '@/lib/firebase-admin'; // UPDATED: Use adminDb from firebase-admin
-import { collection, doc, setDoc, getDoc, getDocs, serverTimestamp, Timestamp, deleteDoc, query, orderBy } from 'firebase/firestore'; // Firestore functions
+import { adminDb as db } from '@/lib/firebase-admin'; // Ensure using adminDb
+import { collection, doc, setDoc, getDoc, getDocs, serverTimestamp, Timestamp, deleteDoc, query, orderBy } from 'firebase/firestore';
 import { z } from 'zod';
 import type { Bulletin, SaveBulletinInput } from '@/ai/schemas/bulletin-schemas';
 import {
@@ -33,7 +33,10 @@ export async function saveBulletin(input: SaveBulletinInput): Promise<Bulletin> 
 }
 
 export async function fetchBulletins(): Promise<Bulletin[]> {
-  if (!db) throw new Error("Firestore admin instance (db) is not initialized in fetchBulletins.");
+  if (!db) { // Check if db is null/undefined
+    console.error("CRITICAL: Firestore admin instance (db) is not initialized in fetchBulletins. This means firebase-admin.ts likely failed to initialize.");
+    throw new Error("Firestore admin instance (db) is not initialized in fetchBulletins.");
+  }
   return fetchBulletinsFlow();
 }
 
@@ -54,7 +57,10 @@ const saveBulletinFlow = ai.defineFlow(
     outputSchema: SaveBulletinOutputSchema,
   },
   async ({ firestoreDocId, bulletinData }) => {
-    if (!db) throw new Error("Firestore admin instance (db) is not initialized in saveBulletinFlow.");
+    if (!db) {
+        console.error("CRITICAL: Firestore admin instance (db) is not initialized in saveBulletinFlow.");
+        throw new Error("Firestore admin instance (db) is not initialized in saveBulletinFlow.");
+    }
     const bulletinDocRef = doc(db, BULLETINS_COLLECTION, firestoreDocId);
     try {
       const docSnap = await getDoc(bulletinDocRef);
@@ -114,7 +120,10 @@ const fetchBulletinsFlow = ai.defineFlow(
     outputSchema: FetchBulletinsOutputSchema,
   },
   async () => {
-    if (!db) throw new Error("Firestore admin instance (db) is not initialized in fetchBulletinsFlow.");
+    if (!db) { // Check if db is null/undefined
+        console.error("CRITICAL: Firestore admin instance (db) is not initialized in fetchBulletinsFlow. This means firebase-admin.ts likely failed to initialize.");
+        throw new Error("Firestore admin instance (db) is not initialized in fetchBulletinsFlow.");
+    }
     try {
       const bulletinsCollectionRef = collection(db, BULLETINS_COLLECTION);
       const q = query(bulletinsCollectionRef, orderBy("publishedAt", "desc"));
@@ -144,7 +153,10 @@ const deleteBulletinFlow = ai.defineFlow(
     outputSchema: DeleteBulletinOutputSchema,
   },
   async (input) => {
-    if (!db) throw new Error("Firestore admin instance (db) is not initialized in deleteBulletinFlow.");
+    if (!db) {
+        console.error("CRITICAL: Firestore admin instance (db) is not initialized in deleteBulletinFlow.");
+        throw new Error("Firestore admin instance (db) is not initialized in deleteBulletinFlow.");
+    }
     try {
       const bulletinDocRef = doc(db, BULLETINS_COLLECTION, input.bulletinId);
       await deleteDoc(bulletinDocRef);

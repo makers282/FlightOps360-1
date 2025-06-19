@@ -1,10 +1,11 @@
+
 // src/lib/firebase-admin.ts
 import { initializeApp, getApps, App, cert, ServiceAccount } from 'firebase-admin/app';
-import { getFirestore, Firestore } from 'firebase-admin/firestore'; // Explicitly import Firestore type
-import { getStorage, Storage } from 'firebase-admin/storage';     // Explicitly import Storage type
+import { getFirestore, Firestore } from 'firebase-admin/firestore';
+import { getStorage, Storage } from 'firebase-admin/storage';
 import serviceAccountCredentials from '../../serviceAccountKey.json';
 
-let adminApp: App | undefined = undefined; // Allow adminApp to be potentially undefined initially
+let adminApp: App | undefined = undefined;
 let adminDb: Firestore | null = null;
 let adminStorage: Storage | null = null;
 
@@ -18,6 +19,9 @@ try {
   } else {
     if (getApps().length === 0) {
       console.log(`[firebase-admin] INIT ATTEMPT: No existing admin apps. Initializing new one for project: ${serviceAccount.project_id}.`);
+      if (serviceAccount.project_id !== 'skybase-nguee') { // Explicit check
+          console.warn(`[firebase-admin] WARNING: Service account project_id ('${serviceAccount.project_id}') does NOT match expected 'skybase-nguee'. This is likely the issue.`);
+      }
       try {
         adminApp = initializeApp({
           credential: cert(serviceAccount),
@@ -26,13 +30,13 @@ try {
         console.log(`[firebase-admin] INIT SUCCESS: Firebase Admin SDK initialized for project: ${adminApp.options?.projectId}.`);
       } catch (initError: any) {
         console.error(`[firebase-admin] INIT FAILURE: CRITICAL ERROR initializing Firebase Admin SDK for project ${serviceAccount.project_id}. Error: ${initError.message}`, initError);
+        adminApp = undefined; // Ensure adminApp is undefined on failure
       }
     } else {
-      adminApp = getApps().find(app => app.name === '[DEFAULT]') || getApps()[0]; // Prefer [DEFAULT] app if exists
+      adminApp = getApps().find(app => app.name === '[DEFAULT]') || getApps()[0];
       if (adminApp) {
         console.log(`[firebase-admin] INIT INFO: Using existing Firebase Admin SDK instance. App Name: ${adminApp.name}, Project: ${adminApp.options?.projectId || 'unknown'}.`);
       } else {
-        // This case should be rare if getApps().length > 0
         console.error('[firebase-admin] INIT ERROR: Could not retrieve an existing admin app instance despite getApps() having length > 0.');
       }
     }
@@ -49,7 +53,7 @@ try {
         }
       } catch (serviceError: any) {
         console.error(`[firebase-admin] SERVICE INIT ERROR: Error getting Firestore/Storage service from adminApp. Error: ${serviceError.message}`, serviceError);
-        adminDb = null; // Ensure db is null if service retrieval fails
+        adminDb = null; 
         adminStorage = null;
       }
     } else {
@@ -57,8 +61,7 @@ try {
     }
   }
 } catch (e: any) {
-    // This catch block would handle errors from importing serviceAccountCredentials if the file doesn't exist or is malformed JSON
-    console.error('[firebase-admin] TOP-LEVEL ERROR: Error during firebase-admin.ts execution (likely serviceAccountKey.json import issue):', e.message, e);
+    console.error('[firebase-admin] TOP-LEVEL ERROR: Error during firebase-admin.ts execution (likely serviceAccountKey.json import issue or malformed JSON):', e.message, e);
 }
 
 if (!adminDb) {
