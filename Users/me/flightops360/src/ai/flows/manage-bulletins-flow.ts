@@ -1,35 +1,33 @@
-
 'use server';
 /**
- * @fileOverview Genkit flows for managing company bulletins using Firestore.
+ * @fileOverview Genkit flows for managing company bulletins using Firestore via the Admin SDK.
  *
- * - saveBulletin - Saves (adds or updates) a bulletin.
- * - fetchBulletins - Fetches all bulletins, ordered by published date.
- * - deleteBulletin - Deletes a bulletin.
+ * - saveBulletin – Adds or updates a bulletin.
+ * - fetchBulletins – Pulls all bulletins, sorted newest first.
+ * - deleteBulletin – Removes a bulletin.
  */
 
 import { ai } from '@/ai/genkit';
-import { adminDb as db } from '@/lib/firebase-admin'; // UPDATED: Use adminDb from firebase-admin
-import { collection, doc, setDoc, getDoc, getDocs, serverTimestamp, Timestamp, deleteDoc, query, orderBy } from 'firebase/firestore';
+import { adminDb } from '@/lib/firebase-admin';               // your initialized Admin Firestore
+import { FieldValue } from 'firebase-admin/firestore';        // for serverTimestamp()
 import { z } from 'zod';
 import type { Bulletin, SaveBulletinInput } from '@/ai/schemas/bulletin-schemas';
 import {
-    SaveBulletinInputSchema,
-    SaveBulletinOutputSchema,
-    FetchBulletinsOutputSchema,
-    DeleteBulletinInputSchema,
-    DeleteBulletinOutputSchema,
+  SaveBulletinInputSchema,
+  SaveBulletinsOutputSchema as SaveBulletinOutputSchema,
+  FetchBulletinsOutputSchema,
+  DeleteBulletinInputSchema,
+  DeleteBulletinOutputSchema,
 } from '@/ai/schemas/bulletin-schemas';
 import { createNotification } from '@/ai/flows/manage-notifications-flow';
 
-const BULLETINS_COLLECTION = 'bulletins';
+const BULLETINS = 'bulletins';
 
-// Exported async functions that clients will call
 export async function saveBulletin(input: SaveBulletinInput): Promise<Bulletin> {
-  const bulletinId = input.id || doc(collection(db, BULLETINS_COLLECTION)).id;
-  // Remove id from data if it was passed in, as it's the doc key for the flow's perspective
-  const { id, ...bulletinDataForFlow } = input;
-  return saveBulletinFlow({ firestoreDocId: bulletinId, bulletinData: bulletinDataForFlow as Omit<SaveBulletinInput, 'id'> });
+  // generate an ID if none was passed
+  const id = input.id || adminDb.collection(BULLETINS).doc().id;
+  const { id: _discard, ...payload } = input;
+  return saveBulletinFlow({ id, payload });
 }
 
 export async function fetchBulletins(): Promise<Bulletin[]> {
@@ -40,115 +38,96 @@ export async function deleteBulletin(input: { bulletinId: string }): Promise<{ s
   return deleteBulletinFlow(input);
 }
 
-
-// Internal Genkit Flow Schemas and Definitions
-const InternalSaveBulletinInputSchema = z.object({
-  firestoreDocId: z.string(),
-  bulletinData: SaveBulletinInputSchema.omit({ id: true }), // Data without the ID field
+// --- internal schema for Genkit ---
+const InternalSaveBulletin = z.object({
+  id: z.string(),
+  payload: SaveBulletinInputSchema.omit({ id: true }),
 });
 
+// --- save flow ---
 const saveBulletinFlow = ai.defineFlow(
   {
     name: 'saveBulletinFlow',
-    inputSchema: InternalSaveBulletinInputSchema,
+    inputSchema: InternalSaveBulletin,
     outputSchema: SaveBulletinOutputSchema,
   },
-  async ({ firestoreDocId, bulletinData }) => {
-    const bulletinDocRef = doc(db, BULLETINS_COLLECTION, firestoreDocId);
-    try {
-      const docSnap = await getDoc(bulletinDocRef);
-      const wasActiveBefore = docSnap.exists() ? docSnap.data().isActive === true : false;
+  async ({ id, payload }) => {
+    const ref = adminDb.collection(BULLETINS).doc(id);
+    const before = await ref.get();
+    const wasActive = before.exists && before.data()?.isActive === true;
 
-      const dataToSet = {
-        ...bulletinData,
-        publishedAt: serverTimestamp(), // Treat publishedAt as "last saved/effective" time
-        updatedAt: serverTimestamp(),
-        createdAt: docSnap.exists() && docSnap.data().createdAt ? docSnap.data().createdAt : serverTimestamp(),
-      };
+    // build our Firestore data
+    const data = {
+      ...payload,
+      publishedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+      createdAt:
+        before.exists && before.data()?.createdAt
+          ? before.data()!.createdAt
+          : FieldValue.serverTimestamp(),
+    };
 
-      await setDoc(bulletinDocRef, dataToSet, { merge: true });
-      const savedDoc = await getDoc(bulletinDocRef); // Re-fetch to get server timestamps resolved
-      const savedData = savedDoc.data();
+    await ref.set(data, { merge: true });
+    const after = await ref.get();
+    if (!after.exists) throw new Error(`Bulletin ${id} vanished after save!`);
 
-      if (!savedData) {
-        throw new Error("Failed to retrieve saved bulletin data from Firestore.");
-      }
-
-      const isNowActive = savedData.isActive === true;
-      const shouldCreateNotification = isNowActive && (!docSnap.exists() || !wasActiveBefore);
-
-      if (shouldCreateNotification) {
-        try {
-          await createNotification({
-            type: 'info', 
-            title: `New Bulletin: ${savedData.title}`,
-            message: `A company bulletin titled "${savedData.title}" has been published. Check the dashboard for details.`,
-            timestamp: new Date().toISOString(),
-            isRead: false,
-            link: '/dashboard', 
-          });
-          console.log(`Notification created for bulletin: ${savedData.title}`);
-        } catch (notificationError) {
-          console.error('Failed to create notification for bulletin:', notificationError);
-        }
-      }
-
-      return {
-        ...savedData,
-        id: firestoreDocId,
-        publishedAt: (savedData.publishedAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
-        createdAt: (savedData.createdAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
-        updatedAt: (savedData.updatedAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
-      } as Bulletin;
-    } catch (error) {
-      console.error('Error saving bulletin to Firestore:', error);
-      throw new Error(`Failed to save bulletin ${firestoreDocId}: ${error instanceof Error ? error.message : String(error)}`);
+    const doc = after.data()!;
+    // if they just flipped active → true, fire off a notification:
+    if (doc.isActive === true && !wasActive) {
+      await createNotification({
+        type: 'info',
+        title: `New Bulletin: ${doc.title}`,
+        message: `A bulletin titled "${doc.title}" has just been published.`,
+        timestamp: new Date().toISOString(),
+        isRead: false,
+        link: '/dashboard',
+      });
     }
+
+    return {
+      id,
+      ...doc,
+      publishedAt: (doc.publishedAt as FirebaseFirestore.Timestamp).toDate().toISOString(),
+      createdAt:   (doc.createdAt   as FirebaseFirestore.Timestamp).toDate().toISOString(),
+      updatedAt:   (doc.updatedAt   as FirebaseFirestore.Timestamp).toDate().toISOString(),
+    } as Bulletin;
   }
 );
 
+// --- fetch flow ---
 const fetchBulletinsFlow = ai.defineFlow(
   {
     name: 'fetchBulletinsFlow',
     outputSchema: FetchBulletinsOutputSchema,
   },
   async () => {
-    try {
-      const bulletinsCollectionRef = collection(db, BULLETINS_COLLECTION);
-      const q = query(bulletinsCollectionRef, orderBy("publishedAt", "desc"));
-      const snapshot = await getDocs(q);
-      const bulletinsList = snapshot.docs.map(docSnapshot => {
-        const data = docSnapshot.data();
-        return {
-          ...data,
-          id: docSnapshot.id,
-          publishedAt: (data.publishedAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
-          createdAt: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
-          updatedAt: (data.updatedAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
-        } as Bulletin;
-      });
-      return bulletinsList;
-    } catch (error) {
-      console.error('Error fetching bulletins from Firestore:', error);
-      throw new Error(`Failed to fetch bulletins: ${error instanceof Error ? error.message : String(error)}`);
-    }
+    const snap = await adminDb
+      .collection(BULLETINS)
+      .orderBy('publishedAt', 'desc')
+      .get();
+
+    return snap.docs.map(d => {
+      const data = d.data()!;
+      return {
+        id: d.id,
+        ...data,
+        publishedAt: (data.publishedAt as FirebaseFirestore.Timestamp).toDate().toISOString(),
+        createdAt:   (data.createdAt   as FirebaseFirestore.Timestamp).toDate().toISOString(),
+        updatedAt:   (data.updatedAt   as FirebaseFirestore.Timestamp).toDate().toISOString(),
+      } as Bulletin;
+    });
   }
 );
 
+// --- delete flow ---
 const deleteBulletinFlow = ai.defineFlow(
   {
     name: 'deleteBulletinFlow',
     inputSchema: DeleteBulletinInputSchema,
     outputSchema: DeleteBulletinOutputSchema,
   },
-  async (input) => {
-    try {
-      const bulletinDocRef = doc(db, BULLETINS_COLLECTION, input.bulletinId);
-      await deleteDoc(bulletinDocRef);
-      return { success: true, bulletinId: input.bulletinId };
-    } catch (error) {
-      console.error('Error deleting bulletin from Firestore:', error);
-      throw new Error(`Failed to delete bulletin ${input.bulletinId}: ${error instanceof Error ? error.message : String(error)}`);
-    }
+  async ({ bulletinId }) => {
+    await adminDb.collection(BULLETINS).doc(bulletinId).delete();
+    return { success: true, bulletinId };
   }
 );

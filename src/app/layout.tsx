@@ -1,7 +1,6 @@
-
-import type { Metadata } from 'next';
-// Removed GeistSans and GeistMono imports
-import './globals.css';
+// src/app/layout.tsx
+import type { Metadata } from "next";
+import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 
 export const metadata: Metadata = {
@@ -11,12 +10,11 @@ export const metadata: Metadata = {
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
+}) {
   return (
     <html lang="en" suppressHydrationWarning>
-      {/* Removed Geist font variables from html className */}
       <body className="font-sans antialiased" suppressHydrationWarning>
         {children}
         <Toaster />
