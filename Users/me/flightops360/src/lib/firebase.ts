@@ -118,5 +118,3 @@ if (app) {
 }
 
 export { db, app, authInstance as auth, storage };
-
-    

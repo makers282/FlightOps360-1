@@ -1,3 +1,4 @@
+
 'use server';
 /**
  * @fileOverview A dedicated Genkit flow for creating notifications to avoid circular dependencies.
@@ -51,5 +52,3 @@ export async function createNotification(input: SaveNotificationInput): Promise<
       throw new Error(`Failed to create notification: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
-
-    

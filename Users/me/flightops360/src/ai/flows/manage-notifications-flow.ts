@@ -218,5 +218,3 @@ const markNotificationReadFlow = ai.defineFlow(
         }
     }
 );
-
-    

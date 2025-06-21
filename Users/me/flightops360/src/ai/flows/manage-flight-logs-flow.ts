@@ -249,5 +249,3 @@ const deleteFlightLogLegFlow = ai.defineFlow(
     }
   }
 );
-
-    

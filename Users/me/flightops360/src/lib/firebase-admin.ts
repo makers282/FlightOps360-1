@@ -1,3 +1,4 @@
+
 // src/lib/firebase-admin.ts
 import { initializeApp, getApps, App, cert, ServiceAccount } from 'firebase-admin/app';
 import { getFirestore, Firestore } from 'firebase-admin/firestore';
@@ -23,11 +24,7 @@ try {
 
     if (getApps().length === 0) {
       console.log(`[firebase-admin] INIT ATTEMPT: No existing admin apps. Initializing new one for project: ${rawServiceAccount.project_id}.`);
-      // Log the projectId that the typed ServiceAccount object *would* have, for TS conformity.
-      // The cert() function will correctly process the underlying snake_case from the JSON.
-      if (serviceAccount.projectId && serviceAccount.projectId !== 'skybase-nguee') {
-         console.warn(`[firebase-admin] WARNING: ServiceAccount type's 'projectId' ('${serviceAccount.projectId}') does NOT match expected 'skybase-nguee' from raw JSON's 'project_id' ('${rawServiceAccount.project_id}'). This is usually fine as cert() handles the JSON.`);
-      } else if (rawServiceAccount.project_id !== 'skybase-nguee') {
+      if (rawServiceAccount.project_id !== 'skybase-nguee') {
          console.warn(`[firebase-admin] WARNING: Raw JSON project_id ('${rawServiceAccount.project_id}') does NOT match expected 'skybase-nguee'. This is likely the issue if initialization fails related to project ID.`);
       }
 
@@ -79,5 +76,3 @@ if (!adminDb) {
 }
 
 export { adminApp, adminDb, adminStorage };
-
-    

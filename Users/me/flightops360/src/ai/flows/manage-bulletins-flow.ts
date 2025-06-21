@@ -179,5 +179,3 @@ const deleteBulletinFlow = ai.defineFlow(
     }
   }
 );
-
-    

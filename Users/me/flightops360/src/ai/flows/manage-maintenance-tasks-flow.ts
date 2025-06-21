@@ -272,5 +272,3 @@ ${selectedTasks.map((task, index) => `
         return workOrderResponse.text();
     }
 );
-
-    
