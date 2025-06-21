@@ -9,8 +9,8 @@
  */
 
 import { ai } from '@/ai/genkit';
-import { db } from '@/lib/firebase';
-import { collection, doc, setDoc, getDoc, getDocs, serverTimestamp, Timestamp, deleteDoc, query, orderBy } from 'firebase/firestore';
+import { adminDb as db } from '@/lib/firebase-admin';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { z } from 'zod';
 import type { AircraftBlockOut, SaveAircraftBlockOutInput, DeleteAircraftBlockOutInput } from '@/ai/schemas/aircraft-block-out-schemas';
 import {
@@ -26,17 +26,29 @@ const AIRCRAFT_BLOCK_OUTS_COLLECTION = 'aircraftBlockOuts';
 
 // Exported async functions that clients will call
 export async function saveAircraftBlockOut(input: SaveAircraftBlockOutInput): Promise<AircraftBlockOut> {
-  const firestoreDocId = input.id || doc(collection(db, AIRCRAFT_BLOCK_OUTS_COLLECTION)).id;
+    if (!db) {
+    console.error("CRITICAL: Firestore admin instance (db) is not initialized in saveAircraftBlockOut (manage-aircraft-block-outs-flow). Admin SDK init likely failed.");
+    throw new Error("Firestore admin instance (db) is not initialized in saveAircraftBlockOut.");
+  }
+  const firestoreDocId = input.id || db.collection(AIRCRAFT_BLOCK_OUTS_COLLECTION).doc().id;
   // Remove id from data if it was passed in, as it's the doc key for the flow's perspective
   const { id, ...blockOutDataForFlow } = input;
   return saveAircraftBlockOutFlow({ firestoreDocId, blockOutData: blockOutDataForFlow as Omit<SaveAircraftBlockOutInput, 'id'> });
 }
 
 export async function fetchAircraftBlockOuts(): Promise<AircraftBlockOut[]> {
+    if (!db) {
+    console.error("CRITICAL: Firestore admin instance (db) is not initialized in fetchAircraftBlockOuts (manage-aircraft-block-outs-flow). Admin SDK init likely failed.");
+    throw new Error("Firestore admin instance (db) is not initialized in fetchAircraftBlockOuts.");
+  }
   return fetchAircraftBlockOutsFlow();
 }
 
 export async function deleteAircraftBlockOut(input: DeleteAircraftBlockOutInput): Promise<{ success: boolean; blockOutId: string }> {
+    if (!db) {
+    console.error("CRITICAL: Firestore admin instance (db) is not initialized in deleteAircraftBlockOut (manage-aircraft-block-outs-flow). Admin SDK init likely failed.");
+    throw new Error("Firestore admin instance (db) is not initialized in deleteAircraftBlockOut.");
+  }
   return deleteAircraftBlockOutFlow(input);
 }
 
@@ -54,19 +66,23 @@ const saveAircraftBlockOutFlow = ai.defineFlow(
     outputSchema: SaveAircraftBlockOutOutputSchema,
   },
   async ({ firestoreDocId, blockOutData }) => {
-    const blockOutDocRef = doc(db, AIRCRAFT_BLOCK_OUTS_COLLECTION, firestoreDocId);
+    if (!db) {
+        console.error("CRITICAL: Firestore admin instance (db) is not initialized in saveAircraftBlockOutFlow.");
+        throw new Error("Firestore admin instance (db) is not initialized in saveAircraftBlockOutFlow.");
+    }
+    const blockOutDocRef = db.collection(AIRCRAFT_BLOCK_OUTS_COLLECTION).doc(firestoreDocId);
     try {
-      const docSnap = await getDoc(blockOutDocRef);
+      const docSnap = await blockOutDocRef.get();
       // The blockOutData already contains aircraftId, title, startDate, endDate, aircraftLabel
       // We just need to manage createdAt and updatedAt timestamps.
       const dataToSet = {
         ...blockOutData, // Contains aircraftId, aircraftLabel, title, startDate, endDate
-        updatedAt: serverTimestamp(),
-        createdAt: docSnap.exists() && docSnap.data().createdAt ? docSnap.data().createdAt : serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+        createdAt: docSnap.exists && docSnap.data()?.createdAt ? docSnap.data()?.createdAt : FieldValue.serverTimestamp(),
       };
 
-      await setDoc(blockOutDocRef, dataToSet, { merge: true });
-      const savedDoc = await getDoc(blockOutDocRef);
+      await blockOutDocRef.set(dataToSet, { merge: true });
+      const savedDoc = await blockOutDocRef.get();
       const savedData = savedDoc.data();
 
       if (!savedData) {
@@ -95,10 +111,14 @@ const fetchAircraftBlockOutsFlow = ai.defineFlow(
     outputSchema: FetchAircraftBlockOutsOutputSchema,
   },
   async () => {
+    if (!db) {
+        console.error("CRITICAL: Firestore admin instance (db) is not initialized in fetchAircraftBlockOutsFlow.");
+        throw new Error("Firestore admin instance (db) is not initialized in fetchAircraftBlockOutsFlow.");
+    }
     try {
-      const blockOutsCollectionRef = collection(db, AIRCRAFT_BLOCK_OUTS_COLLECTION);
-      const q = query(blockOutsCollectionRef, orderBy("startDate", "desc"));
-      const snapshot = await getDocs(q);
+      const blockOutsCollectionRef = db.collection(AIRCRAFT_BLOCK_OUTS_COLLECTION);
+      const q = blockOutsCollectionRef.orderBy("startDate", "desc");
+      const snapshot = await q.get();
       const blockOutsList = snapshot.docs.map(docSnapshot => {
         const data = docSnapshot.data();
         return {
@@ -111,7 +131,8 @@ const fetchAircraftBlockOutsFlow = ai.defineFlow(
         } as AircraftBlockOut;
       });
       return blockOutsList;
-    } catch (error) {
+    } catch (error)
+ {
       console.error('Error fetching aircraft block-outs from Firestore:', error);
       throw new Error(`Failed to fetch aircraft block-outs: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -125,9 +146,13 @@ const deleteAircraftBlockOutFlow = ai.defineFlow(
     outputSchema: DeleteAircraftBlockOutOutputSchema,
   },
   async (input) => {
+    if (!db) {
+        console.error("CRITICAL: Firestore admin instance (db) is not initialized in deleteAircraftBlockOutFlow.");
+        throw new Error("Firestore admin instance (db) is not initialized in deleteAircraftBlockOutFlow.");
+    }
     try {
-      const blockOutDocRef = doc(db, AIRCRAFT_BLOCK_OUTS_COLLECTION, input.blockOutId);
-      await deleteDoc(blockOutDocRef);
+      const blockOutDocRef = db.collection(AIRCRAFT_BLOCK_OUTS_COLLECTION).doc(input.blockOutId);
+      await blockOutDocRef.delete();
       return { success: true, blockOutId: input.blockOutId };
     } catch (error) {
       console.error('Error deleting aircraft block-out from Firestore:', error);

@@ -20,11 +20,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { BookOpen, Eye, Loader2, AlertTriangle } from 'lucide-react';
 import { format, parseISO, isValid } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
-import { fetchAllMelItems, type MelItem } from '@/ai/flows/manage-mel-items-flow';
-import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
+import { type MelItem } from '@/ai/schemas/mel-item-schemas';
+import { type FleetAircraft } from '@/ai/schemas/fleet-aircraft-schemas';
 import { melCategories, melStatuses, type MelCategory, type MelStatus } from '@/ai/schemas/mel-item-schemas';
 import { ClientOnly } from '@/components/client-only';
 import { Skeleton } from '@/components/ui/skeleton';
+import { getMelsAndFleetData } from './actions';
 
 const getStatusBadgeVariant = (status: MelStatus): "default" | "secondary" | "destructive" | "outline" => {
   switch (status) {
@@ -51,12 +52,9 @@ export default function MelsClient() {
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [fetchedMelItems, fetchedFleet] = await Promise.all([
-        fetchAllMelItems(),
-        fetchFleetAircraft(),
-      ]);
-      setAllMelItems(fetchedMelItems);
-      setFleetList(fetchedFleet);
+      const { melItems, fleet } = await getMelsAndFleetData();
+      setAllMelItems(melItems);
+      setFleetList(fleet);
       if (aircraftIdFromQuery !== 'all') {
         setAircraftFilter(aircraftIdFromQuery);
       }

@@ -10,8 +10,8 @@
  */
 
 import { ai } from '@/ai/genkit';
-import { db } from '@/lib/firebase';
-import { collection, doc, setDoc, getDoc, getDocs, serverTimestamp, Timestamp, query, orderBy, deleteDoc } from 'firebase/firestore';
+import { adminDb as db } from '@/lib/firebase-admin';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { z } from 'zod';
 import type { Quote, SaveQuoteInput } from '@/ai/schemas/quote-schemas';
 import { 
@@ -26,9 +26,13 @@ import {
 
 const QUOTES_COLLECTION = 'quotes';
 
-// Exported async function that clients will call
+// Exported async functions that clients will call
 export async function saveQuote(input: SaveQuoteInput): Promise<Quote> {
-  console.log('[ManageQuotesFlow Firestore] Attempting to save quote ID:', input.quoteId);
+    if (!db) {
+    console.error("CRITICAL: Firestore admin instance (db) is not initialized in saveQuote (manage-quotes-flow). Admin SDK init likely failed.");
+    throw new Error("Firestore admin instance (db) is not initialized in saveQuote.");
+  }
+  console.log('[ManageQuotesFlow Firestore Admin] Attempting to save quote ID:', input.quoteId);
   const firestoreDocId = input.quoteId; 
   return saveQuoteFlow({ firestoreDocId, quoteData: input });
 }
@@ -45,34 +49,38 @@ const saveQuoteFlow = ai.defineFlow(
     outputSchema: SaveQuoteOutputSchema, 
   },
   async ({ firestoreDocId, quoteData }) => {
+    if (!db) {
+        console.error("CRITICAL: Firestore admin instance (db) is not initialized in saveQuoteFlow.");
+        throw new Error("Firestore admin instance (db) is not initialized in saveQuoteFlow.");
+    }
     console.log('Executing saveQuoteFlow with input - Firestore, Doc ID:', firestoreDocId);
     
-    const quoteDocRef = doc(db, QUOTES_COLLECTION, firestoreDocId);
+    const quoteDocRef = db.collection(QUOTES_COLLECTION).doc(firestoreDocId);
     
     try {
-      const docSnap = await getDoc(quoteDocRef);
+      const docSnap = await quoteDocRef.get();
       let finalDataToSave;
 
       if (docSnap.exists()) {
         finalDataToSave = {
           ...quoteData,
           id: firestoreDocId, 
-          createdAt: docSnap.data().createdAt, 
-          updatedAt: serverTimestamp(),
+          createdAt: docSnap.data()?.createdAt, 
+          updatedAt: FieldValue.serverTimestamp(),
         };
       } else {
         finalDataToSave = {
           ...quoteData,
           id: firestoreDocId, 
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
+          createdAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
         };
       }
       
-      await setDoc(quoteDocRef, finalDataToSave, { merge: true });
+      await quoteDocRef.set(finalDataToSave, { merge: true });
       console.log('Saved quote in Firestore:', firestoreDocId);
 
-      const savedDoc = await getDoc(quoteDocRef);
+      const savedDoc = await quoteDocRef.get();
       const savedData = savedDoc.data();
 
       if (!savedData) {
@@ -108,7 +116,11 @@ const saveQuoteFlow = ai.defineFlow(
 );
 
 export async function fetchQuotes(): Promise<Quote[]> {
-  console.log('[ManageQuotesFlow Firestore] Attempting to fetch all quotes.');
+    if (!db) {
+    console.error("CRITICAL: Firestore admin instance (db) is not initialized in fetchQuotes (manage-quotes-flow). Admin SDK init likely failed.");
+    throw new Error("Firestore admin instance (db) is not initialized in fetchQuotes.");
+  }
+  console.log('[ManageQuotesFlow Firestore Admin] Attempting to fetch all quotes.');
   return fetchQuotesFlow();
 }
 
@@ -118,11 +130,15 @@ const fetchQuotesFlow = ai.defineFlow(
     outputSchema: FetchQuotesOutputSchema,
   },
   async () => {
+    if (!db) {
+        console.error("CRITICAL: Firestore admin instance (db) is not initialized in fetchQuotesFlow.");
+        throw new Error("Firestore admin instance (db) is not initialized in fetchQuotesFlow.");
+    }
     console.log('Executing fetchQuotesFlow - Firestore');
     try {
-      const quotesCollectionRef = collection(db, QUOTES_COLLECTION);
-      const q = query(quotesCollectionRef, orderBy("createdAt", "desc"));
-      const snapshot = await getDocs(q);
+      const quotesCollectionRef = db.collection(QUOTES_COLLECTION);
+      const q = quotesCollectionRef.orderBy("createdAt", "desc");
+      const snapshot = await q.get();
       const quotesList = snapshot.docs.map(docSnapshot => {
         const data = docSnapshot.data();
         return {
@@ -142,7 +158,11 @@ const fetchQuotesFlow = ai.defineFlow(
 );
 
 export async function fetchQuoteById(input: { id: string }): Promise<Quote | null> {
-  console.log('[ManageQuotesFlow Firestore] Attempting to fetch quote by ID:', input.id);
+    if (!db) {
+    console.error("CRITICAL: Firestore admin instance (db) is not initialized in fetchQuoteById (manage-quotes-flow). Admin SDK init likely failed.");
+    throw new Error("Firestore admin instance (db) is not initialized in fetchQuoteById.");
+  }
+  console.log('[ManageQuotesFlow Firestore Admin] Attempting to fetch quote by ID:', input.id);
   return fetchQuoteByIdFlow(input);
 }
 
@@ -153,12 +173,16 @@ const fetchQuoteByIdFlow = ai.defineFlow(
     outputSchema: QuoteSchema.nullable(),
   },
   async (input) => {
+    if (!db) {
+        console.error("CRITICAL: Firestore admin instance (db) is not initialized in fetchQuoteByIdFlow.");
+        throw new Error("Firestore admin instance (db) is not initialized in fetchQuoteByIdFlow.");
+    }
     console.log('Executing fetchQuoteByIdFlow - Firestore for ID:', input.id);
     try {
-      const quoteDocRef = doc(db, QUOTES_COLLECTION, input.id);
-      const docSnap = await getDoc(quoteDocRef);
+      const quoteDocRef = db.collection(QUOTES_COLLECTION).doc(input.id);
+      const docSnap = await quoteDocRef.get();
 
-      if (docSnap.exists()) {
+      if (docSnap.exists) {
         const data = docSnap.data();
         const quote: Quote = {
           id: docSnap.id,
@@ -180,7 +204,11 @@ const fetchQuoteByIdFlow = ai.defineFlow(
 );
 
 export async function deleteQuote(input: { id: string }): Promise<{ success: boolean; quoteId: string }> {
-    console.log('[ManageQuotesFlow Firestore] Attempting to delete quote ID:', input.id);
+    if (!db) {
+    console.error("CRITICAL: Firestore admin instance (db) is not initialized in deleteQuote (manage-quotes-flow). Admin SDK init likely failed.");
+    throw new Error("Firestore admin instance (db) is not initialized in deleteQuote.");
+  }
+    console.log('[ManageQuotesFlow Firestore Admin] Attempting to delete quote ID:', input.id);
     return deleteQuoteFlow(input);
 }
 
@@ -191,12 +219,16 @@ const deleteQuoteFlow = ai.defineFlow(
     outputSchema: DeleteQuoteOutputSchema, // Expects { success: boolean, quoteId: string }
   },
   async (input) => {
+    if (!db) {
+        console.error("CRITICAL: Firestore admin instance (db) is not initialized in deleteQuoteFlow.");
+        throw new Error("Firestore admin instance (db) is not initialized in deleteQuoteFlow.");
+    }
     console.log('Executing deleteQuoteFlow for quote ID - Firestore:', input.id);
     try {
-      const quoteDocRef = doc(db, QUOTES_COLLECTION, input.id);
-      const docSnap = await getDoc(quoteDocRef);
+      const quoteDocRef = db.collection(QUOTES_COLLECTION).doc(input.id);
+      const docSnap = await quoteDocRef.get();
 
-      if (!docSnap.exists()) {
+      if (!docSnap.exists) {
           console.warn(`Quote with ID ${input.id} not found for deletion.`);
           // It's often better to return success: true if the item is already gone,
           // or success: false if strict confirmation of deletion action is needed.
@@ -204,7 +236,7 @@ const deleteQuoteFlow = ai.defineFlow(
           return { success: true, quoteId: input.id };
       }
       
-      await deleteDoc(quoteDocRef);
+      await quoteDocRef.delete();
       console.log('Deleted quote from Firestore:', input.id);
       return { success: true, quoteId: input.id };
     } catch (error) {

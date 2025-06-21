@@ -35,6 +35,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { FileUpload } from '@/components/file-upload';
 
 interface CompanyPageFleetAircraft extends FleetAircraft {
   // No custom fields needed here anymore as engineDetails and propellerDetails are directly from FleetAircraft
@@ -64,6 +65,7 @@ export default function CompanySettingsPage() {
   const [newPrimaryContactName, setNewPrimaryContactName] = useState('');
   const [newPrimaryContactPhone, setNewPrimaryContactPhone] = useState('');
   const [newPrimaryContactEmail, setNewPrimaryContactEmail] = useState('');
+  const [newImageUrl, setNewImageUrl] = useState<string | undefined>(undefined);
 
   const [currentEngineDetailsForForm, setCurrentEngineDetailsForForm] = useState<EngineDetail[]>([]);
   const [isEngineModalOpen, setIsEngineModalOpen] = useState(false);
@@ -75,6 +77,7 @@ export default function CompanySettingsPage() {
   const [companyAddress, setCompanyAddress] = useState('');
   const [companyEmail, setCompanyEmail] = useState('');
   const [companyPhone, setCompanyPhone] = useState('');
+  const [companyLogoUrl, setCompanyLogoUrl] = useState<string | undefined>(undefined);
   const [currentCompanyProfile, setCurrentCompanyProfile] = useState<CompanyProfile | null>(null);
   const [isLoadingCompanyInfo, setIsLoadingCompanyInfo] = useState(true);
   const [isSavingCompanyInfo, startSavingCompanyInfoTransition] = useTransition();
@@ -113,6 +116,7 @@ export default function CompanySettingsPage() {
         setCompanyAddress(profile.companyAddress || '');
         setCompanyEmail(profile.companyEmail || '');
         setCompanyPhone(profile.companyPhone || '');
+        setCompanyLogoUrl(profile.logoUrl);
         setCurrentCompanyProfile(profile);
       } else {
         // Set default values if profile is null
@@ -163,6 +167,7 @@ export default function CompanySettingsPage() {
     setNewTailNumber(''); setNewModel(''); setNewIsMaintenanceTracked(true);
     setNewTrackedComponentNamesStr(''); setNewSerialNumber(''); setNewBaseLocation('');
     setNewPrimaryContactName(''); setNewPrimaryContactPhone(''); setNewPrimaryContactEmail('');
+    setNewImageUrl(undefined);
     setCurrentEngineDetailsForForm([]); setCurrentPropellerDetailsForForm([]);
   };
 
@@ -173,6 +178,7 @@ export default function CompanySettingsPage() {
     setNewSerialNumber(aircraft.serialNumber || ''); setNewBaseLocation(aircraft.baseLocation || '');
     setNewPrimaryContactName(aircraft.primaryContactName || ''); setNewPrimaryContactPhone(aircraft.primaryContactPhone || '');
     setNewPrimaryContactEmail(aircraft.primaryContactEmail || '');
+    setNewImageUrl(aircraft.imageUrl);
     setCurrentEngineDetailsForForm(aircraft.engineDetails || []);
     setCurrentPropellerDetailsForForm(aircraft.propellerDetails || []);
     setShowAddAircraftForm(true);
@@ -188,6 +194,7 @@ export default function CompanySettingsPage() {
       serialNumber: newSerialNumber.trim() || undefined, aircraftYear: editingAircraftId ? fleet.find(ac => ac.id === editingAircraftId)?.aircraftYear : undefined,
       baseLocation: newBaseLocation.trim() || undefined, primaryContactName: newPrimaryContactName.trim() || undefined,
       primaryContactPhone: newPrimaryContactPhone.trim() || undefined, primaryContactEmail: newPrimaryContactEmail.trim() || undefined,
+      imageUrl: newImageUrl,
       engineDetails: currentEngineDetailsForForm, propellerDetails: currentPropellerDetailsForForm,
       internalNotes: editingAircraftId ? fleet.find(ac => ac.id === editingAircraftId)?.internalNotes : undefined,
     };
@@ -227,6 +234,7 @@ export default function CompanySettingsPage() {
         companyAddress: companyAddress.trim(),
         companyEmail: companyEmail.trim(), 
         companyPhone: companyPhone.trim(),
+        logoUrl: companyLogoUrl,
       };
       try { 
         const savedProfile = await saveCompanyProfile(profileData);
@@ -236,6 +244,7 @@ export default function CompanySettingsPage() {
         setCompanyAddress(savedProfile.companyAddress || '');
         setCompanyEmail(savedProfile.companyEmail || '');
         setCompanyPhone(savedProfile.companyPhone || '');
+        setCompanyLogoUrl(savedProfile.logoUrl);
         toast({ title: "Success", description: "Company info updated." });
       } catch (error) {
         console.error("Failed to save company info:", error);
@@ -351,8 +360,11 @@ export default function CompanySettingsPage() {
             </div>
             <div className="space-y-1">
                 <Label htmlFor="logoUpload">Company Logo</Label>
-                <Input id="logoUpload" type="file" disabled className="text-sm file:mr-2 file:rounded-md file:border-0 file:bg-muted file:px-3 file:py-1.5 file:text-muted-foreground hover:file:bg-muted/80"/>
-                <p className="text-xs text-muted-foreground">Logo upload functionality to be implemented separately.</p>
+                <FileUpload
+                    endpoint="companyLogo"
+                    value={companyLogoUrl}
+                    onChange={(url) => setCompanyLogoUrl(url)}
+                />
             </div>
             <Button onClick={handleSaveCompanyInfo} disabled={isSavingCompanyInfo || isLoadingCompanyInfo}>
               {isSavingCompanyInfo ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
@@ -420,6 +432,14 @@ export default function CompanySettingsPage() {
                       <Label htmlFor="newPrimaryContactEmail">Primary Contact Email</Label>
                       <Input id="newPrimaryContactEmail" type="email" value={newPrimaryContactEmail} onChange={(e) => setNewPrimaryContactEmail(e.target.value)} placeholder="e.g., contact@aircraft.com" />
                     </div>
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="logoUpload">Aircraft Image</Label>
+                    <FileUpload
+                        endpoint="aircraftImage"
+                        value={newImageUrl}
+                        onChange={(url) => setNewImageUrl(url)}
+                    />
                   </div>
                   <div className="pt-2 space-y-3">
                     <div className="space-y-1">
@@ -538,6 +558,3 @@ export default function CompanySettingsPage() {
     </>
   );
 }
-
-    
-    

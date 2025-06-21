@@ -1,3 +1,4 @@
+
 // src/lib/firebase.ts
 import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
 import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
@@ -81,6 +82,7 @@ if (app && process.env.NODE_ENV === 'development') {
   }
   if (authInstance) {
     try {
+      // Corrected emulator URL format
       connectAuthEmulator(authInstance, 'http://127.0.0.1:9100', { disableWarnings: true }); // Port from firebase.json
       console.log("[Firebase Client Init] Connected to Auth Emulator on port 9100.");
     } catch (e) {
@@ -116,3 +118,5 @@ if (app) {
 }
 
 export { db, app, authInstance as auth, storage };
+
+    

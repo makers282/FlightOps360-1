@@ -163,14 +163,11 @@ const saveMaintenanceTaskFlow = ai.defineFlow(
     }
     console.log('Executing saveMaintenanceTaskFlow with input - Firestore:', JSON.stringify(taskData));
     try {
-      // The taskData.id should be the Firestore document ID.
       const taskDocRef = db.collection(MAINTENANCE_TASKS_COLLECTION).doc(taskData.id);
-      // Firestore will create the document if it doesn't exist, or update it if it does.
-      // We spread taskData but explicitly exclude 'id' from being written as a field within the document itself.
       const { id, ...dataToSet } = taskData;
-      await taskDocRef.set(dataToSet); 
+      await taskDocRef.set(dataToSet, { merge: true }); 
       console.log('Saved maintenance task in Firestore:', taskData.id);
-      return taskData; // Return the full input object as it was passed (and saved)
+      return taskData;
     } catch (error) {
       console.error('Error saving maintenance task to Firestore:', error);
       throw new Error(`Failed to save task ${taskData.id}: ${error instanceof Error ? error.message : String(error)}`);
@@ -192,13 +189,10 @@ const deleteMaintenanceTaskFlow = ai.defineFlow(
     console.log('Executing deleteMaintenanceTaskFlow for task ID - Firestore:', input.taskId);
     try {
       const taskDocRef = db.collection(MAINTENANCE_TASKS_COLLECTION).doc(input.taskId);
-      const docSnap = await taskDocRef.get(); // Check if it exists before deleting
+      const docSnap = await taskDocRef.get();
 
       if (!docSnap.exists()) {
           console.warn(`Maintenance task with ID ${input.taskId} not found for deletion in Firestore.`);
-          // Depending on desired behavior, could return success: false or throw an error.
-          // For now, let's say deletion of a non-existent item is "successful" in that it's not there.
-          // Or, to be stricter: return { success: false, taskId: input.taskId };
           throw new Error(`Task ${input.taskId} not found.`);
       }
       
@@ -219,6 +213,9 @@ const generateMaintenanceWorkOrderFlow = ai.defineFlow(
         outputSchema: z.string(),
     },
     async ({ aircraftId, taskIds }) => {
+        if (!db) {
+            throw new Error("Firestore admin instance is not initialized for work order generation.");
+        }
         const [allAircraft, allTasks] = await Promise.all([
             fetchFleetAircraft(),
             fetchMaintenanceTasksForAircraft({ aircraftId }),
@@ -275,3 +272,5 @@ ${selectedTasks.map((task, index) => `
         return workOrderResponse.text();
     }
 );
+
+    

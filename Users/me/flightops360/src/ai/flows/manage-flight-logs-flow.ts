@@ -24,7 +24,7 @@ import {
 
 // For updating component times
 import { fetchTripById, type Trip } from '@/ai/flows/manage-trips-flow';
-import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
+import { fetchFleetAircraft } from '@/ai/flows/manage-fleet-flow';
 import { fetchComponentTimesForAircraft, saveComponentTimesForAircraft, type AircraftComponentTimes, type ComponentTimeData } from '@/ai/flows/manage-component-times-flow';
 import { parse as parseTime, differenceInMinutes } from 'date-fns';
 
@@ -41,12 +41,11 @@ function calculateFlightDurationFromLog(logData: FlightLogLegData): number {
   }
   if (logData.takeOffTime && logData.landingTime) {
     try {
-      // Using a fixed date for time parsing as only HH:MM is relevant for duration
       const today = new Date().toISOString().split('T')[0]; 
       const takeOffDateTime = parseTime(logData.takeOffTime, 'HH:mm', new Date(`${today}T00:00:00Z`));
       let landingDateTime = parseTime(logData.landingTime, 'HH:mm', new Date(`${today}T00:00:00Z`));
 
-      if (landingDateTime < takeOffDateTime) { // Handle midnight crossing
+      if (landingDateTime < takeOffDateTime) { 
         landingDateTime = new Date(landingDateTime.getTime() + 24 * 60 * 60 * 1000);
       }
       
@@ -99,12 +98,12 @@ const saveFlightLogLegFlow = ai.defineFlow(
     inputSchema: SaveFlightLogLegInputSchema,
     outputSchema: FlightLogLegSchema, 
   },
-  async (flightLogInputData) => { // flightLogInputData is of type SaveFlightLogLegInput
+  async (flightLogInputData) => { 
     if (!db) {
         console.error("CRITICAL: Firestore admin instance (db) is not initialized in saveFlightLogLegFlow.");
         throw new Error("Firestore admin instance (db) is not initialized in saveFlightLogLegFlow.");
     }
-    const { tripId, legIndex, ...logDataForDoc } = flightLogInputData; // logDataForDoc now matches FlightLogLegData type
+    const { tripId, legIndex, ...logDataForDoc } = flightLogInputData;
     const docId = getFlightLogDocId(tripId, legIndex);
     const logDocRef = db.collection(FLIGHT_LOGS_COLLECTION).doc(docId);
     
@@ -116,7 +115,7 @@ const saveFlightLogLegFlow = ai.defineFlow(
         id: docId, 
         tripId,
         legIndex,
-        ...logDataForDoc, // Spread the actual log data fields
+        ...logDataForDoc,
         updatedAt: FieldValue.serverTimestamp(),
         createdAt: docSnap.exists && docSnap.data()?.createdAt ? docSnap.data()?.createdAt : FieldValue.serverTimestamp(),
       };
@@ -131,17 +130,17 @@ const saveFlightLogLegFlow = ai.defineFlow(
         throw new Error("Failed to retrieve saved flight log data from Firestore.");
       }
       
-      // --- Update Aircraft Component Times ---
       const tripDetails = await fetchTripById({ id: tripId });
       if (tripDetails && tripDetails.aircraftId) {
         const aircraftId = tripDetails.aircraftId;
-        const aircraftDetails = await fetchFleetAircraft().then(fleet => fleet.find(ac => ac.id === aircraftId));
+        const allFleet = await fetchFleetAircraft();
+        const aircraftDetails = allFleet.find(ac => ac.id === aircraftId);
         
         if (aircraftDetails && aircraftDetails.isMaintenanceTracked) {
           let currentComponentTimes = await fetchComponentTimesForAircraft({ aircraftId }) || {};
           
           const legFlightDuration = calculateFlightDurationFromLog(logDataForDoc as FlightLogLegData);
-          const legCycles = 1; // Assume 1 cycle per leg
+          const legCycles = 1; 
           const apuTime = Number(logDataForDoc.postLegApuTimeDecimal || 0);
 
           (aircraftDetails.trackedComponentNames || ['Airframe', 'Engine 1']).forEach(componentName => {
@@ -149,14 +148,13 @@ const saveFlightLogLegFlow = ai.defineFlow(
             if (!currentComponentTimes[compKey]) {
               currentComponentTimes[compKey] = { time: 0, cycles: 0 };
             }
-            let component = currentComponentTimes[compKey] as ComponentTimeData; // Cast for type safety
+            let component = currentComponentTimes[compKey] as ComponentTimeData;
 
             if (compKey.toLowerCase().startsWith('engine') || compKey.toLowerCase() === 'airframe' || compKey.toLowerCase().startsWith('propeller')) {
               component.time = parseFloat(((component.time || 0) + legFlightDuration).toFixed(2));
               component.cycles = (component.cycles || 0) + legCycles;
             } else if (compKey.toLowerCase() === 'apu' && apuTime > 0) {
               component.time = parseFloat(((component.time || 0) + apuTime).toFixed(2));
-              // APU cycles might be tracked differently or not at all by this simple logic
             }
              currentComponentTimes[compKey] = component;
           });
@@ -171,12 +169,11 @@ const saveFlightLogLegFlow = ai.defineFlow(
       } else {
         console.warn(`Trip ${tripId} or its aircraftId not found. Cannot update component times.`);
       }
-      // --- End Update Aircraft Component Times ---
 
       return {
         ...savedLogDataFromDb,
         createdAt: (savedLogDataFromDb.createdAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
-        updatedAt: (savedLogDataFromDb.updatedAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
+        updatedAt: (savedLogDataFromDb.updatedAt as Timestamp)?.toDate().toISOString(),
       } as FlightLogLeg; 
 
     } catch (error) {
@@ -204,7 +201,7 @@ const fetchFlightLogForLegFlow = ai.defineFlow(
     try {
       const docSnap = await logDocRef.get();
       if (docSnap.exists) {
-        const data = docSnap.data();
+        const data = docSnap.data()!;
         console.log('Fetched flight log from Firestore:', docId);
         return {
           ...data,
@@ -243,15 +240,6 @@ const deleteFlightLogLegFlow = ai.defineFlow(
           return { success: false, flightLogId: flightLogId };
       }
       
-      // TODO: Add logic here to REVERSE aircraft component time updates if a log is deleted.
-      // This would be complex and involve:
-      // 1. Fetching the log to get the flight duration and APU time it contributed.
-      // 2. Fetching the trip to get aircraftId.
-      // 3. Fetching current component times.
-      // 4. Subtracting the times/cycles.
-      // 5. Saving the adjusted component times.
-      // For now, deletion only removes the log entry.
-
       await logDocRef.delete();
       console.log('Deleted flight log from Firestore:', flightLogId);
       return { success: true, flightLogId: flightLogId };
@@ -261,3 +249,5 @@ const deleteFlightLogLegFlow = ai.defineFlow(
     }
   }
 );
+
+    

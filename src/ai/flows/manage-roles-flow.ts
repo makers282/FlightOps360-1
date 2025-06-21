@@ -9,8 +9,8 @@
  */
 
 import { ai } from '@/ai/genkit';
-import { db } from '@/lib/firebase';
-import { collection, doc, getDocs, setDoc, deleteDoc, serverTimestamp, Timestamp, getDoc } from 'firebase/firestore';
+import { adminDb as db } from '@/lib/firebase-admin';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import type { Role, SaveRoleInput } from '@/ai/schemas/role-schemas';
 import {
     RoleSchema,
@@ -26,13 +26,21 @@ const ROLES_COLLECTION = 'roles';
 
 // Exported async functions that clients will call
 export async function fetchRoles(): Promise<Role[]> {
-  console.log('[ManageRolesFlow Firestore] Attempting to fetch all roles.');
+    if (!db) {
+    console.error("CRITICAL: Firestore admin instance (db) is not initialized in fetchRoles (manage-roles-flow). Admin SDK init likely failed.");
+    throw new Error("Firestore admin instance (db) is not initialized in fetchRoles.");
+  }
+  console.log('[ManageRolesFlow Firestore Admin] Attempting to fetch all roles.');
   return fetchRolesFlow();
 }
 
 export async function saveRole(input: SaveRoleInput): Promise<Role> {
-  const roleId = input.id || doc(collection(db, ROLES_COLLECTION)).id;
-  console.log('[ManageRolesFlow Firestore] Attempting to save role:', roleId);
+    if (!db) {
+    console.error("CRITICAL: Firestore admin instance (db) is not initialized in saveRole (manage-roles-flow). Admin SDK init likely failed.");
+    throw new Error("Firestore admin instance (db) is not initialized in saveRole.");
+  }
+  const roleId = input.id || db.collection(ROLES_COLLECTION).doc().id;
+  console.log('[ManageRolesFlow Firestore Admin] Attempting to save role:', roleId);
 
   const dataToSaveInDb = { ...input };
   if (dataToSaveInDb.id) {
@@ -43,7 +51,11 @@ export async function saveRole(input: SaveRoleInput): Promise<Role> {
 }
 
 export async function deleteRole(input: { roleId: string }): Promise<{ success: boolean; roleId: string }> {
-  console.log('[ManageRolesFlow Firestore] Attempting to delete role ID:', input.roleId);
+    if (!db) {
+    console.error("CRITICAL: Firestore admin instance (db) is not initialized in deleteRole (manage-roles-flow). Admin SDK init likely failed.");
+    throw new Error("Firestore admin instance (db) is not initialized in deleteRole.");
+  }
+  console.log('[ManageRolesFlow Firestore Admin] Attempting to delete role ID:', input.roleId);
   return deleteRoleFlow(input);
 }
 
@@ -54,10 +66,14 @@ const fetchRolesFlow = ai.defineFlow(
     outputSchema: FetchRolesOutputSchema,
   },
   async () => {
+    if (!db) {
+        console.error("CRITICAL: Firestore admin instance (db) is not initialized in fetchRolesFlow.");
+        throw new Error("Firestore admin instance (db) is not initialized in fetchRolesFlow.");
+    }
     console.log('Executing fetchRolesFlow - Firestore');
     try {
-      const rolesCollectionRef = collection(db, ROLES_COLLECTION);
-      const snapshot = await getDocs(rolesCollectionRef);
+      const rolesCollectionRef = db.collection(ROLES_COLLECTION);
+      const snapshot = await rolesCollectionRef.get();
       const rolesList = snapshot.docs.map(docSnapshot => {
         const data = docSnapshot.data();
         return {
@@ -91,23 +107,27 @@ const saveRoleFlow = ai.defineFlow(
     outputSchema: SaveRoleOutputSchema,
   },
   async ({ roleId, roleData }) => {
+    if (!db) {
+        console.error("CRITICAL: Firestore admin instance (db) is not initialized in saveRoleFlow.");
+        throw new Error("Firestore admin instance (db) is not initialized in saveRoleFlow.");
+    }
     console.log('Executing saveRoleFlow with input - Firestore:', roleId);
     try {
-      const roleDocRef = doc(db, ROLES_COLLECTION, roleId);
-      const docSnap = await getDoc(roleDocRef);
+      const roleDocRef = db.collection(ROLES_COLLECTION).doc(roleId);
+      const docSnap = await roleDocRef.get();
 
       const dataWithTimestamps = {
         ...roleData,
         permissions: roleData.permissions || [], // Ensure permissions is an array
         isSystemRole: roleData.isSystemRole || false,
-        updatedAt: serverTimestamp(),
-        createdAt: docSnap.exists() ? docSnap.data().createdAt : serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+        createdAt: docSnap.exists() && docSnap.data()?.createdAt ? docSnap.data()?.createdAt : FieldValue.serverTimestamp(),
       };
 
-      await setDoc(roleDocRef, dataWithTimestamps, { merge: true });
+      await roleDocRef.set(dataWithTimestamps, { merge: true });
       console.log('Saved role in Firestore:', roleId);
       
-      const savedDoc = await getDoc(roleDocRef);
+      const savedDoc = await roleDocRef.get();
       const savedData = savedDoc.data();
 
       return {
@@ -132,16 +152,20 @@ const deleteRoleFlow = ai.defineFlow(
     outputSchema: DeleteRoleOutputSchema,
   },
   async (input) => {
+    if (!db) {
+        console.error("CRITICAL: Firestore admin instance (db) is not initialized in deleteRoleFlow.");
+        throw new Error("Firestore admin instance (db) is not initialized in deleteRoleFlow.");
+    }
     console.log('Executing deleteRoleFlow for role ID - Firestore:', input.roleId);
     try {
-      const roleDocRef = doc(db, ROLES_COLLECTION, input.roleId);
-      const docSnap = await getDoc(roleDocRef);
+      const roleDocRef = db.collection(ROLES_COLLECTION).doc(input.roleId);
+      const docSnap = await roleDocRef.get();
 
-      if (docSnap.exists() && docSnap.data().isSystemRole) {
+      if (docSnap.exists() && docSnap.data()?.isSystemRole) {
           throw new Error("System roles cannot be deleted.");
       }
 
-      await deleteDoc(roleDocRef);
+      await roleDocRef.delete();
       console.log('Deleted role from Firestore:', input.roleId);
       return { success: true, roleId: input.roleId };
     } catch (error) {

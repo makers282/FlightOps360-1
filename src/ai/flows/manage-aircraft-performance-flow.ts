@@ -9,8 +9,7 @@
  */
 
 import { ai } from '@/ai/genkit';
-import { db } from '@/lib/firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { adminDb as db } from '@/lib/firebase-admin';
 import type { AircraftPerformanceData, FetchAircraftPerformanceInput, SaveAircraftPerformanceInput } from '@/ai/schemas/aircraft-performance-schemas';
 import { 
     // AircraftPerformanceDataSchema is used for type, not directly in flow schema definition here
@@ -24,12 +23,20 @@ const AIRCRAFT_PERFORMANCE_COLLECTION = 'aircraftPerformanceData';
 
 // Exported async functions that clients will call
 export async function fetchAircraftPerformance(input: FetchAircraftPerformanceInput): Promise<AircraftPerformanceData | null> {
-  console.log('[ManageAircraftPerformanceFlow Firestore] Attempting to fetch performance data for aircraft ID:', input.aircraftId);
+    if (!db) {
+    console.error("CRITICAL: Firestore admin instance (db) is not initialized in fetchAircraftPerformance (manage-aircraft-performance-flow). Admin SDK init likely failed.");
+    throw new Error("Firestore admin instance (db) is not initialized in fetchAircraftPerformance.");
+  }
+  console.log('[ManageAircraftPerformanceFlow Firestore Admin] Attempting to fetch performance data for aircraft ID:', input.aircraftId);
   return fetchAircraftPerformanceFlow(input);
 }
 
 export async function saveAircraftPerformance(input: SaveAircraftPerformanceInput): Promise<{ success: boolean; aircraftId: string }> {
-  console.log('[ManageAircraftPerformanceFlow Firestore] Attempting to save performance data for aircraft ID:', input.aircraftId);
+    if (!db) {
+    console.error("CRITICAL: Firestore admin instance (db) is not initialized in saveAircraftPerformance (manage-aircraft-performance-flow). Admin SDK init likely failed.");
+    throw new Error("Firestore admin instance (db) is not initialized in saveAircraftPerformance.");
+  }
+  console.log('[ManageAircraftPerformanceFlow Firestore Admin] Attempting to save performance data for aircraft ID:', input.aircraftId);
   return saveAircraftPerformanceFlow(input);
 }
 
@@ -41,11 +48,15 @@ const fetchAircraftPerformanceFlow = ai.defineFlow(
     outputSchema: FetchAircraftPerformanceOutputSchema, 
   },
   async (input) => {
+    if (!db) {
+        console.error("CRITICAL: Firestore admin instance (db) is not initialized in fetchAircraftPerformanceFlow.");
+        throw new Error("Firestore admin instance (db) is not initialized in fetchAircraftPerformanceFlow.");
+    }
     console.log('Executing fetchAircraftPerformanceFlow - Firestore for aircraftId:', input.aircraftId);
     try {
-      const docRef = doc(db, AIRCRAFT_PERFORMANCE_COLLECTION, input.aircraftId);
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
+      const docRef = db.collection(AIRCRAFT_PERFORMANCE_COLLECTION).doc(input.aircraftId);
+      const docSnap = await docRef.get();
+      if (docSnap.exists) {
         // The document itself contains the performance data fields directly
         const data = docSnap.data() as AircraftPerformanceData; // Assume the data matches the schema
         console.log('Fetched performance data from Firestore for aircraft:', input.aircraftId, data);
@@ -68,12 +79,16 @@ const saveAircraftPerformanceFlow = ai.defineFlow(
     outputSchema: SaveAircraftPerformanceOutputSchema,
   },
   async (input) => {
+    if (!db) {
+        console.error("CRITICAL: Firestore admin instance (db) is not initialized in saveAircraftPerformanceFlow.");
+        throw new Error("Firestore admin instance (db) is not initialized in saveAircraftPerformanceFlow.");
+    }
     console.log('Executing saveAircraftPerformanceFlow with input - Firestore:', JSON.stringify(input));
     try {
-      const docRef = doc(db, AIRCRAFT_PERFORMANCE_COLLECTION, input.aircraftId);
+      const docRef = db.collection(AIRCRAFT_PERFORMANCE_COLLECTION).doc(input.aircraftId);
       // The performanceData object is stored directly as the document's data.
       // The document ID is aircraftId.
-      await setDoc(docRef, input.performanceData); 
+      await docRef.set(input.performanceData); 
       console.log('Saved performance data in Firestore for aircraft:', input.aircraftId);
       return { success: true, aircraftId: input.aircraftId };
     } catch (error) {
@@ -82,4 +97,3 @@ const saveAircraftPerformanceFlow = ai.defineFlow(
     }
   }
 );
-

@@ -8,51 +8,36 @@
  * - saveCompanyProfile - Saves (adds or updates) the company profile.
  */
 
-import {ai}from '@/ai/genkit';
-import {z}from 'genkit';
-import { db } from '@/lib/firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-
-// Define the structure for an individual service/fee rate
-const ServiceFeeRateSchema = z.object({
-  displayDescription: z.string().min(1, "Display description is required."),
-  buy: z.number().min(0, "Buy rate must be non-negative."),
-  sell: z.number().min(0, "Sell rate must be non-negative."),
-  unitDescription: z.string().min(1, "Unit description is required (e.g., Per Leg, Per Service)."),
-  isActive: z.boolean().optional().default(true).describe("Indicates if this service/fee is active and should be considered for default pricing on new quotes."),
-});
-export type ServiceFeeRate = z.infer<typeof ServiceFeeRateSchema>;
-
-// Define the structure for the company profile
-const CompanyProfileSchema = z.object({
-  id: z.string().default("main").describe("The fixed ID for the company profile document, typically 'main'."),
-  companyName: z.string().optional(),
-  companyAddress: z.string().optional(),
-  companyEmail: z.string().optional(),
-  companyPhone: z.string().optional(),
-  // logoUrl: z.string().optional().describe("URL of the company logo."), // Logo handling is more complex and deferred
-  serviceFeeRates: z.record(ServiceFeeRateSchema).optional().default({}).describe("A map of service/fee keys to their rate details."),
-});
-export type CompanyProfile = z.infer<typeof CompanyProfileSchema>;
-
-// Schemas for flow inputs and outputs
-const SaveCompanyProfileInputSchema = CompanyProfileSchema;
-export type SaveCompanyProfileInput = z.infer<typeof SaveCompanyProfileInputSchema>;
-
-const FetchCompanyProfileOutputSchema = CompanyProfileSchema.nullable(); // Can be null if no profile exists
-const SaveCompanyProfileOutputSchema = CompanyProfileSchema;
+import { ai } from '@/ai/genkit';
+import { adminDb as db } from '@/lib/firebase-admin';
+import {
+  CompanyProfile,
+  SaveCompanyProfileInput,
+  FetchCompanyProfileOutputSchema,
+  SaveCompanyProfileInputSchema,
+  SaveCompanyProfileOutputSchema,
+  ServiceFeeRate,
+} from '@/ai/schemas/company-profile-schemas';
 
 const COMPANY_PROFILE_COLLECTION = 'companyProfile';
 const COMPANY_PROFILE_DOC_ID = 'main'; // Fixed document ID
 
 // Exported async functions that clients will call
 export async function fetchCompanyProfile(): Promise<CompanyProfile | null> {
-  console.log('[ManageCompanyProfileFlow Firestore] Attempting to fetch company profile.');
+    if (!db) {
+    console.error("CRITICAL: Firestore admin instance (db) is not initialized in fetchCompanyProfile (manage-company-profile-flow). Admin SDK init likely failed.");
+    throw new Error("Firestore admin instance (db) is not initialized in fetchCompanyProfile.");
+  }
+  console.log('[ManageCompanyProfileFlow Firestore Admin] Attempting to fetch company profile.');
   return fetchCompanyProfileFlow();
 }
 
 export async function saveCompanyProfile(input: SaveCompanyProfileInput): Promise<CompanyProfile> {
-  console.log('[ManageCompanyProfileFlow Firestore] Attempting to save company profile.');
+    if (!db) {
+    console.error("CRITICAL: Firestore admin instance (db) is not initialized in saveCompanyProfile (manage-company-profile-flow). Admin SDK init likely failed.");
+    throw new Error("Firestore admin instance (db) is not initialized in saveCompanyProfile.");
+  }
+  console.log('[ManageCompanyProfileFlow Firestore Admin] Attempting to save company profile.');
   // Ensure the ID is always 'main' when saving
   const profileToSave: CompanyProfile = {
     ...input,
@@ -70,14 +55,18 @@ const fetchCompanyProfileFlow = ai.defineFlow(
     outputSchema: FetchCompanyProfileOutputSchema,
   },
   async () => {
+    if (!db) {
+        console.error("CRITICAL: Firestore admin instance (db) is not initialized in fetchCompanyProfileFlow.");
+        throw new Error("Firestore admin instance (db) is not initialized in fetchCompanyProfileFlow.");
+    }
     console.log('Executing fetchCompanyProfileFlow - Firestore');
     try {
-      const profileDocRef = doc(db, COMPANY_PROFILE_COLLECTION, COMPANY_PROFILE_DOC_ID);
-      const docSnap = await getDoc(profileDocRef);
-      if (docSnap.exists()) {
+      const profileDocRef = db.collection(COMPANY_PROFILE_COLLECTION).doc(COMPANY_PROFILE_DOC_ID);
+      const docSnap = await profileDocRef.get();
+      if (docSnap.exists) {
         const data = docSnap.data();
         const processedServiceFeeRates: Record<string, ServiceFeeRate> = {};
-        if (data.serviceFeeRates) {
+        if (data?.serviceFeeRates) {
           for (const key in data.serviceFeeRates) {
             processedServiceFeeRates[key] = {
               ...data.serviceFeeRates[key],
@@ -87,10 +76,11 @@ const fetchCompanyProfileFlow = ai.defineFlow(
         }
         const result: CompanyProfile = {
             id: COMPANY_PROFILE_DOC_ID,
-            companyName: data.companyName,
-            companyAddress: data.companyAddress,
-            companyEmail: data.companyEmail,
-            companyPhone: data.companyPhone,
+            companyName: data?.companyName,
+            companyAddress: data?.companyAddress,
+            companyEmail: data?.companyEmail,
+            companyPhone: data?.companyPhone,
+            logoUrl: data?.logoUrl,
             serviceFeeRates: processedServiceFeeRates,
         };
         console.log('Fetched company profile from Firestore:', result);
@@ -104,6 +94,7 @@ const fetchCompanyProfileFlow = ai.defineFlow(
           companyAddress: "123 Sky Lane, Aviation City, FL 33333",
           companyEmail: "ops@example.com",
           companyPhone: "555-123-4567",
+          logoUrl: undefined,
           serviceFeeRates: {}, // Initialize with empty rates
         };
       }
@@ -121,9 +112,13 @@ const saveCompanyProfileFlow = ai.defineFlow(
     outputSchema: SaveCompanyProfileOutputSchema,
   },
   async (profileData) => {
+    if (!db) {
+        console.error("CRITICAL: Firestore admin instance (db) is not initialized in saveCompanyProfileFlow.");
+        throw new Error("Firestore admin instance (db) is not initialized in saveCompanyProfileFlow.");
+    }
     console.log('Executing saveCompanyProfileFlow with input - Firestore:', profileData);
     try {
-      const profileDocRef = doc(db, COMPANY_PROFILE_COLLECTION, COMPANY_PROFILE_DOC_ID);
+      const profileDocRef = db.collection(COMPANY_PROFILE_COLLECTION).doc(COMPANY_PROFILE_DOC_ID);
       const { id, ...dataToSet } = profileData; // Exclude 'id' from document fields
       
       const finalServiceFeeRates: Record<string, ServiceFeeRate> = {};
@@ -140,7 +135,7 @@ const saveCompanyProfileFlow = ai.defineFlow(
         ...dataToSet,
         serviceFeeRates: finalServiceFeeRates,
       };
-      await setDoc(profileDocRef, finalDataToSet, { merge: true }); 
+      await profileDocRef.set(finalDataToSet, { merge: true }); 
       console.log('Saved company profile in Firestore.');
       return profileData; // Return the full input data as per schema
     } catch (error) {

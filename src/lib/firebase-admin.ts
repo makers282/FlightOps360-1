@@ -5,6 +5,7 @@ import { getStorage } from 'firebase-admin/storage';
 // Correct the path to serviceAccountKey.json at the project root
 // The '..' goes up from 'lib', then up from 'src' to the project root.
 import serviceAccountCredentials from '../../serviceAccountKey.json';
+import { FIREBASE_CONFIG } from './config';
 
 let adminApp: App;
 
@@ -15,7 +16,7 @@ if (getApps().length === 0) {
 
     adminApp = initializeApp({
       credential: cert(serviceAccount),
-      storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+      storageBucket: FIREBASE_CONFIG.storageBucket,
     });
     console.log('[firebase-admin] Firebase Admin SDK initialized successfully.');
   } catch (error) {

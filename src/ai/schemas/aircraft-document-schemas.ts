@@ -49,3 +49,13 @@ export const DeleteAircraftDocumentOutputSchema = z.object({
   success: z.boolean(),
   documentId: z.string(),
 });
+
+export const UploadAircraftDocumentInputSchema = z.object({
+    path: z.string(),
+    file: z.string(),
+    contentType: z.string(),
+});
+
+export const UploadAircraftDocumentOutputSchema = z.object({
+    downloadUrl: z.string(),
+});

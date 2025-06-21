@@ -9,8 +9,8 @@
  */
 
 import { ai } from '@/ai/genkit';
-import { db } from '@/lib/firebase';
-import { collection, doc, getDocs, setDoc, deleteDoc, serverTimestamp, Timestamp, getDoc } from 'firebase/firestore';
+import { adminDb as db } from '@/lib/firebase-admin';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import type { CrewMember, SaveCrewMemberInput } from '@/ai/schemas/crew-member-schemas';
 import {
     // CrewMemberSchema, // For validating output type if needed directly
@@ -111,14 +111,22 @@ const mockCrewMembersList: CrewMember[] = [
 
 // Exported async functions that clients will call
 export async function fetchCrewMembers(): Promise<CrewMember[]> {
-  console.log('[ManageCrewFlow Firestore] Attempting to fetch all crew members.');
+    if (!db) {
+    console.error("CRITICAL: Firestore admin instance (db) is not initialized in fetchCrewMembers (manage-crew-flow). Admin SDK init likely failed.");
+    throw new Error("Firestore admin instance (db) is not initialized in fetchCrewMembers.");
+  }
+  console.log('[ManageCrewFlow Firestore Admin] Attempting to fetch all crew members.');
   return fetchCrewMembersFlow();
 }
 
 export async function saveCrewMember(input: SaveCrewMemberInput): Promise<CrewMember> {
+    if (!db) {
+    console.error("CRITICAL: Firestore admin instance (db) is not initialized in saveCrewMember (manage-crew-flow). Admin SDK init likely failed.");
+    throw new Error("Firestore admin instance (db) is not initialized in saveCrewMember.");
+  }
   // If ID is not provided, generate one for Firestore
-  const crewMemberId = input.id || doc(collection(db, CREW_MEMBERS_COLLECTION)).id;
-  console.log('[ManageCrewFlow Firestore] Attempting to save crew member:', crewMemberId);
+  const crewMemberId = input.id || db.collection(CREW_MEMBERS_COLLECTION).doc().id;
+  console.log('[ManageCrewFlow Firestore Admin] Attempting to save crew member:', crewMemberId);
 
   // Prepare data for the flow: exclude 'id' from the data payload as it's the doc key.
   const dataToSaveInDb = { ...input };
@@ -131,7 +139,11 @@ export async function saveCrewMember(input: SaveCrewMemberInput): Promise<CrewMe
 }
 
 export async function deleteCrewMember(input: { crewMemberId: string }): Promise<{ success: boolean; crewMemberId: string }> {
-  console.log('[ManageCrewFlow Firestore] Attempting to delete crew member ID:', input.crewMemberId);
+    if (!db) {
+    console.error("CRITICAL: Firestore admin instance (db) is not initialized in deleteCrewMember (manage-crew-flow). Admin SDK init likely failed.");
+    throw new Error("Firestore admin instance (db) is not initialized in deleteCrewMember.");
+  }
+  console.log('[ManageCrewFlow Firestore Admin] Attempting to delete crew member ID:', input.crewMemberId);
   return deleteCrewMemberFlow(input);
 }
 
@@ -143,10 +155,14 @@ const fetchCrewMembersFlow = ai.defineFlow(
     outputSchema: FetchCrewMembersOutputSchema,
   },
   async () => {
+    if (!db) {
+        console.error("CRITICAL: Firestore admin instance (db) is not initialized in fetchCrewMembersFlow.");
+        throw new Error("Firestore admin instance (db) is not initialized in fetchCrewMembersFlow.");
+    }
     console.log('Executing fetchCrewMembersFlow - Firestore');
     try {
-      const crewMembersCollectionRef = collection(db, CREW_MEMBERS_COLLECTION);
-      const snapshot = await getDocs(crewMembersCollectionRef);
+      const crewMembersCollectionRef = db.collection(CREW_MEMBERS_COLLECTION);
+      const snapshot = await crewMembersCollectionRef.get();
       if (snapshot.empty) {
         console.log('No crew members found in Firestore. Returning mock data for testing.');
         return mockCrewMembersList;
@@ -189,25 +205,29 @@ const saveCrewMemberFlow = ai.defineFlow(
     outputSchema: SaveCrewMemberOutputSchema,
   },
   async ({ crewMemberId, crewMemberData }) => {
+    if (!db) {
+        console.error("CRITICAL: Firestore admin instance (db) is not initialized in saveCrewMemberFlow.");
+        throw new Error("Firestore admin instance (db) is not initialized in saveCrewMemberFlow.");
+    }
     console.log('Executing saveCrewMemberFlow with input - Firestore:', crewMemberId);
     try {
-      const crewMemberDocRef = doc(db, CREW_MEMBERS_COLLECTION, crewMemberId);
-      const docSnap = await getDoc(crewMemberDocRef);
+      const crewMemberDocRef = db.collection(CREW_MEMBERS_COLLECTION).doc(crewMemberId);
+      const docSnap = await crewMemberDocRef.get();
 
       const dataWithTimestamps = {
         ...crewMemberData,
         licenses: crewMemberData.licenses || [], // Ensure array
         typeRatings: crewMemberData.typeRatings || [], // Ensure array
-        updatedAt: serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
         // Preserve original createdAt if doc exists, otherwise set new serverTimestamp
-        createdAt: docSnap.exists() ? docSnap.data().createdAt : serverTimestamp(),
+        createdAt: docSnap.exists() && docSnap.data()?.createdAt ? docSnap.data()?.createdAt : FieldValue.serverTimestamp(),
       };
 
-      await setDoc(crewMemberDocRef, dataWithTimestamps, { merge: true });
+      await crewMemberDocRef.set(dataWithTimestamps, { merge: true });
       console.log('Saved crew member in Firestore:', crewMemberId);
       
       // Fetch the saved document to get server-generated timestamps correctly
-      const savedDoc = await getDoc(crewMemberDocRef);
+      const savedDoc = await crewMemberDocRef.get();
       const savedData = savedDoc.data();
 
       if (!savedData) {
@@ -236,10 +256,14 @@ const deleteCrewMemberFlow = ai.defineFlow(
     outputSchema: DeleteCrewMemberOutputSchema,
   },
   async (input) => {
+    if (!db) {
+        console.error("CRITICAL: Firestore admin instance (db) is not initialized in deleteCrewMemberFlow.");
+        throw new Error("Firestore admin instance (db) is not initialized in deleteCrewMemberFlow.");
+    }
     console.log('Executing deleteCrewMemberFlow for crew member ID - Firestore:', input.crewMemberId);
     try {
-      const crewMemberDocRef = doc(db, CREW_MEMBERS_COLLECTION, input.crewMemberId);
-      await deleteDoc(crewMemberDocRef);
+      const crewMemberDocRef = db.collection(CREW_MEMBERS_COLLECTION).doc(input.crewMemberId);
+      await crewMemberDocRef.delete();
       console.log('Deleted crew member from Firestore:', input.crewMemberId);
       return { success: true, crewMemberId: input.crewMemberId };
     } catch (error) {

@@ -1,6 +1,6 @@
 runConfig:
-minInstances: 0
-maxInstances: 8
-##concurrency: 100
-##cpu: 2
-##memoryMiB: 1024
+  minInstances: 0
+  maxInstances: 100
+storage:
+- bucket: skybase-nguee.appspot.com
+  mountPoint: "/data"

@@ -28,7 +28,7 @@ import type { AircraftDocument, SaveAircraftDocumentInput } from '@/ai/schemas/a
 import { aircraftDocumentTypes } from '@/ai/schemas/aircraft-document-schemas';
 import type { FleetAircraft } from '@/ai/schemas/fleet-aircraft-schemas';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { uploadAircraftDocument } from '@/ai/flows/upload-aircraft-document-flow';
+import { uploadFile } from '@/ai/flows/upload-file-flow';
 import { useToast } from '@/hooks/use-toast';
 
 const aircraftDocumentFormSchema = z.object({
@@ -145,15 +145,18 @@ export function AddEditAircraftDocumentModal({
         await new Promise<void>((resolvePromise, rejectPromise) => {
           reader.onloadend = async () => {
             try {
-              const fileDataUri = reader.result as string;
+              const base64String = reader.result?.toString().split(',')[1];
+              if (!base64String) {
+                rejectPromise(new Error("Could not read file as base64."));
+                return;
+              }
               toast({ title: "Uploading File...", description: `Uploading ${selectedFile.name}. Please wait.`, variant: "default" });
-              const uploadResult = await uploadAircraftDocument({
-                aircraftId: formData.aircraftId,
-                documentId: documentIdForOperations,
-                fileName: selectedFile.name,
-                fileDataUri: fileDataUri,
+              const uploadResult = await uploadFile({
+                path: `aircraft_documents/${formData.aircraftId}/${documentIdForOperations}/${selectedFile.name}`,
+                file: base64String,
+                contentType: selectedFile.type,
               });
-              finalFileUrl = uploadResult.fileUrl;
+              finalFileUrl = uploadResult.downloadUrl;
               toast({ title: "Upload Successful", description: `${selectedFile.name} uploaded.` });
               resolvePromise();
             } catch (uploadError) {

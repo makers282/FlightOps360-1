@@ -10,8 +10,7 @@
  */
 
 import {ai} from '@/ai/genkit';
-import { db } from '@/lib/firebase';
-import { collection, doc, getDocs, setDoc, deleteDoc, getDoc } from 'firebase/firestore';
+import { adminDb as db } from '@/lib/firebase-admin';
 import type { AircraftRate, SaveAircraftRateInput, DeleteAircraftRateInput } from '@/ai/schemas/aircraft-rate-schemas';
 import { 
     AircraftRateSchema as FlowAircraftRateSchema, // Renamed to avoid conflict with AircraftRate type
@@ -27,17 +26,29 @@ const AIRCRAFT_RATES_COLLECTION = 'aircraftRates';
 
 // Exported async functions that clients will call
 export async function fetchAircraftRates(): Promise<AircraftRate[]> {
-  console.log('[ManageAircraftRatesFlow Firestore] Attempting to fetch aircraft rates.');
+    if (!db) {
+    console.error("CRITICAL: Firestore admin instance (db) is not initialized in fetchAircraftRates (manage-aircraft-rates-flow). Admin SDK init likely failed.");
+    throw new Error("Firestore admin instance (db) is not initialized in fetchAircraftRates.");
+  }
+  console.log('[ManageAircraftRatesFlow Firestore Admin] Attempting to fetch aircraft rates.');
   return fetchAircraftRatesFlow();
 }
 
 export async function saveAircraftRate(input: SaveAircraftRateInput): Promise<AircraftRate> {
-  console.log('[ManageAircraftRatesFlow Firestore] Attempting to save aircraft rate for aircraft ID:', input.id);
+    if (!db) {
+    console.error("CRITICAL: Firestore admin instance (db) is not initialized in saveAircraftRate (manage-aircraft-rates-flow). Admin SDK init likely failed.");
+    throw new Error("Firestore admin instance (db) is not initialized in saveAircraftRate.");
+  }
+  console.log('[ManageAircraftRatesFlow Firestore Admin] Attempting to save aircraft rate for aircraft ID:', input.id);
   return saveAircraftRateFlow(input);
 }
 
 export async function deleteAircraftRate(input: DeleteAircraftRateInput): Promise<{ success: boolean; aircraftId: string }> {
-  console.log('[ManageAircraftRatesFlow Firestore] Attempting to delete aircraft rate for aircraft ID:', input.aircraftId);
+    if (!db) {
+    console.error("CRITICAL: Firestore admin instance (db) is not initialized in deleteAircraftRate (manage-aircraft-rates-flow). Admin SDK init likely failed.");
+    throw new Error("Firestore admin instance (db) is not initialized in deleteAircraftRate.");
+  }
+  console.log('[ManageAircraftRatesFlow Firestore Admin] Attempting to delete aircraft rate for aircraft ID:', input.aircraftId);
   return deleteAircraftRateFlow(input);
 }
 
@@ -49,10 +60,14 @@ const fetchAircraftRatesFlow = ai.defineFlow(
     outputSchema: FetchAircraftRatesOutputSchema,
   },
   async () => {
+    if (!db) {
+        console.error("CRITICAL: Firestore admin instance (db) is not initialized in fetchAircraftRatesFlow.");
+        throw new Error("Firestore admin instance (db) is not initialized in fetchAircraftRatesFlow.");
+    }
     console.log('Executing fetchAircraftRatesFlow - Firestore');
     try {
-      const ratesCollectionRef = collection(db, AIRCRAFT_RATES_COLLECTION);
-      const snapshot = await getDocs(ratesCollectionRef);
+      const ratesCollectionRef = db.collection(AIRCRAFT_RATES_COLLECTION);
+      const snapshot = await ratesCollectionRef.get();
       const ratesList = snapshot.docs.map(docSnapshot => {
         const data = docSnapshot.data();
         // Handle potential old format (with nested rates.standardCharter) or new simple format
@@ -89,15 +104,19 @@ const saveAircraftRateFlow = ai.defineFlow(
     outputSchema: SaveAircraftRateOutputSchema,
   },
   async (input) => {
+    if (!db) {
+        console.error("CRITICAL: Firestore admin instance (db) is not initialized in saveAircraftRateFlow.");
+        throw new Error("Firestore admin instance (db) is not initialized in saveAircraftRateFlow.");
+    }
     console.log('Executing saveAircraftRateFlow with input - Firestore:', input);
     try {
-      const rateDocRef = doc(db, AIRCRAFT_RATES_COLLECTION, input.id);
+      const rateDocRef = db.collection(AIRCRAFT_RATES_COLLECTION).doc(input.id);
       // Data to set should be flat buy/sell as per the simplified schema
       const dataToSet = {
         buy: input.buy,
         sell: input.sell,
       };
-      await setDoc(rateDocRef, dataToSet); // Overwrite with new simple structure
+      await rateDocRef.set(dataToSet); // Overwrite with new simple structure
       console.log('Saved aircraft rate in Firestore:', input.id);
       // Return the input which matches the AircraftRate schema (id, buy, sell)
       return {id: input.id, buy: input.buy, sell: input.sell}; 
@@ -115,17 +134,21 @@ const deleteAircraftRateFlow = ai.defineFlow(
     outputSchema: DeleteAircraftRateOutputSchema,
   },
   async (input) => {
+    if (!db) {
+        console.error("CRITICAL: Firestore admin instance (db) is not initialized in deleteAircraftRateFlow.");
+        throw new Error("Firestore admin instance (db) is not initialized in deleteAircraftRateFlow.");
+    }
     console.log('Executing deleteAircraftRateFlow for aircraft ID - Firestore:', input.aircraftId);
     try {
-      const rateDocRef = doc(db, AIRCRAFT_RATES_COLLECTION, input.aircraftId);
-      const docSnap = await getDoc(rateDocRef);
+      const rateDocRef = db.collection(AIRCRAFT_RATES_COLLECTION).doc(input.aircraftId);
+      const docSnap = await rateDocRef.get();
 
-      if (!docSnap.exists()) {
+      if (!docSnap.exists) {
           console.warn(`Aircraft rate for ID ${input.aircraftId} not found for deletion in Firestore.`);
           return { success: false, aircraftId: input.aircraftId };
       }
 
-      await deleteDoc(rateDocRef);
+      await rateDocRef.delete();
       console.log('Deleted aircraft rate from Firestore:', input.aircraftId);
       return { success: true, aircraftId: input.aircraftId };
     } catch (error) {

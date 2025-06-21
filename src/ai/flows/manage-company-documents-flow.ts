@@ -9,8 +9,8 @@
  */
 
 import { ai } from '@/ai/genkit';
-import { db } from '@/lib/firebase';
-import { collection, doc, getDocs, setDoc, deleteDoc, serverTimestamp, Timestamp, getDoc, query, orderBy } from 'firebase/firestore';
+import { adminDb as db } from '@/lib/firebase-admin';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { z } from 'zod';
 import type { CompanyDocument, SaveCompanyDocumentInput } from '@/ai/schemas/company-document-schemas';
 import {
@@ -25,13 +25,21 @@ const COMPANY_DOCUMENTS_COLLECTION = 'companyDocuments';
 
 // Exported async functions that clients will call
 export async function fetchCompanyDocuments(): Promise<CompanyDocument[]> {
-  console.log('[ManageCompanyDocumentsFlow Firestore] Attempting to fetch all company documents.');
+    if (!db) {
+    console.error("CRITICAL: Firestore admin instance (db) is not initialized in fetchCompanyDocuments (manage-company-documents-flow). Admin SDK init likely failed.");
+    throw new Error("Firestore admin instance (db) is not initialized in fetchCompanyDocuments.");
+  }
+  console.log('[ManageCompanyDocumentsFlow Firestore Admin] Attempting to fetch all company documents.');
   return fetchCompanyDocumentsFlow();
 }
 
 export async function saveCompanyDocument(input: SaveCompanyDocumentInput): Promise<CompanyDocument> {
-  const documentId = input.id || doc(collection(db, COMPANY_DOCUMENTS_COLLECTION)).id;
-  console.log('[ManageCompanyDocumentsFlow Firestore] Attempting to save document:', documentId);
+    if (!db) {
+    console.error("CRITICAL: Firestore admin instance (db) is not initialized in saveCompanyDocument (manage-company-documents-flow). Admin SDK init likely failed.");
+    throw new Error("Firestore admin instance (db) is not initialized in saveCompanyDocument.");
+  }
+  const documentId = input.id || db.collection(COMPANY_DOCUMENTS_COLLECTION).doc().id;
+  console.log('[ManageCompanyDocumentsFlow Firestore Admin] Attempting to save document:', documentId);
 
   const dataToSaveInDb = { ...input };
   if (dataToSaveInDb.id) {
@@ -42,7 +50,11 @@ export async function saveCompanyDocument(input: SaveCompanyDocumentInput): Prom
 }
 
 export async function deleteCompanyDocument(input: { documentId: string }): Promise<{ success: boolean; documentId: string }> {
-  console.log('[ManageCompanyDocumentsFlow Firestore] Attempting to delete document ID:', input.documentId);
+    if (!db) {
+    console.error("CRITICAL: Firestore admin instance (db) is not initialized in deleteCompanyDocument (manage-company-documents-flow). Admin SDK init likely failed.");
+    throw new Error("Firestore admin instance (db) is not initialized in deleteCompanyDocument.");
+  }
+  console.log('[ManageCompanyDocumentsFlow Firestore Admin] Attempting to delete document ID:', input.documentId);
   return deleteCompanyDocumentFlow(input);
 }
 
@@ -54,11 +66,15 @@ const fetchCompanyDocumentsFlow = ai.defineFlow(
     outputSchema: FetchCompanyDocumentsOutputSchema,
   },
   async () => {
+    if (!db) {
+        console.error("CRITICAL: Firestore admin instance (db) is not initialized in fetchCompanyDocumentsFlow.");
+        throw new Error("Firestore admin instance (db) is not initialized in fetchCompanyDocumentsFlow.");
+    }
     console.log('Executing fetchCompanyDocumentsFlow - Firestore');
     try {
-      const documentsCollectionRef = collection(db, COMPANY_DOCUMENTS_COLLECTION);
-      const q = query(documentsCollectionRef, orderBy("updatedAt", "desc")); // Order by most recently updated
-      const snapshot = await getDocs(q);
+      const documentsCollectionRef = db.collection(COMPANY_DOCUMENTS_COLLECTION);
+      const q = documentsCollectionRef.orderBy("updatedAt", "desc"); // Order by most recently updated
+      const snapshot = await q.get();
       const documentsList = snapshot.docs.map(docSnapshot => {
         const data = docSnapshot.data();
         return {
@@ -91,22 +107,26 @@ const saveCompanyDocumentFlow = ai.defineFlow(
     outputSchema: SaveCompanyDocumentOutputSchema,
   },
   async ({ documentId, documentData }) => {
+    if (!db) {
+        console.error("CRITICAL: Firestore admin instance (db) is not initialized in saveCompanyDocumentFlow.");
+        throw new Error("Firestore admin instance (db) is not initialized in saveCompanyDocumentFlow.");
+    }
     console.log('Executing saveCompanyDocumentFlow with input - Firestore:', documentId);
     try {
-      const documentDocRef = doc(db, COMPANY_DOCUMENTS_COLLECTION, documentId);
-      const docSnap = await getDoc(documentDocRef);
+      const documentDocRef = db.collection(COMPANY_DOCUMENTS_COLLECTION).doc(documentId);
+      const docSnap = await documentDocRef.get();
 
       const dataWithTimestamps = {
         ...documentData,
         tags: documentData.tags || [], // Ensure tags is an array
-        updatedAt: serverTimestamp(),
-        createdAt: docSnap.exists() ? docSnap.data().createdAt : serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+        createdAt: docSnap.exists() && docSnap.data()?.createdAt ? docSnap.data()?.createdAt : FieldValue.serverTimestamp(),
       };
 
-      await setDoc(documentDocRef, dataWithTimestamps, { merge: true });
+      await documentDocRef.set(dataWithTimestamps, { merge: true });
       console.log('Saved company document in Firestore:', documentId);
       
-      const savedDoc = await getDoc(documentDocRef);
+      const savedDoc = await documentDocRef.get();
       const savedData = savedDoc.data();
 
       if (!savedData) {
@@ -134,10 +154,14 @@ const deleteCompanyDocumentFlow = ai.defineFlow(
     outputSchema: DeleteCompanyDocumentOutputSchema,
   },
   async (input) => {
+    if (!db) {
+        console.error("CRITICAL: Firestore admin instance (db) is not initialized in deleteCompanyDocumentFlow.");
+        throw new Error("Firestore admin instance (db) is not initialized in deleteCompanyDocumentFlow.");
+    }
     console.log('Executing deleteCompanyDocumentFlow for document ID - Firestore:', input.documentId);
     try {
-      const documentDocRef = doc(db, COMPANY_DOCUMENTS_COLLECTION, input.documentId);
-      await deleteDoc(documentDocRef);
+      const documentDocRef = db.collection(COMPANY_DOCUMENTS_COLLECTION).doc(input.documentId);
+      await documentDocRef.delete();
       console.log('Deleted company document from Firestore:', input.documentId);
       return { success: true, documentId: input.documentId };
     } catch (error) {

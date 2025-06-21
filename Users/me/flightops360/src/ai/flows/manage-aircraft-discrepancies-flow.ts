@@ -34,11 +34,6 @@ export async function saveAircraftDiscrepancy(input: SaveAircraftDiscrepancyInpu
     throw new Error("Firestore admin instance (db) is not initialized in saveAircraftDiscrepancy.");
   }
   const discrepancyId = input.id || db.collection(DISCREPANCIES_COLLECTION).doc().id;
-  // Pass the full input (which might include status and id) to the flow logic
-  // The flow will use firestoreDocId for the document ID and the rest as discrepancyData.
-  // The `id` field within `input` (if present) should match `discrepancyId`.
-  // The flow's input schema `InternalSaveAircraftDiscrepancyInputSchema` expects `discrepancyData` to be `SaveAircraftDiscrepancyInputSchema.omit({ id: true })`
-  // So we need to remove `id` from the `input` before passing as `discrepancyData`.
   const { id, ...discrepancyDataForFlow } = input;
 
   return saveAircraftDiscrepancyFlow({ 
@@ -106,18 +101,16 @@ const saveAircraftDiscrepancyFlow = ai.defineFlow(
       let statusToSet: DiscrepancyStatus;
       const existingStatus = docSnap.exists ? docSnap.data()?.status as DiscrepancyStatus : undefined;
 
-      // Prioritize status from input (e.g., "Closed" from sign-off)
       if (discrepancyData.status) {
         statusToSet = discrepancyData.status;
       } else if (existingStatus === "Closed") {
-        statusToSet = "Closed"; // Do not change a closed status if no new status is provided
+        statusToSet = "Closed"; 
       } else if (discrepancyData.isDeferred) {
         statusToSet = "Deferred";
       } else {
         statusToSet = "Open";
       }
       
-      // When status is "Closed", ensure isDeferred is false.
       const isDeferredToSet = statusToSet === "Closed" ? false : discrepancyData.isDeferred;
 
       const dataToSet = {
@@ -253,3 +246,5 @@ const deleteAircraftDiscrepancyFlow = ai.defineFlow(
     }
   }
 );
+
+    

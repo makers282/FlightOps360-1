@@ -9,8 +9,7 @@
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
-import { db } from '@/lib/firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { adminDb as db } from '@/lib/firebase-admin';
 
 const ComponentTimeDataSchema = z.object({
   time: z.number().nonnegative().default(0),
@@ -47,12 +46,20 @@ const COMPONENT_TIMES_COLLECTION = 'aircraftComponentTimes';
 
 // Exported async functions that clients will call
 export async function fetchComponentTimesForAircraft(input: FetchComponentTimesInput): Promise<AircraftComponentTimes | null> {
-  console.log('[ManageComponentTimesFlow Firestore] Attempting to fetch component times for aircraft ID:', input.aircraftId);
+    if (!db) {
+    console.error("CRITICAL: Firestore admin instance (db) is not initialized in fetchComponentTimesForAircraft (manage-component-times-flow). Admin SDK init likely failed.");
+    throw new Error("Firestore admin instance (db) is not initialized in fetchComponentTimesForAircraft.");
+  }
+  console.log('[ManageComponentTimesFlow Firestore Admin] Attempting to fetch component times for aircraft ID:', input.aircraftId);
   return fetchComponentTimesFlow(input);
 }
 
 export async function saveComponentTimesForAircraft(input: SaveComponentTimesInput): Promise<{ success: boolean; aircraftId: string }> {
-  console.log('[ManageComponentTimesFlow Firestore] Attempting to save component times for aircraft ID:', input.aircraftId);
+    if (!db) {
+    console.error("CRITICAL: Firestore admin instance (db) is not initialized in saveComponentTimesForAircraft (manage-component-times-flow). Admin SDK init likely failed.");
+    throw new Error("Firestore admin instance (db) is not initialized in saveComponentTimesForAircraft.");
+  }
+  console.log('[ManageComponentTimesFlow Firestore Admin] Attempting to save component times for aircraft ID:', input.aircraftId);
   return saveComponentTimesFlow(input);
 }
 
@@ -64,11 +71,15 @@ const fetchComponentTimesFlow = ai.defineFlow(
     outputSchema: FetchComponentTimesOutputSchema, 
   },
   async (input) => {
+    if (!db) {
+        console.error("CRITICAL: Firestore admin instance (db) is not initialized in fetchComponentTimesFlow.");
+        throw new Error("Firestore admin instance (db) is not initialized in fetchComponentTimesFlow.");
+    }
     console.log('Executing fetchComponentTimesFlow - Firestore for aircraftId:', input.aircraftId);
     try {
-      const docRef = doc(db, COMPONENT_TIMES_COLLECTION, input.aircraftId);
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
+      const docRef = db.collection(COMPONENT_TIMES_COLLECTION).doc(input.aircraftId);
+      const docSnap = await docRef.get();
+      if (docSnap.exists) {
         const data = docSnap.data()?.componentTimes as AircraftComponentTimes; // Assuming data is stored under a 'componentTimes' field
         console.log('Fetched component times from Firestore for aircraft:', input.aircraftId, data);
         return data || null; // Return data or null if undefined
@@ -90,12 +101,16 @@ const saveComponentTimesFlow = ai.defineFlow(
     outputSchema: SaveComponentTimesOutputSchema,
   },
   async (input) => {
+    if (!db) {
+        console.error("CRITICAL: Firestore admin instance (db) is not initialized in saveComponentTimesFlow.");
+        throw new Error("Firestore admin instance (db) is not initialized in saveComponentTimesFlow.");
+    }
     console.log('Executing saveComponentTimesFlow with input - Firestore:', JSON.stringify(input));
     try {
-      const docRef = doc(db, COMPONENT_TIMES_COLLECTION, input.aircraftId);
+      const docRef = db.collection(COMPONENT_TIMES_COLLECTION).doc(input.aircraftId);
       // Store the componentTimes map directly under a field named 'componentTimes' in the document.
       // The document ID is aircraftId.
-      await setDoc(docRef, { componentTimes: input.componentTimes }, { merge: true }); 
+      await docRef.set({ componentTimes: input.componentTimes }, { merge: true }); 
       console.log('Saved component times in Firestore for aircraft:', input.aircraftId);
       return { success: true, aircraftId: input.aircraftId };
     } catch (error) {

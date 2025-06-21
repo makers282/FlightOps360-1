@@ -29,7 +29,7 @@ import type { MelItem, SaveMelItemInput } from '@/ai/schemas/mel-item-schemas';
 import { melCategories, melStatuses } from '@/ai/schemas/mel-item-schemas';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { FleetAircraft } from '@/ai/schemas/fleet-aircraft-schemas';
-import { Card, CardHeader, CardTitle as ModalCardTitle, CardContent as ModalCardContent } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 
 const melItemFormSchema = z.object({
   melNumber: z.string().min(1, "MEL item number is required (e.g., 25-10-01a)."),
@@ -194,9 +194,9 @@ export function AddEditMelItemModal({
                 <FormField control={form.control} name="provisionsOrLimitations" render={({ field }) => (<FormItem><FormLabel>Provisions or Limitations (Optional)</FormLabel><FormControl><Textarea placeholder="Detail any operational limitations or procedures required..." {...field} value={field.value || ""} rows={3} /></FormControl><FormMessage /></FormItem>)} />
                 
                 {statusWatch === 'Closed' && (
-                    <ModalCard className="p-4 border-green-500/50 bg-green-50/30 dark:bg-green-900/20 mt-4">
-                        <ModalCardHeader className="p-0 pb-3"><ModalCardTitle className="text-md text-green-700 dark:text-green-400">Closure Details</ModalCardTitle></ModalCardHeader>
-                        <ModalCardContent className="p-0 space-y-4">
+                    <Card className="p-4 border-green-500/50 bg-green-50/30 dark:bg-green-900/20 mt-4">
+                        <CardHeader className="p-0 pb-3"><CardTitle className="text-md text-green-700 dark:text-green-400">Closure Details</CardTitle></CardHeader>
+                        <CardContent className="p-0 space-y-4">
                              <FormField control={form.control} name="correctiveAction" render={({ field }) => (<FormItem><FormLabel>Corrective Action Taken</FormLabel><FormControl><Textarea placeholder="e.g., Replaced component, performed operational check..." {...field} value={field.value || ''} rows={3} /></FormControl><FormMessage /></FormItem>)} />
                             <FormField control={form.control} name="closedDate" render={({ field }) => (
                                 <FormItem className="flex flex-col">
@@ -216,8 +216,8 @@ export function AddEditMelItemModal({
                                   <FormMessage />
                                 </FormItem>
                             )} />
-                        </ModalCardContent>
-                    </ModalCard>
+                        </CardContent>
+                    </Card>
                 )}
               </div>
             </ScrollArea>

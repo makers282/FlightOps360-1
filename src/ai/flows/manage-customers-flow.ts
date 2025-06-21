@@ -9,8 +9,8 @@
  */
 
 import { ai } from '@/ai/genkit';
-import { db } from '@/lib/firebase';
-import { collection, doc, getDocs, setDoc, deleteDoc, Timestamp, getDoc, serverTimestamp } from 'firebase/firestore';
+import { adminDb as db } from '@/lib/firebase-admin';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import type { Customer, SaveCustomerInput } from '@/ai/schemas/customer-schemas';
 import { 
     CustomerSchema,
@@ -26,14 +26,22 @@ const CUSTOMERS_COLLECTION = 'customers';
 
 // Exported async functions that clients will call
 export async function fetchCustomers(): Promise<Customer[]> {
-  console.log('[ManageCustomersFlow Firestore] Attempting to fetch all customers.');
+    if (!db) {
+    console.error("CRITICAL: Firestore admin instance (db) is not initialized in fetchCustomers (manage-customers-flow). Admin SDK init likely failed.");
+    throw new Error("Firestore admin instance (db) is not initialized in fetchCustomers.");
+  }
+  console.log('[ManageCustomersFlow Firestore Admin] Attempting to fetch all customers.');
   return fetchCustomersFlow();
 }
 
 export async function saveCustomer(input: SaveCustomerInput): Promise<Customer> {
-  console.log('[ManageCustomersFlow Firestore] Attempting to save customer:', input.id || 'new customer');
+    if (!db) {
+    console.error("CRITICAL: Firestore admin instance (db) is not initialized in saveCustomer (manage-customers-flow). Admin SDK init likely failed.");
+    throw new Error("Firestore admin instance (db) is not initialized in saveCustomer.");
+  }
+  console.log('[ManageCustomersFlow Firestore Admin] Attempting to save customer:', input.id || 'new customer');
   // If ID is not provided, generate one for Firestore
-  const customerId = input.id || doc(collection(db, CUSTOMERS_COLLECTION)).id;
+  const customerId = input.id || db.collection(CUSTOMERS_COLLECTION).doc().id;
   
   const dataToSaveInDb = {
     ...input,
@@ -49,7 +57,11 @@ export async function saveCustomer(input: SaveCustomerInput): Promise<Customer> 
 }
 
 export async function deleteCustomer(input: { customerId: string }): Promise<{ success: boolean; customerId: string }> {
-  console.log('[ManageCustomersFlow Firestore] Attempting to delete customer ID:', input.customerId);
+    if (!db) {
+    console.error("CRITICAL: Firestore admin instance (db) is not initialized in deleteCustomer (manage-customers-flow). Admin SDK init likely failed.");
+    throw new Error("Firestore admin instance (db) is not initialized in deleteCustomer.");
+  }
+  console.log('[ManageCustomersFlow Firestore Admin] Attempting to delete customer ID:', input.customerId);
   return deleteCustomerFlow(input);
 }
 
@@ -61,10 +73,14 @@ const fetchCustomersFlow = ai.defineFlow(
     outputSchema: FetchCustomersOutputSchema,
   },
   async () => {
+    if (!db) {
+        console.error("CRITICAL: Firestore admin instance (db) is not initialized in fetchCustomersFlow.");
+        throw new Error("Firestore admin instance (db) is not initialized in fetchCustomersFlow.");
+    }
     console.log('Executing fetchCustomersFlow - Firestore');
     try {
-      const customersCollectionRef = collection(db, CUSTOMERS_COLLECTION);
-      const snapshot = await getDocs(customersCollectionRef);
+      const customersCollectionRef = db.collection(CUSTOMERS_COLLECTION);
+      const snapshot = await customersCollectionRef.get();
       const customersList = snapshot.docs.map(docSnapshot => {
         const data = docSnapshot.data();
         // Convert Firestore Timestamps to ISO strings
@@ -97,22 +113,26 @@ const saveCustomerFlow = ai.defineFlow(
     outputSchema: SaveCustomerOutputSchema,
   },
   async ({ customerId, customerData }) => {
+    if (!db) {
+        console.error("CRITICAL: Firestore admin instance (db) is not initialized in saveCustomerFlow.");
+        throw new Error("Firestore admin instance (db) is not initialized in saveCustomerFlow.");
+    }
     console.log('Executing saveCustomerFlow with input - Firestore:', customerId);
     try {
-      const customerDocRef = doc(db, CUSTOMERS_COLLECTION, customerId);
+      const customerDocRef = db.collection(CUSTOMERS_COLLECTION).doc(customerId);
       
-      const docSnap = await getDoc(customerDocRef);
+      const docSnap = await customerDocRef.get();
       const dataWithTimestamps = {
         ...customerData,
         isActive: customerData.isActive === undefined ? true : customerData.isActive, // Default again before saving
-        updatedAt: serverTimestamp(),
-        createdAt: docSnap.exists() ? docSnap.data().createdAt : serverTimestamp(), // Preserve original createdAt if doc exists
+        updatedAt: FieldValue.serverTimestamp(),
+        createdAt: docSnap.exists() && docSnap.data()?.createdAt ? docSnap.data()?.createdAt : FieldValue.serverTimestamp(), // Preserve original createdAt if doc exists
       };
 
-      await setDoc(customerDocRef, dataWithTimestamps, { merge: true });
+      await customerDocRef.set(dataWithTimestamps, { merge: true });
       console.log('Saved customer in Firestore:', customerId);
       
-      const savedDoc = await getDoc(customerDocRef);
+      const savedDoc = await customerDocRef.get();
       const savedData = savedDoc.data();
 
       return {
@@ -136,10 +156,14 @@ const deleteCustomerFlow = ai.defineFlow(
     outputSchema: DeleteCustomerOutputSchema,
   },
   async (input) => {
+    if (!db) {
+        console.error("CRITICAL: Firestore admin instance (db) is not initialized in deleteCustomerFlow.");
+        throw new Error("Firestore admin instance (db) is not initialized in deleteCustomerFlow.");
+    }
     console.log('Executing deleteCustomerFlow for customer ID - Firestore:', input.customerId);
     try {
-      const customerDocRef = doc(db, CUSTOMERS_COLLECTION, input.customerId);
-      await deleteDoc(customerDocRef);
+      const customerDocRef = db.collection(CUSTOMERS_COLLECTION).doc(input.customerId);
+      await customerDocRef.delete();
       console.log('Deleted customer from Firestore:', input.customerId);
       return { success: true, customerId: input.customerId };
     } catch (error) {
@@ -148,4 +172,3 @@ const deleteCustomerFlow = ai.defineFlow(
     }
   }
 );
-

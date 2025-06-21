@@ -10,23 +10,42 @@
 
 import { ai } from '@/ai/genkit';
 import { adminDb as db } from '@/lib/firebase-admin'; // USE ADMIN SDK
-import { FieldValue, Timestamp } from 'firebase-admin/firestore'; // ADMIN SDK specific types
-
-import type { 
-  FleetAircraft, 
-  SaveFleetAircraftInput, 
-  DeleteFleetAircraftInput 
-} from '@/ai/schemas/fleet-aircraft-schemas';
-import { 
+import {
+  FleetAircraft,
+  SaveFleetAircraftInput,
+  DeleteFleetAircraftInput,
   SaveFleetAircraftInputSchema,
   DeleteFleetAircraftInputSchema,
   FetchFleetAircraftOutputSchema,
   SaveFleetAircraftOutputSchema,
-  DeleteFleetAircraftOutputSchema
+  DeleteFleetAircraftOutputSchema,
 } from '@/ai/schemas/fleet-aircraft-schemas';
+import { z } from 'zod';
 
 const FLEET_COLLECTION = 'fleet';
 const AIRCRAFT_RATES_COLLECTION = 'aircraftRates'; // For cascading delete
+
+/**
+ * Removes properties with `undefined` values from an object.
+ * Firestore does not allow `undefined` as a field value.
+ * @param obj The object to clean.
+ * @returns A new object with `undefined` properties removed.
+ */
+function removeUndefined(obj: any): any {
+  if (typeof obj !== 'object' || obj === null) {
+    return obj;
+  }
+  if (Array.isArray(obj)) {
+    return obj.map(removeUndefined);
+  }
+  const newObj: { [key: string]: any } = {};
+  for (const key in obj) {
+    if (obj.hasOwnProperty(key) && obj[key] !== undefined) {
+      newObj[key] = removeUndefined(obj[key]);
+    }
+  }
+  return newObj;
+}
 
 // Exported async functions that clients will call
 export async function fetchFleetAircraft(): Promise<FleetAircraft[]> {
@@ -46,27 +65,10 @@ export async function saveFleetAircraft(input: SaveFleetAircraftInput): Promise<
   console.log('[ManageFleetFlow Firestore Admin WRAPPER] Received input for save:', input.id, 'Data:', JSON.stringify(input));
   
   const firestoreDocId = input.id || db.collection(FLEET_COLLECTION).doc().id;
-  // Ensure input is prepared for the flow, which might expect slightly different structure or defaults
-  const aircraftDataForFlow: FleetAircraft = {
-    ...input, 
-    id: firestoreDocId, // Ensure ID is set for the flow's internal logic if it relies on it
-    serialNumber: input.serialNumber === null ? undefined : input.serialNumber,
-    aircraftYear: input.aircraftYear === null ? undefined : (input.aircraftYear === undefined ? undefined : Number(input.aircraftYear)),
-    baseLocation: input.baseLocation === null ? undefined : input.baseLocation,
-    primaryContactName: input.primaryContactName === null ? undefined : input.primaryContactName,
-    primaryContactPhone: input.primaryContactPhone === null ? undefined : input.primaryContactPhone,
-    primaryContactEmail: input.primaryContactEmail === null ? undefined : input.primaryContactEmail,
-    internalNotes: input.internalNotes === null ? undefined : input.internalNotes,
-    
-    isMaintenanceTracked: input.isMaintenanceTracked ?? true,
-    trackedComponentNames: (input.trackedComponentNames && input.trackedComponentNames.length > 0) ? input.trackedComponentNames : ['Airframe', 'Engine 1'],
-    engineDetails: input.engineDetails || [],
-    propellerDetails: input.propellerDetails || [],
-  };
-  console.log('[ManageFleetFlow Firestore Admin WRAPPER] Data prepared for flow:', firestoreDocId, 'Data:', JSON.stringify(aircraftDataForFlow));
+  
   // The flow itself expects the direct data, not nested under a 'aircraftData' key.
-  // And the ID passed to the flow is the Firestore document ID.
-  const { id: internalId, ...dataToSetInFlow } = aircraftDataForFlow; // Separate the Firestore ID
+  const { id: internalId, ...dataToSetInFlow } = { ...input, id: firestoreDocId };
+  
   return saveFleetAircraftFlow({ firestoreDocId, aircraftData: dataToSetInFlow as Omit<FleetAircraft, 'id'> });
 }
 
@@ -121,6 +123,7 @@ const fetchFleetAircraftFlow = ai.defineFlow(
           primaryContactPhone: data.primaryContactPhone ?? undefined,
           primaryContactEmail: data.primaryContactEmail ?? undefined,
           internalNotes: data.internalNotes ?? undefined,
+          imageUrl: data.imageUrl ?? undefined,
         } as FleetAircraft; 
       });
       console.log('Fetched fleet from Firestore (Admin):', aircraftList.length, 'aircraft.');
@@ -143,15 +146,19 @@ const saveFleetAircraftFlow = ai.defineFlow(
         console.error("CRITICAL: Firestore admin instance (db) is not initialized in saveFleetAircraftFlow.");
         throw new Error("Firestore admin instance (db) is not initialized in saveFleetAircraftFlow.");
     }
-    console.log('Executing saveFleetAircraftFlow (Admin FLOW INPUT) with Firestore ID:', firestoreDocId, 'Data:', JSON.stringify(aircraftData));
+    
+    // Clean the object to remove any `undefined` values before saving
+    const cleanedAircraftData = removeUndefined(aircraftData);
+
+    console.log('Executing saveFleetAircraftFlow (Admin FLOW INPUT) with Firestore ID:', firestoreDocId, 'Cleaned Data:', JSON.stringify(cleanedAircraftData));
     try {
       const aircraftDocRef = db.collection(FLEET_COLLECTION).doc(firestoreDocId);
-      // The aircraftData already excludes 'id'.
-      await aircraftDocRef.set(aircraftData, { merge: true }); 
+      // Save the cleaned data
+      await aircraftDocRef.set(cleanedAircraftData, { merge: true }); 
       console.log('Saved/Updated aircraft in Firestore (Admin):', firestoreDocId);
       
       // Return the complete aircraft object including the ID
-      return { id: firestoreDocId, ...aircraftData } as FleetAircraft;
+      return { id: firestoreDocId, ...cleanedAircraftData } as FleetAircraft;
     } catch (error) {
       console.error('Error saving aircraft to Firestore (Admin):', error);
       throw new Error(`Failed to save aircraft ${firestoreDocId} (Admin): ${error instanceof Error ? error.message : String(error)}`);

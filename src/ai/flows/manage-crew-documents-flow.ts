@@ -9,8 +9,8 @@
  */
 
 import { ai } from '@/ai/genkit';
-import { db } from '@/lib/firebase';
-import { collection, doc, getDocs, setDoc, deleteDoc, serverTimestamp, Timestamp, getDoc, query, orderBy } from 'firebase/firestore';
+import { adminDb as db } from '@/lib/firebase-admin';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import type { CrewDocument, SaveCrewDocumentInput } from '@/ai/schemas/crew-document-schemas';
 import {
     SaveCrewDocumentInputSchema,
@@ -25,13 +25,21 @@ const CREW_DOCUMENTS_COLLECTION = 'crewDocuments';
 
 // Exported async functions that clients will call
 export async function fetchCrewDocuments(): Promise<CrewDocument[]> {
-  console.log('[ManageCrewDocumentsFlow Firestore] Attempting to fetch all crew documents.');
+    if (!db) {
+    console.error("CRITICAL: Firestore admin instance (db) is not initialized in fetchCrewDocuments (manage-crew-documents-flow). Admin SDK init likely failed.");
+    throw new Error("Firestore admin instance (db) is not initialized in fetchCrewDocuments.");
+  }
+  console.log('[ManageCrewDocumentsFlow Firestore Admin] Attempting to fetch all crew documents.');
   return fetchCrewDocumentsFlow();
 }
 
 export async function saveCrewDocument(input: SaveCrewDocumentInput): Promise<CrewDocument> {
-  const documentId = input.id || doc(collection(db, CREW_DOCUMENTS_COLLECTION)).id;
-  console.log('[ManageCrewDocumentsFlow Firestore] Attempting to save document:', documentId);
+    if (!db) {
+    console.error("CRITICAL: Firestore admin instance (db) is not initialized in saveCrewDocument (manage-crew-documents-flow). Admin SDK init likely failed.");
+    throw new Error("Firestore admin instance (db) is not initialized in saveCrewDocument.");
+  }
+  const documentId = input.id || db.collection(CREW_DOCUMENTS_COLLECTION).doc().id;
+  console.log('[ManageCrewDocumentsFlow Firestore Admin] Attempting to save document:', documentId);
 
   const dataToSaveInDb = { ...input };
   if (dataToSaveInDb.id) {
@@ -42,7 +50,11 @@ export async function saveCrewDocument(input: SaveCrewDocumentInput): Promise<Cr
 }
 
 export async function deleteCrewDocument(input: { documentId: string }): Promise<{ success: boolean; documentId: string }> {
-  console.log('[ManageCrewDocumentsFlow Firestore] Attempting to delete document ID:', input.documentId);
+    if (!db) {
+    console.error("CRITICAL: Firestore admin instance (db) is not initialized in deleteCrewDocument (manage-crew-documents-flow). Admin SDK init likely failed.");
+    throw new Error("Firestore admin instance (db) is not initialized in deleteCrewDocument.");
+  }
+  console.log('[ManageCrewDocumentsFlow Firestore Admin] Attempting to delete document ID:', input.documentId);
   return deleteCrewDocumentFlow(input);
 }
 
@@ -54,11 +66,15 @@ const fetchCrewDocumentsFlow = ai.defineFlow(
     outputSchema: FetchCrewDocumentsOutputSchema,
   },
   async () => {
+    if (!db) {
+        console.error("CRITICAL: Firestore admin instance (db) is not initialized in fetchCrewDocumentsFlow.");
+        throw new Error("Firestore admin instance (db) is not initialized in fetchCrewDocumentsFlow.");
+    }
     console.log('Executing fetchCrewDocumentsFlow - Firestore');
     try {
-      const documentsCollectionRef = collection(db, CREW_DOCUMENTS_COLLECTION);
-      const q = query(documentsCollectionRef, orderBy("updatedAt", "desc"));
-      const snapshot = await getDocs(q);
+      const documentsCollectionRef = db.collection(CREW_DOCUMENTS_COLLECTION);
+      const q = documentsCollectionRef.orderBy("updatedAt", "desc");
+      const snapshot = await q.get();
       const documentsList = snapshot.docs.map(docSnapshot => {
         const data = docSnapshot.data();
         return {
@@ -90,21 +106,25 @@ const saveCrewDocumentFlow = ai.defineFlow(
     outputSchema: SaveCrewDocumentOutputSchema,
   },
   async ({ documentId, documentData }) => {
+    if (!db) {
+        console.error("CRITICAL: Firestore admin instance (db) is not initialized in saveCrewDocumentFlow.");
+        throw new Error("Firestore admin instance (db) is not initialized in saveCrewDocumentFlow.");
+    }
     console.log('Executing saveCrewDocumentFlow with input - Firestore:', documentId);
     try {
-      const documentDocRef = doc(db, CREW_DOCUMENTS_COLLECTION, documentId);
-      const docSnap = await getDoc(documentDocRef);
+      const documentDocRef = db.collection(CREW_DOCUMENTS_COLLECTION).doc(documentId);
+      const docSnap = await documentDocRef.get();
 
       const dataWithTimestamps = {
         ...documentData,
-        updatedAt: serverTimestamp(),
-        createdAt: docSnap.exists() ? docSnap.data().createdAt : serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+        createdAt: docSnap.exists() && docSnap.data()?.createdAt ? docSnap.data()?.createdAt : FieldValue.serverTimestamp(),
       };
 
-      await setDoc(documentDocRef, dataWithTimestamps, { merge: true });
+      await documentDocRef.set(dataWithTimestamps, { merge: true });
       console.log('Saved crew document in Firestore:', documentId);
       
-      const savedDoc = await getDoc(documentDocRef);
+      const savedDoc = await documentDocRef.get();
       const savedData = savedDoc.data();
 
       if (!savedData) {
@@ -131,10 +151,14 @@ const deleteCrewDocumentFlow = ai.defineFlow(
     outputSchema: DeleteCrewDocumentOutputSchema,
   },
   async (input) => {
+    if (!db) {
+        console.error("CRITICAL: Firestore admin instance (db) is not initialized in deleteCrewDocumentFlow.");
+        throw new Error("Firestore admin instance (db) is not initialized in deleteCrewDocumentFlow.");
+    }
     console.log('Executing deleteCrewDocumentFlow for document ID - Firestore:', input.documentId);
     try {
-      const documentDocRef = doc(db, CREW_DOCUMENTS_COLLECTION, input.documentId);
-      await deleteDoc(documentDocRef);
+      const documentDocRef = db.collection(CREW_DOCUMENTS_COLLECTION).doc(input.documentId);
+      await documentDocRef.delete();
       console.log('Deleted crew document from Firestore:', input.documentId);
       return { success: true, documentId: input.documentId };
     } catch (error) {

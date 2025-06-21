@@ -37,6 +37,7 @@ export const FleetAircraftSchema = z.object({
   primaryContactPhone: z.string().optional().describe("Primary contact phone for the aircraft."),
   primaryContactEmail: z.string().email("Invalid email format.").optional().describe("Primary contact email for the aircraft."),
   internalNotes: z.string().optional().describe("Internal operational notes like hangar location, access codes, etc."),
+  imageUrl: z.string().url().optional().describe("URL of the aircraft image."),
 });
 export type FleetAircraft = z.infer<typeof FleetAircraftSchema>;
 
@@ -55,4 +56,3 @@ export const DeleteFleetAircraftOutputSchema = z.object({
   success: z.boolean(),
   aircraftId: z.string(),
 });
-

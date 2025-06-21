@@ -15,7 +15,7 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { z } from 'zod';
 import type { MelItem, SaveMelItemInput } from '@/ai/schemas/mel-item-schemas';
 import {
-    MelItemSchema, // Added for FetchAllMelItemsOutputSchema
+    MelItemSchema,
     SaveMelItemInputSchema,
     SaveMelItemOutputSchema,
     FetchMelItemsInputSchema,
@@ -23,7 +23,7 @@ import {
     DeleteMelItemInputSchema,
     DeleteMelItemOutputSchema,
 } from '@/ai/schemas/mel-item-schemas';
-import type { FleetAircraft } from '@/ai/schemas/fleet-aircraft-schemas'; // For fetching tail number
+import type { FleetAircraft } from '@/ai/schemas/fleet-aircraft-schemas';
 
 const MEL_ITEMS_COLLECTION = 'aircraftMelItems';
 const FLEET_COLLECTION = 'fleet'; 
@@ -99,7 +99,7 @@ const saveMelItemFlow = ai.defineFlow(
 
       const dataToSet = {
         ...melItemData,
-        aircraftTailNumber: aircraftTailNumber || melItemData.aircraftTailNumber, // Use fetched or existing
+        aircraftTailNumber: aircraftTailNumber || melItemData.aircraftTailNumber, 
         updatedAt: FieldValue.serverTimestamp(),
         createdAt: docSnap.exists && docSnap.data()?.createdAt ? docSnap.data()?.createdAt : FieldValue.serverTimestamp(),
       };
@@ -111,15 +111,14 @@ const saveMelItemFlow = ai.defineFlow(
       if (!savedData) {
         throw new Error("Failed to retrieve saved MEL item data from Firestore.");
       }
+      
+      const convertTimestamp = (ts: any) => ts ? (ts as Timestamp).toDate().toISOString() : new Date().toISOString();
 
       return {
         ...savedData,
         id: firestoreDocId,
-        dateEntered: savedData.dateEntered, // Ensure dates are strings
-        dueDate: savedData.dueDate,
-        closedDate: savedData.closedDate,
-        createdAt: (savedData.createdAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
-        updatedAt: (savedData.updatedAt as Timestamp)?.toDate().toISOString() || new Date().toISOString(),
+        createdAt: convertTimestamp(savedData.createdAt),
+        updatedAt: convertTimestamp(savedData.updatedAt),
       } as MelItem;
     } catch (error) {
       console.error('Error saving MEL item to Firestore:', error);
@@ -145,16 +144,15 @@ const fetchMelItemsForAircraftFlow = ai.defineFlow(
         .where("aircraftId", "==", input.aircraftId)
         .orderBy("dateEntered", "desc");
       const snapshot = await q.get();
+      const convertTimestamp = (ts: any) => ts ? (ts as Timestamp).toDate().toISOString() : new Date(0).toISOString();
+      
       const melItemsList = snapshot.docs.map(docSnapshot => {
         const data = docSnapshot.data();
         return {
           ...data,
           id: docSnapshot.id,
-          dateEntered: data.dateEntered,
-          dueDate: data.dueDate,
-          closedDate: data.closedDate,
-          createdAt: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
-          updatedAt: (data.updatedAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
+          createdAt: convertTimestamp(data.createdAt),
+          updatedAt: convertTimestamp(data.updatedAt),
         } as MelItem;
       });
       return melItemsList;
@@ -179,20 +177,17 @@ const fetchAllMelItemsFlow = ai.defineFlow(
     }
     try {
       const melItemsCollectionRef = db.collection(MEL_ITEMS_COLLECTION);
-      const q = melItemsCollectionRef
-        .orderBy("dateEntered", "desc") 
-      ;
+      const q = melItemsCollectionRef.orderBy("dateEntered", "desc");
       const snapshot = await q.get();
+      const convertTimestamp = (ts: any) => ts ? (ts as Timestamp).toDate().toISOString() : new Date(0).toISOString();
+
       const melItemsList = snapshot.docs.map(docSnapshot => {
         const data = docSnapshot.data();
         return {
           ...data,
           id: docSnapshot.id,
-          dateEntered: data.dateEntered,
-          dueDate: data.dueDate,
-          closedDate: data.closedDate,
-          createdAt: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
-          updatedAt: (data.updatedAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
+          createdAt: convertTimestamp(data.createdAt),
+          updatedAt: convertTimestamp(data.updatedAt),
         } as MelItem;
       });
       return melItemsList;
@@ -226,3 +221,4 @@ const deleteMelItemFlow = ai.defineFlow(
   }
 );
 
+    
