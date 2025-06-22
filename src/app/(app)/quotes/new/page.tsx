@@ -2,13 +2,15 @@
 "use client"; // Required for useSearchParams
 
 import React, { Suspense } from 'react'; // Import Suspense
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation'; // Import useRouter
 import { PageHeader } from '@/components/page-header';
 import { CreateQuoteForm } from './components/create-quote-form';
-import { FilePlus2, Edit3, Loader2 } from 'lucide-react'; // Added Edit3 and Loader2
+import { FilePlus2, Edit3, Loader2, ArrowLeft } from 'lucide-react'; // Added ArrowLeft
+import { Button } from '@/components/ui/button'; // Import Button
 
 function QuotePageContent() {
   const searchParams = useSearchParams();
+  const router = useRouter(); // Initialize useRouter
   const isEditMode = searchParams.get('editMode') === 'true';
   const quoteIdToEdit = searchParams.get('quoteId') || undefined;
 
@@ -24,6 +26,13 @@ function QuotePageContent() {
         title={pageTitle} 
         description={pageDescription}
         icon={pageIcon}
+        actions={ // Add actions prop to PageHeader
+          isEditMode && (
+            <Button variant="outline" onClick={() => router.push('/quotes')}>
+              <ArrowLeft className="mr-2 h-4 w-4" /> Back to Quotes
+            </Button>
+          )
+        }
       />
       <CreateQuoteForm isEditMode={isEditMode} quoteIdToEdit={quoteIdToEdit} />
     </>

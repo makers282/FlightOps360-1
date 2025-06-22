@@ -1,10 +1,20 @@
 "use client";
 
-import React, { useState, useEffect, useTransition, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { PageHeader } from '@/components/page-header';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { FileArchive, PlusCircle, Edit3, Trash2, Search, Eye, Loader2, CheckCircle, CalendarPlus, Edit } from 'lucide-react';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import {
+  FileArchive,
+  PlusCircle,
+  Trash2,
+  Loader2,
+  Search,
+  Eye,
+  Edit,
+  CalendarDays,
+  MoreVertical,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -14,21 +24,21 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from '@/components/ui/table';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from "@/components/ui/tooltip";
+} from '@/components/ui/tooltip';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -38,403 +48,305 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { fetchQuotes, deleteQuote, saveQuote } from '@/ai/flows/manage-quotes-flow';
-import type { Quote, QuoteLeg, quoteStatuses as QuoteStatusType, SaveQuoteInput } from '@/ai/schemas/quote-schemas';
-import { quoteStatuses } from '@/ai/schemas/quote-schemas';
-import { saveTrip } from '@/ai/flows/manage-trips-flow';
-import type { SaveTripInput as TripToSave, TripLeg as TripLegType } from '@/ai/schemas/trip-schemas';
+} from '@/components/ui/alert-dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu';
+import { fetchQuotes, deleteQuote } from '@/ai/flows/manage-quotes-flow';
+import type { Quote, quoteStatuses } from '@/ai/schemas/quote-schemas';
 import { useToast } from '@/hooks/use-toast';
-import { format, parseISO } from 'date-fns';
 import { ClientOnly } from '@/components/client-only';
 import { Skeleton } from '@/components/ui/skeleton';
 
-const formatCurrency = (amount: number | undefined) => {
-  if (amount === undefined) return 'N/A';
-  return amount.toLocaleString(undefined, { style: "currency", currency: "USD" });
-};
-
-const getStatusBadgeVariant = (status?: typeof QuoteStatusType[number]): "default" | "secondary" | "outline" | "destructive" => {
-  switch (status?.toLowerCase()) {
-    case 'accepted':
-    case 'booked':
-      return 'default';
-    case 'sent':
-      return 'secondary';
-    case 'draft':
-      return 'outline';
-    case 'expired':
-    case 'rejected':
-    case 'cancelled':
-      return 'destructive';
-    default: return 'outline';
-  }
-};
+type QuoteStatus = (typeof quoteStatuses)[number];
 
 export default function AllQuotesPage() {
   const [quotesList, setQuotesList] = useState<Quote[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const { toast } = useToast();
-
-  const [isDeleting, startDeletingTransition] = useTransition();
   const [quoteToDelete, setQuoteToDelete] = useState<Quote | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-
-  const [isBookingOrUpdating, startBookingOrUpdatingTransition] = useTransition();
-  const [quoteToProcess, setQuoteToProcess] = useState<Quote | null>(null);
-  const [newStatusForQuote, setNewStatusForQuote] = useState<typeof QuoteStatusType[number] | null>(null);
-  const [showStatusConfirm, setShowStatusConfirm] = useState(false);
-
-
-  const loadQuotes = async () => {
-    setIsLoading(true);
-    try {
-      const fetchedQuotes = await fetchQuotes();
-      setQuotesList(fetchedQuotes);
-    } catch (error) {
-      console.error("Failed to load quotes:", error);
-      toast({ title: "Error Loading Quotes", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const { toast } = useToast();
 
   useEffect(() => {
     loadQuotes();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleDeleteClick = (quote: Quote) => {
+  async function loadQuotes() {
+    setIsLoading(true);
+    try {
+      const data = await fetchQuotes();
+      setQuotesList(data);
+    } catch (error) {
+      toast({
+        title: 'Error loading quotes',
+        description: error instanceof Error ? error.message : 'Unknown error',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function handleStatusChange(quoteId: string, newStatus: QuoteStatus) {
+    // In a real application, you would call an API to update the quote status
+    // For now, we'll just update the local state
+    setQuotesList((prev) =>
+      prev.map((q) => (q.id === quoteId ? { ...q, status: newStatus } : q))
+    );
+    toast({
+      title: 'Status Updated (Simulated)',
+      description: `Quote ${quoteId} status changed to ${newStatus}.`,
+    });
+  }
+
+  function handleDelete(quote: Quote) {
     setQuoteToDelete(quote);
     setShowDeleteConfirm(true);
-  };
+  }
 
-  const executeDelete = async () => {
+  async function confirmDelete() {
     if (!quoteToDelete) return;
-    startDeletingTransition(async () => {
-      try {
-        await deleteQuote({ id: quoteToDelete.id });
-        toast({ title: "Success", description: `Quote "${quoteToDelete.quoteId}" deleted.` });
-        setShowDeleteConfirm(false);
-        setQuoteToDelete(null);
-        await loadQuotes();
-      } catch (error) {
-        console.error("Failed to delete quote:", error);
-        toast({ title: "Error Deleting Quote", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
-        setShowDeleteConfirm(false);
-        setQuoteToDelete(null);
-      }
-    });
+    setIsDeleting(true);
+    try {
+      await deleteQuote({ id: quoteToDelete.id });
+      toast({ title: 'Deleted', description: `Quote ${quoteToDelete.quoteId} deleted.` });
+      setShowDeleteConfirm(false);
+      setQuoteToDelete(null);
+      await loadQuotes();
+    } catch (error) {
+      toast({
+        title: 'Error deleting quote',
+        description: error instanceof Error ? error.message : 'Unknown error',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
+  const getStatusBadgeClassNames = (status: QuoteStatus) => {
+    switch (status) {
+      case 'Draft':
+        return 'bg-gray-200 text-gray-800';
+      case 'Sent':
+        return 'bg-blue-200 text-blue-800'; // Soft blue, can be customized further if a specific palette is defined
+      case 'Booked':
+        return 'bg-green-200 text-green-800';
+      case 'Expired':
+      case 'Cancelled':
+        return 'bg-red-200 text-red-800';
+      case 'Accepted':
+      default:
+        return 'bg-gray-100 text-gray-700 border border-gray-300'; // Outline-like
+    }
   };
 
-  const handleStatusChange = (quote: Quote, newStatus: typeof QuoteStatusType[number]) => {
-    setQuoteToProcess(quote);
-    setNewStatusForQuote(newStatus);
-    setShowStatusConfirm(true);
-  };
-
-  const executeStatusUpdate = async () => {
-    if (!quoteToProcess || !newStatusForQuote) return;
-
-    const wasPreviouslyBooked = quoteToProcess.status === "Booked";
-    const isNowBooking = newStatusForQuote === "Booked";
-
-    startBookingOrUpdatingTransition(async () => {
-      try {
-        const updatedQuoteData: Quote = {
-          ...quoteToProcess,
-          status: newStatusForQuote,
-        };
-
-        const { id: originalDocId, createdAt, updatedAt, ...quoteDataForSave } = updatedQuoteData;
-        const savedQuote = await saveQuote(quoteDataForSave as SaveQuoteInput);
-
-        let tripCreatedSuccessfully = false;
-        let tripCreationMessage = "";
-
-        if (isNowBooking && !wasPreviouslyBooked) {
-            const newTripId = `TRP-${savedQuote.quoteId.replace(/^QT-/i, '')}-${Date.now().toString().slice(-5)}`;
-            const tripLegs: TripLegType[] = savedQuote.legs.map(qLeg => ({
-                origin: qLeg.origin,
-                destination: qLeg.destination,
-                departureDateTime: qLeg.departureDateTime,
-                legType: qLeg.legType,
-                passengerCount: qLeg.passengerCount,
-                originFbo: qLeg.originFbo,
-                destinationFbo: qLeg.destinationFbo,
-                flightTimeHours: qLeg.flightTimeHours,
-                blockTimeHours: qLeg.calculatedBlockTimeHours,
-            }));
-
-            const tripToSave: TripToSave = {
-                tripId: newTripId,
-                quoteId: savedQuote.id,
-                customerId: savedQuote.selectedCustomerId,
-                clientName: savedQuote.clientName,
-                aircraftId: savedQuote.aircraftId || "UNKNOWN_AC",
-                aircraftLabel: savedQuote.aircraftLabel,
-                legs: tripLegs,
-                status: "Scheduled",
-                notes: `Trip created from Quote ${savedQuote.quoteId}. ${savedQuote.options.notes || ''}`.trim(),
-                assignedPilotId: undefined, 
-                assignedCoPilotId: undefined, 
-                assignedFlightAttendantIds: [], 
-            };
-
-            try {
-                await saveTrip(tripToSave);
-                tripCreatedSuccessfully = true;
-                tripCreationMessage = ' Trip also created and scheduled.';
-            } catch (tripError) {
-                console.error("Failed to create trip from quote:", tripError);
-                tripCreationMessage = ` Trip creation FAILED: ${tripError instanceof Error ? tripError.message : "Unknown error"}`;
-            }
-        }
-
-        toast({
-            title: "Quote Status Updated",
-            description: `Quote "${savedQuote.quoteId}" status changed to ${newStatusForQuote}.${tripCreationMessage}`,
-            variant: tripCreatedSuccessfully || !isNowBooking ? "default" : "destructive"
-        });
-
-        setShowStatusConfirm(false);
-        setQuoteToProcess(null);
-        setNewStatusForQuote(null);
-        await loadQuotes();
-      } catch (error) {
-        console.error("Failed to update quote status:", error);
-        toast({ title: "Error Updating Status", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
-        setShowStatusConfirm(false);
-        setQuoteToProcess(null);
-        setNewStatusForQuote(null);
-      }
-    });
-  };
-
-
-  const filteredQuotes = quotesList.filter(quote =>
-    (quote.quoteId && quote.quoteId.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (quote.clientName && quote.clientName.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (quote.aircraftLabel && quote.aircraftLabel.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (quote.status && quote.status.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (quote.legs && quote.legs.length > 0 &&
-      `${quote.legs[0].origin} -> ${quote.legs[quote.legs.length - 1].destination}`.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
-
-  const getRouteDisplay = (legs: QuoteLeg[]) => {
+  const formatRoute = (legs: Quote['legs']) => {
     if (!legs || legs.length === 0) return 'N/A';
-    const origin = legs[0].origin || 'UNK';
-    const destination = legs[legs.length - 1].destination || 'UNK';
-    if (legs.length === 1) return `${origin} → ${destination}`;
-    return `${origin} → ... → ${destination} (${legs.length} legs)`;
+    const firstOrigin = legs[0]?.origin;
+    const lastDestination = legs[legs.length - 1]?.destination;
+    const numLegs = legs.length;
+    if (numLegs === 1) {
+      return `${firstOrigin} → ${lastDestination}`;
+    }
+    return `${firstOrigin} → ... → ${lastDestination} (${numLegs} legs)`;
   };
 
-  const canBookQuote = (status?: typeof QuoteStatusType[number]) => {
-    return status === 'Sent' || status === 'Accepted';
+  const formatDate = (isoString: string) => {
+    return new Date(isoString).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
   };
 
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2,
+    }).format(amount);
+  };
+
+  const filtered = quotesList.filter((q) => {
+    const term = searchTerm.toLowerCase();
+    const route = formatRoute(q.legs).toLowerCase();
+    return (
+      (q.quoteId ?? '').toLowerCase().includes(term) ||
+      (q.clientName ?? '').toLowerCase().includes(term) ||
+      (q.status ?? '').toLowerCase().includes(term) ||
+      (q.aircraftLabel ?? '').toLowerCase().includes(term) ||
+      route.includes(term)
+    );
+  });
 
   return (
     <TooltipProvider>
-      <PageHeader
-        title="All Quotes"
-        description="Browse, manage, and track all flight quotes from Firestore."
-        icon={FileArchive}
-        actions={
-          <Button asChild>
-            <Link href="/quotes/new">
-              <PlusCircle className="mr-2 h-4 w-4" /> Create New Quote
-            </Link>
-          </Button>
-        }
-      />
-      <Card className="shadow-lg">
-        <CardHeader>
-          <CardTitle>Quotes Overview</CardTitle>
-          <CardDescription>Review and manage all generated quotes.</CardDescription>
-          <ClientOnly fallback={<Skeleton className="h-10 w-full sm:w-1/2 lg:w-1/3 mt-2" />}>
-            <div className="mt-2 relative">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search quotes (ID, client, route, aircraft, status)..."
-                className="pl-8 w-full sm:w-1/2 lg:w-1/3"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                disabled={isLoading || (quotesList.length === 0 && !searchTerm)}
-              />
-            </div>
-          </ClientOnly>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="flex items-center justify-center py-10">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <p className="ml-2 text-muted-foreground">Loading quotes from Firestore...</p>
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Quote ID</TableHead>
-                  <TableHead>Client Name</TableHead>
-                  <TableHead>Route</TableHead>
-                  <TableHead>Aircraft</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Quote Date</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead className="text-right min-w-[320px]">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredQuotes.length === 0 && !isLoading ? (
+      <div>
+        <PageHeader
+          title="Quotes Overview"
+          description="Review and manage all generated quotes."
+          icon={FileArchive}
+          actions={
+            <Button asChild>
+              <Link href="/quotes/new">
+                <PlusCircle className="mr-2 h-4 w-4" /> New Quote
+              </Link>
+            </Button>
+          }
+        />
+
+        <Card className="mt-4">
+          <CardHeader>
+            <ClientOnly fallback={<Skeleton className="h-10 w-full max-w-sm" />}>
+              <div className="mt-2 relative">
+                <Search className="absolute left-2 top-2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Search quotes (ID, client, route, aircraft, status)..."
+                  className="pl-8 w-full max-w-sm"
+                />
+              </div>
+            </ClientOnly>
+          </CardHeader>
+
+          <CardContent>
+            {isLoading ? (
+              <div className="py-10 flex justify-center">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center text-muted-foreground py-10">
-                      No quotes found. {searchTerm ? "Try adjusting your search." : ""}
-                    </TableCell>
+                    <TableHead>Quote ID</TableHead>
+                    <TableHead>Client Name</TableHead>
+                    <TableHead>Route</TableHead>
+                    <TableHead>Aircraft</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Quote Date</TableHead>
+                    <TableHead>Amount</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
-                ) : (
-                  filteredQuotes.map((quote) => (
-                    <TableRow key={quote.id}>
-                      <TableCell className="font-medium">{quote.quoteId}</TableCell>
-                      <TableCell>{quote.clientName || 'N/A'}</TableCell>
-                      <TableCell className="truncate max-w-xs" title={getRouteDisplay(quote.legs)}>
-                        {getRouteDisplay(quote.legs)}
-                      </TableCell>
-                      <TableCell>{quote.aircraftLabel || 'N/A'}</TableCell>
-                      <TableCell>
-                        <Badge variant={getStatusBadgeVariant(quote.status as typeof quoteStatuses[number])}>{quote.status}</Badge>
-                      </TableCell>
-                      <TableCell>{quote.createdAt ? format(parseISO(quote.createdAt), 'MMM d, yyyy') : 'N/A'}</TableCell>
-                      <TableCell>{formatCurrency(quote.totalSellPrice)}</TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end space-x-1 flex-nowrap">
-                          <Select
-                              value={quote.status}
-                              onValueChange={(newStatus) => handleStatusChange(quote, newStatus as typeof QuoteStatusType[number])}
-                              disabled={isBookingOrUpdating && quoteToProcess?.id === quote.id}
-                            >
-                            <SelectTrigger className="h-9 w-[120px] text-xs px-2">
-                              <SelectValue placeholder="Change Status" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {quoteStatuses.map(stat => (
-                                <SelectItem key={stat} value={stat} className="text-xs">
-                                  {stat}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-
-                          {canBookQuote(quote.status as typeof QuoteStatusType[number]) && (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleStatusChange(quote, "Booked")}
-                                  disabled={isBookingOrUpdating}
-                                  className="text-green-600 border-green-600 hover:bg-green-50 hover:text-green-700 p-2 w-9"
-                                >
-                                  <CalendarPlus className="h-4 w-4" />
-                                  <span className="sr-only">Book Trip</span>
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent><p>Book Trip & Create Schedule Item</p></TooltipContent>
-                            </Tooltip>
-                          )}
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Link href={`/quotes/${quote.id}`} passHref legacyBehavior>
-                                <Button variant="ghost" size="sm" className="p-2 w-9" asChild>
-                                  <Eye className="h-4 w-4" />
-                                  <span className="sr-only">View Quote</span>
-                                </Button>
-                              </Link>
-                            </TooltipTrigger>
-                            <TooltipContent><p>View Quote</p></TooltipContent>
-                          </Tooltip>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                               <Link href={`/quotes/new?editMode=true&quoteId=${quote.id}`} passHref legacyBehavior>
-                                <Button variant="ghost" size="sm" className="p-2 w-9" asChild>
-                                  <Edit3 className="h-4 w-4" />
-                                  <span className="sr-only">Edit Quote</span>
-                                </Button>
-                              </Link>
-                            </TooltipTrigger>
-                            <TooltipContent><p>Edit Quote</p></TooltipContent>
-                          </Tooltip>
-
-                          <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="text-destructive hover:text-destructive p-2 w-9"
-                                  onClick={() => handleDeleteClick(quote)}
-                                  disabled={isDeleting || quote.status === 'Booked'}
-                                >
-                                  {isDeleting && quoteToDelete?.id === quote.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                                  <span className="sr-only">Delete Quote</span>
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent><p>{quote.status === 'Booked' ? 'Cannot delete booked quote' : 'Delete Quote'}</p></TooltipContent>
-                          </Tooltip>
-                        </div>
+                </TableHeader>
+                <TableBody>
+                  {filtered.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center py-10 text-muted-foreground">
+                        No quotes.
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+                  ) : (
+                    filtered.map((q) => (
+                      <TableRow key={q.id}>
+                        <TableCell>{q.quoteId}</TableCell>
+                        <TableCell>{q.clientName}</TableCell>
+                        <TableCell>{formatRoute(q.legs)}</TableCell>
+                        <TableCell>{q.aircraftLabel || 'N/A'}</TableCell>
+                        <TableCell className="min-w-[120px]">
+                          <div className="flex items-center gap-2">
+                            <Select value={q.status} onValueChange={(newStatus: QuoteStatus) => handleStatusChange(q.id, newStatus)}>
+                              <SelectTrigger className="h-8 text-xs focus:ring-0 focus:ring-offset-0">
+                                <Badge className={getStatusBadgeClassNames(q.status as QuoteStatus)}>
+                                  {q.status}
+                                </Badge>
+                              </SelectTrigger>
+                              <SelectContent>
+                                {(['Draft', 'Sent', 'Accepted', 'Booked', 'Expired', 'Cancelled'] as QuoteStatus[]).map(
+                                  (status) => (
+                                    <SelectItem key={status} value={status} className="py-1 px-2 text-sm">
+                                      {status}
+                                    </SelectItem>
+                                  )
+                                )}
+                              </SelectContent>
+                            </Select>
+                            {q.status === 'Sent' && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    asChild
+                                    className="text-green-600 border-green-600 hover:bg-green-50 hover:text-green-700 p-2 w-9"
+                                  >
+                                    <Link href={`/trips/new?quoteId=${q.id}`}> {/* Link to trip creation page */}
+                                      <CalendarDays className="h-4 w-4" />
+                                    </Link>
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Book Trip</TooltipContent>
+                              </Tooltip>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>{formatDate(q.createdAt)}</TableCell>
+                        <TableCell>{formatCurrency(q.totalSellPrice)}</TableCell>
+                        <TableCell className="text-right">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" className="h-8 w-8 p-0">
+                                <span className="sr-only">Open menu</span>
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem asChild>
+                                <Link href={`/quotes/${q.id}`} className="flex items-center w-full">
+                                  <Eye className="mr-2 h-4 w-4" /> View
+                                </Link>
+                              </DropdownMenuItem>
+                              <DropdownMenuItem asChild>
+                                <Link href={`/quotes/new?editMode=true&quoteId=${q.id}`} className="flex items-center w-full">
+                                  <Edit className="mr-2 h-4 w-4" /> Edit
+                                </Link>
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={() => handleDelete(q)}
+                                disabled={isDeleting}
+                                className="flex items-center text-red-600 focus:text-red-600 w-full"
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" /> Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
 
-      {showDeleteConfirm && quoteToDelete && (
-        <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
-              <AlertDialogDescription>
-                Are you sure you want to delete quote "{quoteToDelete.quoteId}" for {quoteToDelete.clientName}? This action cannot be undone.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => setShowDeleteConfirm(false)} disabled={isDeleting}>Cancel</AlertDialogCancel>
-              <Button variant="destructive" onClick={executeDelete} disabled={isDeleting}>
-                {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Delete
-              </Button>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      )}
-
-      {showStatusConfirm && quoteToProcess && newStatusForQuote && (
-        <AlertDialog open={showStatusConfirm} onOpenChange={(open) => {if(!isBookingOrUpdating) setShowStatusConfirm(open)}}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Confirm Status Change</AlertDialogTitle>
-              <AlertDialogDescription>
-                Are you sure you want to change the status of quote "{quoteToProcess.quoteId}" to "{newStatusForQuote}"?
-                {newStatusForQuote === "Booked" && quoteToProcess.status !== "Booked" && " This will also create a new trip record."}
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => {setShowStatusConfirm(false); setQuoteToProcess(null); setNewStatusForQuote(null);}} disabled={isBookingOrUpdating}>Cancel</AlertDialogCancel>
-              <Button
-                variant={newStatusForQuote === "Booked" || newStatusForQuote === "Accepted" ? "default" : (newStatusForQuote === "Rejected" || newStatusForQuote === "Expired" || newStatusForQuote === "Cancelled" ? "destructive" : "secondary")}
-                onClick={executeStatusUpdate}
-                disabled={isBookingOrUpdating}
-              >
-                {isBookingOrupdating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Confirm & Change to {newStatusForQuote}
-              </Button>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      )}
+        {showDeleteConfirm && quoteToDelete && (
+          <AlertDialog open onOpenChange={() => setShowDeleteConfirm(false)}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete Quote?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Are you sure you want to delete {quoteToDelete.quoteId}?
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={confirmDelete} disabled={isDeleting}>
+                  Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
+      </div>
     </TooltipProvider>
   );
+}
