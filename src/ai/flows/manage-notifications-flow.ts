@@ -2,11 +2,6 @@
 'use server';
 /**
  * @fileOverview Genkit flows for managing notifications using Firestore.
- *
- * - fetchNotifications - Fetches notifications.
- * - markNotificationAsRead - Marks a notification as read.
- * - createNotification - Creates a new notification.
- * - generateDynamicNotifications - Scans data and creates notifications for events.
  */
 
 import { ai } from '@/ai/genkit';
@@ -15,10 +10,8 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import type { Notification, SaveNotificationInput } from '@/ai/schemas/notification-schemas';
 import { 
     FetchNotificationsOutputSchema, 
-    NotificationSchema,
     MarkNotificationReadInputSchema,
     MarkNotificationReadOutputSchema,
-    SaveNotificationInputSchema
 } from '@/ai/schemas/notification-schemas';
 import { z } from 'zod';
 import { fetchAircraftDocuments } from './manage-aircraft-documents-flow';
@@ -29,7 +22,22 @@ import { differenceInDays, parseISO, subHours } from 'date-fns';
 
 const NOTIFICATIONS_COLLECTION = 'notifications';
 
-// This function can be called by a scheduled job (e.g., cron) to generate notifications.
+function removeUndefined(obj: any): any {
+  if (typeof obj !== 'object' || obj === null) {
+    return obj;
+  }
+  if (Array.isArray(obj)) {
+    return obj.map(removeUndefined);
+  }
+  const newObj: { [key: string]: any } = {};
+  for (const key in obj) {
+    if (obj.hasOwnProperty(key) && obj[key] !== undefined) {
+      newObj[key] = removeUndefined(obj[key]);
+    }
+  }
+  return newObj;
+}
+
 export async function generateDynamicNotifications(): Promise<{ createdCount: number }> {
     return generateDynamicNotificationsFlow();
 }
@@ -43,88 +51,62 @@ const generateDynamicNotificationsFlow = ai.defineFlow(
         let createdCount = 0;
         const today = new Date();
 
-        // 1. Check for expiring aircraft documents
-        const aircraftDocs = await fetchAircraftDocuments();
-        for (const doc of aircraftDocs) {
-            if (doc.expiryDate) {
-                const expiry = parseISO(doc.expiryDate);
-                const daysUntilExpiry = differenceInDays(expiry, today);
-
-                if (daysUntilExpiry <= 30 && daysUntilExpiry >= 0) {
-                    const notificationId = `doc-expiry-${doc.id}`;
-                    const notification = await db.collection(NOTIFICATIONS_COLLECTION).doc(notificationId).get();
-                    if (!notification.exists) {
-                        await createNotification({
-                            id: notificationId,
-                            type: 'alert',
-                            title: `Document Expiring: ${doc.documentName}`,
-                            message: `The document "${doc.documentName}" for aircraft ${doc.aircraftTailNumber || doc.aircraftId} expires in ${daysUntilExpiry} days on ${doc.expiryDate}.`,
-                            link: `/aircraft/documents`,
-                        });
-                        createdCount++;
-                    }
-                }
-            }
-        }
-
-        // 2. Check for new company bulletins
-        const bulletins = await fetchBulletins();
-        const twentyFourHoursAgo = subHours(today, 24);
-        for (const bulletin of bulletins) {
-            if (bulletin.isActive && parseISO(bulletin.publishedAt) > twentyFourHoursAgo) {
-                const notificationId = `new-bulletin-${bulletin.id}`;
-                const notification = await db.collection(NOTIFICATIONS_COLLECTION).doc(notificationId).get();
-                if (!notification.exists) {
-                    await createNotification({
-                        id: notificationId,
-                        type: 'info',
-                        title: `New Bulletin: ${bulletin.title}`,
-                        message: `A new company bulletin has been published.`,
-                        link: `/settings/company`,
-                    });
-                    createdCount++;
-                }
-            }
-        }
-        
-        // 3. Check for due maintenance tasks
-        const allAircraft = await fetchFleetAircraft();
-        for (const aircraft of allAircraft) {
-            if (aircraft.isMaintenanceTracked) {
-                const tasks = await fetchMaintenanceTasksForAircraft({ aircraftId: aircraft.id });
-                for (const task of tasks) {
-                    // This is a simplified check. A more robust solution would reuse the
-                    // `calculateLocalDisplayFields` and `getLocalReleaseStatus` logic from the client.
-                    // For now, we'll just check for overdue tasks based on a simple date comparison.
-                    if (task.isDaysDueEnabled && task.daysDueValue && parseISO(task.daysDueValue) < today) {
-                        const notificationId = `maintenance-due-${task.id}`;
+        try {
+            const aircraftDocs = await fetchAircraftDocuments();
+            for (const doc of aircraftDocs) {
+                if (doc.expiryDate) {
+                    const expiry = parseISO(doc.expiryDate);
+                    const daysUntilExpiry = differenceInDays(expiry, today);
+                    if (daysUntilExpiry <= 30 && daysUntilExpiry >= 0) {
+                        const notificationId = `doc-expiry-${doc.id}`;
                         const notification = await db.collection(NOTIFICATIONS_COLLECTION).doc(notificationId).get();
                         if (!notification.exists) {
-                            await createNotification({
-                                id: notificationId,
-                                type: 'alert',
-                                title: `Maintenance Due: ${task.itemTitle}`,
-                                message: `The maintenance task "${task.itemTitle}" for aircraft ${aircraft.tailNumber} was due on ${task.daysDueValue}.`,
-                                link: `/aircraft/currency/${aircraft.tailNumber}`,
-                            });
+                            await createNotification({ id: notificationId, type: 'alert', title: `Document Expiring: ${doc.documentName}`, message: `The document "${doc.documentName}" for aircraft ${doc.aircraftTailNumber || doc.aircraftId} expires in ${daysUntilExpiry} days on ${doc.expiryDate}.`, link: `/aircraft/documents` });
                             createdCount++;
                         }
                     }
                 }
             }
+
+            const bulletins = await fetchBulletins();
+            const twentyFourHoursAgo = subHours(today, 24);
+            for (const bulletin of bulletins) {
+                if (bulletin.isActive && parseISO(bulletin.publishedAt) > twentyFourHoursAgo) {
+                    const notificationId = `new-bulletin-${bulletin.id}`;
+                    const notification = await db.collection(NOTIFICATIONS_COLLECTION).doc(notificationId).get();
+                    if (!notification.exists) {
+                        await createNotification({ id: notificationId, type: 'info', title: `New Bulletin: ${bulletin.title}`, message: `A new company bulletin has been published.`, link: `/settings/company` });
+                        createdCount++;
+                    }
+                }
+            }
+        
+            const allAircraft = await fetchFleetAircraft();
+            for (const aircraft of allAircraft) {
+                if (aircraft.isMaintenanceTracked) {
+                    const tasks = await fetchMaintenanceTasksForAircraft({ aircraftId: aircraft.id });
+                    for (const task of tasks) {
+                        if (task.isDaysDueEnabled && task.daysDueValue && parseISO(task.daysDueValue) < today) {
+                            const notificationId = `maintenance-due-${task.id}`;
+                            const notification = await db.collection(NOTIFICATIONS_COLLECTION).doc(notificationId).get();
+                            if (!notification.exists) {
+                                await createNotification({ id: notificationId, type: 'alert', title: `Maintenance Due: ${task.itemTitle}`, message: `Task "${task.itemTitle}" for ${aircraft.tailNumber} was due.`, link: `/aircraft/currency/${aircraft.tailNumber}` });
+                                createdCount++;
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (error) {
+            console.error("Error during notification generation:", error);
+            // Don't rethrow, allow fetching existing notifications to proceed
         }
 
         return { createdCount };
     }
 );
 
-
-// Exported async function that clients will call
 export async function fetchNotifications(): Promise<Notification[]> {
-    if (!db) {
-    console.error("CRITICAL: Firestore admin instance (db) is not initialized in fetchNotifications (manage-notifications-flow). Admin SDK init likely failed.");
-    throw new Error("Firestore admin instance (db) is not initialized in fetchNotifications.");
-  }
   return fetchNotificationsFlow();
 }
 
@@ -134,13 +116,7 @@ const fetchNotificationsFlow = ai.defineFlow(
     outputSchema: FetchNotificationsOutputSchema,
   },
   async () => {
-    if (!db) {
-        console.error("CRITICAL: Firestore admin instance (db) is not initialized in fetchNotificationsFlow.");
-        throw new Error("Firestore admin instance (db) is not initialized in fetchNotificationsFlow.");
-    }
     try {
-      // For this example, we generate notifications on-the-fly when they are fetched.
-      // In a production system, you would use a scheduled job (cron) to call generateDynamicNotifications().
       await generateDynamicNotifications();
 
       const notificationsCollectionRef = db.collection(NOTIFICATIONS_COLLECTION);
@@ -148,20 +124,28 @@ const fetchNotificationsFlow = ai.defineFlow(
       const snapshot = await q.get();
 
       if (snapshot.empty) {
-        return []; // Return empty if no notifications exist after generation attempt.
+        return [];
       }
 
-      const notificationsList = snapshot.docs.map(docSnapshot => {
+      return snapshot.docs.map(docSnapshot => {
         const data = docSnapshot.data();
+        // Robustly handle timestamp conversion
+        let timestampStr = new Date(0).toISOString();
+        if (data.timestamp) {
+            if (typeof data.timestamp.toDate === 'function') { // It's a Firestore Timestamp
+                timestampStr = data.timestamp.toDate().toISOString();
+            } else if (typeof data.timestamp === 'string') { // It's already an ISO string
+                timestampStr = data.timestamp;
+            }
+        }
         return {
           id: docSnapshot.id,
           ...data,
-          timestamp: (data.timestamp as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
-          createdAt: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
-          updatedAt: (data.updatedAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
+          timestamp: timestampStr,
+          createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : new Date(0).toISOString(),
+          updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate().toISOString() : new Date(0).toISOString(),
         } as Notification; 
       });
-      return notificationsList;
     } catch (error) {
       console.error('Error fetching notifications from Firestore:', error);
       throw new Error(`Failed to fetch notifications: ${error instanceof Error ? error.message : String(error)}`);
@@ -169,12 +153,7 @@ const fetchNotificationsFlow = ai.defineFlow(
   }
 );
 
-// Placeholder for marking notification as read
 export async function markNotificationAsRead(input: { notificationId: string; isRead: boolean }): Promise<Notification> {
-    if (!db) {
-    console.error("CRITICAL: Firestore admin instance (db) is not initialized in markNotificationAsRead (manage-notifications-flow). Admin SDK init likely failed.");
-    throw new Error("Firestore admin instance (db) is not initialized in markNotificationAsRead.");
-  }
   return markNotificationReadFlow(input);
 }
 
@@ -185,10 +164,6 @@ const markNotificationReadFlow = ai.defineFlow(
         outputSchema: MarkNotificationReadOutputSchema,
     },
     async ({ notificationId, isRead }) => {
-        if (!db) {
-        console.error("CRITICAL: Firestore admin instance (db) is not initialized in markNotificationReadFlow.");
-        throw new Error("Firestore admin instance (db) is not initialized in markNotificationReadFlow.");
-    }
         const notificationDocRef = db.collection(NOTIFICATIONS_COLLECTION).doc(notificationId);
         try {
             await notificationDocRef.update({
@@ -196,10 +171,10 @@ const markNotificationReadFlow = ai.defineFlow(
                 updatedAt: FieldValue.serverTimestamp(),
             });
             const updatedDocSnap = await notificationDocRef.get();
-            if (!updatedDocSnap.exists()) {
+            if (!updatedDocSnap.exists) {
                 throw new Error("Notification not found after update.");
             }
-            const data = updatedDocSnap.data();
+            const data = updatedDocSnap.data()!;
             return {
                 id: updatedDocSnap.id,
                 ...data,
@@ -214,38 +189,30 @@ const markNotificationReadFlow = ai.defineFlow(
     }
 );
 
-
-// Internal function for creating notifications - not directly exposed to client yet
-// This would be called by other backend flows/services
 export async function createNotification(input: SaveNotificationInput): Promise<Notification> {
-    if (!db) {
-    console.error("CRITICAL: Firestore admin instance (db) is not initialized in createNotification (manage-notifications-flow). Admin SDK init likely failed.");
-    throw new Error("Firestore admin instance (db) is not initialized in createNotification.");
-  }
     const notificationId = input.id || db.collection(NOTIFICATIONS_COLLECTION).doc().id;
-    const { id, ...notificationData } = input; // remove id if present
+    const { id, ...notificationData } = input;
 
-    const dataToSave: Omit<Notification, 'id' | 'createdAt' | 'updatedAt'> & { createdAt: any; updatedAt: any } = {
+    // Use FieldValue.serverTimestamp() for timestamp to ensure correct data type
+    const dataToSave = {
         ...notificationData,
         type: notificationData.type || 'info',
-        title: notificationData.title,
-        message: notificationData.message,
-        timestamp: notificationData.timestamp || new Date().toISOString(),
+        timestamp: FieldValue.serverTimestamp(), // Correctly use server timestamp
         isRead: notificationData.isRead || false,
-        link: notificationData.link,
-        userId: notificationData.userId,
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
     };
 
+    const cleanedData = removeUndefined(dataToSave);
     const notificationDocRef = db.collection(NOTIFICATIONS_COLLECTION).doc(notificationId);
+
     try {
-        await notificationDocRef.set(dataToSave);
+        await notificationDocRef.set(cleanedData);
         const savedDocSnap = await notificationDocRef.get();
         if (!savedDocSnap.exists()) {
             throw new Error("Notification not found after creation.");
         }
-        const savedData = savedDocSnap.data();
+        const savedData = savedDocSnap.data()!;
         return {
             id: savedDocSnap.id,
             ...savedData,

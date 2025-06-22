@@ -2,6 +2,7 @@
 import { initializeApp, getApps, App, cert, ServiceAccount } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getStorage } from 'firebase-admin/storage';
+import { getAuth } from 'firebase-admin/auth';
 // Correct the path to serviceAccountKey.json at the project root
 // The '..' goes up from 'lib', then up from 'src' to the project root.
 import serviceAccountCredentials from '../../serviceAccountKey.json';
@@ -36,5 +37,7 @@ if (getApps().length === 0) {
 const adminDb = adminApp ? getFirestore(adminApp) : null;
 // @ts-ignore adminApp might be uninitialized
 const adminStorage = adminApp ? getStorage(adminApp) : null;
+// @ts-ignore adminApp might be uninitialized
+const adminAuth = adminApp ? getAuth(adminApp) : null;
 
-export { adminApp, adminDb, adminStorage };
+export { adminApp, adminDb, adminStorage, adminAuth };

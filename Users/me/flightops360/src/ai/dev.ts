@@ -29,7 +29,8 @@ import '@/ai/flows/manage-notifications-flow.ts';
 import '@/ai/flows/manage-aircraft-discrepancies-flow.ts'; 
 import '@/ai/flows/manage-mel-items-flow.ts'; 
 import '@/ai/flows/manage-flight-logs-flow.ts';
-import '@/ai/flows/create-notification-flow.ts'; // Added import for the new flow
+import '@/ai/flows/create-notification-flow.ts';
+import '@/ai/flows/generate-system-notifications-flow.ts'; // Added import for the new flow
 
 // Schemas are not Genkit plugins and should not be imported here for registration.
 // They are imported directly by flows or components that use them.

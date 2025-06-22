@@ -1,8 +1,7 @@
 
-
 "use client"; 
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import type { PropsWithChildren } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation'; 
@@ -68,7 +67,7 @@ import {
 } from '@/components/ui/sidebar';
 import { Icons } from '@/components/icons';
 import { auth } from '@/lib/firebase'; 
-import { signOut } from 'firebase/auth';
+import { signOut, onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
 
 
@@ -76,6 +75,14 @@ export default function AppLayout({ children }: PropsWithChildren) {
   const pathname = usePathname(); 
   const router = useRouter();
   const { toast } = useToast();
+  const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setCurrentUser(user);
+    });
+    return () => unsubscribe();
+  }, []);
 
   const handleLogout = async () => {
     try {
@@ -85,9 +92,17 @@ export default function AppLayout({ children }: PropsWithChildren) {
     } catch (error) {
       console.error("Logout error:", error);
       toast({ title: "Logout Failed", description: "Could not log you out. Please try again.", variant: "destructive" });
-      // Even if signout fails, try to redirect to login
       router.push('/login');
     }
+  };
+  
+  const getInitials = (name: string | null | undefined) => {
+    if (!name) return 'U';
+    const names = name.split(' ');
+    if (names.length > 1) {
+      return `${names[0][0]}${names[names.length - 1][0]}`.toUpperCase();
+    }
+    return name.substring(0, 2).toUpperCase();
   };
 
   return (
@@ -304,13 +319,13 @@ export default function AppLayout({ children }: PropsWithChildren) {
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="rounded-full">
                 <Avatar className="h-8 w-8">
-                  <AvatarImage src="https://placehold.co/100x100.png" alt="User Avatar" data-ai-hint="user avatar" />
-                  <AvatarFallback>JD</AvatarFallback>
+                  <AvatarImage src={currentUser?.photoURL || ''} alt="User Avatar" />
+                  <AvatarFallback>{getInitials(currentUser?.displayName)}</AvatarFallback>
                 </Avatar>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuLabel>My Account</DropdownMenuLabel>
+              <DropdownMenuLabel>{currentUser?.displayName || 'My Account'}</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem>Profile</DropdownMenuItem>
               <DropdownMenuItem>Billing</DropdownMenuItem>
@@ -329,6 +344,3 @@ export default function AppLayout({ children }: PropsWithChildren) {
     </SidebarProvider>
   );
 }
-
-    
-

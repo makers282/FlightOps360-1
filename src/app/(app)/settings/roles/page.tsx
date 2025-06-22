@@ -34,13 +34,16 @@ import {
 } from "@/components/ui/alert-dialog";
 
 import { fetchRoles, saveRole, deleteRole } from '@/ai/flows/manage-roles-flow';
+import { fetchUsers } from '@/ai/flows/manage-users-flow';
 import type { Role, SaveRoleInput, Permission } from '@/ai/schemas/role-schemas';
+import type { User } from '@/ai/flows/manage-users-flow';
 import { availablePermissions } from '@/ai/schemas/role-schemas';
 import { AddEditRoleModal } from './components/add-edit-role-modal';
 import { useToast } from '@/hooks/use-toast';
+import { auth } from '@/lib/firebase';
 
 const formatPermissionName = (permission: Permission | string) => {
-  return permission.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+  return permission.replace(/_/g, ' ').replace(/\w/g, l => l.toUpperCase());
 };
 
 const predefinedRoles: SaveRoleInput[] = [
@@ -89,6 +92,7 @@ const predefinedRoles: SaveRoleInput[] = [
 export default function UserRolesPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [rolesList, setRolesList] = useState<Role[]>([]);
+  const [usersList, setUsersList] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
 
@@ -100,6 +104,18 @@ export default function UserRolesPage() {
   const [isDeletingRole, startDeletingRoleTransition] = useTransition();
   const [roleToDelete, setRoleToDelete] = useState<Role | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isUserAdmin, setIsUserAdmin] = useState(false);
+
+  useEffect(() => {
+    const checkAdminStatus = async () => {
+      const user = auth.currentUser;
+      if (user) {
+        const idTokenResult = await user.getIdTokenResult();
+        setIsUserAdmin(idTokenResult.claims.roles?.includes('Administrator'));
+      }
+    };
+    checkAdminStatus();
+  }, []);
 
   const seedPredefinedRoles = async (existingRoles: Role[]) => {
     const rolesToCreate = predefinedRoles.filter(
@@ -123,25 +139,26 @@ export default function UserRolesPage() {
     return false; 
   };
 
-  const loadRoles = async () => {
+  const loadData = async () => {
     setIsLoading(true);
     try {
-      let fetchedRoles = await fetchRoles();
+      let [fetchedRoles, fetchedUsers] = await Promise.all([fetchRoles(), fetchUsers()]);
       const wasSeeded = await seedPredefinedRoles(fetchedRoles);
       if (wasSeeded) {
         fetchedRoles = await fetchRoles(); 
       }
       setRolesList(fetchedRoles);
+      setUsersList(fetchedUsers);
     } catch (error) {
-      console.error("Failed to load roles:", error);
-      toast({ title: "Error Loading Roles", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
+      console.error("Failed to load data:", error);
+      toast({ title: "Error Loading Data", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    loadRoles();
+    loadData();
   }, []);
 
   const handleOpenAddModal = () => {
@@ -166,7 +183,7 @@ export default function UserRolesPage() {
           description: `Role "${savedData.name}" has been successfully ${isEditingModal ? 'updated' : 'saved'}.`,
         });
         setIsModalOpen(false);
-        await loadRoles(); 
+        await loadData(); 
       } catch (error) {
         console.error("Failed to save role:", error);
         toast({
@@ -179,7 +196,7 @@ export default function UserRolesPage() {
   };
 
   const handleDeleteClick = (role: Role) => {
-    if (role.isSystemRole) {
+    if (role.isSystemRole && !isUserAdmin) {
         toast({ title: "Action Not Allowed", description: "System roles cannot be deleted.", variant: "destructive" });
         return;
     }
@@ -189,7 +206,7 @@ export default function UserRolesPage() {
 
   const executeDeleteRole = async () => {
     if (!roleToDelete) return;
-    if (roleToDelete.isSystemRole) { 
+    if (roleToDelete.isSystemRole && !isUserAdmin) { 
         toast({ title: "Action Not Allowed", description: "System roles cannot be deleted.", variant: "destructive" });
         setShowDeleteConfirm(false);
         return;
@@ -200,7 +217,7 @@ export default function UserRolesPage() {
         toast({ title: "Role Deleted", description: `Role "${roleToDelete.name}" has been removed.` });
         setShowDeleteConfirm(false);
         setRoleToDelete(null);
-        await loadRoles(); 
+        await loadData(); 
       } catch (error) {
         console.error("Failed to delete role:", error);
         toast({ title: "Error Deleting Role", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
@@ -209,6 +226,17 @@ export default function UserRolesPage() {
       }
     });
   };
+
+  const roleUserCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    rolesList.forEach(role => counts.set(role.id, 0));
+    usersList.forEach(user => {
+      user.roles?.forEach(roleId => {
+        counts.set(roleId, (counts.get(roleId) || 0) + 1);
+      });
+    });
+    return counts;
+  }, [rolesList, usersList]);
 
   const sortedAndFilteredRoles = useMemo(() => {
     let sortedList = [...rolesList].sort((a, b) => {
@@ -243,7 +271,7 @@ export default function UserRolesPage() {
         <CardHeader>
           <CardTitle>Manage Roles</CardTitle>
           <CardDescription>
-            Assign permissions to roles to control access to SkyBase features. User counts are illustrative pending full user management.
+            Assign permissions to roles to control access to SkyBase features.
           </CardDescription>
            <div className="mt-2 relative">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -298,9 +326,8 @@ export default function UserRolesPage() {
                           {(role.permissions || []).length === 0 && <span className="text-xs text-muted-foreground">-</span>}
                         </div>
                       </TableCell>
-                      <TableCell className="text-center text-sm text-muted-foreground">
-                        {/* Placeholder for user count */}
-                        {role.name === "Administrator" ? 1 : (role.name === "Flight Crew" ? 5 : (role.name === "Dispatch" ? 2 : 0))}
+                      <TableCell className="text-center text-sm font-medium">
+                        {roleUserCounts.get(role.id) || 0}
                       </TableCell>
                       <TableCell className="text-right">
                         <Tooltip>
@@ -319,13 +346,13 @@ export default function UserRolesPage() {
                                 size="icon" 
                                 className="text-destructive hover:text-destructive" 
                                 onClick={() => handleDeleteClick(role)} 
-                                disabled={isDeletingRole && roleToDelete?.id === role.id || role.isSystemRole}
+                                disabled={isDeletingRole && roleToDelete?.id === role.id || (role.isSystemRole && !isUserAdmin)}
                               >
                                 {isDeletingRole && roleToDelete?.id === role.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                                 <span className="sr-only">Delete Role</span>
                               </Button>
                             </TooltipTrigger>
-                            <TooltipContent><p>{role.isSystemRole ? "System roles cannot be deleted" : "Delete Role"}</p></TooltipContent>
+                            <TooltipContent><p>{(role.isSystemRole && !isUserAdmin) ? "System roles cannot be deleted" : "Delete Role"}</p></TooltipContent>
                         </Tooltip>
                       </TableCell>
                     </TableRow>
@@ -344,6 +371,7 @@ export default function UserRolesPage() {
         initialData={currentRoleForModal}
         isEditing={isEditingModal}
         isSaving={isSavingRole}
+        isUserAdmin={isUserAdmin}
       />
 
       {showDeleteConfirm && roleToDelete && (

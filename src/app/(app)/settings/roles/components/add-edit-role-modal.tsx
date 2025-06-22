@@ -40,6 +40,7 @@ interface AddEditRoleModalProps {
   initialData?: Role | null;
   isEditing?: boolean;
   isSaving: boolean;
+  isUserAdmin: boolean;
 }
 
 export function AddEditRoleModal({
@@ -49,6 +50,7 @@ export function AddEditRoleModal({
   initialData,
   isEditing,
   isSaving,
+  isUserAdmin,
 }: AddEditRoleModalProps) {
   
   const form = useForm<RoleFormData>({
@@ -97,10 +99,7 @@ export function AddEditRoleModal({
     ? "Update the role's details and permissions."
     : "Define a new user role and assign permissions.";
   
-  // Determine if the 'System Role' checkbox should be disabled
-  // It's disabled if:
-  // 1. We are editing an existing role that IS ALREADY a system role (to prevent unmarking it).
-  const isSystemRoleCheckboxDisabled = !!(isEditing && initialData?.isSystemRole);
+  const isSystemRoleCheckboxDisabled = !!(isEditing && initialData?.isSystemRole && !isUserAdmin);
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!isSaving) setIsOpen(open); }}>
@@ -159,7 +158,7 @@ export function AddEditRoleModal({
                             />
                           </FormControl>
                           <FormLabel className="text-sm font-normal cursor-pointer flex-1">
-                            {permission.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                            {permission.replace(/_/g, ' ').replace(/\w/g, l => l.toUpperCase())}
                           </FormLabel>
                         </FormItem>
                       )}
@@ -215,4 +214,3 @@ export function AddEditRoleModal({
     </Dialog>
   );
 }
-

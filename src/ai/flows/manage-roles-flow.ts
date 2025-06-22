@@ -121,7 +121,7 @@ const saveRoleFlow = ai.defineFlow(
         permissions: roleData.permissions || [], // Ensure permissions is an array
         isSystemRole: roleData.isSystemRole || false,
         updatedAt: FieldValue.serverTimestamp(),
-        createdAt: docSnap.exists() && docSnap.data()?.createdAt ? docSnap.data()?.createdAt : FieldValue.serverTimestamp(),
+        createdAt: docSnap.exists && docSnap.data()?.createdAt ? docSnap.data()?.createdAt : FieldValue.serverTimestamp(),
       };
 
       await roleDocRef.set(dataWithTimestamps, { merge: true });
@@ -161,7 +161,7 @@ const deleteRoleFlow = ai.defineFlow(
       const roleDocRef = db.collection(ROLES_COLLECTION).doc(input.roleId);
       const docSnap = await roleDocRef.get();
 
-      if (docSnap.exists() && docSnap.data()?.isSystemRole) {
+      if (docSnap.exists && docSnap.data()?.isSystemRole) {
           throw new Error("System roles cannot be deleted.");
       }
 

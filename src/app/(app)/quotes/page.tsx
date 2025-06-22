@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect, useTransition, useMemo } from 'react';
@@ -347,7 +346,7 @@ export default function AllQuotesPage() {
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <Link href={`/quotes/${quote.id}`} passHref legacyBehavior>
-                                <Button variant="ghost" size="sm" className="p-2 w-9" asChild={false}>
+                                <Button variant="ghost" size="sm" className="p-2 w-9" asChild>
                                   <Eye className="h-4 w-4" />
                                   <span className="sr-only">View Quote</span>
                                 </Button>
@@ -358,7 +357,7 @@ export default function AllQuotesPage() {
                           <Tooltip>
                             <TooltipTrigger asChild>
                                <Link href={`/quotes/new?editMode=true&quoteId=${quote.id}`} passHref legacyBehavior>
-                                <Button variant="ghost" size="sm" className="p-2 w-9" asChild={false}>
+                                <Button variant="ghost" size="sm" className="p-2 w-9" asChild>
                                   <Edit3 className="h-4 w-4" />
                                   <span className="sr-only">Edit Quote</span>
                                 </Button>
@@ -366,6 +365,7 @@ export default function AllQuotesPage() {
                             </TooltipTrigger>
                             <TooltipContent><p>Edit Quote</p></TooltipContent>
                           </Tooltip>
+
                           <Tooltip>
                               <TooltipTrigger asChild>
                                 <Button
@@ -429,7 +429,7 @@ export default function AllQuotesPage() {
                 onClick={executeStatusUpdate}
                 disabled={isBookingOrUpdating}
               >
-                {isBookingOrUpdating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {isBookingOrupdating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Confirm & Change to {newStatusForQuote}
               </Button>
             </AlertDialogFooter>
@@ -438,6 +438,3 @@ export default function AllQuotesPage() {
       )}
     </TooltipProvider>
   );
-}
-
-    
