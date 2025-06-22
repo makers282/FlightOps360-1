@@ -348,8 +348,10 @@ export default function AllQuotesPage() {
                             <TooltipTrigger asChild>
                               <Button asChild variant="ghost" size="sm" className="p-2 w-9">
                                 <Link href={`/quotes/${quote.id}`}>
-                                  <Eye className="h-4 w-4" />
-                                  <span className="sr-only">View Quote</span>
+                                  <span>
+                                    <Eye className="h-4 w-4" />
+                                    <span className="sr-only">View Quote</span>
+                                  </span>
                                 </Link>
                               </Button>
                             </TooltipTrigger>
@@ -359,8 +361,10 @@ export default function AllQuotesPage() {
                             <TooltipTrigger asChild>
                               <Button asChild variant="ghost" size="sm" className="p-2 w-9">
                                 <Link href={`/quotes/new?editMode=true&quoteId=${quote.id}`}>
-                                  <Edit3 className="h-4 w-4" />
-                                  <span className="sr-only">Edit Quote</span>
+                                  <span>
+                                    <Edit3 className="h-4 w-4" />
+                                    <span className="sr-only">Edit Quote</span>
+                                  </span>
                                 </Link>
                               </Button>
                             </TooltipTrigger>
