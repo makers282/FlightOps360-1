@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useMemo, useTransition } from 'react';
 import { PageHeader } from '@/components/page-header';
-import { Users as UsersIcon, Loader2, Edit, Trash2, RefreshCw } from 'lucide-react';
+import { Users as UsersIcon, Loader2, Edit, Trash2, RefreshCw, MoreVertical } from 'lucide-react';
 import { fetchUsers, createUser, updateUser, deleteUser, type User } from '@/ai/flows/manage-users-flow';
 import {
   Table,
@@ -34,6 +34,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
@@ -295,11 +301,41 @@ export default function UsersPage() {
                           2 hours ago
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button variant="ghost" size="icon" onClick={() => handleOpenEditUserModal(user)} disabled={isTogglingStatus}><Edit className="h-4 w-4" /></Button>
-                          <Button variant="ghost" size="icon" onClick={() => handleToggleUserStatus(user)} disabled={isTogglingStatus}>
-                            <RefreshCw className={`h-4 w-4 ${isTogglingStatus && 'animate-spin'}`} />
-                          </Button>
-                          <Button variant="ghost" size="icon" onClick={() => { setUserToDelete(user); setShowDeleteConfirm(true);}} disabled={isTogglingStatus}><Trash2 className="h-4 w-4" /></Button>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" className="h-8 w-8 p-0">
+                                <span className="sr-only">Open menu</span>
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => loadData()} disabled={isTogglingStatus}>
+                                <RefreshCw className="mr-2 h-4 w-4" />
+                                <span>Refresh</span>
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleOpenEditUserModal(user)} disabled={isTogglingStatus}>
+                                <Edit className="mr-2 h-4 w-4" />
+                                <span>Edit</span>
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleToggleUserStatus(user)} disabled={isTogglingStatus}>
+                                {user.disabled ? (
+                                  <>
+                                    <RefreshCw className={`mr-2 h-4 w-4 ${isTogglingStatus && 'animate-spin'}`} />
+                                    <span>Enable</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <RefreshCw className={`mr-2 h-4 w-4 ${isTogglingStatus && 'animate-spin'}`} />
+                                    <span>Disable</span>
+                                  </>
+                                )}
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => { setUserToDelete(user); setShowDeleteConfirm(true);}} disabled={isTogglingStatus}>
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                <span>Delete</span>
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </TableCell>
                     </TableRow>
                     ))}
