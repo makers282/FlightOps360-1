@@ -120,6 +120,12 @@ const deleteMaintenanceTaskFlow = ai.defineFlow(
     }
     try {
       const taskDocRef = db.collection(MAINTENANCE_TASKS_COLLECTION).doc(input.taskId);
+      const docSnap = await taskDocRef.get();
+
+      if (!docSnap.exists) {
+          throw new Error(`Task with ID ${input.taskId} not found for deletion.`);
+      }
+      
       await taskDocRef.delete();
       return { success: true, taskId: input.taskId };
     } catch (error) {

@@ -62,7 +62,7 @@ const saveQuoteFlow = ai.defineFlow(
       const docSnap = await quoteDocRef.get();
       let finalDataToSave;
 
-      if (docSnap.exists) { // Corrected: .exists is a property, not a function
+      if (docSnap.exists) { // Corrected: .exists is a property
         finalDataToSave = {
           ...quoteData,
           id: firestoreDocId, 
