@@ -42,19 +42,6 @@ export function LoginForm() {
       try {
         const userCredential = await signInWithEmailAndPassword(auth, data.email, data.password);
         console.log("User signed in:", userCredential.user);
-
-        // === ADDED FOR DEBUGGING: Log ID Token ===
-        if (userCredential.user) {
-          try {
-            const idTokenResult = await userCredential.user.getIdTokenResult();
-            console.log("[ID Token DEBUG] Token retrieved successfully. Claims:", idTokenResult.claims);
-            // console.log("[ID Token DEBUG] Full Token:", idTokenResult.token); // Optionally log the full token if needed
-          } catch (tokenError) {
-            console.error("[ID Token DEBUG] Error getting ID token:", tokenError);
-          }
-        }
-        // === END ADDED CODE ===
-
         toast({ title: "Login Successful", description: "Redirecting to dashboard..." });
         router.push('/dashboard'); 
       } catch (error: any) {

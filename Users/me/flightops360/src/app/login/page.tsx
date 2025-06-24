@@ -1,4 +1,6 @@
 
+"use client";
+
 import { LoginForm } from './components/login-form';
 import { Plane } from 'lucide-react';
 import Image from 'next/image';
