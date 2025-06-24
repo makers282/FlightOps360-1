@@ -21,7 +21,7 @@ import {
     DeleteBulletinInputSchema,
     DeleteBulletinOutputSchema,
 } from '@/ai/schemas/bulletin-schemas';
-import { createNotification } from '@/ai/flows/create-notification-flow';
+import { createNotification } from './create-notification-flow';
 
 const BULLETINS_COLLECTION = 'bulletins';
 
