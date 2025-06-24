@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { List, ListItem } from '@/components/ui/list';
-import { Megaphone, Loader2, AlertTriangle, Plane, CalendarDays, LayoutDashboard, Info, UserX as UserXIcon, Briefcase, Clock, Users, FileText as QuoteIcon, ShieldAlert } from 'lucide-react';
+import { Megaphone, Loader2, AlertTriangle, Plane, CalendarDays, LayoutDashboard, Info, UserX as UserXIcon, Briefcase, Clock, Users, FileText as QuoteIcon, ShieldAlert, PlaneTakeoff } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { AlertDialog, AlertDialogContent, AlertDialogDescription as ModalAlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogCancel } from "@/components/ui/alert-dialog";
@@ -14,19 +14,16 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from '@/hooks/use-toast';
-import { format, parseISO, isValid, addDays, differenceInCalendarDays } from 'date-fns';
-import { getFirestore } from 'firebase-admin/firestore';
+import { format, parseISO, isValid, addDays } from 'date-fns';
 import { auth } from '@/lib/firebase';
 import type { User as FirebaseUser } from 'firebase/auth';
 import { fetchBulletins, type Bulletin, type BulletinType } from '@/ai/flows/manage-bulletins-flow';
-import { fetchTrips, type Trip, type TripStatus } from '@/ai/flows/manage-trips-flow';
+import { fetchCurrentTrips, fetchUpcomingTrips, type Trip } from '@/ai/flows/manage-trips-flow';
 import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
-import { fetchComponentTimesForAircraft, type AircraftComponentTimes } from '@/ai/flows/manage-component-times-flow';
 import { fetchAircraftDiscrepancies } from '@/ai/flows/manage-aircraft-discrepancies-flow';
-import { fetchMaintenanceTasksForAircraft, type MaintenanceTask as FlowMaintenanceTask } from '@/ai/flows/manage-maintenance-tasks-flow';
+import { fetchMaintenanceTasksForAircraft } from '@/ai/flows/manage-maintenance-tasks-flow';
 import { fetchNotifications } from '@/ai/flows/manage-notifications-flow';
 import { fetchQuotes } from '@/ai/flows/manage-quotes-flow';
-import type { DisplayMaintenanceItem } from '@/app/(app)/aircraft/currency/[tailNumber]/page';
 
 interface AircraftStatusDetail {
     label: "Active" | "Maintenance" | "Info";
@@ -36,7 +33,7 @@ interface AircraftStatusDetail {
 
 interface SystemAlert {
   id: string;
-  type: 'aircraft' | 'system' | 'maintenance' | 'trip';
+  type: 'aircraft' | 'system' | 'maintenance' | 'training' | 'compliance';
   severity: 'critical' | 'warning' | 'info';
   title: string;
   message: string;
@@ -52,11 +49,10 @@ export default function DashboardPage() {
   const [isLoadingBulletins, setIsLoadingBulletins] = useState(true);
   const [selectedBulletin, setSelectedBulletin] = useState<Bulletin | null>(null);
   const [isBulletinModalOpen, setIsBulletinModalOpen] = useState(false);
-  const [isBulletinAccordionOpen, setIsBulletinAccordionOpen] = useState(true);
 
+  const [currentTrips, setCurrentTrips] = useState<Trip[]>([]);
   const [upcomingTrips, setUpcomingTrips] = useState<Trip[]>([]);
   const [isLoadingTrips, setIsLoadingTrips] = useState(true);
-  const [isUpcomingTripsAccordionOpen, setIsUpcomingTripsAccordionOpen] = useState(true);
 
   const [fleetList, setFleetList] = useState<FleetAircraft[]>([]);
   const [isLoadingFleet, setIsLoadingFleet] = useState(true);
@@ -92,9 +88,9 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    // Set the greeting only on the client side after mount
     setGreeting(generateGreeting());
     const interval = setInterval(() => setGreeting(generateGreeting()), 60000); // Update every minute
+    return () => clearInterval(interval);
   }, [generateGreeting]);
   
   const getBulletinTypeBadgeVariant = (type: BulletinType): "default" | "destructive" | "secondary" => {
@@ -120,13 +116,15 @@ export default function DashboardPage() {
     try {
         const [
             fetchedBulletins, 
-            fetchedTrips, 
+            fetchedCurrent,
+            fetchedUpcoming,
             fetchedFleet, 
             fetchedQuotes, 
             fetchedNotifications
         ] = await Promise.all([
             fetchBulletins(),
-            fetchTrips(),
+            fetchCurrentTrips(),
+            fetchUpcomingTrips(),
             fetchFleetAircraft(),
             fetchQuotes(),
             fetchNotifications(),
@@ -134,8 +132,7 @@ export default function DashboardPage() {
 
         const now = new Date();
 
-        // KPI Data
-        const activeTripStatuses: TripStatus[] = ["Confirmed", "Released"];
+        // Process data for KPIs
         const pendingQuoteStatuses = ["Draft", "Sent"];
         const pendingQuotesList = fetchedQuotes.filter(q => pendingQuoteStatuses.includes(q.status));
         
@@ -150,25 +147,19 @@ export default function DashboardPage() {
         }
 
         setKpiStats({
-            activeTrips: fetchedTrips.filter(t => activeTripStatuses.includes(t.status as TripStatus)).length,
+            activeTrips: fetchedCurrent.length,
             pendingQuotes: pendingQuotesList.length,
             pendingQuotesValue: pendingQuotesList.reduce((acc, q) => acc + (q.totalSellPrice || 0), 0),
             aircraftDue: dueCount,
             alertNotices: fetchedNotifications.filter(n => !n.isRead).length,
         });
 
-        // Dashboard Sections Data
+        // Process data for dashboard sections
         setBulletins(fetchedBulletins.filter(b => b.isActive).sort((a, b) => parseISO(b.publishedAt).getTime() - parseISO(a.publishedAt).getTime()));
         
-        const upcomingTripStatuses: TripStatus[] = ["Scheduled", "Confirmed", "Released"];
-        setUpcomingTrips(
-            fetchedTrips
-                .filter(trip => trip.legs?.[0]?.departureDateTime && parseISO(trip.legs[0].departureDateTime) >= now && upcomingTripStatuses.includes(trip.status as TripStatus))
-                .map(trip => ({...trip, aircraftLabel: fetchedFleet.find(ac => ac.id === trip.aircraftId)?.tailNumber || trip.aircraftId}))
-                .sort((a, b) => parseISO(a.legs![0].departureDateTime!).getTime() - parseISO(b.legs![0].departureDateTime!).getTime())
-                .slice(0, 5)
-        );
-
+        setCurrentTrips(fetchedCurrent.map(trip => ({...trip, aircraftLabel: fetchedFleet.find(ac => ac.id === trip.aircraftId)?.tailNumber || trip.aircraftId})));
+        setUpcomingTrips(fetchedUpcoming.map(trip => ({...trip, aircraftLabel: fetchedFleet.find(ac => ac.id === trip.aircraftId)?.tailNumber || trip.aircraftId})));
+        
         setFleetList(fetchedFleet);
         
         const statusMap = new Map<string, AircraftStatusDetail>();
@@ -186,19 +177,17 @@ export default function DashboardPage() {
                  statusMap.set(ac.id, { label: "Active", variant: "default", details: "All Clear" });
             }
         }
-
-        // Add notifications to alerts
+        
         alerts = alerts.concat(fetchedNotifications
             .filter(n => !n.isRead)
             .map(n => ({
                 id: n.id,
-                type: 'system', // Or refine based on notification type if available
-                severity: n.severity || 'info', // Assuming severity field exists
+                type: n.type as SystemAlert['type'] || 'system',
+                severity: n.type === 'alert' ? 'warning' : 'info',
                 title: n.title,
                 message: n.message,
                 link: n.link,
-                icon: Info, // Default icon for notifications
-                // Exclude createdAt as it's not part of SystemAlert and caused the toDate() error
+                icon: Info,
             })));
         setAircraftStatusDetails(statusMap);
         setActiveSystemAlerts(alerts);
@@ -220,7 +209,6 @@ export default function DashboardPage() {
   }, [loadData]);
 
   const kpiCardData = [
-    { title: "Active Trips", value: kpiStats.activeTrips, icon: CalendarDays, details: `${upcomingTrips.filter(t => differenceInCalendarDays(parseISO(t.legs[0].departureDateTime!), new Date()) === 0).length} departing today`, link: "/trips/list" },
     { title: "Pending Quotes", value: kpiStats.pendingQuotes, icon: QuoteIcon, details: `$${(kpiStats.pendingQuotesValue / 1000).toFixed(1)}K total value`, link: "/quotes" },
     { title: "Aircraft Due", value: kpiStats.aircraftDue, icon: Plane, details: "Maintenance items", link: "/aircraft/currency" },
     { title: "Alert Notices", value: kpiStats.alertNotices, icon: ShieldAlert, details: "Unread notifications", link: "/notifications" },
@@ -237,26 +225,32 @@ export default function DashboardPage() {
         </p>
       </div>
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-6">
-        {isLoadingKpis ? (
-            Array.from({ length: 4 }).map((_, index) => (
-                <Card key={index}><CardHeader><div className="h-5 w-2/3 bg-muted rounded animate-pulse"></div></CardHeader><CardContent><div className="h-8 w-1/3 bg-muted rounded animate-pulse"></div><div className="h-4 w-full mt-2 bg-muted rounded animate-pulse"></div></CardContent></Card>
-            ))
-        ) : (
-            kpiCardData.map((stat, index) => (
-              <Card key={index} className="shadow-md hover:shadow-lg transition-shadow">
-                <Link href={stat.link || "#"} className="block h-full">
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">{stat.title}</CardTitle>
-                    <stat.icon className="h-4 w-4 text-muted-foreground" />
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">{stat.value}</div>
-                    <p className="text-xs text-muted-foreground">{stat.details}</p>
-                  </CardContent>
-                </Link>
-              </Card>
-            ))
-        )}
+        <Card className="shadow-md hover:shadow-lg transition-shadow">
+          <Link href="/trips/list" className="block h-full">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Active Trips</CardTitle>
+              <CalendarDays className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{kpiStats.activeTrips}</div>
+              <p className="text-xs text-muted-foreground">Trips currently in progress</p>
+            </CardContent>
+          </Link>
+        </Card>
+        {kpiCardData.map((stat, index) => (
+          <Card key={index} className="shadow-md hover:shadow-lg transition-shadow">
+            <Link href={stat.link || "#"} className="block h-full">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">{stat.title}</CardTitle>
+                <stat.icon className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{stat.value}</div>
+                <p className="text-xs text-muted-foreground">{stat.details}</p>
+              </CardContent>
+            </Link>
+          </Card>
+        ))}
       </div>
       
       <Card className="mb-6 shadow-md">
@@ -273,33 +267,74 @@ export default function DashboardPage() {
             </AccordionItem>
         </Accordion>
       </Card>
+      
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <Card className="shadow-md">
+            <CardHeader>
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <PlaneTakeoff className="h-5 w-5 text-primary" />
+                        <CardTitle>Current Trips</CardTitle>
+                    </div>
+                    <Badge variant="secondary">{currentTrips.length} Ongoing</Badge>
+                </div>
+            </CardHeader>
+            <CardContent>
+                {isLoadingTrips ? (
+                    <div className="text-center py-5"><Loader2 className="h-6 w-6 animate-spin"/></div>
+                ) : currentTrips.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-3">No trips currently in progress.</p>
+                ) : (
+                    <List>
+                        {currentTrips.slice(0, 5).map(trip => (
+                            <ListItem key={trip.id} className="py-2 border-b last:border-b-0">
+                                <Link href={`/trips/details/${trip.id}`} className="flex justify-between items-center hover:bg-muted/50 rounded-md -mx-2 px-2 py-1">
+                                    <div>
+                                        <p className="font-semibold">{trip.tripId} ({trip.clientName})</p>
+                                        <p className="text-xs text-muted-foreground">{trip.legs?.[0]?.origin} &rarr; {trip.legs?.[trip.legs.length -1]?.destination} on {trip.aircraftLabel}</p>
+                                    </div>
+                                    <Badge variant="default">Released</Badge>
+                                </Link>
+                            </ListItem>
+                        ))}
+                    </List>
+                )}
+            </CardContent>
+        </Card>
 
-      <Card className="mb-6 shadow-md">
-        <Accordion type="single" collapsible defaultValue="trips-item" className="w-full">
-            <AccordionItem value="trips-item" className="border-b-0">
-                <AccordionTrigger className="flex w-full items-center justify-between p-4 hover:no-underline [&[data-state=open]>svg]:text-primary">
-                    <div className="flex items-center gap-2 text-left flex-grow"><CalendarDays className="h-5 w-5 text-primary" /><CardTitle>Upcoming Trips</CardTitle></div>
-                </AccordionTrigger>
-                <AccordionContent className="pt-0"><CardContent className="pb-4 px-4">{
-                    isLoadingTrips ? <div className="text-center py-5"><Loader2 className="h-6 w-6 animate-spin"/></div> :
-                    upcomingTrips.length === 0 ? <p className="text-sm text-muted-foreground text-center py-3">No upcoming trips.</p> :
-                    <Table>
-                        <TableHeader><TableRow><TableHead>Trip ID</TableHead><TableHead>Client</TableHead><TableHead>Route</TableHead><TableHead>Aircraft</TableHead><TableHead>Departure</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
-                        <TableBody>{upcomingTrips.map(trip => (
-                            <TableRow key={trip.id}>
-                                <TableCell><Link href={`/trips/details/${trip.id}`} className="text-primary hover:underline">{trip.tripId}</Link></TableCell>
-                                <TableCell>{trip.clientName}</TableCell>
-                                <TableCell>{trip.legs?.[0]?.origin} - {trip.legs?.[trip.legs.length -1]?.destination}</TableCell>
-                                <TableCell>{trip.aircraftLabel}</TableCell>
-                                <TableCell>{format(parseISO(trip.legs[0].departureDateTime!), 'MM/dd HH:mm')}</TableCell>
-                                <TableCell><Badge variant={trip.status === "Scheduled" ? "outline" : "default"}>{trip.status}</Badge></TableCell>
-                            </TableRow>
-                        ))}</TableBody>
-                    </Table>
-                }</CardContent></AccordionContent>
-            </AccordionItem>
-        </Accordion>
-      </Card>
+        <Card className="shadow-md">
+            <CardHeader>
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <CalendarDays className="h-5 w-5 text-primary" />
+                        <CardTitle>Upcoming Trips</CardTitle>
+                    </div>
+                    <Badge variant="outline">{upcomingTrips.length} Departing Soon</Badge>
+                </div>
+            </CardHeader>
+            <CardContent>
+                 {isLoadingTrips ? (
+                    <div className="text-center py-5"><Loader2 className="h-6 w-6 animate-spin"/></div>
+                ) : upcomingTrips.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-3">No upcoming trips scheduled.</p>
+                ) : (
+                     <List>
+                        {upcomingTrips.slice(0, 5).map(trip => (
+                            <ListItem key={trip.id} className="py-2 border-b last:border-b-0">
+                                <Link href={`/trips/details/${trip.id}`} className="flex justify-between items-center hover:bg-muted/50 rounded-md -mx-2 px-2 py-1">
+                                    <div>
+                                        <p className="font-semibold">{trip.tripId} ({trip.clientName})</p>
+                                        <p className="text-xs text-muted-foreground">Departs {format(parseISO(trip.legs[0].departureDateTime!), 'MM/dd HH:mm')}</p>
+                                    </div>
+                                    <Badge variant="outline">{trip.status}</Badge>
+                                </Link>
+                            </ListItem>
+                        ))}
+                    </List>
+                )}
+            </CardContent>
+        </Card>
+      </div>
       
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="lg:col-span-2 shadow-md">
@@ -333,7 +368,7 @@ export default function DashboardPage() {
             isLoadingAircraftStatusDetails ? <div className="text-center py-5"><Loader2 className="h-6 w-6 animate-spin"/></div> :
             activeSystemAlerts.length === 0 ? <p className="text-sm text-muted-foreground text-center py-3">No critical system alerts.</p> :
             <List>{
-                activeSystemAlerts.map(alert => (
+                activeSystemAlerts.slice(0, 5).map(alert => (
                     <ListItem key={alert.id} className="py-2 border-b last:border-b-0">
                         <Link href={alert.link || "#"} className="flex items-start gap-2 hover:underline">
                             {alert.icon && <alert.icon className={`h-5 w-5 mt-0.5 ${alert.severity === 'critical' ? 'text-destructive' : 'text-yellow-500'}`} />}

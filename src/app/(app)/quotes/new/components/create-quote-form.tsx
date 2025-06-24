@@ -155,16 +155,16 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
   const form = useForm<FullQuoteFormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      quoteId: '',
+      quoteId: generateNewQuoteId(), // Generate ID on init for new quotes
       selectedCustomerId: undefined,
       clientName: '',
       clientEmail: '',
       clientPhone: '',
       legs: [{
         origin: '',
-        destination: '',
+ destination: '',
         legType: 'Charter',
-        departureDateTime: undefined as Date | undefined,
+ departureDateTime: undefined, // It's okay for Date to be undefined initially
         passengerCount: 1,
         originFbo: '',
         destinationFbo: '',
@@ -198,10 +198,9 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
     name: "optionalServices",
   });
 
-
-  const generateNewQuoteId = useCallback(() => {
+ function generateNewQuoteId() {
     return `QT-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
-  }, []);
+ }
 
    useEffect(() => {
     if (fetchedCompanyProfile?.serviceFeeRates && !isEditMode) { 
@@ -253,7 +252,7 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
   }, [currentSelectedAircraftId]);
 
 
-  useEffect(() => {
+ useEffect(() => {
     setIsClient(true);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -363,10 +362,7 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
           router.push('/quotes');
         })
         .finally(() => setIsLoadingQuoteDataForEdit(false));
-    } else {
-      if (!getValues('quoteId')) {
-        setValue('quoteId', generateNewQuoteId());
-      }
+    } else { // For new quotes, the quoteId is already set by defaultValues
     }
   }, [isEditMode, quoteIdToEdit, reset, toast, router, setValue, getValues, generateNewQuoteId, fetchedCompanyProfile]);
 
@@ -385,27 +381,6 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
     }
   }, [legsArray, legEstimates.length]);
 
-
-  useEffect(() => {
-    if (currentSelectedAircraftId) {
-      setIsLoadingSelectedAcPerf(true);
-      fetchAircraftPerformance({ aircraftId: currentSelectedAircraftId })
-        .then(perfData => {
-          if (perfData) {
-             setSelectedAircraftPerformance({...perfData, aircraftId: currentSelectedAircraftId});
-          } else {
-             setSelectedAircraftPerformance(null);
-          }
-        })
-        .catch(error => {
-          console.warn(`Could not fetch performance data for aircraft ${currentSelectedAircraftId}:`, error);
-          setSelectedAircraftPerformance(null);
-        })
-        .finally(() => setIsLoadingSelectedAcPerf(false));
-    } else {
-      setSelectedAircraftPerformance(null);
-    }
-  }, [currentSelectedAircraftId]);
 
   const handleCustomerSelect = (customerId: string | undefined) => {
     setValue('selectedCustomerId', customerId);
