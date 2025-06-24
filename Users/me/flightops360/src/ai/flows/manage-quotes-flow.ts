@@ -184,7 +184,7 @@ const fetchQuoteByIdFlow = ai.defineFlow(
       const docSnap = await quoteDocRef.get();
 
       if (docSnap.exists) {
-        const data = docSnap.data();
+        const data = docSnap.data()!;
         const quote: Quote = {
           id: docSnap.id,
           ...data,

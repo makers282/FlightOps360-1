@@ -5,7 +5,7 @@
   "private": true,
   "description": "FlightOps360 - Flight Operations Management Platform",
   "scripts": {
-    "dev": "next dev --turbopack -p 9005",
+    "dev": "next dev -p 9005",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",

@@ -10,7 +10,7 @@
 import { ai } from '@/ai/genkit';
 import { adminDb as db } from '@/lib/firebase-admin';
 import { z } from 'zod';
-import { differenceInDays, parseISO, subHours } from 'date-fns';
+import { differenceInDays, parseISO, subHours, isValid } from 'date-fns';
 import { fetchAircraftDocuments } from './manage-aircraft-documents-flow';
 import { fetchBulletins } from './manage-bulletins-flow';
 import { fetchFleetAircraft } from './manage-fleet-flow';
