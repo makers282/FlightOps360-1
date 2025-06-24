@@ -28,6 +28,14 @@ import {
 import { isPast, parseISO } from 'date-fns';
 
 
+const TRIPS_COLLECTION = 'trips';
+const InternalSaveTripInputSchema = z.object({
+  firestoreDocId: z.string(),
+  tripData: SaveTripInputSchema,
+});
+
+
+// Internal Genkit Flow Definitions
 const saveTripFlow = ai.defineFlow(
   {
     name: 'saveTripFlow',
@@ -210,6 +218,17 @@ const deleteTripFlow = ai.defineFlow(
 
 
 // Exported async functions that clients will call
+export async function saveTrip(input: SaveTripInput | Trip): Promise<Trip> {
+  if (!db) {
+    console.error("CRITICAL: Firestore admin instance (db) is not initialized in saveTrip (manage-trips-flow). Admin SDK init likely failed.");
+    throw new Error("Firestore admin instance (db) is not initialized in saveTrip.");
+  }
+  const firestoreDocId = (input as Trip).id || db.collection(TRIPS_COLLECTION).doc().id;
+  const { id, createdAt, updatedAt, ...tripDataForFlow } = input as Trip;
+  console.log('[ManageTripsFlow Firestore Admin] Attempting to save trip with Firestore ID:', firestoreDocId, 'User-facing TripID:', input.tripId);
+  return saveTripFlow({ firestoreDocId, tripData: tripDataForFlow as SaveTripInput });
+}
+
 export async function fetchTrips(): Promise<Trip[]> {
   if (!db) {
     console.error("CRITICAL: Firestore admin instance (db) is not initialized in fetchTrips (manage-trips-flow).");
@@ -225,8 +244,6 @@ export async function fetchCurrentTrips(): Promise<Trip[]> {
     const isReleased = trip.status === 'Released';
     if (!isReleased) return false;
     
-    // A trip is current if it's released and the first leg has departed
-    // and the trip isn't yet completed/cancelled.
     if (!trip.legs || trip.legs.length === 0) return false;
     
     const firstLegDeparture = trip.legs[0]?.departureDateTime ? parseISO(trip.legs[0].departureDateTime) : null;
@@ -252,25 +269,6 @@ export async function fetchTripById(input: { id: string }): Promise<Trip | null>
     throw new Error("Firestore admin instance (db) is not initialized in fetchTripById.");
   }
   return fetchTripByIdFlow(input);
-}
-
-
-const TRIPS_COLLECTION = 'trips';
-const InternalSaveTripInputSchema = z.object({
-  firestoreDocId: z.string(),
-  tripData: SaveTripInputSchema,
-});
-
-
-export async function saveTrip(input: SaveTripInput | Trip): Promise<Trip> {
-  if (!db) {
-    console.error("CRITICAL: Firestore admin instance (db) is not initialized in saveTrip (manage-trips-flow). Admin SDK init likely failed.");
-    throw new Error("Firestore admin instance (db) is not initialized in saveTrip.");
-  }
-  const firestoreDocId = (input as Trip).id || db.collection(TRIPS_COLLECTION).doc().id;
-  const { id, createdAt, updatedAt, ...tripDataForFlow } = input as Trip;
-  console.log('[ManageTripsFlow Firestore Admin] Attempting to save trip with Firestore ID:', firestoreDocId, 'User-facing TripID:', input.tripId);
-  return saveTripFlow({ firestoreDocId, tripData: tripDataForFlow as SaveTripInput });
 }
 
 
