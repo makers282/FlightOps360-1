@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -14,14 +14,14 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from '@/hooks/use-toast';
-import { format, parseISO, isValid, addDays, differenceInCalendarDays } from 'date-fns';
+import { format, parseISO, isValid, addDays } from 'date-fns';
 import { auth } from '@/lib/firebase';
 import type { User as FirebaseUser } from 'firebase/auth';
 import { fetchBulletins, type Bulletin, type BulletinType } from '@/ai/flows/manage-bulletins-flow';
-import { fetchCurrentTrips, fetchUpcomingTrips, type Trip, type TripStatus } from '@/ai/flows/manage-trips-flow';
+import { fetchCurrentTrips, fetchUpcomingTrips, type Trip } from '@/ai/flows/manage-trips-flow';
 import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
 import { fetchAircraftDiscrepancies } from '@/ai/flows/manage-aircraft-discrepancies-flow';
-import { fetchMaintenanceTasksForAircraft, type MaintenanceTask as FlowMaintenanceTask } from '@/ai/flows/manage-maintenance-tasks-flow';
+import { fetchMaintenanceTasksForAircraft } from '@/ai/flows/manage-maintenance-tasks-flow';
 import { fetchNotifications } from '@/ai/flows/manage-notifications-flow';
 import { fetchQuotes } from '@/ai/flows/manage-quotes-flow';
 
@@ -182,7 +182,7 @@ export default function DashboardPage() {
             .filter(n => !n.isRead)
             .map(n => ({
                 id: n.id,
-                type: n.type || 'system',
+                type: n.type as SystemAlert['type'] || 'system',
                 severity: n.type === 'alert' ? 'warning' : 'info',
                 title: n.title,
                 message: n.message,

@@ -25,7 +25,7 @@ import {
     DeleteTripInputSchema,
     DeleteTripOutputSchema
 } from '@/ai/schemas/trip-schemas';
-import { isPast, parseISO, isWithinInterval, endOfDay } from 'date-fns';
+import { isPast, parseISO } from 'date-fns';
 
 
 const saveTripFlow = ai.defineFlow(
@@ -225,14 +225,13 @@ export async function fetchCurrentTrips(): Promise<Trip[]> {
     const isReleased = trip.status === 'Released';
     if (!isReleased) return false;
     
-    // A trip is current if it's released and today is between the first leg's departure and the last leg's departure.
-    // This is a simplified logic. A more robust check might consider arrival times.
+    // A trip is current if it's released and the first leg has departed
+    // and the trip isn't yet completed/cancelled.
     if (!trip.legs || trip.legs.length === 0) return false;
     
     const firstLegDeparture = trip.legs[0]?.departureDateTime ? parseISO(trip.legs[0].departureDateTime) : null;
     if (!firstLegDeparture) return false;
     
-    // Simplistic view: if the first leg has departed and the trip isn't yet completed/cancelled, it's 'current'.
     return isPast(firstLegDeparture) && (trip.status !== 'Completed' && trip.status !== 'Cancelled');
   });
 }
