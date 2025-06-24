@@ -10,28 +10,29 @@
  */
 
 import {ai} from '@/ai/genkit';
-import * as genkit from 'genkit';
+import {defineTool} from '@genkit-ai/ai/tool';
+import * as z from 'zod';
 
-const AirportDataSchema = genkit.z.object({
-  icao: genkit.z.string().describe('The ICAO code of the airport.'),
-  iata: genkit.z.string().optional().describe('The IATA code of the airport.'),
-  name: genkit.z.string().describe('The common name of the airport.'),
-  city: genkit.z.string().describe('The city where the airport is located.'),
-  state: genkit.z.string().optional().describe('The state or region of the airport.'),
-  country: genkit.z.string().describe('The country where the airport is located.'),
-  lat: genkit.z.number().describe('The latitude of the airport.'),
-  lon: genkit.z.number().describe('The longitude of the airport.'),
+const AirportDataSchema = z.object({
+  icao: z.string().describe('The ICAO code of the airport.'),
+  iata: z.string().optional().describe('The IATA code of the airport.'),
+  name: z.string().describe('The common name of the airport.'),
+  city: z.string().describe('The city where the airport is located.'),
+  state: z.string().optional().describe('The state or region of the airport.'),
+  country: z.string().describe('The country where the airport is located.'),
+  lat: z.number().describe('The latitude of the airport.'),
+  lon: z.number().describe('The longitude of the airport.'),
 });
 
-type AirportData = genkit.z.infer<typeof AirportDataSchema>;
+type AirportData = z.infer<typeof AirportDataSchema>;
 
-const getAirportDataTool = genkit.tool(
+const getAirportDataTool = defineTool(
   {
     name: 'getAirportData',
     description:
       'Get airport data for a given ICAO code. Use this to find airport locations for distance calculations.',
-    input: genkit.z.object({airportCode: genkit.z.string().describe('The ICAO code of the airport (e.g., KJFK, EGLL).')}),
-    output: AirportDataSchema,
+    inputSchema: z.object({airportCode: z.string().describe('The ICAO code of the airport (e.g., KJFK, EGLL).')}),
+    outputSchema: AirportDataSchema,
   },
   async ({airportCode}) => {
     // In a real app, you would fetch this from a database or an external API.
@@ -103,29 +104,29 @@ function haversineDistance(
       Math.cos(lat2 * (Math.PI / 180)) *
       Math.sin(dLon / 2) *
       Math.sin(dLon / 2);
-  const c = 2 * genkit.z.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const c = 2 * z.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 }
 
-const EstimateFlightDetailsInputSchema = genkit.z.object({
-  origin: genkit.z.string().describe('The origin airport code (e.g., JFK or KJFK).'),
-  destination: genkit.z.string().describe('The destination airport code (e.g., LAX or KLAX).'),
-  aircraftType: genkit.z.string().describe('The full aircraft type and model (e.g., Cessna Citation CJ3 or N123AB - Cessna Citation CJ3).'),
-  knownCruiseSpeedKts: genkit.z.number().optional().describe('A known cruise speed in knots for this specific aircraft, if available. If provided, this speed should be prioritized for calculations and reported as the assumed cruise speed.'),
+const EstimateFlightDetailsInputSchema = z.object({
+  origin: z.string().describe('The origin airport code (e.g., JFK or KJFK).'),
+  destination: z.string().describe('The destination airport code (e.g., LAX or KLAX).'),
+  aircraftType: z.string().describe('The full aircraft type and model (e.g., Cessna Citation CJ3 or N123AB - Cessna Citation CJ3).'),
+  knownCruiseSpeedKts: z.number().optional().describe('A known cruise speed in knots for this specific aircraft, if available. If provided, this speed should be prioritized for calculations and reported as the assumed cruise speed.'),
 });
-export type EstimateFlightDetailsInput = genkit.z.infer<typeof EstimateFlightDetailsInputSchema>;
+export type EstimateFlightDetailsInput = z.infer<typeof EstimateFlightDetailsInputSchema>;
 
-const EstimateFlightDetailsOutputSchema = genkit.z.object({
-  estimatedMileageNM: genkit.z.number().describe('The estimated flight distance in nautical miles (NM).'),
-  estimatedFlightTimeHours: genkit.z.number().describe('The estimated flight time in hours, as a decimal (e.g., 2.5 for 2 hours and 30 minutes).'),
-  assumedCruiseSpeedKts: genkit.z.number().describe('The assumed cruise speed in knots (kts) used for the estimation. This should be the knownCruiseSpeedKts if it was provided in the input.'),
-  resolvedOriginIcao: genkit.z.string().describe('The resolved ICAO code used for the origin airport.'),
-  resolvedOriginName: genkit.z.string().describe('The single, common official name of the resolved origin airport (e.g., "John F. Kennedy International Airport" or "Dayton-Wright Brothers Airport"). Must be concise and not repetitive.'),
-  resolvedDestinationIcao: genkit.z.string().describe('The resolved ICAO code used for the destination airport.'),
-  resolvedDestinationName: genkit.z.string().describe('The single, common official name of the resolved destination airport (e.g., "Los Angeles International Airport" or "Colorado Plains Regional Airport"). Must be concise and not repetitive.'),
-  briefExplanation: genkit.z.string().describe('A very brief, one-sentence explanation of the estimation method (e.g., "Estimated based on direct route and average cruise speed for the aircraft type." or "Estimated based on direct route and provided cruise speed of X kts.").'),
+const EstimateFlightDetailsOutputSchema = z.object({
+  estimatedMileageNM: z.number().describe('The estimated flight distance in nautical miles (NM).'),
+  estimatedFlightTimeHours: z.number().describe('The estimated flight time in hours, as a decimal (e.g., 2.5 for 2 hours and 30 minutes).'),
+  assumedCruiseSpeedKts: z.number().describe('The assumed cruise speed in knots (kts) used for the estimation. This should be the knownCruiseSpeedKts if it was provided in the input.'),
+  resolvedOriginIcao: z.string().describe('The resolved ICAO code used for the origin airport.'),
+  resolvedOriginName: z.string().describe('The single, a common official name of the resolved origin airport (e.g., "John F. Kennedy International Airport" or "Dayton-Wright Brothers Airport"). Must be concise and not repetitive.'),
+  resolvedDestinationIcao: z.string().describe('The resolved ICAO code used for the destination airport.'),
+  resolvedDestinationName: z.string().describe('The single, a common official name of the resolved destination airport (e.g., "Los Angeles International Airport" or "Colorado Plains Regional Airport"). Must be concise and not repetitive.'),
+  briefExplanation: z.string().describe('A very brief, one-sentence explanation of the estimation method (e.g., "Estimated based on direct route and average cruise speed for the aircraft type." or "Estimated based on direct route and provided cruise speed of X kts.").'),
 });
-export type EstimateFlightDetailsOutput = genkit.z.infer<typeof EstimateFlightDetailsOutputSchema>;
+export type EstimateFlightDetailsOutput = z.infer<typeof EstimateFlightDetailsOutputSchema>;
 
 export async function estimateFlightDetails(input: EstimateFlightDetailsInput): Promise<EstimateFlightDetailsOutput> {
   return estimateFlightDetailsFlow(input);
@@ -154,7 +155,7 @@ For 'resolvedOriginName' and 'resolvedDestinationName', provide **ONLY the singl
     - Example for "JFK" (resolves to KJFK): "John F. Kennedy International Airport".
     - Example for "MGY" (input is MGY, resolves to KMGY): "Dayton-Wright Brothers Airport".
     - Example for "KAKO" (input is KAKO): "Colorado Plains Regional Airport".
-    - **The name output for these fields MUST be ONLY the airport's name. Do NOT repeat the airport name, ICAO code, city, state, country, or any other descriptive text within these specific name fields.**
+    - **The name output for these fields MUST be ONLY the airport's name. Do NOT repeat the airport name, ICAO code, city, state, or any other descriptive text within these specific name fields.**
     - **If the input is "GDK", the output for 'resolvedOriginName' should be "Gardner Municipal Airport", and nothing more.**
 
 Aircraft Type: {{{aircraftType}}}
@@ -176,9 +177,9 @@ Output fields required:
 - estimatedFlightTimeHours: Estimated flight time in hours (e.g., 2.5 for 2 hours 30 minutes), based on the strictly determined ICAO codes and aircraft speed.
 - assumedCruiseSpeedKts: The assumed cruise speed in knots (kts) used.
 - resolvedOriginIcao: The ICAO code used for the origin, strictly adhering to the rules above.
-- resolvedOriginName: The single, common official airport name for the resolvedOriginIcao.
+- resolvedOriginName: The single, a common official airport name for the resolvedOriginIcao.
 - resolvedDestinationIcao: The ICAO code used for the destination, strictly adhering to the rules above.
-- resolvedDestinationName: The single, common official airport name for the resolvedDestinationIcao.
+- resolvedDestinationName: The single, a common official airport name for the resolvedDestinationIcao.
 - briefExplanation: A very brief, one-sentence explanation of the estimation method.
 
 Return the data strictly in the specified JSON output format.
@@ -258,14 +259,15 @@ const estimateFlightDetailsFlow = ai.defineFlow(
     outputSchema: EstimateFlightDetailsOutputSchema,
   },
   async input => {
-    const {output} = await prompt(input);
+    const result = await prompt.generate(input);
+    const output = result.output();
     if (!output) {
       throw new Error("The AI model did not return an output for flight detail estimation.");
     }
 
     const [originData, destinationData] = await Promise.all([
-      getAirportDataTool.run({airportCode: output.resolvedOriginIcao}),
-      getAirportDataTool.run({airportCode: output.resolvedDestinationIcao}),
+      getAirportDataTool.invoke({airportCode: output.resolvedOriginIcao}),
+      getAirportDataTool.invoke({airportCode: output.resolvedDestinationIcao}),
     ]);
 
     const distance = haversineDistance(
