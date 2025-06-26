@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useTransition } from 'react';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -10,34 +10,45 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { DollarSign, PlusCircle, Search, Edit, Trash2, Paperclip, ArrowUpDown, ChevronLeft, ChevronRight, FileText, TrendingUp, Wrench, Calendar as CalendarIcon, Skeleton } from 'lucide-react';
+import { DollarSign, PlusCircle, Search, Edit, Trash2, Paperclip, ArrowUpDown, ChevronLeft, ChevronRight, FileText, TrendingUp, Wrench, Calendar as CalendarIcon, Skeleton, Loader2 } from 'lucide-react';
 import { DateRange } from "react-day-picker"
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
-import { addDays, format, startOfMonth, endOfMonth, subMonths, startOfQuarter, endOfQuarter, subQuarters, isWithinInterval, parseISO } from "date-fns"
+import { addDays, format, startOfMonth, endOfMonth, subMonths, startOfQuarter, endOfQuarter, subQuarters, isWithinInterval, parseISO, isValid } from "date-fns"
 import { cn } from "@/lib/utils"
 import Link from 'next/link';
+import { useToast } from '@/hooks/use-toast';
+import { fetchMaintenanceCosts, deleteMaintenanceCost } from '@/ai/flows/manage-maintenance-costs-flow';
+import type { MaintenanceCost } from '@/ai/schemas/maintenance-cost-schemas';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { ClientOnly } from '@/components/client-only';
+
+type Cost = MaintenanceCost & { variance: number; projectedTotal: number; actualTotal: number };
+type SortKey = 'invoiceDate' | 'tailNumber' | 'invoiceNumber' | 'costType' | 'category' | 'projectedTotal' | 'actualTotal' | 'variance';
 
 
-// Mock data based on the prompt's requirements
-const mockCosts = [
-  { id: 'cost1', date: '2025-06-15', tailNumber: 'N1327J', invoice: 'INV-12345', type: 'Scheduled', category: 'Labor', projected: 1200, actual: 1350, attachments: 2 },
-  { id: 'cost2', date: '2025-06-14', tailNumber: 'N907DK', invoice: 'INV-12346', type: 'Unscheduled', category: 'Parts', projected: 5000, actual: 4850.75, attachments: 1 },
-  { id: 'cost3', date: '2025-06-12', tailNumber: 'N630MW', invoice: 'INV-12347', type: 'Scheduled', category: 'Shop Fees', projected: 300, actual: 300, attachments: 0 },
-  { id: 'cost4', date: '2025-06-10', tailNumber: 'N1327J', invoice: 'INV-12348', type: 'Unscheduled', category: 'Other', projected: 150, actual: 145.50, attachments: 1 },
-  { id: 'cost5', date: '2025-06-08', tailNumber: 'N907DK', invoice: 'INV-12349', type: 'Scheduled', category: 'Parts', projected: 25000, actual: 26500, attachments: 5 },
-  // Replaced dynamic dates with static ones to prevent hydration errors.
-  { id: 'cost6', date: '2025-05-15', tailNumber: 'N1327J', invoice: 'INV-PREV-1', type: 'Scheduled', category: 'Labor', projected: 1000, actual: 1100, attachments: 1 },
-  { id: 'cost7', date: '2025-03-15', tailNumber: 'N907DK', invoice: 'INV-PREV-Q', type: 'Scheduled', category: 'Parts', projected: 20000, actual: 19500, attachments: 3 },
-];
+const formatCurrency = (amount?: number) => {
+    if (amount === undefined || isNaN(amount)) return '$0.00';
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+};
 
-type Cost = typeof mockCosts[0];
-type SortKey = keyof Cost | 'variance';
-
-const formatCurrency = (amount: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
 
 export default function MaintenanceCostsPage() {
-  const [costs, setCosts] = useState<Cost[]>(mockCosts);
+  const [costs, setCosts] = useState<Cost[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isDeleting, startDeletingTransition] = useTransition();
+  const [costToDelete, setCostToDelete] = useState<Cost | null>(null);
+  const { toast } = useToast();
+
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState({
     aircraft: 'all',
@@ -45,7 +56,7 @@ export default function MaintenanceCostsPage() {
     category: 'all',
   });
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
-  const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: 'ascending' | 'descending' } | null>({ key: 'date', direction: 'descending' });
+  const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: 'ascending' | 'descending' } | null>({ key: 'invoiceDate', direction: 'descending' });
   const [summaryMetrics, setSummaryMetrics] = useState({
     thisMonth: 0,
     monthChange: 0,
@@ -54,46 +65,68 @@ export default function MaintenanceCostsPage() {
     avgPerAircraft: 0
   });
 
-  const [isClient, setIsClient] = useState(false);
+  const loadData = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const fetchedCosts = await fetchMaintenanceCosts();
+      const processedCosts = fetchedCosts.map(c => {
+        const projectedTotal = c.costBreakdowns.reduce((sum, item) => sum + item.projectedCost, 0);
+        const actualTotal = c.costBreakdowns.reduce((sum, item) => sum + item.actualCost, 0);
+        return {
+          ...c,
+          projectedTotal,
+          actualTotal,
+          variance: actualTotal - projectedTotal,
+        };
+      });
+      setCosts(processedCosts);
+    } catch (error) {
+      console.error("Failed to fetch maintenance costs:", error);
+      toast({ title: "Error", description: "Could not load maintenance costs.", variant: "destructive" });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [toast]);
 
   useEffect(() => {
-    setIsClient(true);
-  }, []);
+    loadData();
+  }, [loadData]);
+
 
   useEffect(() => {
-    if (!isClient) return;
+    if (isLoading) return;
 
     const now = new Date();
-
     const getCostsInDateRange = (startDate: Date, endDate: Date) => {
-        return costs.filter(c => isWithinInterval(parseISO(c.date), { start: startDate, end: endDate }));
+        return costs.filter(c => {
+            try {
+                return isWithinInterval(parseISO(c.invoiceDate), { start: startDate, end: endDate });
+            } catch {
+                return false;
+            }
+        });
     };
 
-    // This Month
     const thisMonthStart = startOfMonth(now);
     const thisMonthEnd = endOfMonth(now);
     const thisMonthCosts = getCostsInDateRange(thisMonthStart, thisMonthEnd);
-    const thisMonthTotal = thisMonthCosts.reduce((sum, c) => sum + c.actual, 0);
+    const thisMonthTotal = thisMonthCosts.reduce((sum, c) => sum + c.actualTotal, 0);
 
-    // Last Month
     const lastMonthStart = startOfMonth(subMonths(now, 1));
     const lastMonthEnd = endOfMonth(subMonths(now, 1));
-    const lastMonthTotal = getCostsInDateRange(lastMonthStart, lastMonthEnd).reduce((sum, c) => sum + c.actual, 0);
+    const lastMonthTotal = getCostsInDateRange(lastMonthStart, lastMonthEnd).reduce((sum, c) => sum + c.actualTotal, 0);
     const monthChange = lastMonthTotal > 0 ? ((thisMonthTotal - lastMonthTotal) / lastMonthTotal) * 100 : (thisMonthTotal > 0 ? 100 : 0);
 
-    // This Quarter
     const thisQuarterStart = startOfQuarter(now);
     const thisQuarterEnd = endOfQuarter(now);
     const thisQuarterCosts = getCostsInDateRange(thisQuarterStart, thisQuarterEnd);
-    const thisQuarterTotal = thisQuarterCosts.reduce((sum, c) => sum + c.actual, 0);
+    const thisQuarterTotal = thisQuarterCosts.reduce((sum, c) => sum + c.actualTotal, 0);
 
-    // Last Quarter
     const lastQuarterStart = startOfQuarter(subQuarters(now, 1));
     const lastQuarterEnd = endOfQuarter(subQuarters(now, 1));
-    const lastQuarterTotal = getCostsInDateRange(lastQuarterStart, lastQuarterEnd).reduce((sum, c) => sum + c.actual, 0);
+    const lastQuarterTotal = getCostsInDateRange(lastQuarterStart, lastQuarterEnd).reduce((sum, c) => sum + c.actualTotal, 0);
     const quarterChange = lastQuarterTotal > 0 ? ((thisQuarterTotal - lastQuarterTotal) / lastQuarterTotal) * 100 : (thisQuarterTotal > 0 ? 100 : 0);
 
-    // Average per aircraft
     const aircraftInQuarter = new Set(thisQuarterCosts.map(c => c.tailNumber));
     const numAircraftInQuarter = aircraftInQuarter.size;
     const avgPerAircraft = numAircraftInQuarter > 0 ? thisQuarterTotal / numAircraftInQuarter : 0;
@@ -105,31 +138,47 @@ export default function MaintenanceCostsPage() {
       quarterChange: quarterChange,
       avgPerAircraft: avgPerAircraft,
     });
-  }, [costs, isClient]);
+  }, [costs, isLoading]);
 
-  const getVariance = (projected: number, actual: number) => actual - projected;
+  const confirmDelete = (cost: Cost) => {
+    setCostToDelete(cost);
+  };
+
+  const executeDelete = () => {
+    if (!costToDelete) return;
+    startDeletingTransition(async () => {
+      try {
+        await deleteMaintenanceCost({ costId: costToDelete.id });
+        toast({ title: "Success", description: `Invoice ${costToDelete.invoiceNumber} deleted.` });
+        loadData();
+      } catch (error) {
+        toast({ title: "Error", description: "Failed to delete cost entry.", variant: "destructive" });
+      } finally {
+        setCostToDelete(null);
+      }
+    });
+  };
 
   const filteredAndSortedCosts = useMemo(() => {
     let filtered = costs.filter(cost => {
-      const searchMatch = searchTerm ? cost.invoice.toLowerCase().includes(searchTerm.toLowerCase()) || cost.tailNumber.toLowerCase().includes(searchTerm.toLowerCase()) : true;
+      const searchMatch = searchTerm ? cost.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) || cost.tailNumber.toLowerCase().includes(searchTerm.toLowerCase()) : true;
       const aircraftMatch = filters.aircraft === 'all' || cost.tailNumber === filters.aircraft;
-      const typeMatch = filters.costType === 'all' || cost.type === filters.costType;
-      const categoryMatch = filters.category === 'all' || cost.category === filters.category;
-      const dateMatch = !dateRange?.from || isWithinInterval(parseISO(cost.date), { start: dateRange.from, end: dateRange.to || dateRange.from });
+      const typeMatch = filters.costType === 'all' || cost.costType === filters.costType;
+      const categoryMatch = filters.category === 'all' || cost.costBreakdowns.some(b => b.category === filters.category);
+      const dateMatch = !dateRange?.from || isWithinInterval(parseISO(cost.invoiceDate), { start: dateRange.from, end: dateRange.to || dateRange.from });
       return searchMatch && aircraftMatch && typeMatch && categoryMatch && dateMatch;
     });
 
     if (sortConfig) {
       filtered.sort((a, b) => {
-        let aValue: any;
-        let bValue: any;
-        if (sortConfig.key === 'variance') {
-            aValue = getVariance(a.projected, a.actual);
-            bValue = getVariance(b.projected, b.actual);
-        } else {
-            aValue = a[sortConfig.key];
-            bValue = b[sortConfig.key];
+        let aValue: any = a[sortConfig.key];
+        let bValue: any = b[sortConfig.key];
+        
+        if (sortConfig.key === 'invoiceDate') {
+            aValue = parseISO(a.invoiceDate).getTime();
+            bValue = parseISO(b.invoiceDate).getTime();
         }
+
         if (aValue < bValue) return sortConfig.direction === 'ascending' ? -1 : 1;
         if (aValue > bValue) return sortConfig.direction === 'ascending' ? 1 : -1;
         return 0;
@@ -161,7 +210,12 @@ export default function MaintenanceCostsPage() {
   };
 
   const uniqueTailNumbers = [...new Set(costs.map(c => c.tailNumber))];
-  const uniqueCategories = [...new Set(costs.map(c => c.category))];
+  const uniqueCategories = [...new Set(costs.flatMap(c => c.costBreakdowns.map(b => b.category)))];
+
+  const formatDateForDisplay = (dateString: string) => {
+    if (!dateString || !isValid(parseISO(dateString))) return 'N/A';
+    return format(parseISO(dateString), 'MM/dd/yyyy');
+  };
 
   return (
     <TooltipProvider>
@@ -183,21 +237,14 @@ export default function MaintenanceCostsPage() {
                 <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-6 w-6"><FileText className="h-4 w-4 text-muted-foreground"/></Button></TooltipTrigger><TooltipContent>Total Actual Cost this Month</TooltipContent></Tooltip>
             </CardHeader>
             <CardContent>
-              {isClient ? (
-                <>
-                  <div className="text-3xl font-bold">{formatCurrency(summaryMetrics.thisMonth)}</div>
-                  <p className="text-xs text-muted-foreground">
-                      <span className={summaryMetrics.monthChange >= 0 ? "text-green-600" : "text-red-600"}>
-                        {summaryMetrics.monthChange >= 0 ? '+' : ''}{summaryMetrics.monthChange.toFixed(1)}%
-                      </span> from last month
-                  </p>
-                </>
-              ) : (
-                <>
-                  <Skeleton className="h-9 w-3/4 mb-1" />
-                  <Skeleton className="h-4 w-1/2" />
-                </>
-              )}
+              <ClientOnly fallback={<><Skeleton className="h-9 w-3/4 mb-1" /><Skeleton className="h-4 w-1/2" /></>}>
+                <div className="text-3xl font-bold">{formatCurrency(summaryMetrics.thisMonth)}</div>
+                <p className="text-xs text-muted-foreground">
+                    <span className={summaryMetrics.monthChange >= 0 ? "text-green-600" : "text-red-600"}>
+                      {summaryMetrics.monthChange >= 0 ? '+' : ''}{summaryMetrics.monthChange.toFixed(1)}%
+                    </span> from last month
+                </p>
+              </ClientOnly>
             </CardContent>
         </Card>
         <Card className="shadow-sm hover:shadow-md transition-shadow cursor-pointer" onClick={() => setDateRange({ from: startOfQuarter(new Date()), to: endOfQuarter(new Date()) })}>
@@ -206,21 +253,14 @@ export default function MaintenanceCostsPage() {
                 <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-6 w-6"><TrendingUp className="h-4 w-4 text-muted-foreground"/></Button></TooltipTrigger><TooltipContent>Total Actual Cost this Quarter</TooltipContent></Tooltip>
             </CardHeader>
             <CardContent>
-                {isClient ? (
-                  <>
-                    <div className="text-3xl font-bold">{formatCurrency(summaryMetrics.thisQuarter)}</div>
-                     <p className="text-xs text-muted-foreground">
-                        <span className={summaryMetrics.quarterChange >= 0 ? "text-green-600" : "text-red-600"}>
-                          {summaryMetrics.quarterChange >= 0 ? '+' : ''}{summaryMetrics.quarterChange.toFixed(1)}%
-                        </span> from last quarter
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <Skeleton className="h-9 w-3/4 mb-1" />
-                    <Skeleton className="h-4 w-1/2" />
-                  </>
-                )}
+              <ClientOnly fallback={<><Skeleton className="h-9 w-3/4 mb-1" /><Skeleton className="h-4 w-1/2" /></>}>
+                <div className="text-3xl font-bold">{formatCurrency(summaryMetrics.thisQuarter)}</div>
+                  <p className="text-xs text-muted-foreground">
+                      <span className={summaryMetrics.quarterChange >= 0 ? "text-green-600" : "text-red-600"}>
+                        {summaryMetrics.quarterChange >= 0 ? '+' : ''}{summaryMetrics.quarterChange.toFixed(1)}%
+                      </span> from last quarter
+                  </p>
+              </ClientOnly>
             </CardContent>
         </Card>
         <Card className="shadow-sm hover:shadow-md transition-shadow">
@@ -229,17 +269,10 @@ export default function MaintenanceCostsPage() {
                 <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-6 w-6"><Wrench className="h-4 w-4 text-muted-foreground"/></Button></TooltipTrigger><TooltipContent>Average Cost per Aircraft this Quarter</TooltipContent></Tooltip>
             </CardHeader>
             <CardContent>
-                {isClient ? (
-                  <>
-                    <div className="text-3xl font-bold">{formatCurrency(summaryMetrics.avgPerAircraft)}</div>
-                    <p className="text-xs text-muted-foreground">Per aircraft this quarter</p>
-                  </>
-                ) : (
-                  <>
-                    <Skeleton className="h-9 w-3/4 mb-1" />
-                    <Skeleton className="h-4 w-1/2" />
-                  </>
-                )}
+              <ClientOnly fallback={<><Skeleton className="h-9 w-3/4 mb-1" /><Skeleton className="h-4 w-1/2" /></>}>
+                <div className="text-3xl font-bold">{formatCurrency(summaryMetrics.avgPerAircraft)}</div>
+                <p className="text-xs text-muted-foreground">Per aircraft this quarter</p>
+              </ClientOnly>
             </CardContent>
         </Card>
       </div>
@@ -285,7 +318,9 @@ export default function MaintenanceCostsPage() {
            <Button variant="link" size="sm" className="px-0 h-auto mt-2" onClick={clearAllFilters}>Clear Filters</Button>
         </CardHeader>
         <CardContent>
-          {filteredAndSortedCosts.length === 0 ? (
+          {isLoading ? (
+            <div className="py-10 flex justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+          ) : filteredAndSortedCosts.length === 0 ? (
             <div className="text-center py-20">
               <DollarSign className="mx-auto h-12 w-12 text-muted-foreground" />
               <h3 className="mt-2 text-sm font-semibold text-gray-900">No maintenance costs found</h3>
@@ -293,80 +328,62 @@ export default function MaintenanceCostsPage() {
               <div className="mt-6"><Button asChild><Link href="/maintenance/costs/new"><PlusCircle className="mr-2 h-4 w-4" /> New Cost Entry</Link></Button></div>
             </div>
           ) : (
-            <>
-              <div className="hidden md:block">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="cursor-pointer" onClick={() => requestSort('date')}>Date {getSortIcon('date')}</TableHead>
-                        <TableHead className="cursor-pointer" onClick={() => requestSort('tailNumber')}>Tail # {getSortIcon('tailNumber')}</TableHead>
-                        <TableHead className="cursor-pointer" onClick={() => requestSort('invoice')}>Invoice # {getSortIcon('invoice')}</TableHead>
-                        <TableHead className="cursor-pointer" onClick={() => requestSort('type')}>Type {getSortIcon('type')}</TableHead>
-                        <TableHead className="cursor-pointer" onClick={() => requestSort('category')}>Category {getSortIcon('category')}</TableHead>
-                        <TableHead className="cursor-pointer text-right" onClick={() => requestSort('projected')}>Projected {getSortIcon('projected')}</TableHead>
-                        <TableHead className="cursor-pointer text-right" onClick={() => requestSort('actual')}>Actual {getSortIcon('actual')}</TableHead>
-                        <TableHead className="cursor-pointer text-right" onClick={() => requestSort('variance')}>Variance {getSortIcon('variance')}</TableHead>
-                        <TableHead className="text-center">Files</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredAndSortedCosts.map(cost => {
-                        const variance = getVariance(cost.projected, cost.actual);
-                        return (
-                          <TableRow key={cost.id}>
-                            <TableCell>{format(parseISO(cost.date), 'MM/dd/yyyy')}</TableCell>
-                            <TableCell>{cost.tailNumber}</TableCell>
-                            <TableCell>{cost.invoice}</TableCell>
-                            <TableCell><Badge variant={cost.type === 'Scheduled' ? 'default' : 'secondary'}>{cost.type}</Badge></TableCell>
-                            <TableCell>{cost.category}</TableCell>
-                            <TableCell className="text-right">{formatCurrency(cost.projected)}</TableCell>
-                            <TableCell className="text-right">{formatCurrency(cost.actual)}</TableCell>
-                            <TableCell className={`text-right font-medium ${variance > 0 ? 'text-red-500' : variance < 0 ? 'text-green-500' : ''}`}>{variance >= 0 ? '+' : ''}{formatCurrency(variance)}</TableCell>
-                            <TableCell className="text-center">{cost.attachments > 0 ? <Badge variant="outline"><Paperclip className="inline-block h-3 w-3 mr-1"/>{cost.attachments}</Badge> : '-'}</TableCell>
-                            <TableCell className="text-right">
-                              <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon"><Edit className="h-4 w-4"/></Button></TooltipTrigger><TooltipContent>Edit</TooltipContent></Tooltip>
-                              <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="text-destructive"><Trash2 className="h-4 w-4"/></Button></TooltipTrigger><TooltipContent>Delete</TooltipContent></Tooltip>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-              </div>
-              <div className="block md:hidden space-y-4">
-                  {filteredAndSortedCosts.map(cost => {
-                      const variance = getVariance(cost.projected, cost.actual);
-                      return (
-                          <Card key={cost.id} className="p-4">
-                              <div className="flex justify-between items-start">
-                                  <div>
-                                      <p className="font-semibold">{cost.tailNumber} - {cost.invoice}</p>
-                                      <p className="text-sm text-muted-foreground">{format(parseISO(cost.date), 'MM/dd/yyyy')} | <Badge variant={cost.type === 'Scheduled' ? 'default' : 'secondary'} className="text-xs">{cost.type}</Badge> - {cost.category}</p>
-                                  </div>
-                                  <div className="flex">
-                                      <Button variant="ghost" size="icon"><Edit className="h-4 w-4"/></Button>
-                                      <Button variant="ghost" size="icon" className="text-destructive"><Trash2 className="h-4 w-4"/></Button>
-                                  </div>
-                              </div>
-                              <div className="mt-4 grid grid-cols-3 gap-2 text-center text-sm">
-                                  <div><p className="text-xs text-muted-foreground">Projected</p><p>{formatCurrency(cost.projected)}</p></div>
-                                  <div><p className="text-xs text-muted-foreground">Actual</p><p>{formatCurrency(cost.actual)}</p></div>
-                                  <div><p className="text-xs text-muted-foreground">Variance</p><p className={`font-bold ${variance > 0 ? 'text-red-600' : 'text-green-600'}`}>{variance >= 0 ? '+' : ''}{formatCurrency(variance)}</p></div>
-                              </div>
-                              {cost.attachments > 0 && <p className="text-xs text-muted-foreground mt-2"><Paperclip className="inline-block h-3 w-3 mr-1"/>{cost.attachments} Attachments</p>}
-                          </Card>
-                      )
-                  })}
-              </div>
-              <div className="flex items-center justify-end space-x-2 py-4">
-                  <Button variant="outline" size="sm" ><ChevronLeft className="h-4 w-4" />Previous</Button>
-                  <Button variant="outline" size="sm" >Next<ChevronRight className="h-4 w-4" /></Button>
-              </div>
-            </>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="cursor-pointer" onClick={() => requestSort('invoiceDate')}>Date {getSortIcon('invoiceDate')}</TableHead>
+                  <TableHead className="cursor-pointer" onClick={() => requestSort('tailNumber')}>Tail # {getSortIcon('tailNumber')}</TableHead>
+                  <TableHead className="cursor-pointer" onClick={() => requestSort('invoiceNumber')}>Invoice # {getSortIcon('invoiceNumber')}</TableHead>
+                  <TableHead className="cursor-pointer" onClick={() => requestSort('costType')}>Type {getSortIcon('costType')}</TableHead>
+                  <TableHead className="text-right cursor-pointer" onClick={() => requestSort('projectedTotal')}>Projected {getSortIcon('projectedTotal')}</TableHead>
+                  <TableHead className="text-right cursor-pointer" onClick={() => requestSort('actualTotal')}>Actual {getSortIcon('actualTotal')}</TableHead>
+                  <TableHead className="text-right cursor-pointer" onClick={() => requestSort('variance')}>Variance {getSortIcon('variance')}</TableHead>
+                  <TableHead className="text-center">Files</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredAndSortedCosts.map(cost => {
+                  const variance = cost.variance;
+                  return (
+                    <TableRow key={cost.id}>
+                      <TableCell>{formatDateForDisplay(cost.invoiceDate)}</TableCell>
+                      <TableCell>{cost.tailNumber}</TableCell>
+                      <TableCell>{cost.invoiceNumber}</TableCell>
+                      <TableCell><Badge variant={cost.costType === 'Scheduled' ? 'default' : 'secondary'}>{cost.costType}</Badge></TableCell>
+                      <TableCell className="text-right">{formatCurrency(cost.projectedTotal)}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(cost.actualTotal)}</TableCell>
+                      <TableCell className={`text-right font-medium ${variance > 0 ? 'text-red-500' : variance < 0 ? 'text-green-500' : ''}`}>{variance >= 0 ? '+' : ''}{formatCurrency(variance)}</TableCell>
+                      <TableCell className="text-center">{cost.attachments && cost.attachments.length > 0 ? <Badge variant="outline"><Paperclip className="inline-block h-3 w-3 mr-1"/>{cost.attachments.length}</Badge> : '-'}</TableCell>
+                      <TableCell className="text-right">
+                        <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" asChild><Link href={`/maintenance/costs/new?id=${cost.id}`}><Edit className="h-4 w-4"/></Link></Button></TooltipTrigger><TooltipContent>Edit</TooltipContent></Tooltip>
+                        <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="text-destructive" onClick={() => confirmDelete(cost)}><Trash2 className="h-4 w-4"/></Button></TooltipTrigger><TooltipContent>Delete</TooltipContent></Tooltip>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
           )}
         </CardContent>
       </Card>
+      {costToDelete && (
+        <AlertDialog open={!!costToDelete} onOpenChange={(open) => !open && setCostToDelete(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
+              <AlertDialogDescription>Are you sure you want to delete the cost entry for invoice "{costToDelete.invoiceNumber}"? This action cannot be undone.</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={executeDelete} disabled={isDeleting}>
+                {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </TooltipProvider>
   );
 }
