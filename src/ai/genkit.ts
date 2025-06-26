@@ -6,7 +6,7 @@ import { firebase as firebaseGenkitPlugin } from '@genkit-ai/firebase';
 export const ai = genkit({
   plugins: [
     googleAI(),
-    firebaseGenkitPlugin,
+    firebaseGenkitPlugin(),
   ],
   model: 'googleai/gemini-1.5-flash',
 });
