@@ -176,15 +176,11 @@ export default function AppLayout({ children }: PropsWithChildren) {
             </SidebarMenuItem>
             
             <SidebarMenuItem>
-              <SidebarMenuButton isSubmenuTrigger tooltip="Aircraft" isActive={pathname.startsWith('/aircraft')}>
+              <SidebarMenuButton isSubmenuTrigger tooltip="Aircraft" isActive={pathname.startsWith('/aircraft') && !pathname.startsWith('/aircraft/currency')}>
                 <Plane />
                 Aircraft
               </SidebarMenuButton>
               <SidebarMenuSub>
-                <SidebarMenuSubButton href="/aircraft/currency" tooltip="Maintenance Currency" isActive={pathname.startsWith('/aircraft/currency')}>
-                  <Wrench /> 
-                  Maintenance Currency
-                </SidebarMenuSubButton>
                  <SidebarMenuSubButton href="/aircraft/discrepancies" tooltip="Discrepancy Log" isActive={pathname.startsWith('/aircraft/discrepancies')}>
                   <FileWarning /> 
                   Discrepancy Log
@@ -198,6 +194,23 @@ export default function AppLayout({ children }: PropsWithChildren) {
                   Aircraft Documents
                 </SidebarMenuSubButton>
               </SidebarMenuSub>
+            </SidebarMenuItem>
+            
+            <SidebarMenuItem>
+                <SidebarMenuButton isSubmenuTrigger tooltip="Maintenance" isActive={pathname.startsWith('/aircraft/currency') || pathname.startsWith('/maintenance')}>
+                    <Wrench />
+                    Maintenance
+                </SidebarMenuButton>
+                <SidebarMenuSub>
+                    <SidebarMenuSubButton href="/aircraft/currency" tooltip="Maintenance Currency" isActive={pathname.startsWith('/aircraft/currency')}>
+                        <ListChecks /> 
+                        Maintenance Currency
+                    </SidebarMenuSubButton>
+                    <SidebarMenuSubButton href="/maintenance/costs" tooltip="Maintenance Costs" isActive={pathname.startsWith('/maintenance/costs')}>
+                        <DollarSign />
+                        Maintenance Costs
+                    </SidebarMenuSubButton>
+                </SidebarMenuSub>
             </SidebarMenuItem>
 
             <SidebarMenuItem>
