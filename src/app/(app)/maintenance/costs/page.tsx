@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { DollarSign, PlusCircle, Search, Edit, Trash2, Paperclip, ArrowUpDown, ChevronLeft, ChevronRight, FileText, TrendingUp, Wrench, Calendar as CalendarIcon, Skeleton, Loader2 } from 'lucide-react';
+import { DollarSign, PlusCircle, Search, Edit, Trash2, Paperclip, ArrowUpDown, ChevronLeft, ChevronRight, FileText, TrendingUp, Wrench, Calendar as CalendarIcon, Loader2 } from 'lucide-react';
 import { DateRange } from "react-day-picker"
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
@@ -31,6 +31,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { ClientOnly } from '@/components/client-only';
+import { Skeleton } from '@/components/ui/skeleton';
 
 type Cost = MaintenanceCost & { variance: number; projectedTotal: number; actualTotal: number };
 type SortKey = 'invoiceDate' | 'tailNumber' | 'invoiceNumber' | 'costType' | 'category' | 'projectedTotal' | 'actualTotal' | 'variance';
