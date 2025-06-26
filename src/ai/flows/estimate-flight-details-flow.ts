@@ -1,4 +1,3 @@
-
 // src/ai/flows/estimate-flight-details-flow.ts
 'use server';
 /**
@@ -258,8 +257,7 @@ const estimateFlightDetailsFlow = ai.defineFlow(
     outputSchema: EstimateFlightDetailsOutputSchema,
   },
   async input => {
-    const result = await prompt.generate(input);
-    const output = result.output();
+    const {output} = await prompt(input);
     if (!output) {
       throw new Error("The AI model did not return an output for flight detail estimation.");
     }
