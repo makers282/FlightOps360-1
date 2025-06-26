@@ -16,6 +16,7 @@ import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar"
 import { addDays, format, startOfMonth, endOfMonth, subMonths, startOfQuarter, endOfQuarter, subQuarters, isWithinInterval, parseISO } from "date-fns"
 import { cn } from "@/lib/utils"
+import Link from 'next/link';
 
 
 // Mock data based on the prompt's requirements
@@ -159,7 +160,13 @@ export default function MaintenanceCostsPage() {
       <PageHeader
         title="Maintenance Costs"
         icon={DollarSign}
-        actions={<Button>+ New Cost Entry</Button>}
+        actions={
+          <Button asChild>
+            <Link href="/maintenance/costs/new">
+              <PlusCircle className="mr-2 h-4 w-4" /> New Cost Entry
+            </Link>
+          </Button>
+        }
       />
       <div className="grid gap-6 mb-6 md:grid-cols-2 lg:grid-cols-3">
         <Card className="shadow-sm hover:shadow-md transition-shadow cursor-pointer" onClick={() => setDateRange({ from: startOfMonth(new Date()), to: endOfMonth(new Date()) })}>
@@ -248,7 +255,7 @@ export default function MaintenanceCostsPage() {
               <DollarSign className="mx-auto h-12 w-12 text-muted-foreground" />
               <h3 className="mt-2 text-sm font-semibold text-gray-900">No maintenance costs found</h3>
               <p className="mt-1 text-sm text-gray-500">{searchTerm || filters.aircraft !== 'all' || filters.costType !== 'all' || filters.category !== 'all' || dateRange ? "No costs match your current filters." : "Get started by adding a new cost entry."}</p>
-              <div className="mt-6"><Button>+ New Cost Entry</Button></div>
+              <div className="mt-6"><Button asChild><Link href="/maintenance/costs/new"><PlusCircle className="mr-2 h-4 w-4" /> New Cost Entry</Link></Button></div>
             </div>
           ) : (
             <>
@@ -310,7 +317,7 @@ export default function MaintenanceCostsPage() {
                               <div className="mt-4 grid grid-cols-3 gap-2 text-center text-sm">
                                   <div><p className="text-xs text-muted-foreground">Projected</p><p>{formatCurrency(cost.projected)}</p></div>
                                   <div><p className="text-xs text-muted-foreground">Actual</p><p>{formatCurrency(cost.actual)}</p></div>
-                                  <div><p className="text-xs text-muted-foreground">Variance</p><p className={`font-medium ${variance > 0 ? 'text-red-500' : variance < 0 ? 'text-green-500' : ''}`}>{variance >= 0 ? '+' : ''}{formatCurrency(variance)}</p></div>
+                                  <div><p className="text-xs text-muted-foreground">Variance</p><p className={`font-bold ${variance > 0 ? 'text-red-600' : 'text-green-600'}`}>{variance >= 0 ? '+' : ''}{formatCurrency(variance)}</p></div>
                               </div>
                               {cost.attachments > 0 && <p className="text-xs text-muted-foreground mt-2"><Paperclip className="inline-block h-3 w-3 mr-1"/>{cost.attachments} Attachments</p>}
                           </Card>
