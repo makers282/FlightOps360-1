@@ -25,9 +25,9 @@ const mockCosts = [
   { id: 'cost3', date: '2025-06-12', tailNumber: 'N630MW', invoice: 'INV-12347', type: 'Scheduled', category: 'Shop Fees', projected: 300, actual: 300, attachments: 0 },
   { id: 'cost4', date: '2025-06-10', tailNumber: 'N1327J', invoice: 'INV-12348', type: 'Unscheduled', category: 'Other', projected: 150, actual: 145.50, attachments: 1 },
   { id: 'cost5', date: '2025-06-08', tailNumber: 'N907DK', invoice: 'INV-12349', type: 'Scheduled', category: 'Parts', projected: 25000, actual: 26500, attachments: 5 },
-  // Adding data for last month/quarter for calculations
-  { id: 'cost6', date: format(subMonths(new Date(), 1), 'yyyy-MM-dd'), tailNumber: 'N1327J', invoice: 'INV-PREV-1', type: 'Scheduled', category: 'Labor', projected: 1000, actual: 1100, attachments: 1 },
-  { id: 'cost7', date: format(subQuarters(new Date(), 1), 'yyyy-MM-dd'), tailNumber: 'N907DK', invoice: 'INV-PREV-Q', type: 'Scheduled', category: 'Parts', projected: 20000, actual: 19500, attachments: 3 },
+  // Replaced dynamic dates with static ones to prevent hydration errors.
+  { id: 'cost6', date: '2025-05-15', tailNumber: 'N1327J', invoice: 'INV-PREV-1', type: 'Scheduled', category: 'Labor', projected: 1000, actual: 1100, attachments: 1 },
+  { id: 'cost7', date: '2025-03-15', tailNumber: 'N907DK', invoice: 'INV-PREV-Q', type: 'Scheduled', category: 'Parts', projected: 20000, actual: 19500, attachments: 3 },
 ];
 
 type Cost = typeof mockCosts[0];
