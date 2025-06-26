@@ -1,24 +1,12 @@
+
 // src/app/login/page.tsx (or wherever your LoginPage lives)
 "use client";
-
-import { useEffect } from "react";
-import { getAuth, onAuthStateChanged } from "firebase/auth";
 
 import { LoginForm } from './components/login-form';
 import { Plane } from 'lucide-react';
 import Image from 'next/image';
 
 export default function LoginPage() {
-  // ← THIS useEffect exposes / logs your currentUser on the login page
-  useEffect(() => {
-    const auth = getAuth();
-    // @ts-ignore
-    window._auth = auth;
-    onAuthStateChanged(auth, (user) => {
-      console.log("🔐 auth state:", user);
-    });
-  }, []);
-
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-sky-100 via-indigo-50 to-purple-100 p-4">
       <div className="w-full max-w-md space-y-8">
