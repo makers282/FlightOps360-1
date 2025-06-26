@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { DollarSign, PlusCircle, Search, Edit, Trash2, Paperclip, ArrowUpDown, ChevronLeft, ChevronRight, FileText, TrendingUp, Wrench, Calendar as CalendarIcon } from 'lucide-react';
+import { DollarSign, PlusCircle, Search, Edit, Trash2, Paperclip, ArrowUpDown, ChevronLeft, ChevronRight, FileText, TrendingUp, Wrench, Calendar as CalendarIcon, Skeleton } from 'lucide-react';
 import { DateRange } from "react-day-picker"
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
@@ -54,11 +54,19 @@ export default function MaintenanceCostsPage() {
     avgPerAircraft: 0
   });
 
+  const [isClient, setIsClient] = useState(false);
+
   useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isClient) return;
+
     const now = new Date();
 
     const getCostsInDateRange = (startDate: Date, endDate: Date) => {
-        return costs.filter(c => isWithinInterval(new Date(c.date), { start: startDate, end: endDate }));
+        return costs.filter(c => isWithinInterval(parseISO(c.date), { start: startDate, end: endDate }));
     };
 
     // This Month
@@ -97,7 +105,7 @@ export default function MaintenanceCostsPage() {
       quarterChange: quarterChange,
       avgPerAircraft: avgPerAircraft,
     });
-  }, [costs]);
+  }, [costs, isClient]);
 
   const getVariance = (projected: number, actual: number) => actual - projected;
 
@@ -107,7 +115,7 @@ export default function MaintenanceCostsPage() {
       const aircraftMatch = filters.aircraft === 'all' || cost.tailNumber === filters.aircraft;
       const typeMatch = filters.costType === 'all' || cost.type === filters.costType;
       const categoryMatch = filters.category === 'all' || cost.category === filters.category;
-      const dateMatch = !dateRange?.from || isWithinInterval(new Date(cost.date), { start: dateRange.from, end: dateRange.to || dateRange.from });
+      const dateMatch = !dateRange?.from || isWithinInterval(parseISO(cost.date), { start: dateRange.from, end: dateRange.to || dateRange.from });
       return searchMatch && aircraftMatch && typeMatch && categoryMatch && dateMatch;
     });
 
@@ -175,12 +183,21 @@ export default function MaintenanceCostsPage() {
                 <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-6 w-6"><FileText className="h-4 w-4 text-muted-foreground"/></Button></TooltipTrigger><TooltipContent>Total Actual Cost this Month</TooltipContent></Tooltip>
             </CardHeader>
             <CardContent>
-                <div className="text-3xl font-bold">{formatCurrency(summaryMetrics.thisMonth)}</div>
-                <p className="text-xs text-muted-foreground">
-                    <span className={summaryMetrics.monthChange >= 0 ? "text-green-600" : "text-red-600"}>
-                      {summaryMetrics.monthChange >= 0 ? '+' : ''}{summaryMetrics.monthChange.toFixed(1)}%
-                    </span> from last month
-                </p>
+              {isClient ? (
+                <>
+                  <div className="text-3xl font-bold">{formatCurrency(summaryMetrics.thisMonth)}</div>
+                  <p className="text-xs text-muted-foreground">
+                      <span className={summaryMetrics.monthChange >= 0 ? "text-green-600" : "text-red-600"}>
+                        {summaryMetrics.monthChange >= 0 ? '+' : ''}{summaryMetrics.monthChange.toFixed(1)}%
+                      </span> from last month
+                  </p>
+                </>
+              ) : (
+                <>
+                  <Skeleton className="h-9 w-3/4 mb-1" />
+                  <Skeleton className="h-4 w-1/2" />
+                </>
+              )}
             </CardContent>
         </Card>
         <Card className="shadow-sm hover:shadow-md transition-shadow cursor-pointer" onClick={() => setDateRange({ from: startOfQuarter(new Date()), to: endOfQuarter(new Date()) })}>
@@ -189,12 +206,21 @@ export default function MaintenanceCostsPage() {
                 <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-6 w-6"><TrendingUp className="h-4 w-4 text-muted-foreground"/></Button></TooltipTrigger><TooltipContent>Total Actual Cost this Quarter</TooltipContent></Tooltip>
             </CardHeader>
             <CardContent>
-                <div className="text-3xl font-bold">{formatCurrency(summaryMetrics.thisQuarter)}</div>
-                 <p className="text-xs text-muted-foreground">
-                    <span className={summaryMetrics.quarterChange >= 0 ? "text-green-600" : "text-red-600"}>
-                      {summaryMetrics.quarterChange >= 0 ? '+' : ''}{summaryMetrics.quarterChange.toFixed(1)}%
-                    </span> from last quarter
-                </p>
+                {isClient ? (
+                  <>
+                    <div className="text-3xl font-bold">{formatCurrency(summaryMetrics.thisQuarter)}</div>
+                     <p className="text-xs text-muted-foreground">
+                        <span className={summaryMetrics.quarterChange >= 0 ? "text-green-600" : "text-red-600"}>
+                          {summaryMetrics.quarterChange >= 0 ? '+' : ''}{summaryMetrics.quarterChange.toFixed(1)}%
+                        </span> from last quarter
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <Skeleton className="h-9 w-3/4 mb-1" />
+                    <Skeleton className="h-4 w-1/2" />
+                  </>
+                )}
             </CardContent>
         </Card>
         <Card className="shadow-sm hover:shadow-md transition-shadow">
@@ -203,8 +229,17 @@ export default function MaintenanceCostsPage() {
                 <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-6 w-6"><Wrench className="h-4 w-4 text-muted-foreground"/></Button></TooltipTrigger><TooltipContent>Average Cost per Aircraft this Quarter</TooltipContent></Tooltip>
             </CardHeader>
             <CardContent>
-                <div className="text-3xl font-bold">{formatCurrency(summaryMetrics.avgPerAircraft)}</div>
-                <p className="text-xs text-muted-foreground">Per aircraft this quarter</p>
+                {isClient ? (
+                  <>
+                    <div className="text-3xl font-bold">{formatCurrency(summaryMetrics.avgPerAircraft)}</div>
+                    <p className="text-xs text-muted-foreground">Per aircraft this quarter</p>
+                  </>
+                ) : (
+                  <>
+                    <Skeleton className="h-9 w-3/4 mb-1" />
+                    <Skeleton className="h-4 w-1/2" />
+                  </>
+                )}
             </CardContent>
         </Card>
       </div>
@@ -280,7 +315,7 @@ export default function MaintenanceCostsPage() {
                         const variance = getVariance(cost.projected, cost.actual);
                         return (
                           <TableRow key={cost.id}>
-                            <TableCell>{format(new Date(cost.date), 'MM/dd/yyyy')}</TableCell>
+                            <TableCell>{format(parseISO(cost.date), 'MM/dd/yyyy')}</TableCell>
                             <TableCell>{cost.tailNumber}</TableCell>
                             <TableCell>{cost.invoice}</TableCell>
                             <TableCell><Badge variant={cost.type === 'Scheduled' ? 'default' : 'secondary'}>{cost.type}</Badge></TableCell>
@@ -307,7 +342,7 @@ export default function MaintenanceCostsPage() {
                               <div className="flex justify-between items-start">
                                   <div>
                                       <p className="font-semibold">{cost.tailNumber} - {cost.invoice}</p>
-                                      <p className="text-sm text-muted-foreground">{format(new Date(cost.date), 'MM/dd/yyyy')} | <Badge variant={cost.type === 'Scheduled' ? 'default' : 'secondary'} className="text-xs">{cost.type}</Badge> - {cost.category}</p>
+                                      <p className="text-sm text-muted-foreground">{format(parseISO(cost.date), 'MM/dd/yyyy')} | <Badge variant={cost.type === 'Scheduled' ? 'default' : 'secondary'} className="text-xs">{cost.type}</Badge> - {cost.category}</p>
                                   </div>
                                   <div className="flex">
                                       <Button variant="ghost" size="icon"><Edit className="h-4 w-4"/></Button>
