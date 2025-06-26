@@ -1,50 +1,37 @@
+
 rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
-    // Default deny all reads and writes if no other rules match
+    // Default deny all reads and writes
     match /{allPaths=**} {
       allow read, write: if false;
     }
 
-    // Allow public read for any file in the companyLogo directory
-    match /companyLogo/{allPaths=**} {
-      allow read: if true;
-      allow write: if request.auth != null;
-    }
-
-    // Allow public read for any file in the aircraftImage directory
-    match /aircraftImage/{allPaths=**} {
-      allow read: if true;
-      allow write: if request.auth != null;
-    }
-
-    // Aircraft-specific documents
-    // The uploadAircraftDocument flow makes these files public after upload.
-    // Allow public read.
-    // Allow authenticated users to write (upload).
+    // Aircraft documents are made public by the upload flow for now.
+    // TODO: Consider if these should be restricted and served via signed URLs
+    // if they contain sensitive information.
     match /aircraft_documents/{aircraftId}/{documentId}/{fileName} {
-      allow read: if true;
-      allow write: if request.auth != null;
+      allow read: if true; // Publicly readable
+      allow write: if request.auth != null; // Only authenticated users can upload
+                                          // (Assumes backend flow validates before making public)
     }
 
-    // Example: User-specific files (e.g., profile pictures, private user uploads)
-    // Only the authenticated user can read or write their own files.
+    // Example: User-specific private files
     // match /user_uploads/{userId}/{allPaths=**} {
     //   allow read, write: if request.auth != null && request.auth.uid == userId;
     // }
 
-    // Example: Company-wide documents that are not public but accessible to any authenticated user
-    // match /company_documents_internal/{allPaths=**} {
-    //   allow read: if request.auth != null;
-    //   // Allow write only by admin (example, requires admin claim or role check)
-    //   // allow write: if request.auth != null && request.auth.token.admin == true;
+    // Example: Company documents (restricted read/write)
+    // match /company_documents/{docId}/{fileName} {
+    //  allow read: if request.auth != null; // Or more specific role check
+    //  allow write: if request.auth != null; // TODO: Restrict to admin/doc managers
     // }
-
-    // Example: Public assets like images for the app UI (if stored in Storage)
-    // match /public_assets/{allPaths=**} {
-    //   allow read: if true;
-    //   allow write: if false; // Typically only admins/deploy process would write these
+    
+    // Example: Crew documents (restricted based on crew or admin)
+    // match /crew_documents/{crewMemberId}/{docId}/{fileName} {
+    //   allow read: if request.auth != null && (request.auth.uid == crewMemberId || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true);
+    //   allow write: if request.auth != null; // TODO: Restrict to admin or specific crew member for their own docs
     // }
   }
 }

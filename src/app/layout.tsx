@@ -1,23 +1,12 @@
-// src/app/layout.tsx
-import type { Metadata } from "next";
-import "./globals.css";
-import { Toaster } from "@/components/ui/toaster";
 
-export const metadata: Metadata = {
-  title: 'FlightOps360 - Flight Operations Management',
-  description: 'Comprehensive operations management for FAA Part 135 charter operators.',
-};
+import type { PropsWithChildren } from 'react';
+import './globals.css';
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: PropsWithChildren) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className="font-sans antialiased" suppressHydrationWarning>
+      <body suppressHydrationWarning>
         {children}
-        <Toaster />
       </body>
     </html>
   );

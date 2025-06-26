@@ -22,6 +22,28 @@ import { generateDynamicNotifications } from './generate-system-notifications-fl
 
 const NOTIFICATIONS_COLLECTION = 'notifications';
 
+/**
+ * Safely converts a Firestore Timestamp or an ISO date string to an ISO date string.
+ * @param ts The timestamp to convert.
+ * @returns An ISO date string, or null if the input is invalid.
+ */
+const convertTimestampToISO = (ts: any): string | null => {
+    if (!ts) return null;
+    // Firestore Timestamp
+    if (typeof ts.toDate === 'function') {
+        return ts.toDate().toISOString();
+    }
+    // ISO String or other date string
+    if (typeof ts === 'string') {
+        const d = new Date(ts);
+        // Check if the parsed date is valid
+        if (d instanceof Date && !isNaN(d.getTime())) {
+            return d.toISOString();
+        }
+    }
+    return null;
+};
+
 // Fetch notifications flow
 export async function fetchNotifications(): Promise<Notification[]> {
   if (!db) throw new Error('Firestore admin instance is not initialized.');
@@ -46,19 +68,10 @@ const fetchNotificationsFlow = ai.defineFlow(
 
     return snapshot.docs.map((docSnap) => {
       const data = docSnap.data();
-      // fallback chain: timestamp → createdAt → epoch
-      const timestamp =
-        (data.timestamp as Timestamp)?.toDate().toISOString() ??
-        (data.createdAt as Timestamp)?.toDate().toISOString() ??
-        new Date(0).toISOString();
-
-      const createdAt =
-        (data.createdAt as Timestamp)?.toDate().toISOString() ??
-        new Date(0).toISOString();
-
-      const updatedAt =
-        (data.updatedAt as Timestamp)?.toDate().toISOString() ??
-        new Date(0).toISOString();
+      
+      const timestamp = convertTimestampToISO(data.timestamp) ?? convertTimestampToISO(data.createdAt) ?? new Date(0).toISOString();
+      const createdAt = convertTimestampToISO(data.createdAt) ?? new Date(0).toISOString();
+      const updatedAt = convertTimestampToISO(data.updatedAt) ?? new Date(0).toISOString();
 
       return {
         id: docSnap.id,
@@ -102,17 +115,9 @@ const markNotificationReadFlow = ai.defineFlow(
       }
 
       const data = updatedSnap.data()!;
-      const timestamp =
-        (data.timestamp as Timestamp)?.toDate().toISOString() ??
-        new Date(0).toISOString();
-
-      const createdAt =
-        (data.createdAt as Timestamp)?.toDate().toISOString() ??
-        new Date(0).toISOString();
-
-      const updatedAt =
-        (data.updatedAt as Timestamp)?.toDate().toISOString() ??
-        new Date(0).toISOString();
+      const timestamp = convertTimestampToISO(data.timestamp) ?? new Date(0).toISOString();
+      const createdAt = convertTimestampToISO(data.createdAt) ?? new Date(0).toISOString();
+      const updatedAt = convertTimestampToISO(data.updatedAt) ?? new Date(0).toISOString();
 
       return {
         id: updatedSnap.id,

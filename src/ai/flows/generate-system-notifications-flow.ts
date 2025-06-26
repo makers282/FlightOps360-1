@@ -11,11 +11,11 @@ import { ai } from '@/ai/genkit';
 import { adminDb as db } from '@/lib/firebase-admin';
 import { z } from 'zod';
 import { differenceInDays, parseISO, subHours, isValid } from 'date-fns';
-import { fetchAircraftDocuments } from './manage-aircraft-documents-flow';
-import { fetchBulletins } from './manage-bulletins-flow';
-import { fetchFleetAircraft } from './manage-fleet-flow';
-import { fetchMaintenanceTasksForAircraft } from './manage-maintenance-tasks-flow';
-import { createNotification } from './create-notification-flow';
+import { fetchBulletins } from '@/ai/flows/manage-bulletins-flow';
+import { fetchFleetAircraft } from '@/ai/flows/manage-fleet-flow';
+import { fetchMaintenanceTasksForAircraft } from '@/ai/flows/manage-maintenance-tasks-flow';
+import { createNotification } from '@/ai/flows/create-notification-flow';
+import { fetchAircraftDocuments } from '@/ai/flows/manage-aircraft-documents-flow';
 
 const NOTIFICATIONS_COLLECTION = 'notifications';
 

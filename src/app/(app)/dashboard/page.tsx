@@ -17,8 +17,8 @@ import { useToast } from '@/hooks/use-toast';
 import { format, parseISO, isValid, addDays } from 'date-fns';
 import { auth } from '@/lib/firebase';
 import type { User as FirebaseUser } from 'firebase/auth';
-import { fetchBulletins, type Bulletin, type BulletinType } from '/Users/me/flightops360/src/ai/flows/manage-bulletins-flow.ts';
-import { fetchCurrentTrips, fetchUpcomingTrips, type Trip } from '@/ai/flows/manage-trips-flow';
+import { fetchBulletins, type Bulletin, type BulletinType } from '@/ai/flows/manage-bulletins-flow';
+import { fetchTrips, type Trip } from '@/ai/flows/manage-trips-flow';
 import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
 import { fetchAircraftDiscrepancies } from '@/ai/flows/manage-aircraft-discrepancies-flow';
 import { fetchMaintenanceTasksForAircraft } from '@/ai/flows/manage-maintenance-tasks-flow';
@@ -115,21 +115,24 @@ export default function DashboardPage() {
 
     try {
         const [
-            fetchedBulletins, 
- fetchedTripsData,
-            fetchedFleet, 
-            fetchedQuotes, 
+            fetchedBulletins,
+            fetchedTripsData,
+            fetchedFleet,
+            fetchedQuotes,
             fetchedNotifications
         ] = await Promise.all([
             fetchBulletins(),
-            fetchCurrentTrips(),
- fetchTrips(),
+            fetchTrips(),
             fetchFleetAircraft(),
             fetchQuotes(),
             fetchNotifications(),
         ]);
 
         const now = new Date();
+
+        const fetchedCurrent = fetchedTripsData.filter(trip => trip.status === 'Active');
+        const fetchedUpcoming = fetchedTripsData.filter(trip => trip.legs?.[0]?.departureDateTime && parseISO(trip.legs[0].departureDateTime) > now && trip.status !== 'Active');
+
 
         // Process data for KPIs
         const pendingQuoteStatuses = ["Draft", "Sent"];
@@ -150,11 +153,8 @@ export default function DashboardPage() {
             pendingQuotes: pendingQuotesList.length,
             pendingQuotesValue: pendingQuotesList.reduce((acc, q) => acc + (q.totalSellPrice || 0), 0),
             aircraftDue: dueCount,
- alertNotices: fetchedNotifications.filter(n => !n.isRead).length,
+            alertNotices: fetchedNotifications.filter(n => !n.isRead).length,
         });
-
- const current = fetchedTripsData.filter(trip => trip.status === 'Active');
-        const upcoming = fetchedTripsData.filter(trip => trip.legs?.[0]?.departureDateTime && parseISO(trip.legs[0].departureDateTime) > now && trip.status !== 'Active');
 
         // Process data for dashboard sections
         setBulletins(fetchedBulletins.filter(b => b.isActive).sort((a, b) => parseISO(b.publishedAt).getTime() - parseISO(a.publishedAt).getTime()));
@@ -164,7 +164,7 @@ export default function DashboardPage() {
         
         setFleetList(fetchedFleet);
 
- const statusMap = new Map<string, AircraftStatusDetail>();
+        const statusMap = new Map<string, AircraftStatusDetail>();
         let alerts: SystemAlert[] = [];
         for (const ac of fetchedFleet) {
             if (!ac.isMaintenanceTracked) {

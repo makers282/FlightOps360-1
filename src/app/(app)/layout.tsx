@@ -79,10 +79,14 @@ export default function AppLayout({ children }: PropsWithChildren) {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setCurrentUser(user);
+      if (!user) {
+        router.push('/login');
+      } else {
+        setCurrentUser(user);
+      }
     });
     return () => unsubscribe();
-  }, []);
+  }, [router]);
 
   const handleLogout = async () => {
     try {

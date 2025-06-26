@@ -21,7 +21,7 @@ import {
     DeleteBulletinInputSchema,
     DeleteBulletinOutputSchema,
 } from '@/ai/schemas/bulletin-schemas';
-import { createNotification } from 'Users/me/flightops360/src/ai/flows/create-notification-flow';
+import { createNotification } from '@/ai/flows/create-notification-flow';
 
 const BULLETINS_COLLECTION = 'bulletins';
 

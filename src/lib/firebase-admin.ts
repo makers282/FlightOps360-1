@@ -4,8 +4,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { getStorage } from 'firebase-admin/storage';
 import { getAuth } from 'firebase-admin/auth';
 // Correct the path to serviceAccountKey.json at the project root
-// The '..' goes up from 'lib', then up from 'src' to the project root.
-import serviceAccountCredentials from '../../serviceAccountKey.json';
+import serviceAccountCredentials from '@/../serviceAccountKey.json';
 import { FIREBASE_CONFIG } from './config';
 
 let adminApp: App;
