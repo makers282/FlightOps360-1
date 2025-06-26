@@ -11,160 +11,6 @@
 import {ai} from '@/ai/genkit';
 import * as z from 'zod';
 
-const AirportDataSchema = z.object({
-  icao: z.string().describe('The ICAO code of the airport.'),
-  iata: z.string().optional().describe('The IATA code of the airport.'),
-  name: z.string().describe('The common name of the airport.'),
-  city: z.string().describe('The city where the airport is located.'),
-  state: z.string().optional().describe('The state or region of the airport.'),
-  country: z.string().describe('The country where the airport is located.'),
-  lat: z.number().describe('The latitude of the airport.'),
-  lon: z.number().describe('The longitude of the airport.'),
-});
-
-type AirportData = z.infer<typeof AirportDataSchema>;
-
-const getAirportDataTool = ai.defineTool(
-  {
-    name: 'getAirportData',
-    description:
-      'Get airport data for a given ICAO code. Use this to find airport locations for distance calculations.',
-    inputSchema: z.object({airportCode: z.string().describe('The ICAO code of the airport (e.g., KJFK, EGLL).')}),
-    outputSchema: AirportDataSchema,
-  },
-  async ({airportCode}) => {
-    // In a real app, you would fetch this from a database or an external API.
-    // For this example, we'll use a hardcoded list.
-    const airports: Record<string, AirportData> = {
-      KJFK: {
-        icao: 'KJFK',
-        iata: 'JFK',
-        name: 'John F. Kennedy International Airport',
-        city: 'New York',
-        state: 'New York',
-        country: 'USA',
-        lat: 40.6398,
-        lon: -73.7789,
-      },
-      KLAX: {
-        icao: 'KLAX',
-        iata: 'LAX',
-        name: 'Los Angeles International Airport',
-        city: 'Los Angeles',
-        state: 'California',
-        country: 'USA',
-        lat: 33.9425,
-        lon: -118.4081,
-      },
-      KISM: {
-        icao: 'KISM',
-        iata: 'ISM',
-        name: 'Kissimmee Gateway Airport',
-        city: 'Kissimmee',
-        state: 'Florida',
-        country: 'USA',
-        lat: 28.2892,
-        lon: -81.4358,
-      },
-      KIAH: {
-        icao: 'KIAH',
-        iata: 'IAH',
-        name: 'George Bush Intercontinental Airport',
-        city: 'Houston',
-        state: 'Texas',
-        country: 'USA',
-        lat: 29.9844,
-        lon: -95.3414,
-      },
-      KDAY: {
-        icao: 'KDAY',
-        iata: 'DAY',
-        name: 'James M. Cox Dayton International Airport',
-        city: 'Dayton',
-        state: 'Ohio',
-        country: 'USA',
-        lat: 39.9022,
-        lon: -84.2194,
-      },
-      KATL: {
-        icao: 'KATL',
-        iata: 'ATL',
-        name: 'Hartsfield-Jackson Atlanta International Airport',
-        city: 'Atlanta',
-        state: 'Georgia',
-        country: 'USA',
-        lat: 33.6367,
-        lon: -84.4281,
-      },
-      KORD: {
-        icao: 'KORD',
-        iata: 'ORD',
-        name: "O'Hare International Airport",
-        city: 'Chicago',
-        state: 'Illinois',
-        country: 'USA',
-        lat: 41.9742,
-        lon: -87.9073,
-      },
-      KDFW: {
-        icao: 'KDFW',
-        iata: 'DFW',
-        name: 'Dallas/Fort Worth International Airport',
-        city: 'Dallas-Fort Worth',
-        state: 'Texas',
-        country: 'USA',
-        lat: 32.8998,
-        lon: -97.0403,
-      },
-      KDEN: {
-        icao: 'KDEN',
-        iata: 'DEN',
-        name: 'Denver International Airport',
-        city: 'Denver',
-        state: 'Colorado',
-        country: 'USA',
-        lat: 39.8561,
-        lon: -104.6737,
-      },
-      KLAS: {
-        icao: 'KLAS',
-        iata: 'LAS',
-        name: 'Harry Reid International Airport',
-        city: 'Las Vegas',
-        state: 'Nevada',
-        country: 'USA',
-        lat: 36.084,
-        lon: -115.1537,
-      },
-      KSFO: {
-        icao: 'KSFO',
-        iata: 'SFO',
-        name: 'San Francisco International Airport',
-        city: 'San Francisco',
-        state: 'California',
-        country: 'USA',
-        lat: 37.6213,
-        lon: -122.379,
-      },
-      KSEA: {
-        icao: 'KSEA',
-        iata: 'SEA',
-        name: 'Seattle-Tacoma International Airport',
-        city: 'Seattle',
-        state: 'Washington',
-        country: 'USA',
-        lat: 47.449,
-        lon: -122.3093,
-      },
-    };
-    const airport = airports[airportCode.toUpperCase()];
-    if (!airport) {
-      throw new Error(`Airport with ICAO code ${airportCode} not found.`);
-    }
-    return airport;
-  },
-);
-
 // Helper function to calculate great-circle distance
 function haversineDistance(
   lat1: number,
@@ -181,7 +27,7 @@ function haversineDistance(
       Math.cos(lat2 * (Math.PI / 180)) *
       Math.sin(dLon / 2) *
       Math.sin(dLon / 2);
-  const c = 2 * z.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 }
 
@@ -194,13 +40,17 @@ const EstimateFlightDetailsInputSchema = z.object({
 export type EstimateFlightDetailsInput = z.infer<typeof EstimateFlightDetailsInputSchema>;
 
 const EstimateFlightDetailsOutputSchema = z.object({
-  estimatedMileageNM: z.number().describe('The estimated flight distance in nautical miles (NM).'),
-  estimatedFlightTimeHours: z.number().describe('The estimated flight time in hours, as a decimal (e.g., 2.5 for 2 hours and 30 minutes).'),
-  assumedCruiseSpeedKts: z.number().describe('The assumed cruise speed in knots (kts) used for the estimation. This should be the knownCruiseSpeedKts if it was provided in the input.'),
+  estimatedMileageNM: z.number().describe('The estimated flight distance in nautical miles (NM). This value will be calculated by the flow after the AI returns coordinates.'),
+  estimatedFlightTimeHours: z.number().describe('The estimated flight time in hours, as a decimal (e.g., 2.5 for 2 hours and 30 minutes). This value will be calculated by the flow after the AI returns coordinates and speed.'),
+  assumedCruiseSpeedKts: z.number().describe('The assumed cruise speed in knots (kts) used for the estimation. This should be the knownCruiseSpeedKts if it was provided in the input, otherwise it is the AI\'s best estimate for the aircraft type.'),
   resolvedOriginIcao: z.string().describe('The resolved ICAO code used for the origin airport.'),
   resolvedOriginName: z.string().describe('The single, a common official name of the resolved origin airport (e.g., "John F. Kennedy International Airport" or "Dayton-Wright Brothers Airport"). Must be concise and not repetitive.'),
+  originLat: z.number().describe("The latitude of the resolved origin airport."),
+  originLon: z.number().describe("The longitude of the resolved origin airport."),
   resolvedDestinationIcao: z.string().describe('The resolved ICAO code used for the destination airport.'),
   resolvedDestinationName: z.string().describe('The single, a common official name of the resolved destination airport (e.g., "Los Angeles International Airport" or "Colorado Plains Regional Airport"). Must be concise and not repetitive.'),
+  destinationLat: z.number().describe("The latitude of the resolved destination airport."),
+  destinationLon: z.number().describe("The longitude of the resolved destination airport."),
   briefExplanation: z.string().describe('A very brief, one-sentence explanation of the estimation method (e.g., "Estimated based on direct route and average cruise speed for the aircraft type." or "Estimated based on direct route and provided cruise speed of X kts.").'),
 });
 export type EstimateFlightDetailsOutput = z.infer<typeof EstimateFlightDetailsOutputSchema>;
@@ -216,24 +66,23 @@ const prompt = ai.definePrompt({
   config: {
     temperature: 0.1, 
   },
-  tools: [getAirportDataTool],
   prompt: `You are an expert flight operations assistant. Your task is to estimate flight details based on the provided information.
+
+You will determine the airport ICAO codes and find their geographic coordinates (latitude and longitude).
 
 Airport Code Interpretation and Strict Adherence:
 - You will be given an origin airport code and a destination airport code.
-- **CRITICAL RULE: If an input airport code (origin or destination) is 4 letters long (e.g., KJFK, KAKO), you MUST assume it is an ICAO code. All your information retrieval (airport name, location for distance calculation) and subsequent calculations for that airport MUST be based SOLELY and EXACTLY on THIS GIVEN 4-LETTER ICAO CODE. Do not substitute it or get confused by similar names or other airports in similarly named cities.** For example, if the input is 'KAKO', all details and calculations must relate to KAKO (Colorado Plains Regional Airport), NOT KAKR (Akron-Fulton International Airport, Ohio). The \`resolvedOriginIcao\` and \`resolvedDestinationIcao\` fields in your output MUST match these input ICAO codes if they were 4 letters.
+- **CRITICAL RULE: If an input airport code (origin or destination) is 4 letters long (e.g., KJFK, KDAY), you MUST assume it is an ICAO code. All your information retrieval (airport name, location) and subsequent data for that airport MUST be based SOLELY and EXACTLY on THIS GIVEN 4-LETTER ICAO CODE. Do not substitute it or get confused by similar names or other airports in similarly named cities.** For example, if the input is 'KDAY', all details and calculations must relate to KDAY (James M. Cox Dayton International Airport). The \`resolvedOriginIcao\` and \`resolvedDestinationIcao\` fields in your output MUST match these input ICAO codes if they were 4 letters.
 - If an input airport code is 3 letters long (e.g., JFK, LHR), assume it is an IATA code.
     - For US airports, prefix 'K' to the 3-letter IATA code to derive the ICAO code (e.g., JFK becomes KJFK, LAX becomes KLAX). Use this derived K-prefixed ICAO for all subsequent steps.
     - For non-US airports, use the most common ICAO equivalent for the given IATA code (e.g., LHR becomes EGLL). Use this derived ICAO.
-- Perform your distance and time estimations based on these strictly determined ICAO codes.
 
-**CRITICALLY IMPORTANT FOR AIRPORT NAMES:**
-For 'resolvedOriginName' and 'resolvedDestinationName', provide **ONLY the single, most common official airport name associated with the ICAO code you have determined according to the rules above.**
+**CRITICALLY IMPORTANT FOR AIRPORT NAMES & COORDINATES:**
+- For 'resolvedOriginName' and 'resolvedDestinationName', provide **ONLY the single, most common official airport name associated with the ICAO code you have determined according to the rules above.**
     - Example for "JFK" (resolves to KJFK): "John F. Kennedy International Airport".
-    - Example for "MGY" (input is MGY, resolves to KMGY): "Dayton-Wright Brothers Airport".
-    - Example for "KAKO" (input is KAKO): "Colorado Plains Regional Airport".
-    - **The name output for these fields MUST be ONLY the airport's name. Do NOT repeat the airport name, ICAO code, city, state, or any other descriptive text within these specific name fields.**
-    - **If the input is "GDK", the output for 'resolvedOriginName' should be "Gardner Municipal Airport", and nothing more.**
+    - Example for "KDAY" (input is KDAY): "James M. Cox Dayton International Airport".
+- **The name output for these fields MUST be ONLY the airport's name. Do NOT repeat the airport name, ICAO code, city, state, or any other descriptive text within these specific name fields.**
+- You must find and return the latitude and longitude for the resolved airports in the 'originLat', 'originLon', 'destinationLat', and 'destinationLon' fields.
 
 Aircraft Type: {{{aircraftType}}}
 Origin Input: {{{origin}}}
@@ -249,85 +98,11 @@ Your brief explanation should reflect this. For example: "Estimated based on a d
 The assumedCruiseSpeedKts in your output should be your best estimate for the aircraft type.
 {{/if}}
 
-Output fields required:
-- estimatedMileageNM: Estimated flight distance in nautical miles (NM), calculated based on the strictly determined ICAO codes.
-- estimatedFlightTimeHours: Estimated flight time in hours (e.g., 2.5 for 2 hours 30 minutes), based on the strictly determined ICAO codes and aircraft speed.
-- assumedCruiseSpeedKts: The assumed cruise speed in knots (kts) used.
-- resolvedOriginIcao: The ICAO code used for the origin, strictly adhering to the rules above.
-- resolvedOriginName: The single, a common official airport name for the resolvedOriginIcao.
-- resolvedDestinationIcao: The ICAO code used for the destination, strictly adhering to the rules above.
-- resolvedDestinationName: The single, a common official airport name for the resolvedDestinationIcao.
-- briefExplanation: A very brief, one-sentence explanation of the estimation method.
+The 'estimatedMileageNM' and 'estimatedFlightTimeHours' fields in your output can be set to 0. They will be recalculated by the calling function based on the coordinates you provide.
 
 Return the data strictly in the specified JSON output format.
-Example for a request (KJFK to KLAX, Cessna Citation CJ3, knownCruiseSpeedKts: 410):
-{
-  "estimatedMileageNM": 2150,
-  "estimatedFlightTimeHours": 5.24,
-  "assumedCruiseSpeedKts": 410,
-  "resolvedOriginIcao": "KJFK",
-  "resolvedOriginName": "John F. Kennedy International Airport",
-  "resolvedDestinationIcao": "KLAX",
-  "resolvedDestinationName": "Los Angeles International Airport",
-  "briefExplanation": "Estimated based on a direct route and a provided cruise speed of 410 kts."
-}
-Example for a request (KAKO to KDEN, Piper Archer, no knownCruiseSpeedKts):
-{
-  "estimatedMileageNM": 75,
-  "estimatedFlightTimeHours": 0.7,
-  "assumedCruiseSpeedKts": 110,
-  "resolvedOriginIcao": "KAKO",
-  "resolvedOriginName": "Colorado Plains Regional Airport",
-  "resolvedDestinationIcao": "KDEN",
-  "resolvedDestinationName": "Denver International Airport",
-  "briefExplanation": "Estimated based on a direct route and an average cruise speed of 110 kts for a Piper Archer."
-}
-Example for GDK (Gardner Municipal Airport): If origin is GDK, resolvedOriginName must be "Gardner Municipal Airport".
-Provide realistic estimates based *only* on the correctly identified airports.
 `,
 });
-
-function cleanupAirportName(name: string): string {
-  if (!name) return 'N/A';
-  let cleanedName = name;
-
-  // Attempt to get the part before " - " if it exists and looks substantial
-  const hyphenIndex = cleanedName.indexOf(" - ");
-  if (hyphenIndex !== -1) {
-    const partBeforeHyphen = cleanedName.substring(0, hyphenIndex).trim();
-    if (partBeforeHyphen.length > 3) { // Heuristic: avoid just codes
-      cleanedName = partBeforeHyphen;
-    }
-  }
-
-  // If the name still contains parentheses, take the part before the first one
-  const parenthesisIndex = cleanedName.indexOf(" (");
-  if (parenthesisIndex !== -1) {
-    cleanedName = cleanedName.substring(0, parenthesisIndex).trim();
-  }
-  
-  // Additional cleanup: if it ends with " Airport Airport", remove the duplicate " Airport"
-  if (cleanedName.endsWith(" Airport Airport")) {
-    cleanedName = cleanedName.substring(0, cleanedName.length - " Airport".length);
-  }
-
-  // Fallback for excessively long names that might have slipped through
-  if (cleanedName.length > 70) {
-    const firstSentenceEnd = cleanedName.indexOf(". ");
-    if (firstSentenceEnd !== -1 && firstSentenceEnd < 70) {
-        cleanedName = cleanedName.substring(0, firstSentenceEnd);
-    } else {
-        // Try to find a comma if no period
-        const firstCommaEnd = cleanedName.indexOf(", ");
-         if (firstCommaEnd !== -1 && firstCommaEnd < 70) {
-            cleanedName = cleanedName.substring(0, firstCommaEnd);
-        } else {
-            cleanedName = cleanedName.substring(0, 67) + "...";
-        }
-    }
-  }
-  return cleanedName.trim() || 'N/A';
-}
 
 const estimateFlightDetailsFlow = ai.defineFlow(
   {
@@ -340,17 +115,13 @@ const estimateFlightDetailsFlow = ai.defineFlow(
     if (!output) {
       throw new Error("The AI model did not return an output for flight detail estimation.");
     }
-
-    const [originData, destinationData] = await Promise.all([
-      getAirportDataTool({airportCode: output.resolvedOriginIcao}),
-      getAirportDataTool({airportCode: output.resolvedDestinationIcao}),
-    ]);
-
+    
+    // Recalculate distance and time based on AI-provided coordinates
     const distance = haversineDistance(
-      originData.lat,
-      originData.lon,
-      destinationData.lat,
-      destinationData.lon,
+      output.originLat,
+      output.originLon,
+      output.destinationLat,
+      output.destinationLon,
     );
     output.estimatedMileageNM = Math.round(distance);
     
@@ -366,10 +137,6 @@ const estimateFlightDetailsFlow = ai.defineFlow(
         console.warn(`AI output assumed speed ${output.assumedCruiseSpeedKts} kts, but known speed was ${input.knownCruiseSpeedKts} kts. Overriding to known speed.`);
         output.assumedCruiseSpeedKts = input.knownCruiseSpeedKts;
     }
-
-    // Post-process airport names for conciseness
-    output.resolvedOriginName = cleanupAirportName(output.resolvedOriginName);
-    output.resolvedDestinationName = cleanupAirportName(output.resolvedDestinationName);
     
     return output;
   }
