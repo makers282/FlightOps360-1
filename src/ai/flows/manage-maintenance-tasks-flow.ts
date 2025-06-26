@@ -5,6 +5,7 @@
  * Tasks are associated with specific aircraft from the fleet.
  *
  * - fetchMaintenanceTasksForAircraft - Fetches all tasks for a given aircraft.
+ * - fetchAllMaintenanceTasks - Fetches all tasks for all aircraft.
  * - saveMaintenanceTask - Saves (adds or updates) a maintenance task.
  * - deleteMaintenanceTask - Deletes a maintenance task.
  */
@@ -97,6 +98,14 @@ export async function fetchMaintenanceTasksForAircraft(input: FetchTasksInput): 
   return fetchMaintenanceTasksForAircraftFlow(input);
 }
 
+export async function fetchAllMaintenanceTasks(): Promise<MaintenanceTask[]> {
+  if (!db) {
+    console.error("CRITICAL: Firestore admin instance (db) is not initialized in fetchAllMaintenanceTasks (manage-maintenance-tasks-flow). Admin SDK init likely failed.");
+    throw new Error("Firestore admin instance (db) is not initialized in fetchAllMaintenanceTasks.");
+  }
+  return fetchAllMaintenanceTasksFlow();
+}
+
 export async function saveMaintenanceTask(input: SaveTaskInput): Promise<MaintenanceTask> {
     if (!db) {
     console.error("CRITICAL: Firestore admin instance (db) is not initialized in saveMaintenanceTask (manage-maintenance-tasks-flow). Admin SDK init likely failed.");
@@ -149,6 +158,31 @@ const fetchMaintenanceTasksForAircraftFlow = ai.defineFlow(
     }
   }
 );
+
+const fetchAllMaintenanceTasksFlow = ai.defineFlow(
+  {
+    name: 'fetchAllMaintenanceTasksFlow',
+    outputSchema: FetchTasksOutputSchema,
+  },
+  async () => {
+    if (!db) {
+        console.error("CRITICAL: Firestore admin instance (db) is not initialized in fetchAllMaintenanceTasksFlow.");
+        throw new Error("Firestore admin instance (db) is not initialized in fetchAllMaintenanceTasksFlow.");
+    }
+    console.log('Executing fetchAllMaintenanceTasksFlow - Firestore');
+    try {
+      const tasksCollectionRef = db.collection(MAINTENANCE_TASKS_COLLECTION);
+      const snapshot = await tasksCollectionRef.get();
+      const tasksList = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as MaintenanceTask));
+      console.log('Fetched all', tasksList.length, 'tasks from Firestore');
+      return tasksList;
+    } catch (error) {
+      console.error('Error fetching all tasks from Firestore:', error);
+      throw new Error(`Failed to fetch all tasks: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+);
+
 
 const saveMaintenanceTaskFlow = ai.defineFlow(
   {

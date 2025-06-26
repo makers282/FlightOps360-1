@@ -14,14 +14,14 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from '@/hooks/use-toast';
-import { format, parseISO, isValid, addDays } from 'date-fns';
+import { format, parseISO, isValid, addDays, addMonths, addYears } from 'date-fns';
 import { auth } from '@/lib/firebase';
 import type { User as FirebaseUser } from 'firebase/auth';
 import { fetchBulletins, type Bulletin, type BulletinType } from '@/ai/flows/manage-bulletins-flow';
 import { fetchTrips, type Trip } from '@/ai/flows/manage-trips-flow';
 import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
-import { fetchAircraftDiscrepancies } from '@/ai/flows/manage-aircraft-discrepancies-flow';
-import { fetchMaintenanceTasksForAircraft } from '@/ai/flows/manage-maintenance-tasks-flow';
+import { fetchAllAircraftDiscrepancies } from '@/ai/flows/manage-aircraft-discrepancies-flow';
+import { fetchAllMaintenanceTasks } from '@/ai/flows/manage-maintenance-tasks-flow';
 import { fetchNotifications } from '@/ai/flows/manage-notifications-flow';
 import { fetchQuotes } from '@/ai/flows/manage-quotes-flow';
 
@@ -119,34 +119,67 @@ export default function DashboardPage() {
             fetchedTripsData,
             fetchedFleet,
             fetchedQuotes,
-            fetchedNotifications
+            fetchedNotifications,
+            allDiscrepancies,
+            allMaintenanceTasks
         ] = await Promise.all([
             fetchBulletins(),
             fetchTrips(),
             fetchFleetAircraft(),
             fetchQuotes(),
             fetchNotifications(),
+            fetchAllAircraftDiscrepancies(),
+            fetchAllMaintenanceTasks(),
         ]);
 
         const now = new Date();
 
-        const fetchedCurrent = fetchedTripsData.filter(trip => trip.status === 'Active');
-        const fetchedUpcoming = fetchedTripsData.filter(trip => trip.legs?.[0]?.departureDateTime && parseISO(trip.legs[0].departureDateTime) > now && trip.status !== 'Active');
-
+        const fetchedCurrent = fetchedTripsData.filter(trip => trip.status === 'Released');
+        const fetchedUpcoming = fetchedTripsData.filter(trip => {
+            const departureTime = trip.legs?.[0]?.departureDateTime ? parseISO(trip.legs[0].departureDateTime) : null;
+            return departureTime && departureTime > now && trip.status !== 'Completed' && trip.status !== 'Cancelled';
+        });
 
         // Process data for KPIs
         const pendingQuoteStatuses = ["Draft", "Sent"];
         const pendingQuotesList = fetchedQuotes.filter(q => pendingQuoteStatuses.includes(q.status));
         
         let dueCount = 0;
-        for (const ac of fetchedFleet) {
-            if (ac.isMaintenanceTracked) {
-                const tasks = await fetchMaintenanceTasksForAircraft({ aircraftId: ac.id });
-                if (tasks.some(t => t.isDaysDueEnabled && t.daysDueValue && parseISO(t.daysDueValue) < addDays(now, 30))) {
-                    dueCount++;
+        const aircraftWithDueTask = new Set<string>();
+
+        allMaintenanceTasks.forEach(task => {
+            if (!task.isMaintenanceTracked || aircraftWithDueTask.has(task.aircraftId)) return;
+
+            if (task.isDaysDueEnabled && task.daysDueValue) {
+                let isDueSoon = false;
+                if (task.trackType === 'One Time') {
+                    const dueDate = parseISO(task.daysDueValue);
+                    if (isValid(dueDate) && dueDate < addDays(now, 30)) {
+                        isDueSoon = true;
+                    }
+                } else if (task.trackType === 'Interval' && task.lastCompletedDate) {
+                    const lastCompleted = parseISO(task.lastCompletedDate);
+                    const interval = parseInt(task.daysDueValue, 10);
+                    if (isValid(lastCompleted) && !isNaN(interval)) {
+                        let dueDate;
+                        switch (task.daysIntervalType) {
+                            case 'days': dueDate = addDays(lastCompleted, interval); break;
+                            case 'months_specific_day': case 'months_eom': dueDate = addMonths(lastCompleted, interval); break;
+                            case 'years_specific_day': dueDate = addYears(lastCompleted, interval); break;
+                            default: break;
+                        }
+                        if (dueDate && isValid(dueDate) && dueDate < addDays(now, 30)) {
+                            isDueSoon = true;
+                        }
+                    }
+                }
+                if (isDueSoon) {
+                    aircraftWithDueTask.add(task.aircraftId);
                 }
             }
-        }
+        });
+        dueCount = aircraftWithDueTask.size;
+
 
         setKpiStats({
             activeTrips: fetchedCurrent.length,
@@ -156,7 +189,6 @@ export default function DashboardPage() {
             alertNotices: fetchedNotifications.filter(n => !n.isRead).length,
         });
 
-        // Process data for dashboard sections
         setBulletins(fetchedBulletins.filter(b => b.isActive).sort((a, b) => parseISO(b.publishedAt).getTime() - parseISO(a.publishedAt).getTime()));
         
         setCurrentTrips(fetchedCurrent.map(trip => ({...trip, aircraftLabel: fetchedFleet.find(ac => ac.id === trip.aircraftId)?.tailNumber || trip.aircraftId})));
@@ -166,13 +198,14 @@ export default function DashboardPage() {
 
         const statusMap = new Map<string, AircraftStatusDetail>();
         let alerts: SystemAlert[] = [];
+
         for (const ac of fetchedFleet) {
+            const discrepanciesForThisAircraft = allDiscrepancies.filter(d => d.aircraftId === ac.id);
             if (!ac.isMaintenanceTracked) {
                 statusMap.set(ac.id, { label: "Info", variant: "outline", details: "Not Tracked" });
                 continue;
             }
-            const discrepancies = await fetchAircraftDiscrepancies({ aircraftId: ac.id });
-            if (discrepancies.some(d => d.status === 'Open')) {
+            if (discrepanciesForThisAircraft.some(d => d.status === 'Open')) {
                  statusMap.set(ac.id, { label: "Maintenance", variant: "destructive", details: "Grounded (Open Write-up)" });
                  alerts.push({ id: `alert-disc-${ac.id}`, type: 'aircraft', severity: 'critical', title: `Grounded: ${ac.tailNumber}`, message: 'Aircraft has an open discrepancy.', link: `/aircraft/currency/${ac.tailNumber}`, icon: AlertTriangle });
             } else {
