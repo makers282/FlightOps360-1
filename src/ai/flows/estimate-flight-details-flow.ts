@@ -10,7 +10,6 @@
  */
 
 import {ai} from '@/ai/genkit';
-import {defineTool} from '@genkit-ai/ai/tool';
 import * as z from 'zod';
 
 const AirportDataSchema = z.object({
@@ -26,7 +25,7 @@ const AirportDataSchema = z.object({
 
 type AirportData = z.infer<typeof AirportDataSchema>;
 
-const getAirportDataTool = defineTool(
+const getAirportDataTool = ai.defineTool(
   {
     name: 'getAirportData',
     description:
