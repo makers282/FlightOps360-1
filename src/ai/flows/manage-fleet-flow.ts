@@ -104,6 +104,12 @@ const fetchFleetAircraftFlow = ai.defineFlow(
     try {
       const fleetCollectionRef = db.collection(FLEET_COLLECTION);
       const snapshot = await fleetCollectionRef.get();
+      
+      if (snapshot.empty) {
+        console.log('No fleet aircraft found in Firestore. Returning empty list.');
+        return [];
+      }
+
       const aircraftList = snapshot.docs.map(doc => {
         const data = doc.data();
         return {

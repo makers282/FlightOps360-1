@@ -1,10 +1,21 @@
+
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow read/write access to all users if they are authenticated
+    // Default deny all reads and writes
     match /{document=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if false;
+    }
+
+    // Allow authenticated users to read and write their own data
+    // Example: match /users/{userId} {
+    //   allow read, write: if request.auth.uid == userId;
+    // }
+
+    match /maintenanceCosts/{docId} {
+      allow read: if request.auth != null;
+      allow create, update, delete: if request.auth.token.admin == true; // Example: only admins can write
     }
   }
 }

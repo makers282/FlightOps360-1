@@ -1,5 +1,4 @@
 
-'use server';
 /**
  * @fileOverview Zod schemas and TypeScript types for maintenance cost entries.
  */
