@@ -263,8 +263,8 @@ const estimateFlightDetailsFlow = ai.defineFlow(
     }
 
     const [originData, destinationData] = await Promise.all([
-      getAirportDataTool.invoke({airportCode: output.resolvedOriginIcao}),
-      getAirportDataTool.invoke({airportCode: output.resolvedDestinationIcao}),
+      getAirportDataTool({airportCode: output.resolvedOriginIcao}),
+      getAirportDataTool({airportCode: output.resolvedDestinationIcao}),
     ]);
 
     const distance = haversineDistance(
