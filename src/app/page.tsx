@@ -47,7 +47,7 @@ export default function LandingPage() {
               height={600}
               className="rounded-xl object-cover shadow-2xl"
               priority
-              data-ai-hint="dashboard aviation software"
+              data-ai-hint="aviation dashboard"
             />
             <div className="absolute inset-0 rounded-xl bg-black/10 ring-1 ring-inset ring-black/20"></div>
           </div>
@@ -75,9 +75,9 @@ export default function LandingPage() {
           </div>
           <div className="grid grid-cols-1 gap-x-8 gap-y-10 md:grid-cols-3">
             {[
-              { name: "Intelligent Quoting", description: "Generate accurate quotes quickly with integrated aircraft performance and operational costs.", icon: Zap, dataAiHint: "calculator money" },
-              { name: "Crew Management", description: "Track crew qualifications, duty times, and scheduling with ease.", icon: Users, dataAiHint: "team people" },
-              { name: "Aircraft & Maintenance", description: "Monitor aircraft status, maintenance schedules, and compliance requirements.", icon: ShieldCheck, dataAiHint: "airplane safety" },
+              { name: "Intelligent Quoting", description: "Generate accurate quotes quickly with integrated aircraft performance and operational costs.", icon: Zap, dataAiHint: "flight quote" },
+              { name: "Crew Management", description: "Track crew qualifications, duty times, and scheduling with ease.", icon: Users, dataAiHint: "flight crew" },
+              { name: "Aircraft & Maintenance", description: "Monitor aircraft status, maintenance schedules, and compliance requirements.", icon: ShieldCheck, dataAiHint: "aircraft maintenance" },
             ].map((feature) => (
               <div key={feature.name} className="flex flex-col items-center rounded-lg bg-card p-8 text-center shadow-lg transition-shadow hover:shadow-xl">
                 <feature.icon className="mb-4 h-10 w-10 text-primary" aria-hidden="true" />

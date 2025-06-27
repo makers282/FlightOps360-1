@@ -1,8 +1,7 @@
 
 'use server';
 /**
- * @fileOverview An AI agent that estimates flight details like mileage and flight time.
- * This is a "use server" file and only exports the async `estimateFlightDetails` function.
+ * @fileOverview A flow that uses a tool to look up airport data and estimate flight details.
  */
 
 import { ai } from '@/ai/genkit';
@@ -12,10 +11,10 @@ import {
   type EstimateFlightDetailsInput,
   type EstimateFlightDetailsOutput,
 } from '@/ai/schemas/estimate-flight-details-schemas';
+import { airportLookupTool } from '../tools/airport-lookup-tool';
+import { flow } from 'genkit';
 
-// Re-export types for client convenience. This is allowed in 'use server' files.
 export type { EstimateFlightDetailsInput, EstimateFlightDetailsOutput };
-
 
 /**
  * Helper to calculate great-circle distance in NM
@@ -24,7 +23,7 @@ function haversineDistance(
   lat1: number, lon1: number,
   lat2: number, lon2: number,
 ): number {
-  const R = 3440.065;
+  const R = 3440.065; // Nautical miles
   const toRad = (d:number) => d * Math.PI/180;
   const dLat = toRad(lat2 - lat1);
   const dLon = toRad(lon2 - lon1);
@@ -34,59 +33,42 @@ function haversineDistance(
   return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
-const prompt = ai.definePrompt({
-  name: 'estimateFlightDetailsPrompt',
-  input:  { schema: EstimateFlightDetailsInputSchema },
-  output: { schema: EstimateFlightDetailsOutputSchema },
-  config: { temperature: 0.1 },
-  prompt: `
-You are an expert flight-ops assistant. You will ONLY ever accept valid 4-letter ICAO codes.
-  
-1. ORIGIN & DESTINATION must be output verbatim in \`resolved...Icao\`.
-2. You MUST look up the single official airport name and exact lat/lon for each code.
-3. If you CANNOT find EXACT matches for those ICAO codes, or if you attempt to substitute anything, you MUST instead return a JSON object with an "error" field and NO other data.
+export const estimateFlightDetails = flow(
+    {
+      name: 'estimateFlightDetailsFlow',
+      inputSchema: EstimateFlightDetailsInputSchema,
+      outputSchema: EstimateFlightDetailsOutputSchema,
+      tools: [airportLookupTool],
+    },
+    async (input) => {
+        const [originData, destinationData] = await Promise.all([
+            airportLookupTool({ icao: input.origin }),
+            airportLookupTool({ icao: input.destination }),
+        ]);
 
-Origin Input: {{{origin}}}
-Destination Input: {{{destination}}}
+        const dist = haversineDistance(
+            originData.lat, originData.lon,
+            destinationData.lat, destinationData.lon
+        );
 
-{{#if knownCruiseSpeedKts}}
-Use the provided cruise speed of {{{knownCruiseSpeedKts}}} kts.
-{{else}}
-Use a typical cruise speed for the aircraft type.
-{{/if}}
+        const speed = input.knownCruiseSpeedKts || 350; // Default to 350 if not provided
+        const flightTime = speed > 0 ? Math.round((dist / speed) * 100) / 100 : 0;
 
-Output EXACTLY in this JSON schema or else return:
-{ "error": "Could not resolve ICAO code XYZ1" }
-`,
-});
+        const result: EstimateFlightDetailsOutput = {
+            resolvedOriginName: originData.name,
+            resolvedOriginIcao: originData.icao,
+            originLat: originData.lat,
+            originLon: originData.lon,
+            resolvedDestinationName: destinationData.name,
+            resolvedDestinationIcao: destinationData.icao,
+            destinationLat: destinationData.lat,
+            destinationLon: destinationData.lon,
+            assumedCruiseSpeedKts: speed,
+            estimatedMileageNM: Math.round(dist),
+            estimatedFlightTimeHours: flightTime,
+            aiExplanation: `Estimated based on a direct route between ${originData.name} and ${destinationData.name}.`
+        };
 
-export async function estimateFlightDetails(
-  input: EstimateFlightDetailsInput
-): Promise<EstimateFlightDetailsOutput> {
-  // 1. Pre-process inputs before calling the flow (client now handles uppercase)
-  const processedInput = {
-    ...input,
-  };
-
-  // 2) Run the AI
-  const { output, error } = await prompt(processedInput);
-  if (error) {
-    throw new Error(`Airport resolution failed: ${error}`);
-  }
-  if (!output) {
-    throw new Error("AI returned no output");
-  }
-
-  // 3) Recompute distance & time locally
-  const dist = haversineDistance(
-    output.originLat, output.originLon,
-    output.destinationLat, output.destinationLon
-  );
-  output.estimatedMileageNM       = Math.round(dist);
-  const speed = output.assumedCruiseSpeedKts;
-  output.estimatedFlightTimeHours = speed > 0
-    ? Math.round((dist/speed)*100)/100
-    : 0;
-
-  return output;
-}
+        return result;
+    }
+);
