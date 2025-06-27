@@ -1,7 +1,6 @@
-'use server';
 /**
  * @fileOverview Zod schemas and TypeScript types for flight detail estimation.
- * This file is not marked with 'use server' and can be safely imported by clients.
+ * This file does not use the 'use server' directive and can be safely imported by clients.
  */
 import { z } from 'zod';
 
@@ -11,9 +10,9 @@ const IcaoCode = z
   .length(4, "Must be exactly 4 letters")
   .regex(/^[A-Z]{4}$/, "ICAO codes must be uppercase A–Z")
   .describe("A 4-letter ICAO airport code (e.g. KJFK)");
-  
+
 export const EstimateFlightDetailsInputSchema = z.object({
-  origin: z.string().min(3, "Origin must be 3-4 characters.").max(4),
+  origin:      z.string().min(3, "Origin must be 3-4 characters.").max(4),
   destination: z.string().min(3, "Destination must be 3-4 characters.").max(4),
   aircraftType: z.string().describe("Full aircraft type/model"),
   knownCruiseSpeedKts: z
