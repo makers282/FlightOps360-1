@@ -255,6 +255,10 @@ export default function AppLayout({ children }: PropsWithChildren) {
                 Reports
               </SidebarMenuButton>
               <SidebarMenuSub>
+                <SidebarMenuSubButton href="/reports/maintenance" tooltip="Maintenance Reports" isActive={pathname === '/reports/maintenance'}>
+                  <Wrench />
+                  Maintenance
+                </SidebarMenuSubButton>
                 <SidebarMenuSubButton href="/reports/financial" tooltip="Financial Reports" isActive={pathname === '/reports/financial'}>
                   <DollarSign />
                   Financial Reports
