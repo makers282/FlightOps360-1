@@ -4,7 +4,7 @@
 
 import type { LegFormData } from './create-quote-form'; 
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { format } from "date-fns";
+import { format, isValid as isValidDate } from "date-fns";
 
 interface LegsSummaryTableProps {
   legs: LegFormData[];
@@ -16,6 +16,23 @@ export function LegsSummaryTable({ legs }: LegsSummaryTableProps) {
   let totalRevenueBlockTimeHours = 0;
   let totalPositioningBlockTimeHours = 0;
 
+  // Calculate totals first for clarity
+  legs.forEach(leg => {
+    const flightTimeHours = Number(leg.flightTimeHours || 0);
+    const originTaxiMinutes = Number(leg.originTaxiTimeMinutes || 0);
+    const destinationTaxiMinutes = Number(leg.destinationTaxiTimeMinutes || 0);
+    const blockTimeHoursCalculated = parseFloat(((originTaxiMinutes + (flightTimeHours * 60) + destinationTaxiMinutes) / 60).toFixed(2));
+
+    if (leg.legType === "Charter" || leg.legType === "Owner" || leg.legType === "Ambulance" || leg.legType === "Cargo") {
+      totalRevenueFlightTimeHours += flightTimeHours;
+      totalRevenueBlockTimeHours += blockTimeHoursCalculated;
+    } else if (leg.legType === "Positioning" || leg.legType === "Ferry" || leg.legType === "Maintenance") {
+      totalPositioningFlightTimeHours += flightTimeHours;
+      totalPositioningBlockTimeHours += blockTimeHoursCalculated;
+    }
+  });
+
+
   const formattedLegs = legs.map((leg, index) => {
     let estimatedArrivalTime = "N/A";
     const flightTimeHours = Number(leg.flightTimeHours || 0);
@@ -25,33 +42,11 @@ export function LegsSummaryTable({ legs }: LegsSummaryTableProps) {
     const blockTimeTotalMinutes = originTaxiMinutes + (flightTimeHours * 60) + destinationTaxiMinutes;
     const blockTimeHoursCalculated = parseFloat((blockTimeTotalMinutes / 60).toFixed(2));
 
-
-    if (leg.departureDateTime && flightTimeHours > 0) {
+    // FIX: Check if the departureDateTime is a valid date before using it
+    if (leg.departureDateTime && isValidDate(leg.departureDateTime) && flightTimeHours > 0) {
       const departureTime = new Date(leg.departureDateTime);
       const arrivalTimeMillis = departureTime.getTime() + (flightTimeHours * 60 * 60 * 1000);
       estimatedArrivalTime = format(new Date(arrivalTimeMillis), "MM/dd HH:mm");
-
-      if (leg.legType === "Charter" || leg.legType === "Owner" || leg.legType === "Ambulance" || leg.legType === "Cargo") {
-        totalRevenueFlightTimeHours += flightTimeHours;
-        totalRevenueBlockTimeHours += blockTimeHoursCalculated;
-      } else if (leg.legType === "Positioning" || leg.legType === "Ferry" || leg.legType === "Maintenance") {
-        totalPositioningFlightTimeHours += flightTimeHours;
-        totalPositioningBlockTimeHours += blockTimeHoursCalculated;
-      }
-    } else if (flightTimeHours > 0) { // Still add to totals if flight time exists but no departure date
-        if (leg.legType === "Charter" || leg.legType === "Owner" || leg.legType === "Ambulance" || leg.legType === "Cargo") {
-            totalRevenueFlightTimeHours += flightTimeHours;
-            totalRevenueBlockTimeHours += blockTimeHoursCalculated;
-        } else if (leg.legType === "Positioning" || leg.legType === "Ferry" || leg.legType === "Maintenance") {
-            totalPositioningFlightTimeHours += flightTimeHours;
-            totalPositioningBlockTimeHours += blockTimeHoursCalculated;
-        }
-    } else if (blockTimeHoursCalculated > 0) { // Add to block time totals if only taxi times exist
-      if (leg.legType === "Charter" || leg.legType === "Owner" || leg.legType === "Ambulance" || leg.legType === "Cargo") {
-        totalRevenueBlockTimeHours += blockTimeHoursCalculated;
-      } else if (leg.legType === "Positioning" || leg.legType === "Ferry" || leg.legType === "Maintenance") {
-        totalPositioningBlockTimeHours += blockTimeHoursCalculated;
-      }
     }
     
     const formatTimeDecimalToHHMM = (timeDecimal: number | undefined) => {
@@ -64,7 +59,7 @@ export function LegsSummaryTable({ legs }: LegsSummaryTableProps) {
     return {
       legNumber: index + 1,
       legType: leg.legType,
-      departure: leg.departureDateTime && leg.departureDateTime instanceof Date && !isNaN(leg.departureDateTime.getTime()) ? format(leg.departureDateTime, "MM/dd HH:mm") : "N/A",
+      departure: leg.departureDateTime && leg.departureDateTime instanceof Date && isValidDate(leg.departureDateTime) ? format(leg.departureDateTime, "MM/dd HH:mm") : "N/A",
       origin: leg.origin ? leg.origin.toUpperCase() : "N/A",
       originFbo: leg.originFbo || "N/A",
       arrival: estimatedArrivalTime,
@@ -161,4 +156,3 @@ export function LegsSummaryTable({ legs }: LegsSummaryTableProps) {
     </div>
   );
 }
-
