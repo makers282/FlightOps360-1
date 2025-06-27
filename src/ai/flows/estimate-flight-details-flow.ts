@@ -66,39 +66,35 @@ const prompt = ai.definePrompt({
   config: {
     temperature: 0.1, 
   },
-  prompt: `You are an expert flight operations assistant. Your task is to estimate flight details based on the provided information.
+  prompt: `You are an expert flight operations assistant. Your primary and most critical task is to accurately identify airports based on provided codes and retrieve their name and geographic coordinates.
 
-You will determine the airport ICAO codes and find their geographic coordinates (latitude and longitude).
+**VERY IMPORTANT RULES FOR AIRPORT IDENTIFICATION:**
 
-Airport Code Interpretation and Strict Adherence:
-- You will be given an origin airport code and a destination airport code.
-- **CRITICAL RULE: If an input airport code (origin or destination) is 4 letters long (e.g., KJFK, KDAY), you MUST assume it is an ICAO code. All your information retrieval (airport name, location) and subsequent data for that airport MUST be based SOLELY and EXACTLY on THIS GIVEN 4-LETTER ICAO CODE. Do not substitute it or get confused by similar names or other airports in similarly named cities.** For example, if the input is 'KDAY', all details and calculations must relate to KDAY (James M. Cox Dayton International Airport). The \`resolvedOriginIcao\` and \`resolvedDestinationIcao\` fields in your output MUST match these input ICAO codes if they were 4 letters.
-- If an input airport code is 3 letters long (e.g., JFK, LHR), assume it is an IATA code.
-    - For US airports, prefix 'K' to the 3-letter IATA code to derive the ICAO code (e.g., JFK becomes KJFK, LAX becomes KLAX). Use this derived K-prefixed ICAO for all subsequent steps.
-    - For non-US airports, use the most common ICAO equivalent for the given IATA code (e.g., LHR becomes EGLL). Use this derived ICAO.
+1.  **4-LETTER CODES ARE ABSOLUTE:** If you are given a 4-letter airport code (e.g., KDAY, KUYF), you MUST treat it as a definitive ICAO code.
+    *   All information you find (airport name, latitude, longitude) MUST correspond *exactly* to this given ICAO code.
+    *   DO NOT substitute it with a more common airport. DO NOT get confused by similar names or locations.
+    *   The \`resolved...Icao\` fields in your output MUST exactly match the 4-letter input code.
+    *   **CRITICAL EXAMPLE:** The ICAO code 'KUYF' is Madison County Airport in London, Ohio. It is NOT John Wayne Airport. If the input is 'KUYF', you must provide details for Madison County Airport.
 
-**CRITICALLY IMPORTANT FOR AIRPORT NAMES & COORDINATES:**
-- For 'resolvedOriginName' and 'resolvedDestinationName', provide **ONLY the single, most common official airport name associated with the ICAO code you have determined according to the rules above.**
-    - Example for "JFK" (resolves to KJFK): "John F. Kennedy International Airport".
-    - Example for "KDAY" (input is KDAY): "James M. Cox Dayton International Airport".
-- **The name output for these fields MUST be ONLY the airport's name. Do NOT repeat the airport name, ICAO code, city, state, or any other descriptive text within these specific name fields.**
-- You must find and return the latitude and longitude for the resolved airports in the 'originLat', 'originLon', 'destinationLat', and 'destinationLon' fields.
+2.  **3-LETTER CODES (IATA):** Only if the input code is 3 letters long (e.g., JFK, LHR), should you treat it as an IATA code and derive the ICAO code.
+    *   For US airports, prefix 'K' (e.g., JFK becomes KJFK).
+    *   For non-US airports, use the most common ICAO equivalent (e.g., LHR becomes EGLL).
+
+**OUTPUT REQUIREMENTS:**
+
+*   **Airport Names:** For \`resolvedOriginName\` and \`resolvedDestinationName\`, provide ONLY the single, common official name for the resolved ICAO code. Do not add the city, state, or repeat the code in the name field.
+*   **Coordinates:** You must find and return the latitude and longitude for the resolved airports.
+*   **Calculations:** The \`estimatedMileageNM\` and \`estimatedFlightTimeHours\` fields can be set to 0. They will be recalculated by the system based on the coordinates you provide.
 
 Aircraft Type: {{{aircraftType}}}
 Origin Input: {{{origin}}}
 Destination Input: {{{destination}}}
 
 {{#if knownCruiseSpeedKts}}
-A specific cruise speed of {{{knownCruiseSpeedKts}}} knots has been provided for this aircraft. Please use this speed for your calculations.
-Your brief explanation should reflect this. For example: "Estimated based on a direct route and a provided cruise speed of {{{knownCruiseSpeedKts}}} kts."
-The assumedCruiseSpeedKts in your output MUST be {{{knownCruiseSpeedKts}}}.
+A specific cruise speed of {{{knownCruiseSpeedKts}}} knots has been provided. Use this speed for your calculations. The \`assumedCruiseSpeedKts\` in your output MUST be {{{knownCruiseSpeedKts}}}. Your brief explanation should state that the provided speed was used.
 {{else}}
-Consider typical cruise speeds for the given aircraft type if no specific cruise speed is provided.
-Your brief explanation should reflect this. For example: "Estimated based on a direct route and an average cruise speed of XXX kts for the aircraft type."
-The assumedCruiseSpeedKts in your output should be your best estimate for the aircraft type.
+Use a typical cruise speed for the given aircraft type. Your brief explanation should state the assumed speed used.
 {{/if}}
-
-The 'estimatedMileageNM' and 'estimatedFlightTimeHours' fields in your output can be set to 0. They will be recalculated by the calling function based on the coordinates you provide.
 
 Return the data strictly in the specified JSON output format.
 `,
