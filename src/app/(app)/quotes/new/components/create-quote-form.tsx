@@ -305,7 +305,7 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
             
             const initialFormOptionalServices: OptionalServiceFormData[] = 
               Object.entries(fetchedCompanyProfile?.serviceFeeRates || {})
-              .filter(([_key, rate]) => rate.isActive) // Only include active services as options
+              .filter(([_key, rate]) => rate.isActive)
               .map(([key, rate]) => {
                 const existingLineItem = (quoteData.lineItems || []).find(li => li.id === key); 
                 let quantityInputType: OptionalServiceFormData['quantityInputType'] = 'none';
@@ -337,7 +337,7 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
               legs: quoteData.legs.map(leg => ({
                 ...leg,
                 departureDateTime: leg.departureDateTime ? parseISO(leg.departureDateTime) : undefined,
-                passengerCount: leg.passengerCount || 1,
+                passengerCount: leg.passengerCount || 1, 
                 originTaxiTimeMinutes: leg.originTaxiTimeMinutes === undefined ? 15 : leg.originTaxiTimeMinutes,
                 destinationTaxiTimeMinutes: leg.destinationTaxiTimeMinutes === undefined ? 15 : leg.destinationTaxiTimeMinutes,
               })),
@@ -729,7 +729,7 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
               legs: updatedQuoteData.legs.map(leg => ({
                 ...leg,
                 departureDateTime: leg.departureDateTime ? parseISO(leg.departureDateTime) : undefined,
-                passengerCount: leg.passengerCount || 1,
+                passengerCount: leg.passengerCount || 1, 
                 originTaxiTimeMinutes: leg.originTaxiTimeMinutes === undefined ? 15 : leg.originTaxiTimeMinutes,
                 destinationTaxiTimeMinutes: leg.destinationTaxiTimeMinutes === undefined ? 15 : leg.destinationTaxiTimeMinutes,
               })),
@@ -985,7 +985,7 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
                             <AlertTitle className="text-sm">
                                 {legEstimates[index]!.error ? `Error Estimating Leg ${index + 1}` : `Leg ${index + 1} AI Estimate Reference`}
                             </AlertTitle>
-                            <AlertDescription className="space-y-1">
+                            <AlertDescription>
                                 {legEstimates[index]!.error ? ( <p>{legEstimates[index]!.error}</p> ) : (
                                 <>
                                     <p><strong>Origin:</strong> {legEstimates[index]!.resolvedOriginName} ({legEstimates[index]!.resolvedOriginIcao})</p>
@@ -1106,4 +1106,3 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
     </>
   );
 }
-
