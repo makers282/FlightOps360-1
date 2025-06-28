@@ -1,5 +1,5 @@
 
-const withGenkit = require('@genkit-ai/next');
+import withGenkit from '@genkit-ai/next';
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -27,4 +27,4 @@ const nextConfig = {
   transpilePackages: ['@genkit-ai/googleai', 'genkit', '@genkit-ai/next'],
 };
 
-module.exports = withGenkit(nextConfig);
+export default withGenkit(nextConfig);
