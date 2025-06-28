@@ -6,7 +6,7 @@ import { next } from '@genkit-ai/next';
 export const ai = genkit({
   plugins: [
     googleAI(),
-    // next(), // Temporarily disabled to resolve startup issue
+    next(), // Re-enabled to correctly integrate Genkit with Next.js
   ],
   model: 'googleai/gemini-1.5-flash',
 });
