@@ -19,11 +19,12 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  transpilePackages: ['@genkit-ai/googleai', '@genkit-ai/firebase', 'genkit', '@genkit-ai/next'],
   experimental: {
     allowedDevOrigins: [
       "https://9005-firebase-studio-1748345624802.cluster-hf4yr35cmnbd4vhbxvfvc6cp5q.cloudworkstations.dev",
+      "https://9000-firebase-studio-1748345624802.cluster-hf4yr35cmnbd4vhbxvfvc6cp5q.cloudworkstations.dev"
     ],
-    transpilePackages: ['@genkit-ai/googleai', '@genkit-ai/firebase', 'genkit', '@genkit-ai/next'],
   },
 };
 
