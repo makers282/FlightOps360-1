@@ -1,20 +1,15 @@
 
 'use server';
 /**
- * @fileOverview A flow that uses a tool to look up airport data and estimate flight details.
+ * @fileOverview A function that uses a tool to look up airport data and estimate flight details.
  */
 
-import { ai } from '@/ai/genkit';
 import {
   EstimateFlightDetailsInputSchema,
-  EstimateFlightDetailsOutputSchema,
   type EstimateFlightDetailsInput,
   type EstimateFlightDetailsOutput,
 } from '@/ai/schemas/estimate-flight-details-schemas';
-import { airportLookupTool } from '../tools/airport-lookup-tool';
-import { flow } from 'genkit';
-
-export type { EstimateFlightDetailsInput, EstimateFlightDetailsOutput };
+import { lookupAirport } from '../tools/airport-lookup-tool';
 
 /**
  * Helper to calculate great-circle distance in NM
@@ -33,42 +28,37 @@ function haversineDistance(
   return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
-export const estimateFlightDetails = flow(
-    {
-      name: 'estimateFlightDetailsFlow',
-      inputSchema: EstimateFlightDetailsInputSchema,
-      outputSchema: EstimateFlightDetailsOutputSchema,
-      tools: [airportLookupTool],
-    },
-    async (input) => {
-        const [originData, destinationData] = await Promise.all([
-            airportLookupTool({ icao: input.origin }),
-            airportLookupTool({ icao: input.destination }),
-        ]);
+// This is no longer a Genkit flow, just a regular server action.
+export async function estimateFlightDetails(input: EstimateFlightDetailsInput): Promise<EstimateFlightDetailsOutput> {
+    const validatedInput = EstimateFlightDetailsInputSchema.parse(input);
 
-        const dist = haversineDistance(
-            originData.lat, originData.lon,
-            destinationData.lat, destinationData.lon
-        );
+    const [originData, destinationData] = await Promise.all([
+        lookupAirport(validatedInput.origin),
+        lookupAirport(validatedInput.destination),
+    ]);
 
-        const speed = input.knownCruiseSpeedKts || 350; // Default to 350 if not provided
-        const flightTime = speed > 0 ? Math.round((dist / speed) * 100) / 100 : 0;
+    const dist = haversineDistance(
+        originData.lat, originData.lon,
+        destinationData.lat, destinationData.lon
+    );
 
-        const result: EstimateFlightDetailsOutput = {
-            resolvedOriginName: originData.name,
-            resolvedOriginIcao: originData.icao,
-            originLat: originData.lat,
-            originLon: originData.lon,
-            resolvedDestinationName: destinationData.name,
-            resolvedDestinationIcao: destinationData.icao,
-            destinationLat: destinationData.lat,
-            destinationLon: destinationData.lon,
-            assumedCruiseSpeedKts: speed,
-            estimatedMileageNM: Math.round(dist),
-            estimatedFlightTimeHours: flightTime,
-            aiExplanation: `Estimated based on a direct route between ${originData.name} and ${destinationData.name}.`
-        };
+    const speed = validatedInput.knownCruiseSpeedKts || 350; // Default to 350 if not provided
+    const flightTime = speed > 0 ? Math.round((dist / speed) * 100) / 100 : 0;
 
-        return result;
-    }
-);
+    const result: EstimateFlightDetailsOutput = {
+        resolvedOriginName: originData.name,
+        resolvedOriginIcao: originData.icao,
+        originLat: originData.lat,
+        originLon: originData.lon,
+        resolvedDestinationName: destinationData.name,
+        resolvedDestinationIcao: destinationData.icao,
+        destinationLat: destinationData.lat,
+        destinationLon: destinationData.lon,
+        assumedCruiseSpeedKts: speed,
+        estimatedMileageNM: Math.round(dist),
+        estimatedFlightTimeHours: flightTime,
+        briefExplanation: `Estimated based on a direct route between ${originData.name} and ${destinationData.name}.`
+    };
+
+    return result;
+}
