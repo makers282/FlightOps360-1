@@ -123,13 +123,13 @@ export default function DashboardPage() {
             allDiscrepancies,
             allMaintenanceTasks
         ] = await Promise.all([
-            fetchBulletins(),
-            fetchTrips(),
-            fetchFleetAircraft(),
-            fetchQuotes(),
-            fetchNotifications(),
-            fetchAllAircraftDiscrepancies(),
-            fetchAllMaintenanceTasks(),
+            fetchBulletins().catch(e => { console.error("Error fetching bulletins:", e); return []; }),
+            fetchTrips().catch(e => { console.error("Error fetching trips:", e); return []; }),
+            fetchFleetAircraft().catch(e => { console.error("Error fetching fleet:", e); return []; }),
+            fetchQuotes().catch(e => { console.error("Error fetching quotes:", e); return []; }),
+            fetchNotifications().catch(e => { console.error("Error fetching notifications:", e); return []; }),
+            fetchAllAircraftDiscrepancies().catch(e => { console.error("Error fetching discrepancies:", e); return []; }),
+            fetchAllMaintenanceTasks().catch(e => { console.error("Error fetching maintenance tasks:", e); return []; }),
         ]);
 
         const now = new Date();
@@ -240,7 +240,7 @@ export default function DashboardPage() {
   }, [toast]);
 
   useEffect(() => {
-    loadData();
+    // loadData();
   }, [loadData]);
 
   const kpiCardData = [

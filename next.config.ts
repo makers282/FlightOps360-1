@@ -1,6 +1,4 @@
 
-import withGenkit from '@genkit-ai/next';
-
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   /* your existing config... */
@@ -21,10 +19,8 @@ const nextConfig = {
     ],
   },
   experimental: {
-    serverActions: true,
-    serverComponentsExternalPackages: ['@genkit-ai/firebase'],
+    serverActions: {},
   },
-  transpilePackages: ['@genkit-ai/googleai', 'genkit', '@genkit-ai/next'],
 };
 
-export default withGenkit(nextConfig);
+export default nextConfig;
