@@ -1,14 +1,12 @@
 
-import { genkit, flow } from 'genkit';
+// src/ai/genkit.ts
+import { genkit as initializeAI } from 'genkit';
 import { googleAI } from '@genkit-ai/googleai';
-import next from '@genkit-ai/next';
+import { firebase } from '@genkit-ai/firebase';
 
-export const ai = genkit({
+export const ai = initializeAI({
   plugins: [
     googleAI(),
-    next(),
+    firebase(),
   ],
-  model: 'googleai/gemini-1.5-flash',
 });
-
-export { flow };
