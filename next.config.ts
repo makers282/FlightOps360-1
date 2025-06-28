@@ -1,5 +1,5 @@
 
-const { withGenkit } = require('@genkit-ai/next');
+const withGenkit = require('@genkit-ai/next');
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
