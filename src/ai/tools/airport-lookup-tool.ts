@@ -3,7 +3,6 @@
 import { z } from 'zod';
 import { adminDb } from '@/lib/firebase-admin';
 
-// Schema for the data returned by the lookup
 const AirportDataSchema = z.object({
   icao: z.string(),
   name: z.string(),
@@ -14,31 +13,32 @@ const AirportDataSchema = z.object({
 });
 export type AirportData = z.infer<typeof AirportDataSchema>;
 
-/**
- * Looks up airport data from Firestore based on an ICAO code.
- * @param icao The 4-letter ICAO code of the airport.
- * @returns A promise that resolves to the airport data.
- * @throws An error if the airport is not found or data is invalid.
- */
 export async function lookupAirport(icao: string): Promise<AirportData> {
+  console.log(`[lookupAirport] Received request for ICAO: ${icao}`);
+
   if (!adminDb) {
-    throw new Error("Firestore admin instance is not initialized.");
+    console.error("[lookupAirport] CRITICAL: adminDb is null or undefined. Firebase Admin SDK likely failed to initialize.");
+    throw new Error("Database connection is not available.");
   }
   
+  console.log(`[lookupAirport] Querying Firestore for document: ${icao.toUpperCase()}`);
   const airportRef = adminDb.collection('airports').doc(icao.toUpperCase());
   const doc = await airportRef.get();
 
   if (!doc.exists) {
+    console.warn(`[lookupAirport] Airport with ICAO code ${icao} not found in Firestore.`);
     throw new Error(`Airport with ICAO code ${icao} not found.`);
   }
 
   const data = doc.data();
+  console.log(`[lookupAirport] Found data for ${icao}:`, data);
+  
   const validation = AirportDataSchema.safeParse(data);
-
   if (!validation.success) {
-      console.error("Firestore data validation error:", validation.error.issues);
+      console.error(`[lookupAirport] Firestore data validation error for ${icao}:`, validation.error.issues);
       throw new Error(`Invalid data structure for airport ${icao} in Firestore.`);
   }
 
+  console.log(`[lookupAirport] Successfully looked up and validated data for ${icao}.`);
   return validation.data;
 }
