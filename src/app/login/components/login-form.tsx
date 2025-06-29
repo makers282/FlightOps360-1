@@ -1,7 +1,7 @@
 
 "use client";
 
-import { zodResolver } from '@hookform/resolvers/zod';
+import { zodResolver } from '@hookform/resolvers/zod/dist/zod.js';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { z } from 'zod';
 import { useState, useTransition } from 'react';

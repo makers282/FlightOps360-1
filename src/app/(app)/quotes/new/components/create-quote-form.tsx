@@ -52,8 +52,8 @@ import { ClientOnly } from '@/components/client-only';
 
 
 const legSchema = z.object({
-  origin: z.string().min(3, "Origin airport code (e.g., JFK).").max(5, "Origin airport code too long.").toUpperCase(),
-  destination: z.string().min(3, "Destination airport code (e.g., LAX).").max(5, "Destination airport code too long.").toUpperCase(),
+  origin: z.string().min(3, "Origin airport code (e.g., JFK).").max(5, "Origin code too long.").toUpperCase(),
+  destination: z.string().min(3, "Destination airport code (e.g., LAX).").max(5, "Destination code too long.").toUpperCase(),
   departureDateTime: z.date({ required_error: "Departure date and time are required." }).optional(),
   legType: z.enum(legTypes, { required_error: "Leg type is required." }),
   passengerCount: z.coerce.number().min(0, "Passenger count cannot be negative.").int().default(1),
@@ -382,6 +382,27 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
   }, [legsArray, legEstimates.length]);
 
 
+  useEffect(() => {
+    if (currentSelectedAircraftId) {
+      setIsLoadingSelectedAcPerf(true);
+      fetchAircraftPerformance({ aircraftId: currentSelectedAircraftId })
+        .then(perfData => {
+          if (perfData) {
+             setSelectedAircraftPerformance({...perfData, aircraftId: currentSelectedAircraftId});
+          } else {
+             setSelectedAircraftPerformance(null);
+          }
+        })
+        .catch(error => {
+          console.warn(`Could not fetch performance data for aircraft ${currentSelectedAircraftId}:`, error);
+          setSelectedAircraftPerformance(null);
+        })
+        .finally(() => setIsLoadingSelectedAcPerf(false));
+    } else {
+      setSelectedAircraftPerformance(null);
+    }
+  }, [currentSelectedAircraftId]);
+
   const handleCustomerSelect = (customerId: string | undefined) => {
     setValue('selectedCustomerId', customerId);
     if (!customerId) {
@@ -644,30 +665,37 @@ export function CreateQuoteForm({ isEditMode = false, quoteIdToEdit }: CreateQuo
 
       try {
         const savedQuote = await saveQuote(quoteToSave);
-        let toastDescription = `Quote ${savedQuote.quoteId} (${intendedStatus}) has been ${isEditMode ? 'updated' : 'saved'} in Firestore.`;
-
+        
         if (intendedStatus === "Sent") {
           try {
-            const emailInput = {
+            await sendQuoteEmail({
                 clientName: savedQuote.clientName,
                 clientEmail: savedQuote.clientEmail,
                 quoteId: savedQuote.quoteId,
                 totalAmount: savedQuote.totalSellPrice,
-                quoteLink: isEditMode ? `${window.location.origin}/quotes/${savedQuote.id}` : undefined
-            };
-            await sendQuoteEmail(emailInput);
-            toastDescription += " Email simulation logged to console.";
+                quoteLink: `${window.location.origin}/quotes/${savedQuote.id}`
+            });
+            toast({
+              title: "Quote Sent",
+              description: `Quote ${savedQuote.quoteId} has been sent to ${savedQuote.clientEmail}.`,
+              variant: "default",
+            });
           } catch (emailError) {
              console.error("Failed to send quote email (simulation):", emailError);
-             toastDescription += " Email simulation failed (see console).";
+             toast({
+               title: "Quote Saved, Email Failed",
+               description: `Quote ${savedQuote.quoteId} was saved, but the email simulation failed. See console for details.`,
+               variant: "destructive"
+             });
           }
+        } else { // It's a Draft
+          toast({
+            title: "Quote Saved as Draft",
+            description: `Quote ${savedQuote.quoteId} has been successfully saved.`,
+            variant: "default",
+          });
         }
 
-        toast({
-          title: isEditMode ? "Quote Updated" : "Quote Saved",
-          description: toastDescription,
-          variant: "default",
-        });
 
         if (!isEditMode) {
           form.reset({
