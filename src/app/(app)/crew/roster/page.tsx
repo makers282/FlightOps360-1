@@ -1,11 +1,9 @@
 
 "use client";
 
-import React, { useState, useMemo, useEffect } from 'react';
-import Link from 'next/link';
+import React, { useState, useMemo, useEffect, useTransition } from 'react';
 import { PageHeader } from '@/components/page-header';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Users2, AlertTriangle, CheckCircle2, UserPlus, Loader2 } from 'lucide-react';
+import { Users2, UserPlus, Loader2, Edit3, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Table,
@@ -18,12 +16,30 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useToast } from '@/hooks/use-toast';
-import { fetchCrewMembers } from '@/ai/flows/manage-crew-flow';
-import type { CrewMember } from '@/ai/schemas/crew-member-schemas';
+import { fetchCrewMembers, saveCrewMember, deleteCrewMember } from '@/ai/flows/manage-crew-flow';
+import type { CrewMember, SaveCrewMemberInput } from '@/ai/schemas/crew-member-schemas';
+import { AddEditCrewMemberModal } from './components/add-edit-crew-member-modal';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export default function CrewRosterPage() {
   const [crewList, setCrewList] = useState<CrewMember[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, startSavingTransition] = useTransition();
+  const [isDeleting, startDeletingTransition] = useTransition();
+  const [currentCrewMember, setCurrentCrewMember] = useState<CrewMember | null>(null);
+  const [crewToDelete, setCrewToDelete] = useState<CrewMember | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const { toast } = useToast();
 
   const loadCrewMembers = async () => {
@@ -44,13 +60,54 @@ export default function CrewRosterPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const summaryData = useMemo(() => {
-    const totalCrew = crewList.length;
-    const pendingOnboarding = crewList.filter(c => c.onboardingStatus !== 'Completed').length;
-    const completedOnboarding = totalCrew - pendingOnboarding;
-    return { totalCrew, pendingOnboarding, completedOnboarding };
-  }, [crewList]);
+  const handleOpenNewModal = () => {
+    setIsEditing(false);
+    setCurrentCrewMember(null);
+    setIsModalOpen(true);
+  };
 
+  const handleOpenEditModal = (crewMember: CrewMember) => {
+    setIsEditing(true);
+    setCurrentCrewMember(crewMember);
+    setIsModalOpen(true);
+  };
+
+  const handleSave = (data: SaveCrewMemberInput) => {
+    startSavingTransition(async () => {
+        try {
+            await saveCrewMember(data);
+            toast({ title: "Success", description: `Crew member ${isEditing ? 'updated' : 'added'}.`});
+            setIsModalOpen(false);
+            await loadCrewMembers();
+        } catch (error) {
+            console.error("Failed to save crew member:", error);
+            toast({ title: "Error", description: `Could not save crew member. ${error instanceof Error ? error.message : ''}`, variant: "destructive"});
+        }
+    });
+  };
+
+  const handleDelete = (crewMember: CrewMember) => {
+    setCrewToDelete(crewMember);
+    setShowDeleteConfirm(true);
+  };
+
+  const executeDelete = async () => {
+    if (!crewToDelete) return;
+    startDeletingTransition(async () => {
+        try {
+            await deleteCrewMember({ crewMemberId: crewToDelete.id });
+            toast({ title: "Success", description: `${crewToDelete.firstName} ${crewToDelete.lastName} has been deleted.` });
+            await loadCrewMembers();
+        } catch (error) {
+            console.error("Failed to delete crew member:", error);
+            toast({ title: "Error", description: `Could not delete crew member. ${error instanceof Error ? error.message : ''}`, variant: "destructive"});
+        } finally {
+            setShowDeleteConfirm(false);
+            setCrewToDelete(null);
+        }
+    });
+  };
+  
   const getInitials = (firstName?: string, lastName?: string) => {
     const first = firstName?.[0] || '';
     const last = lastName?.[0] || '';
@@ -61,22 +118,14 @@ export default function CrewRosterPage() {
     <>
       <PageHeader 
         title="Crew Roster Management" 
-        description="View and manage all crew members and their onboarding status."
+        description="View, add, and manage all crew members in the system."
         icon={Users2}
         actions={
-          <Button asChild>
-            <Link href="/settings/users">
-              <UserPlus className="mr-2 h-4 w-4" /> Add User / Crew
-            </Link>
+          <Button onClick={handleOpenNewModal}>
+            <UserPlus className="mr-2 h-4 w-4" /> Add Crew Member
           </Button>
         }
       />
-
-      <div className="grid gap-4 md:grid-cols-3 mb-6">
-        <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Total Crew Members</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{summaryData.totalCrew}</div></CardContent></Card>
-        <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Onboarding Complete</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{summaryData.completedOnboarding}</div></CardContent></Card>
-        <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-destructive">Pending Onboarding</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-destructive">{summaryData.pendingOnboarding}</div></CardContent></Card>
-      </div>
 
       <Card className="shadow-lg">
         <CardHeader>
@@ -94,15 +143,17 @@ export default function CrewRosterPage() {
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Role</TableHead>
-                  <TableHead>Onboarding Status</TableHead>
+                  <TableHead>Contact</TableHead>
+                  <TableHead>Home Base</TableHead>
+                  <TableHead>Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {crewList.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center text-muted-foreground py-10">
-                      No crew members found. Add a user with the 'Flight Crew' role to begin.
+                    <TableCell colSpan={6} className="text-center text-muted-foreground py-10">
+                      No crew members found. Add one to get started.
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -118,28 +169,22 @@ export default function CrewRosterPage() {
                       </TableCell>
                       <TableCell><Badge variant="outline">{crew.role}</Badge></TableCell>
                       <TableCell>
-                        {crew.onboardingStatus === 'Completed' ? (
-                          <Badge variant="default" className="bg-green-500 hover:bg-green-600">
-                            <CheckCircle2 className="mr-2 h-4 w-4" />
-                            Complete
-                          </Badge>
-                        ) : (
-                          <Badge variant="destructive">
-                            <AlertTriangle className="mr-2 h-4 w-4" />
-                            Attention Needed
-                          </Badge>
-                        )}
+                        <div className="text-sm">{crew.email || 'N/A'}</div>
+                        <div className="text-xs text-muted-foreground">{crew.phone || 'N/A'}</div>
+                      </TableCell>
+                      <TableCell>{crew.homeBase || 'N/A'}</TableCell>
+                      <TableCell>
+                        <Badge variant={crew.isActive ? 'default' : 'secondary'} className={crew.isActive ? "bg-green-500 hover:bg-green-600" : ""}>
+                          {crew.isActive ? 'Active' : 'Inactive'}
+                        </Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        {crew.onboardingStatus !== 'Completed' ? (
-                          <Button asChild>
-                            <Link href={`/crew/onboarding/${crew.id}`}>Complete Onboarding</Link>
-                          </Button>
-                        ) : (
-                          <Button variant="outline" asChild>
-                             <Link href={`/crew/onboarding/${crew.id}`}>View/Edit Profile</Link>
-                          </Button>
-                        )}
+                         <Button variant="ghost" size="icon" onClick={() => handleOpenEditModal(crew)}>
+                           <Edit3 className="h-4 w-4" />
+                         </Button>
+                         <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDelete(crew)} disabled={isDeleting && crewToDelete?.id === crew.id}>
+                            {isDeleting && crewToDelete?.id === crew.id ? <Loader2 className="h-4 w-4 animate-spin"/> : <Trash2 className="h-4 w-4" />}
+                         </Button>
                       </TableCell>
                     </TableRow>
                   ))
@@ -149,26 +194,33 @@ export default function CrewRosterPage() {
           )}
         </CardContent>
       </Card>
-
-      {summaryData.pendingOnboarding > 0 && (
-         <Card className="mt-6 border-destructive">
-            <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-destructive"><AlertTriangle/>Pending Onboarding</CardTitle>
-            </CardHeader>
-            <CardContent>
-                <p>There are <strong className="font-bold">{summaryData.pendingOnboarding} crew members</strong> that require onboarding to be completed.</p>
-                <ul className="list-disc pl-5 mt-2 text-sm">
-                    {crewList.filter(c => c.onboardingStatus !== 'Completed').map(crew => (
-                        <li key={crew.id}>
-                            <Link href={`/crew/onboarding/${crew.id}`} className="text-primary hover:underline">
-                                {crew.firstName} {crew.lastName}
-                            </Link>
-                        </li>
-                    ))}
-                </ul>
-            </CardContent>
-        </Card>
-      )}
+      
+      <AddEditCrewMemberModal
+        isOpen={isModalOpen}
+        setIsOpen={setIsModalOpen}
+        onSave={handleSave}
+        isSaving={isSaving}
+        isEditing={isEditing}
+        initialData={currentCrewMember}
+      />
+      
+      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the record for {crewToDelete?.firstName} {crewToDelete?.lastName}. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setShowDeleteConfirm(false)} disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={executeDelete} disabled={isDeleting}>
+              {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
