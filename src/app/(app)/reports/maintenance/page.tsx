@@ -196,7 +196,7 @@ export default function MaintenanceReportsPage() {
                         {isLoading ? <Skeleton className="h-64 w-full"/> : 
                             pieChartData.length > 0 ? (
                                 <ChartContainer config={{}} className="mx-auto aspect-square max-h-[350px]">
-                                    <PieChart>
+                                    <PieChart margin={{ top: 20, right: 50, bottom: 20, left: 50 }}>
                                         <Pie
                                             data={pieChartData}
                                             dataKey="value"
