@@ -15,7 +15,7 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/
 import { BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, Legend } from 'recharts';
 import { DollarSign, Download, Percent, Users, FileText, TrendingUp, TrendingDown, ArrowRight, Eye, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { subMonths, startOfMonth, endOfMonth, eachWeekOfInterval, format, parseISO, isWithinInterval } from 'date-fns';
+import { addDays, subMonths, startOfMonth, endOfMonth, eachWeekOfInterval, format, parseISO, isWithinInterval } from 'date-fns';
 
 import type { Quote, QuoteStatus } from '@/ai/schemas/quote-schemas';
 import type { Customer } from '@/ai/schemas/customer-schemas';
@@ -117,7 +117,7 @@ export default function QuoteConversionReportPage() {
     const weeks = eachWeekOfInterval({ start: fourWeeksAgo, end: now }, { weekStartsOn: 1 });
 
     return weeks.map(weekStart => {
-        const weekEnd = addDays(weekStart, 6); // Missing import or definition for addDays.
+        const weekEnd = addDays(weekStart, 6);
         const weekQuotes = filteredQuotes.filter(q => isWithinInterval(parseISO(q.createdAt), {start: weekStart, end: weekEnd}));
         return {
             name: format(weekStart, 'MMM d'),
@@ -313,6 +313,3 @@ export default function QuoteConversionReportPage() {
     </div>
   );
 }
-
-
-    
