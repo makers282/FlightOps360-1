@@ -195,7 +195,7 @@ export default function MaintenanceReportsPage() {
                     <CardContent>
                         {isLoading ? <Skeleton className="h-64 w-full"/> : 
                             pieChartData.length > 0 ? (
-                                <ChartContainer config={{}} className="mx-auto aspect-square max-h-[350px]">
+                                <ChartContainer config={{}} className="mx-auto aspect-square max-h-[350px] overflow-visible">
                                     <PieChart margin={{ top: 30, right: 70, bottom: 30, left: 70 }}>
                                         <Pie
                                             data={pieChartData}
