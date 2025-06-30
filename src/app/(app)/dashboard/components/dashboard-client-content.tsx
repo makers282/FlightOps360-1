@@ -24,6 +24,7 @@ import type { Bulletin, BulletinType } from '@/ai/flows/manage-bulletins-flow';
 import type { Trip } from '@/ai/flows/manage-trips-flow';
 import type { FleetAircraft } from '@/ai/flows/manage-fleet-flow';
 import type { SystemAlert } from '../page'; // Import the serializable type from the server component
+import { ClientOnly } from '@/components/client-only';
 
 // Define a mapping from icon name string to actual component
 const iconMap = {
@@ -228,7 +229,9 @@ export function DashboardClientContent({
                                 <Link href={`/trips/details/${trip.id}`} className="flex justify-between items-center hover:bg-muted/50 rounded-md -mx-2 px-2 py-1">
                                     <div>
                                         <p className="font-semibold">{trip.tripId} ({trip.clientName})</p>
-                                        <p className="text-xs text-muted-foreground">Departs {format(parseISO(trip.legs[0].departureDateTime!), 'MM/dd HH:mm')}</p>
+                                        <ClientOnly fallback={<p className="text-xs text-muted-foreground">Loading departure...</p>}>
+                                          <p className="text-xs text-muted-foreground">Departs {format(parseISO(trip.legs[0].departureDateTime!), 'MM/dd HH:mm')}</p>
+                                        </ClientOnly>
                                     </div>
                                     <Badge variant="outline">{trip.status}</Badge>
                                 </Link>
