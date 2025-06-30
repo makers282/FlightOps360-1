@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -15,7 +15,7 @@ import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { DateRange } from "react-day-picker";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from "@/components/ui/chart";
-import { PieChart, Pie, Cell, LineChart, CartesianGrid, XAxis, YAxis, Tooltip as RechartsTooltip, Legend, Line } from 'recharts';
+import { PieChart, Pie, Cell, LineChart, CartesianGrid, XAxis, YAxis, Tooltip as RechartsTooltip, Legend, Line, Sector } from 'recharts';
 
 import { Wrench, Download, Calendar as CalendarIcon, Loader2, TrendingUp, AlertCircle } from 'lucide-react';
 
@@ -32,7 +32,39 @@ const formatCurrency = (value: number | undefined) => {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
 };
 
-const COLORS = ["hsl(200, 70%, 55%)", "hsl(145, 65%, 45%)", "hsl(30, 80%, 55%)", "hsl(280, 55%, 60%)"];
+const renderActiveShape = (props: any) => {
+  const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill, payload, value } = props;
+
+  return (
+    <g>
+      <text x={cx} y={cy - 8} dy={8} textAnchor="middle" fill={fill} className="text-base font-bold">
+        {payload.name}
+      </text>
+      <text x={cx} y={cy + 12} dy={8} textAnchor="middle" fill="hsl(var(--muted-foreground))" className="text-sm">
+        {formatCurrency(value)}
+      </text>
+      <Sector
+        cx={cx}
+        cy={cy}
+        innerRadius={innerRadius}
+        outerRadius={outerRadius}
+        startAngle={startAngle}
+        endAngle={endAngle}
+        fill={fill}
+      />
+      <Sector
+        cx={cx}
+        cy={cy}
+        startAngle={startAngle}
+        endAngle={endAngle}
+        innerRadius={outerRadius + 6}
+        outerRadius={outerRadius + 10}
+        fill={fill}
+      />
+    </g>
+  );
+};
+
 
 export default function MaintenanceReportsPage() {
     const [costs, setCosts] = useState<MaintenanceCost[]>([]);
@@ -46,6 +78,11 @@ export default function MaintenanceReportsPage() {
         from: startOfYear(new Date()),
         to: endOfYear(new Date()),
     });
+
+    const [activeIndex, setActiveIndex] = useState(0);
+    const onPieEnter = useCallback((_: any, index: number) => {
+        setActiveIndex(index);
+    }, [setActiveIndex]);
 
     useEffect(() => {
         const loadData = async () => {
@@ -132,6 +169,14 @@ export default function MaintenanceReportsPage() {
         });
         return Array.from(dataMap.values());
     }, [filteredCosts]);
+
+    const CATEGORY_COLORS: { [key: string]: string } = {
+        Labor: "hsl(200, 70%, 55%)",
+        Parts: "hsl(145, 65%, 45%)",
+        'Shop Fees': "hsl(30, 80%, 55%)",
+        Other: "hsl(280, 55%, 60%)",
+    };
+    const DEFAULT_COLOR = 'hsl(0, 0%, 80%)';
     
     return (
         <div className="max-w-7xl mx-auto space-y-6">
@@ -153,7 +198,45 @@ export default function MaintenanceReportsPage() {
             </CardContent></Card>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <Card><CardHeader><CardTitle>Cost Breakdown by Category</CardTitle></CardHeader><CardContent>{isLoading ? <Skeleton className="h-64 w-full"/> : <ChartContainer config={{}} className="mx-auto aspect-square max-h-[300px]"><PieChart><ChartTooltip content={<ChartTooltipContent nameKey="value" formatter={(value) => formatCurrency(Number(value))}/>}/><Pie data={pieChartData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={60} outerRadius={80} labelLine={false} label={({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => { const radius = innerRadius + (outerRadius - innerRadius) * 0.5; const x = cx + radius * Math.cos(-midAngle * (Math.PI / 180)); const y = cy + radius * Math.sin(-midAngle * (Math.PI / 180)); return (<text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" className="text-xs font-bold">{(percent * 100).toFixed(0)}%</text>);}}>{pieChartData.map((_, index) => (<Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />))}</Pie><ChartLegend content={<ChartLegendContent />} /></PieChart></ChartContainer>}</CardContent></Card>
+                <Card>
+                    <CardHeader><CardTitle>Cost Breakdown by Category</CardTitle></CardHeader>
+                    <CardContent>
+                        {isLoading ? <Skeleton className="h-64 w-full"/> : 
+                            pieChartData.length > 0 ? (
+                                <ChartContainer config={{}} className="mx-auto aspect-square max-h-[300px]">
+                                    <PieChart>
+                                        <ChartTooltip cursor={false} content={<ChartTooltipContent hideLabel />} />
+                                        <Pie
+                                            activeIndex={activeIndex}
+                                            activeShape={renderActiveShape}
+                                            onMouseEnter={onPieEnter}
+                                            data={pieChartData}
+                                            dataKey="value"
+                                            nameKey="name"
+                                            cx="50%"
+                                            cy="50%"
+                                            innerRadius={60}
+                                            outerRadius={80}
+                                            paddingAngle={2}
+                                            labelLine={false}
+                                            label={false}
+                                        >
+                                            {pieChartData.map((entry, index) => (
+                                                <Cell key={`cell-${index}`} fill={CATEGORY_COLORS[entry.name] || DEFAULT_COLOR} />
+                                            ))}
+                                        </Pie>
+                                        <ChartLegend content={<ChartLegendContent />} />
+                                    </PieChart>
+                                </ChartContainer>
+                            ) : (
+                                <div className="text-center py-10 text-muted-foreground">
+                                    <AlertCircle className="mx-auto h-12 w-12" />
+                                    <p className="mt-2">No cost data available for the selected filters.</p>
+                                </div>
+                            )
+                        }
+                    </CardContent>
+                </Card>
                 <Card><CardHeader><CardTitle>Monthly Cost Trend</CardTitle></CardHeader><CardContent>{isLoading ? <Skeleton className="h-64 w-full"/> : <ChartContainer config={{total: { label: "Total Cost", color: "hsl(200, 70%, 55%)"}}} className="aspect-auto h-[300px] w-full"><LineChart data={lineChartData} margin={{left: 12, right: 12}}><CartesianGrid vertical={false} /><XAxis dataKey="name" tickLine={false} axisLine={false} tickMargin={8} tickFormatter={(value) => value.slice(0, 3)} /><YAxis tickLine={false} axisLine={false} tickMargin={8} tickFormatter={(value) => `$${Number(value) / 1000}k`} /><ChartTooltip content={<ChartTooltipContent indicator="dot" />} /><Line type="monotone" dataKey="total" stroke="var(--color-total)" strokeWidth={2} dot={false}/></LineChart></ChartContainer>}</CardContent></Card>
             </div>
 
@@ -161,7 +244,7 @@ export default function MaintenanceReportsPage() {
                 {isLoading ? <Skeleton className="h-48 w-full"/> : 
                 <Table><TableHeader><TableRow><TableHead>Tail Number</TableHead><TableHead className="text-right">Total Cost</TableHead><TableHead className="text-right">Scheduled</TableHead><TableHead className="text-right">Unscheduled</TableHead><TableHead className="text-right">Cost/Hour (TBD)</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
                 <TableBody>{aircraftTableData.length > 0 ? aircraftTableData.map(item => (
-                    <TableRow key={item.tailNumber}><TableCell>{item.tailNumber}</TableCell><TableCell className="text-right font-semibold">{formatCurrency(item.totalCost)}</TableCell><TableCell className="text-right">{formatCurrency(item.scheduledCost)}</TableCell><TableCell className="text-right">{formatCurrency(item.unscheduledCost)}</TableCell><TableCell className="text-right text-muted-foreground">N/A</TableCell><TableCell className="text-right"><Button variant="ghost" size="sm" asChild><Link href={`/aircraft/currency/${item.tailNumber}`}>Details</Link></Button></TableCell></TableRow>
+                    <TableRow key={item.tailNumber}><TableCell>{item.tailNumber}</TableCell><TableCell className="text-right font-semibold">{formatCurrency(item.totalCost)}</TableCell><TableCell className="text-right">{formatCurrency(item.scheduledCost)}</TableCell><TableCell className="text-right">{formatCurrency(item.unscheduledCost)}</TableCell><TableCell className="text-right text-muted-foreground">N/A</TableCell><TableCell className="text-right"><Button variant="ghost" size="sm" asChild><Link href={`/aircraft/currency/${item.aircraftId}`}>Details</Link></Button></TableCell></TableRow>
                 )) : <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground">No data for selected filters.</TableCell></TableRow>}
                 </TableBody></Table>
                 }
