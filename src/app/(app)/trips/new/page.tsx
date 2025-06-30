@@ -78,8 +78,12 @@ function NewTripPageContent() {
           try {
             const originalQuote = await fetchQuoteById({ id: initialQuoteId });
             if (originalQuote) {
-              const updatedQuote = { ...originalQuote, status: "Booked" as TripStatus };
-              await saveQuote(updatedQuote);
+              const { id, createdAt, updatedAt, ...quoteDataForSave } = originalQuote;
+              const updatedQuoteData = {
+                ...quoteDataForSave,
+                status: "Booked" as TripStatus,
+              };
+              await saveQuote(updatedQuoteData);
               toast({ title: "Quote Status Updated", description: `Quote ${originalQuote.quoteId} has been marked as Booked.` });
             }
           } catch (quoteError) {
