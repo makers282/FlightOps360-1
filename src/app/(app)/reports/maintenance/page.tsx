@@ -14,14 +14,14 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { DateRange } from "react-day-picker";
-import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from "@/components/ui/chart";
-import { PieChart, Pie, Cell, LineChart, CartesianGrid, XAxis, YAxis, Tooltip as RechartsTooltip, Legend, Line, Sector } from 'recharts';
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import { PieChart, Pie, Cell, LineChart, CartesianGrid, XAxis, YAxis, Tooltip as RechartsTooltip, Line } from 'recharts';
 
 import { Wrench, Download, Calendar as CalendarIcon, Loader2, TrendingUp, AlertCircle } from 'lucide-react';
 
 import { useToast } from '@/hooks/use-toast';
 import { cn } from "@/lib/utils";
-import { format, isWithinInterval, parseISO, startOfYear, endOfYear, getMonth, getYear } from 'date-fns';
+import { format, isWithinInterval, parseISO } from 'date-fns';
 
 import { fetchMaintenanceCosts, type MaintenanceCost } from '@/ai/flows/manage-maintenance-costs-flow';
 import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
@@ -32,35 +32,30 @@ const formatCurrency = (value: number | undefined) => {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
 };
 
-const renderActiveShape = (props: any) => {
-  const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill, payload, value } = props;
+// Custom label renderer for the Pie Chart
+const RADIAN = Math.PI / 180;
+const renderCustomizedLabel = ({ cx, cy, midAngle, outerRadius, percent, name, fill }: any) => {
+  const radius = outerRadius * 1.35; // Position label further out
+  const x = cx + radius * Math.cos(-midAngle * RADIAN);
+  const y = cy + radius * Math.sin(-midAngle * RADIAN);
+  const sin = Math.sin(-midAngle * RADIAN);
+  const cos = Math.cos(-midAngle * RADIAN);
+  const sx = cx + (outerRadius + 5) * cos;
+  const sy = cy + (outerRadius + 5) * sin;
+  const mx = cx + (outerRadius + 20) * cos;
+  const my = cy + (outerRadius + 20) * sin;
+  const ex = mx + (cos >= 0 ? 1 : -1) * 22;
+  const ey = my;
+  const textAnchor = cos >= 0 ? 'start' : 'end';
+
 
   return (
     <g>
-      <text x={cx} y={cy - 8} dy={8} textAnchor="middle" fill={fill} className="text-base font-bold">
-        {payload.name}
+       <path d={`M${sx},${sy}L${mx},${my}L${ex},${ey}`} stroke={fill} fill="none" />
+       <circle cx={ex} cy={ey} r={2} fill={fill} stroke="none" />
+      <text x={ex + (cos >= 0 ? 1 : -1) * 6} y={ey} textAnchor={textAnchor} fill="hsl(var(--muted-foreground))" dominantBaseline="central" className="text-xs font-medium">
+        {`${name}: ${(percent * 100).toFixed(0)}%`}
       </text>
-      <text x={cx} y={cy + 12} dy={8} textAnchor="middle" fill="hsl(var(--muted-foreground))" className="text-sm">
-        {formatCurrency(value)}
-      </text>
-      <Sector
-        cx={cx}
-        cy={cy}
-        innerRadius={innerRadius}
-        outerRadius={outerRadius}
-        startAngle={startAngle}
-        endAngle={endAngle}
-        fill={fill}
-      />
-      <Sector
-        cx={cx}
-        cy={cy}
-        startAngle={startAngle}
-        endAngle={endAngle}
-        innerRadius={outerRadius + 6}
-        outerRadius={outerRadius + 10}
-        fill={fill}
-      />
     </g>
   );
 };
@@ -74,15 +69,7 @@ export default function MaintenanceReportsPage() {
 
     const [aircraftFilter, setAircraftFilter] = useState('all');
     const [costTypeFilter, setCostTypeFilter] = useState<'all' | 'Scheduled' | 'Unscheduled'>('all');
-    const [dateRange, setDateRange] = useState<DateRange | undefined>({
-        from: startOfYear(new Date()),
-        to: endOfYear(new Date()),
-    });
-
-    const [activeIndex, setActiveIndex] = useState(0);
-    const onPieEnter = useCallback((_: any, index: number) => {
-        setActiveIndex(index);
-    }, [setActiveIndex]);
+    const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
 
     useEffect(() => {
         const loadData = async () => {
@@ -171,10 +158,12 @@ export default function MaintenanceReportsPage() {
     }, [filteredCosts]);
 
     const CATEGORY_COLORS: { [key: string]: string } = {
-        Labor: "hsl(200, 70%, 55%)",
-        Parts: "hsl(145, 65%, 45%)",
-        'Shop Fees': "hsl(30, 80%, 55%)",
-        Other: "hsl(280, 55%, 60%)",
+        Labor: '#4A90E2',
+        Parts: '#7ED321',
+        Consumables: '#F8E71C',
+        'External Services': '#D0021B',
+        'Shop Fees': '#F5A623',
+        Other: '#BD10E0',
     };
     const DEFAULT_COLOR = 'hsl(0, 0%, 80%)';
     
@@ -194,38 +183,34 @@ export default function MaintenanceReportsPage() {
                 <Select value={aircraftFilter} onValueChange={setAircraftFilter}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="all">All Aircraft</SelectItem>{fleet.map(ac => <SelectItem key={ac.id} value={ac.id}>{ac.tailNumber}</SelectItem>)}</SelectContent></Select>
                 <Select value={costTypeFilter} onValueChange={(v) => setCostTypeFilter(v as any)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="all">All Cost Types</SelectItem><SelectItem value="Scheduled">Scheduled</SelectItem><SelectItem value="Unscheduled">Unscheduled</SelectItem></SelectContent></Select>
                 <Popover><PopoverTrigger asChild><Button id="date" variant="outline" className={cn("w-full md:w-auto justify-start text-left font-normal", !dateRange && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{dateRange?.from ? (dateRange.to ? <>{format(dateRange.from, "LLL dd, y")} - {format(dateRange.to, "LLL dd, y")}</> : format(dateRange.from, "LLL dd, y")) : <span>Pick a date</span>}</Button></PopoverTrigger><PopoverContent className="w-auto p-0" align="start"><Calendar initialFocus mode="range" defaultMonth={dateRange?.from} selected={dateRange} onSelect={setDateRange} numberOfMonths={2}/></PopoverContent></Popover>
-                <Button variant="link" onClick={() => { setAircraftFilter('all'); setCostTypeFilter('all'); setDateRange({ from: startOfYear(new Date()), to: endOfYear(new Date()) }); }}>Clear Filters</Button>
+                <Button variant="link" onClick={() => { setAircraftFilter('all'); setCostTypeFilter('all'); setDateRange(undefined); }}>Clear Filters</Button>
             </CardContent></Card>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <Card>
-                    <CardHeader><CardTitle>Cost Breakdown by Category</CardTitle></CardHeader>
+                    <CardHeader>
+                        <CardTitle>Cost Breakdown by Category</CardTitle>
+                        <CardDescription>Distribution of maintenance costs</CardDescription>
+                    </CardHeader>
                     <CardContent>
                         {isLoading ? <Skeleton className="h-64 w-full"/> : 
                             pieChartData.length > 0 ? (
-                                <ChartContainer config={{}} className="mx-auto aspect-square max-h-[300px]">
+                                <ChartContainer config={{}} className="mx-auto aspect-square max-h-[350px]">
                                     <PieChart>
-                                        <ChartTooltip cursor={false} content={<ChartTooltipContent hideLabel />} />
                                         <Pie
-                                            activeIndex={activeIndex}
-                                            activeShape={renderActiveShape}
-                                            onMouseEnter={onPieEnter}
                                             data={pieChartData}
                                             dataKey="value"
                                             nameKey="name"
                                             cx="50%"
                                             cy="50%"
-                                            innerRadius={60}
                                             outerRadius={80}
-                                            paddingAngle={2}
-                                            labelLine={false}
-                                            label={false}
+                                            labelLine={true}
+                                            label={renderCustomizedLabel}
                                         >
                                             {pieChartData.map((entry, index) => (
                                                 <Cell key={`cell-${index}`} fill={CATEGORY_COLORS[entry.name] || DEFAULT_COLOR} />
                                             ))}
                                         </Pie>
-                                        <ChartLegend content={<ChartLegendContent />} />
                                     </PieChart>
                                 </ChartContainer>
                             ) : (
