@@ -158,12 +158,12 @@ export default function MaintenanceReportsPage() {
     }, [filteredCosts]);
 
     const CATEGORY_COLORS: { [key: string]: string } = {
-        Labor: '#4A90E2',
-        Parts: '#7ED321',
-        Consumables: '#F8E71C',
-        'External Services': '#D0021B',
-        'Shop Fees': '#F5A623',
-        Other: '#BD10E0',
+        Labor: '#4A90E2', // Blue
+        Parts: '#7ED321', // Green
+        'Shop Fees': '#F5A623', // Orange
+        Consumables: '#F8E71C', // Yellow
+        'External Services': '#D0021B', // Red
+        Other: '#BD10E0', // Purple
     };
     const DEFAULT_COLOR = 'hsl(0, 0%, 80%)';
     
@@ -196,7 +196,7 @@ export default function MaintenanceReportsPage() {
                         {isLoading ? <Skeleton className="h-64 w-full"/> : 
                             pieChartData.length > 0 ? (
                                 <ChartContainer config={{}} className="mx-auto aspect-square max-h-[350px]">
-                                    <PieChart margin={{ top: 20, right: 50, bottom: 20, left: 50 }}>
+                                    <PieChart margin={{ top: 30, right: 70, bottom: 30, left: 70 }}>
                                         <Pie
                                             data={pieChartData}
                                             dataKey="value"
