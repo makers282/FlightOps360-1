@@ -22,7 +22,7 @@ import { auth } from '@/lib/firebase';
 import type { User as FirebaseUser } from 'firebase/auth';
 import type { Bulletin, BulletinType } from '@/ai/flows/manage-bulletins-flow';
 import type { Trip } from '@/ai/flows/manage-trips-flow';
-import type { FleetAircraft } from '@/ai/flows/manage-fleet-flow';
+import type { FleetAircraft } from '@/ai/schemas/fleet-aircraft-schemas';
 import type { SystemAlert } from '../page'; // Import the serializable type from the server component
 
 // Define a mapping from icon name string to actual component
@@ -195,7 +195,20 @@ export function DashboardClientContent({
                 </AccordionTrigger>
                 <AccordionContent className="pt-0"><CardContent className="pb-4 px-4">{
                     bulletins.length === 0 ? <p className="text-sm text-muted-foreground text-center py-3">No active company bulletins.</p> :
-                    <List>{bulletins.map((item, index) => (<React.Fragment key={item.id}><ListItem onClick={() => handleBulletinClick(item)} className="cursor-pointer hover:bg-muted/50 rounded-md px-2 -mx-2 py-3 flex justify-between items-center"><p className="font-semibold">{item.title}</p><Badge variant={getBulletinTypeBadgeVariant(item.type)}>{item.type}</Badge></ListItem>{index < bulletins.length - 1 && <Separator />}</React.Fragment>))}</List>
+                    <List>{bulletins.map((item, index) => (
+                      <React.Fragment key={item.id}>
+                        <ListItem onClick={() => handleBulletinClick(item)} className="cursor-pointer hover:bg-muted/50 rounded-md -mx-2 px-2 py-3 flex-col items-start">
+                          <div className="flex justify-between items-center w-full">
+                            <p className="font-semibold">{item.title}</p>
+                            <Badge variant={getBulletinTypeBadgeVariant(item.type)}>{item.type}</Badge>
+                          </div>
+                          <p className="text-sm text-muted-foreground mt-1 truncate" title={item.message}>
+                            {item.message}
+                          </p>
+                        </ListItem>
+                        {index < bulletins.length - 1 && <Separator />}
+                      </React.Fragment>
+                    ))}</List>
                 }</CardContent></AccordionContent>
             </AccordionItem>
         </Accordion>
