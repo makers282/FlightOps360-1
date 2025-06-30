@@ -120,7 +120,7 @@ const saveCompanyDocumentFlow = ai.defineFlow(
         ...documentData,
         tags: documentData.tags || [], // Ensure tags is an array
         updatedAt: FieldValue.serverTimestamp(),
-        createdAt: docSnap.exists() && docSnap.data()?.createdAt ? docSnap.data()?.createdAt : FieldValue.serverTimestamp(),
+        createdAt: docSnap.exists && docSnap.data()?.createdAt ? docSnap.data()?.createdAt : FieldValue.serverTimestamp(),
       };
 
       await documentDocRef.set(dataWithTimestamps, { merge: true });

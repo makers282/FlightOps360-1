@@ -126,7 +126,7 @@ const saveCustomerFlow = ai.defineFlow(
         ...customerData,
         isActive: customerData.isActive === undefined ? true : customerData.isActive, // Default again before saving
         updatedAt: FieldValue.serverTimestamp(),
-        createdAt: docSnap.exists() && docSnap.data()?.createdAt ? docSnap.data()?.createdAt : FieldValue.serverTimestamp(), // Preserve original createdAt if doc exists
+        createdAt: docSnap.exists && docSnap.data()?.createdAt ? docSnap.data()?.createdAt : FieldValue.serverTimestamp(), // Preserve original createdAt if doc exists
       };
 
       await customerDocRef.set(dataWithTimestamps, { merge: true });
