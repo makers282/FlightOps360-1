@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useEffect, useTransition, useMemo } from 'react';
+import React, { useState, useEffect, useTransition, useMemo, useCallback } from 'react';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Users, ShieldCheck, PlusCircle, Edit3, Trash2, Search, Loader2 } from 'lucide-react';
@@ -37,56 +37,13 @@ import { fetchRoles, saveRole, deleteRole } from '@/ai/flows/manage-roles-flow';
 import { fetchUsers } from '@/ai/flows/manage-users-flow';
 import type { Role, SaveRoleInput, Permission } from '@/ai/schemas/role-schemas';
 import type { User } from '@/ai/flows/manage-users-flow';
-import { availablePermissions } from '@/ai/schemas/role-schemas';
 import { AddEditRoleModal } from './components/add-edit-role-modal';
 import { useToast } from '@/hooks/use-toast';
 import { auth } from '@/lib/firebase';
 
 const formatPermissionName = (permission: Permission | string) => {
-  return permission.replace(/_/g, ' ').replace(/\w/g, l => l.toUpperCase());
+  return permission.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 };
-
-const predefinedRoles: SaveRoleInput[] = [
-  {
-    name: "Administrator",
-    description: "Full access to all system features and settings.",
-    permissions: [...availablePermissions] as Permission[],
-    isSystemRole: true,
-  },
-  {
-    name: "Flight Crew",
-    description: "Access to flight schedules, aircraft status, and FRAT submission.",
-    permissions: ["VIEW_TRIPS", "ACCESS_FRAT_PAGE", "ACCESS_DOCUMENTS_PAGE", "VIEW_DASHBOARD"] as Permission[],
-    isSystemRole: true,
-  },
-  {
-    name: "Dispatch",
-    description: "Manages trip scheduling, flight releases, and optimal routing.",
-    permissions: ["MANAGE_TRIPS", "VIEW_TRIPS", "ACCESS_OPTIMAL_ROUTE_PAGE", "VIEW_DASHBOARD"] as Permission[],
-    isSystemRole: true,
-  },
-  {
-    name: "Maintenance",
-    description: "Tracks aircraft compliance and maintenance schedules.",
-    permissions: ["MANAGE_AIRCRAFT_MAINTENANCE_DATA", "VIEW_DASHBOARD"] as Permission[],
-    isSystemRole: true,
-  },
-  {
-    name: "Sales",
-    description: "Manages quotes and customer communication.",
-    permissions: ["CREATE_QUOTES", "VIEW_ALL_QUOTES", "MANAGE_CUSTOMERS", "VIEW_DASHBOARD"] as Permission[],
-    isSystemRole: true,
-  },
-  {
-    name: "FAA Inspector",
-    description: "Read-only access to compliance and operational data.",
-    permissions: ["ACCESS_DOCUMENTS_PAGE", "VIEW_TRIPS", "VIEW_DASHBOARD"] as Permission[],
-    isSystemRole: true,
-  }
-].sort((a, b) => { 
-    const order = ["Administrator", "Flight Crew", "Dispatch", "Maintenance", "Sales", "FAA Inspector"];
-    return order.indexOf(a.name!) - order.indexOf(b.name!);
-});
 
 
 export default function UserRolesPage() {
@@ -110,43 +67,36 @@ export default function UserRolesPage() {
     const checkAdminStatus = async () => {
       const user = auth.currentUser;
       if (user) {
-        const idTokenResult = await user.getIdTokenResult();
-        setIsUserAdmin(idTokenResult.claims.roles?.includes('Administrator'));
+        try {
+          const idTokenResult = await user.getIdTokenResult();
+          const userRoles = idTokenResult.claims.roles as string[] | undefined;
+          const allRoles = await fetchRoles(); // Fetch roles to map ID to name
+          const adminRole = allRoles.find(r => r.name === "Administrator");
+          if (userRoles && adminRole && userRoles.includes(adminRole.id)) {
+            setIsUserAdmin(true);
+          }
+        } catch (error) {
+          console.error("Error checking admin status:", error);
+          setIsUserAdmin(false);
+        }
       }
     };
-    checkAdminStatus();
+    const unsubscribe = auth.onAuthStateChanged((user) => {
+        if (user) {
+            checkAdminStatus();
+        } else {
+            setIsUserAdmin(false);
+        }
+    });
+
+    return () => unsubscribe();
   }, []);
 
-  const seedPredefinedRoles = async (existingRoles: Role[]) => {
-    const rolesToCreate = predefinedRoles.filter(
-      pRole => !existingRoles.some(eRole => eRole.name === pRole.name && eRole.isSystemRole)
-    );
-
-    if (rolesToCreate.length > 0) {
-      toast({ title: "Initializing System Roles", description: `Creating ${rolesToCreate.length} predefined roles...` });
-      try {
-        for (const roleData of rolesToCreate) {
-          await saveRole({ ...roleData, permissions: roleData.permissions as Permission[] });
-        }
-        toast({ title: "System Roles Initialized", description: "Predefined roles have been added to Firestore.", variant: "default" });
-        return true; 
-      } catch (error) {
-        console.error("Failed to seed predefined roles:", error);
-        toast({ title: "Error Seeding Roles", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
-        return false;
-      }
-    }
-    return false; 
-  };
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      let [fetchedRoles, fetchedUsers] = await Promise.all([fetchRoles(), fetchUsers()]);
-      const wasSeeded = await seedPredefinedRoles(fetchedRoles);
-      if (wasSeeded) {
-        fetchedRoles = await fetchRoles(); 
-      }
+      // The seeding logic is now handled inside fetchRoles on the backend
+      const [fetchedRoles, fetchedUsers] = await Promise.all([fetchRoles(), fetchUsers()]);
       setRolesList(fetchedRoles);
       setUsersList(fetchedUsers);
     } catch (error) {
@@ -155,11 +105,11 @@ export default function UserRolesPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [toast]);
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [loadData]);
 
   const handleOpenAddModal = () => {
     setIsEditingModal(false);

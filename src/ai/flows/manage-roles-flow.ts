@@ -11,18 +11,90 @@
 import { ai } from '@/ai/genkit';
 import { adminDb as db } from '@/lib/firebase-admin';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
-import type { Role, SaveRoleInput } from '@/ai/schemas/role-schemas';
+import { z } from 'zod';
+import type { Role, SaveRoleInput, Permission } from '@/ai/schemas/role-schemas';
 import {
     RoleSchema,
     SaveRoleInputSchema,
     SaveRoleOutputSchema,
     FetchRolesOutputSchema,
     DeleteRoleInputSchema,
-    DeleteRoleOutputSchema
+    DeleteRoleOutputSchema,
+    availablePermissions,
 } from '@/ai/schemas/role-schemas';
-import { z } from 'zod';
+
 
 const ROLES_COLLECTION = 'roles';
+
+const predefinedRoles: SaveRoleInput[] = [
+  {
+    name: "Administrator",
+    description: "Full access to all system features and settings.",
+    permissions: [...availablePermissions] as Permission[],
+    isSystemRole: true,
+  },
+  {
+    name: "Flight Crew",
+    description: "Access to flight schedules, aircraft status, and FRAT submission.",
+    permissions: ["VIEW_TRIPS", "ACCESS_FRAT_PAGE", "ACCESS_DOCUMENTS_PAGE", "VIEW_DASHBOARD"] as Permission[],
+    isSystemRole: true,
+  },
+  {
+    name: "Dispatch",
+    description: "Manages trip scheduling, flight releases, and optimal routing.",
+    permissions: ["MANAGE_TRIPS", "VIEW_TRIPS", "ACCESS_OPTIMAL_ROUTE_PAGE", "VIEW_DASHBOARD"] as Permission[],
+    isSystemRole: true,
+  },
+  {
+    name: "Maintenance",
+    description: "Tracks aircraft compliance and maintenance schedules.",
+    permissions: ["MANAGE_AIRCRAFT_MAINTENANCE_DATA", "VIEW_DASHBOARD"] as Permission[],
+    isSystemRole: true,
+  },
+  {
+    name: "Sales",
+    description: "Manages quotes and customer communication.",
+    permissions: ["CREATE_QUOTES", "VIEW_ALL_QUOTES", "MANAGE_CUSTOMERS", "VIEW_DASHBOARD"] as Permission[],
+    isSystemRole: true,
+  },
+  {
+    name: "FAA Inspector",
+    description: "Read-only access to compliance and operational data.",
+    permissions: ["ACCESS_DOCUMENTS_PAGE", "VIEW_TRIPS", "VIEW_DASHBOARD"] as Permission[],
+    isSystemRole: true,
+  }
+];
+
+// This function checks for and creates any missing system roles.
+async function seedPredefinedRoles() {
+  if (!db) return;
+  const rolesCollectionRef = db.collection(ROLES_COLLECTION);
+  const existingRolesSnapshot = await rolesCollectionRef.where('isSystemRole', '==', true).get();
+  const existingSystemRoleNames = new Set(existingRolesSnapshot.docs.map(doc => doc.data().name));
+
+  const rolesToCreate = predefinedRoles.filter(pRole => !existingSystemRoleNames.has(pRole.name!));
+  
+  if (rolesToCreate.length > 0) {
+    console.log(`[seedPredefinedRoles] Seeding ${rolesToCreate.length} missing system roles...`);
+    const batch = db.batch();
+    for (const roleData of rolesToCreate) {
+        // Use a consistent, predictable ID for system roles.
+        const roleId = roleData.name!.toLowerCase().replace(/\s+/g, '-');
+        const roleDocRef = rolesCollectionRef.doc(roleId);
+        const dataWithTimestamps = {
+            ...roleData,
+            updatedAt: FieldValue.serverTimestamp(),
+            createdAt: FieldValue.serverTimestamp(),
+        };
+        batch.set(roleDocRef, dataWithTimestamps);
+    }
+    await batch.commit();
+    console.log('[seedPredefinedRoles] System roles seeded successfully.');
+    return true; // Indicate that seeding happened
+  }
+  return false; // No seeding was needed
+}
+
 
 // Exported async functions that clients will call
 export async function fetchRoles(): Promise<Role[]> {
@@ -71,6 +143,10 @@ const fetchRolesFlow = ai.defineFlow(
         throw new Error("Firestore admin instance (db) is not initialized in fetchRolesFlow.");
     }
     console.log('Executing fetchRolesFlow - Firestore');
+
+    // Ensure system roles exist before fetching
+    await seedPredefinedRoles();
+
     try {
       const rolesCollectionRef = db.collection(ROLES_COLLECTION);
       const snapshot = await rolesCollectionRef.get();
@@ -121,7 +197,7 @@ const saveRoleFlow = ai.defineFlow(
         permissions: roleData.permissions || [], // Ensure permissions is an array
         isSystemRole: roleData.isSystemRole || false,
         updatedAt: FieldValue.serverTimestamp(),
-        createdAt: docSnap.exists && docSnap.data()?.createdAt ? docSnap.data()?.createdAt : FieldValue.serverTimestamp(),
+        createdAt: docSnap.exists ? docSnap.data()?.createdAt : FieldValue.serverTimestamp(),
       };
 
       await roleDocRef.set(dataWithTimestamps, { merge: true });
@@ -129,6 +205,10 @@ const saveRoleFlow = ai.defineFlow(
       
       const savedDoc = await roleDocRef.get();
       const savedData = savedDoc.data();
+
+      if (!savedData) {
+        throw new Error(`Failed to retrieve saved role data for ID: ${roleId}`);
+      }
 
       return {
         id: roleId,
