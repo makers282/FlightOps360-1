@@ -1,19 +1,18 @@
-
 'use server';
 /**
  * @fileOverview Genkit flows for managing crew member data using Firestore.
  *
- * - fetchCrewMembers - Fetches all crew members.
+ * - fetchCrewMembers - Fetches all crew members, reconciling with Firebase Auth.
  * - saveCrewMember - Saves (adds or updates) a crew member.
  * - deleteCrewMember - Deletes a crew member.
  */
 
 import { ai } from '@/ai/genkit';
-import { adminDb as db } from '@/lib/firebase-admin';
+import { adminApp, adminDb as db } from '@/lib/firebase-admin';
+import { getAuth } from 'firebase-admin/auth';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import type { CrewMember, SaveCrewMemberInput } from '@/ai/schemas/crew-member-schemas';
 import {
-    // CrewMemberSchema, // For validating output type if needed directly
     SaveCrewMemberInputSchema,
     SaveCrewMemberOutputSchema,
     FetchCrewMembersOutputSchema,
@@ -21,93 +20,9 @@ import {
     DeleteCrewMemberOutputSchema
 } from '@/ai/schemas/crew-member-schemas';
 import { z } from 'zod';
+import { fetchRoles } from './manage-roles-flow';
 
 const CREW_MEMBERS_COLLECTION = 'crewMembers';
-
-// Mock data for testing if Firestore is empty
-const mockCrewMembersList: CrewMember[] = [
-  {
-    id: 'mock-capt-001',
-    employeeId: 'EMP001',
-    firstName: 'Ava',
-    lastName: 'Williams',
-    role: 'Captain',
-    email: 'ava.williams@example.com',
-    phone: '555-0101',
-    licenses: [{ type: 'ATP', number: '12345', expiryDate: '2025-12-31' }],
-    typeRatings: ['C560', 'GLEX'],
-    homeBase: 'KTEB',
-    isActive: true,
-    notes: 'Experienced captain, check airman.',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'mock-fo-002',
-    employeeId: 'EMP002',
-    firstName: 'Ben',
-    lastName: 'Carter',
-    role: 'First Officer',
-    email: 'ben.carter@example.com',
-    phone: '555-0102',
-    licenses: [{ type: 'CPL', number: '67890', expiryDate: '2024-11-15' }],
-    typeRatings: ['C560'],
-    homeBase: 'KHPN',
-    isActive: true,
-    notes: 'Recently completed line training.',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'mock-fa-003',
-    employeeId: 'EMP003',
-    firstName: 'Chloe',
-    lastName: 'Davis',
-    role: 'Flight Attendant',
-    email: 'chloe.davis@example.com',
-    phone: '555-0103',
-    licenses: [{ type: 'FA Cert', expiryDate: '2026-06-01' }],
-    typeRatings: [],
-    homeBase: 'KDAL',
-    isActive: true,
-    notes: 'Lead flight attendant.',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'mock-fa-004',
-    employeeId: 'EMP004',
-    firstName: 'David',
-    lastName: 'Miller',
-    role: 'Flight Attendant',
-    email: 'david.miller@example.com',
-    phone: '555-0104',
-    licenses: [{ type: 'FA Cert', expiryDate: '2025-08-10' }],
-    typeRatings: [],
-    homeBase: 'KVNY',
-    isActive: true,
-    notes: '',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'mock-other-005',
-    employeeId: 'EMP005',
-    firstName: 'Elena',
-    lastName: 'Rodriguez',
-    role: 'Mechanic',
-    email: 'elena.rodriguez@example.com',
-    phone: '555-0105',
-    licenses: [{ type: 'A&P License' }],
-    typeRatings: [],
-    homeBase: 'KMIA',
-    isActive: false,
-    notes: 'Specializes in avionics. Currently on leave.',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-];
-
 
 // Exported async functions that clients will call
 export async function fetchCrewMembers(): Promise<CrewMember[]> {
@@ -115,7 +30,6 @@ export async function fetchCrewMembers(): Promise<CrewMember[]> {
     console.error("CRITICAL: Firestore admin instance (db) is not initialized in fetchCrewMembers (manage-crew-flow). Admin SDK init likely failed.");
     throw new Error("Firestore admin instance (db) is not initialized in fetchCrewMembers.");
   }
-  console.log('[ManageCrewFlow Firestore Admin] Attempting to fetch all crew members.');
   return fetchCrewMembersFlow();
 }
 
@@ -157,40 +71,98 @@ const fetchCrewMembersFlow = ai.defineFlow(
   async () => {
     if (!db) {
         console.error("CRITICAL: Firestore admin instance (db) is not initialized in fetchCrewMembersFlow.");
-        throw new Error("Firestore admin instance (db) is not initialized in fetchCrewMembersFlow.");
+        throw new Error("Firestore admin instance is not initialized.");
     }
-    console.log('Executing fetchCrewMembersFlow - Firestore');
+    console.log('Executing fetchCrewMembersFlow - Firestore Admin with reconciliation');
+
     try {
-      const crewMembersCollectionRef = db.collection(CREW_MEMBERS_COLLECTION);
-      const snapshot = await crewMembersCollectionRef.get();
-      if (snapshot.empty) {
-        console.log('No crew members found in Firestore. Returning mock data for testing.');
-        return mockCrewMembersList;
-      }
-      const crewList = snapshot.docs.map(docSnapshot => {
-        const data = docSnapshot.data();
-        // Convert Firestore Timestamps to ISO strings for client compatibility
-        return {
-          id: docSnapshot.id,
-          ...data,
-          createdAt: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
-          updatedAt: (data.updatedAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
-          // Ensure arrays are present even if undefined in DB
-          licenses: data.licenses || [],
-          typeRatings: data.typeRatings || [],
-        } as CrewMember;
-      });
-      console.log('Fetched crew members from Firestore:', crewList.length, 'members.');
-      return crewList;
+        // Step 1: Fetch all necessary data concurrently
+        const [authUsersList, crewDocsSnapshot, rolesList] = await Promise.all([
+            getAuth(adminApp).listUsers(),
+            db.collection(CREW_MEMBERS_COLLECTION).get(),
+            fetchRoles(), // This helper function now seeds roles if needed
+        ]);
+        
+        // Step 2: Find the 'Flight Crew' role ID
+        const flightCrewRole = rolesList.find(r => r.name === 'Flight Crew');
+        if (!flightCrewRole) {
+            console.error("[fetchCrewMembersFlow] CRITICAL: 'Flight Crew' role not found in the database. Cannot determine which users are crew members.");
+            return []; // Cannot proceed without this role definition
+        }
+        const flightCrewRoleId = flightCrewRole.id;
+        
+        // Step 3: Map existing crew documents by their associated userId
+        const existingCrewMap = new Map<string, CrewMember>();
+        crewDocsSnapshot.forEach(doc => {
+            const data = doc.data();
+            // Important: map by userId for reconciliation with Auth users
+            if (data.userId) { 
+                existingCrewMap.set(data.userId, {
+                    id: doc.id,
+                    ...data,
+                    createdAt: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
+                    updatedAt: (data.updatedAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
+                    licenses: data.licenses || [],
+                    typeRatings: data.typeRatings || [],
+                    onboardingStatus: data.onboardingStatus || 'Pending',
+                } as CrewMember);
+            }
+        });
+
+        // Step 4: Reconcile Auth users with Firestore crew documents
+        const reconciledCrewPromises: Promise<CrewMember | null>[] = authUsersList.users.map(async (authUser) => {
+            const userRoles = (authUser.customClaims?.roles as string[]) || [];
+
+            // Check if user has the Flight Crew role
+            if (userRoles.includes(flightCrewRoleId)) {
+                // If they exist in our Firestore map, return that data
+                if (existingCrewMap.has(authUser.uid)) {
+                    return existingCrewMap.get(authUser.uid)!;
+                }
+
+                // If they DON'T exist in Firestore, they are a "missing" crew member.
+                // We need to create a profile for them.
+                console.log(`[fetchCrewMembersFlow] Reconciling: User ${authUser.email} has Flight Crew role but no crew profile. Creating one now.`);
+                
+                const [firstName, ...lastNameParts] = (authUser.displayName || 'New Crew').split(' ');
+                const lastName = lastNameParts.join(' ') || 'Member';
+
+                const newCrewMemberData: SaveCrewMemberInput = {
+                    firstName,
+                    lastName,
+                    email: authUser.email,
+                    userId: authUser.uid, // Link to the auth user
+                    role: 'Other', // A default role to be updated during onboarding
+                    isActive: !authUser.disabled,
+                    onboardingStatus: 'Pending', // Explicitly set as Pending
+                    // Other fields will use schema defaults
+                };
+                
+                try {
+                    // Use the existing saveCrewMember function to create the document in Firestore
+                    const savedCrewMember = await saveCrewMember(newCrewMemberData);
+                    return savedCrewMember; // Return the newly created and saved crew member
+                } catch (saveError) {
+                    console.error(`[fetchCrewMembersFlow] Failed to auto-create crew profile for ${authUser.email}:`, saveError);
+                    return null; // Skip this user if saving fails
+                }
+            }
+            
+            return null; // Not a flight crew member
+        });
+
+        const reconciledCrewMembers = (await Promise.all(reconciledCrewPromises)).filter((c): c is CrewMember => c !== null);
+
+        console.log(`[fetchCrewMembersFlow] Reconciled and fetched ${reconciledCrewMembers.length} crew members.`);
+        return reconciledCrewMembers;
+
     } catch (error) {
-      console.error('Error fetching crew members from Firestore:', error);
-      // Optionally, return mock data on error during testing phase
-      // console.log('Error occurred, returning mock data for testing.');
-      // return mockCrewMembersList; 
-      throw new Error(`Failed to fetch crew members: ${error instanceof Error ? error.message : String(error)}`);
+      console.error('Error in fetchCrewMembersFlow reconciliation process:', error);
+      throw new Error(`Failed to fetch and reconcile crew members: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 );
+
 
 // Internal schema for saveCrewMemberFlow input
 const InternalSaveCrewMemberInputSchema = z.object({
@@ -218,9 +190,10 @@ const saveCrewMemberFlow = ai.defineFlow(
         ...crewMemberData,
         licenses: crewMemberData.licenses || [], // Ensure array
         typeRatings: crewMemberData.typeRatings || [], // Ensure array
+        onboardingStatus: crewMemberData.onboardingStatus || 'Pending',
         updatedAt: FieldValue.serverTimestamp(),
         // Preserve original createdAt if doc exists, otherwise set new serverTimestamp
-        createdAt: docSnap.exists && docSnap.data()?.createdAt ? docSnap.data()?.createdAt : FieldValue.serverTimestamp(),
+        createdAt: docSnap.exists() && docSnap.data()?.createdAt ? docSnap.data()?.createdAt : FieldValue.serverTimestamp(),
       };
 
       await crewMemberDocRef.set(dataWithTimestamps, { merge: true });
