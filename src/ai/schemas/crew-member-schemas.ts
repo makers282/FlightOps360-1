@@ -7,9 +7,34 @@ import { z } from 'zod';
 export const crewRoles = ["Captain", "First Officer", "Flight Attendant", "Flight Medic", "Mechanic", "Loadmaster", "Other"] as const;
 export type CrewRole = typeof crewRoles[number];
 
+export const employmentTypes = ["Full-Time", "Part-Time", "Contractor"] as const;
+export type EmploymentType = typeof employmentTypes[number];
+
+// Schema for the onboarding wizard data structure
+export const OnboardingDataSchema = z.object({
+  // Step 1: Personal & Contact
+  dateOfBirth: z.string().optional(),
+  address: z.object({
+    street1: z.string().optional(),
+    street2: z.string().optional(),
+    city: z.string().optional(),
+    state: z.string().optional(),
+    zip: z.string().optional(),
+    country: z.string().optional(),
+  }).optional(),
+
+  // Step 2: Employment & Role
+  employmentType: z.enum(employmentTypes).optional(),
+  aircraftQualifications: z.array(z.string()).optional().default([]),
+  priaEligible: z.boolean().optional().default(false),
+  
+  // Step 4: Training
+  assignedTrainings: z.array(z.string()).optional().default([]),
+});
+
 export const CrewMemberSchema = z.object({
   id: z.string().describe("Unique Firestore document ID for the crew member."),
-  userId: z.string().optional().describe("The ID of the associated system user account, if any."), // Added for future integration
+  userId: z.string().optional().describe("The ID of the associated system user account, if any."),
   employeeId: z.string().optional().describe("Employee ID or similar internal identifier."),
   firstName: z.string().min(1, "First name is required."),
   lastName: z.string().min(1, "Last name is required."),
@@ -30,6 +55,9 @@ export const CrewMemberSchema = z.object({
   isActive: z.boolean().default(true).describe("Whether the crew member is currently active."),
   
   notes: z.string().optional().describe("Internal notes about the crew member."),
+
+  onboardingStatus: z.enum(['Pending', 'Completed']).default('Pending').describe("The status of the crew member's onboarding process."),
+  onboardingData: OnboardingDataSchema.optional(),
 
   createdAt: z.string().describe("ISO string format, server-generated timestamp."),
   updatedAt: z.string().describe("ISO string format, server-generated timestamp."),
@@ -58,4 +86,3 @@ export const DeleteCrewMemberOutputSchema = z.object({
   success: z.boolean(),
   crewMemberId: z.string(),
 });
-

@@ -13,7 +13,6 @@ import { adminDb as db } from '@/lib/firebase-admin';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import type { CrewMember, SaveCrewMemberInput } from '@/ai/schemas/crew-member-schemas';
 import {
-    // CrewMemberSchema, // For validating output type if needed directly
     SaveCrewMemberInputSchema,
     SaveCrewMemberOutputSchema,
     FetchCrewMembersOutputSchema,
@@ -23,91 +22,6 @@ import {
 import { z } from 'zod';
 
 const CREW_MEMBERS_COLLECTION = 'crewMembers';
-
-// Mock data for testing if Firestore is empty
-const mockCrewMembersList: CrewMember[] = [
-  {
-    id: 'mock-capt-001',
-    employeeId: 'EMP001',
-    firstName: 'Ava',
-    lastName: 'Williams',
-    role: 'Captain',
-    email: 'ava.williams@example.com',
-    phone: '555-0101',
-    licenses: [{ type: 'ATP', number: '12345', expiryDate: '2025-12-31' }],
-    typeRatings: ['C560', 'GLEX'],
-    homeBase: 'KTEB',
-    isActive: true,
-    notes: 'Experienced captain, check airman.',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'mock-fo-002',
-    employeeId: 'EMP002',
-    firstName: 'Ben',
-    lastName: 'Carter',
-    role: 'First Officer',
-    email: 'ben.carter@example.com',
-    phone: '555-0102',
-    licenses: [{ type: 'CPL', number: '67890', expiryDate: '2024-11-15' }],
-    typeRatings: ['C560'],
-    homeBase: 'KHPN',
-    isActive: true,
-    notes: 'Recently completed line training.',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'mock-fa-003',
-    employeeId: 'EMP003',
-    firstName: 'Chloe',
-    lastName: 'Davis',
-    role: 'Flight Attendant',
-    email: 'chloe.davis@example.com',
-    phone: '555-0103',
-    licenses: [{ type: 'FA Cert', expiryDate: '2026-06-01' }],
-    typeRatings: [],
-    homeBase: 'KDAL',
-    isActive: true,
-    notes: 'Lead flight attendant.',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'mock-fa-004',
-    employeeId: 'EMP004',
-    firstName: 'David',
-    lastName: 'Miller',
-    role: 'Flight Attendant',
-    email: 'david.miller@example.com',
-    phone: '555-0104',
-    licenses: [{ type: 'FA Cert', expiryDate: '2025-08-10' }],
-    typeRatings: [],
-    homeBase: 'KVNY',
-    isActive: true,
-    notes: '',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'mock-other-005',
-    employeeId: 'EMP005',
-    firstName: 'Elena',
-    lastName: 'Rodriguez',
-    role: 'Mechanic',
-    email: 'elena.rodriguez@example.com',
-    phone: '555-0105',
-    licenses: [{ type: 'A&P License' }],
-    typeRatings: [],
-    homeBase: 'KMIA',
-    isActive: false,
-    notes: 'Specializes in avionics. Currently on leave.',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-];
-
 
 // Exported async functions that clients will call
 export async function fetchCrewMembers(): Promise<CrewMember[]> {
@@ -164,8 +78,8 @@ const fetchCrewMembersFlow = ai.defineFlow(
       const crewMembersCollectionRef = db.collection(CREW_MEMBERS_COLLECTION);
       const snapshot = await crewMembersCollectionRef.get();
       if (snapshot.empty) {
-        console.log('No crew members found in Firestore. Returning mock data for testing.');
-        return mockCrewMembersList;
+        console.log('No crew members found in Firestore. Returning empty list.');
+        return [];
       }
       const crewList = snapshot.docs.map(docSnapshot => {
         const data = docSnapshot.data();
@@ -178,15 +92,13 @@ const fetchCrewMembersFlow = ai.defineFlow(
           // Ensure arrays are present even if undefined in DB
           licenses: data.licenses || [],
           typeRatings: data.typeRatings || [],
+          onboardingStatus: data.onboardingStatus || 'Pending',
         } as CrewMember;
       });
       console.log('Fetched crew members from Firestore:', crewList.length, 'members.');
       return crewList;
     } catch (error) {
       console.error('Error fetching crew members from Firestore:', error);
-      // Optionally, return mock data on error during testing phase
-      // console.log('Error occurred, returning mock data for testing.');
-      // return mockCrewMembersList; 
       throw new Error(`Failed to fetch crew members: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
@@ -218,6 +130,7 @@ const saveCrewMemberFlow = ai.defineFlow(
         ...crewMemberData,
         licenses: crewMemberData.licenses || [], // Ensure array
         typeRatings: crewMemberData.typeRatings || [], // Ensure array
+        onboardingStatus: crewMemberData.onboardingStatus || 'Pending',
         updatedAt: FieldValue.serverTimestamp(),
         // Preserve original createdAt if doc exists, otherwise set new serverTimestamp
         createdAt: docSnap.exists() && docSnap.data()?.createdAt ? docSnap.data()?.createdAt : FieldValue.serverTimestamp(),

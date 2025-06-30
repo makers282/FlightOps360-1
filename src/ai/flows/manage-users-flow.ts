@@ -4,6 +4,8 @@ import { ai } from '@/ai/genkit';
 import { getAuth } from 'firebase-admin/auth';
 import { z } from 'zod';
 import { adminApp } from '@/lib/firebase-admin';
+import { fetchRoles } from './manage-roles-flow';
+import { saveCrewMember } from './manage-crew-flow';
 
 const adminAuth = getAuth(adminApp);
 
@@ -95,6 +97,28 @@ const createUserFlow = ai.defineFlow(
             });
 
             await adminAuth.setCustomUserClaims(userRecord.uid, { roles: input.roles });
+            
+            // Check if user should be added to the crew roster
+            const allRoles = await fetchRoles();
+            const flightCrewRole = allRoles.find(r => r.name === 'Flight Crew');
+
+            if (flightCrewRole && input.roles.includes(flightCrewRole.id)) {
+                console.log(`User ${input.email} has 'Flight Crew' role. Creating crew member profile.`);
+                const [firstName, ...lastNameParts] = (input.displayName || '').split(' ');
+                const lastName = lastNameParts.join(' ');
+                
+                await saveCrewMember({
+                    firstName: firstName || 'New',
+                    lastName: lastName || 'Crew',
+                    email: input.email,
+                    userId: userRecord.uid,
+                    role: 'Other', // Let them set the primary role in onboarding
+                    isActive: true,
+                    // onboardingStatus will default to 'Pending' in the schema
+                });
+                console.log(`Crew member profile created for ${input.email}.`);
+            }
+
 
             return {
                 uid: userRecord.uid,
