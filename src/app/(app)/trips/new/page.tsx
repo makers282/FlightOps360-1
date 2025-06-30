@@ -2,11 +2,12 @@
 "use client"; 
 
 import React, { Suspense, useTransition } from 'react'; 
-import { useRouter } from 'next/navigation'; 
+import { useRouter, useSearchParams } from 'next/navigation'; 
 import { PageHeader } from '@/components/page-header';
 import { TripForm, type FullTripFormData } from '../edit/[tripId]/components/trip-form'; 
 import { CalendarPlus, Loader2 } from 'lucide-react';
 import { saveTrip, type SaveTripInput } from '@/ai/flows/manage-trips-flow'; 
+import { fetchQuoteById, saveQuote } from '@/ai/flows/manage-quotes-flow';
 import { useToast } from '@/hooks/use-toast'; 
 import type { TripStatus } from '@/ai/schemas/trip-schemas';
 import { fetchFleetAircraft } from '@/ai/flows/manage-fleet-flow';
@@ -16,6 +17,8 @@ function NewTripPageContent() {
   const [isSaving, startSavingTransition] = useTransition();
   const router = useRouter();
   const { toast } = useToast();
+  const searchParams = useSearchParams();
+  const initialQuoteId = searchParams.get('quoteId') || undefined;
 
   const handleSaveTrip = async (data: FullTripFormData) => {
     startSavingTransition(async () => {
@@ -39,6 +42,7 @@ function NewTripPageContent() {
         clientPhone: data.clientPhone,
         aircraftId: data.aircraftId || "UNKNOWN_AC", 
         aircraftLabel: aircraftLabelForSave,
+        quoteId: initialQuoteId,
         legs: data.legs.map(leg => {
           const originTaxi = Number(leg.originTaxiTimeMinutes || 0);
           const destTaxi = Number(leg.destinationTaxiTimeMinutes || 0);
@@ -68,6 +72,22 @@ function NewTripPageContent() {
           title: "Trip Created",
           description: `Trip ${savedTrip.tripId} has been successfully scheduled.`,
         });
+
+        // If the trip was created from a quote, update the quote's status to "Booked"
+        if (initialQuoteId) {
+          try {
+            const originalQuote = await fetchQuoteById({ id: initialQuoteId });
+            if (originalQuote) {
+              const updatedQuote = { ...originalQuote, status: "Booked" as TripStatus };
+              await saveQuote(updatedQuote);
+              toast({ title: "Quote Status Updated", description: `Quote ${originalQuote.quoteId} has been marked as Booked.` });
+            }
+          } catch (quoteError) {
+             console.error("Failed to update original quote status:", quoteError);
+             toast({ title: "Quote Update Failed", description: "Could not update the original quote's status. Please do so manually.", variant: "destructive" });
+          }
+        }
+        
         router.push(`/trips/details/${savedTrip.id}`); 
       } catch (error) {
         console.error("Failed to save trip:", error);
@@ -91,6 +111,7 @@ function NewTripPageContent() {
         isEditMode={false} 
         onSave={handleSaveTrip} 
         isSaving={isSaving} 
+        initialQuoteId={initialQuoteId}
       />
     </>
   );

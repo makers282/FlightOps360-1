@@ -31,6 +31,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { LegsSummaryTable } from '@/app/(app)/quotes/new/components/legs-summary-table';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { fetchCrewMembers, type CrewMember } from '@/ai/flows/manage-crew-flow';
+import { fetchQuoteById } from '@/ai/flows/manage-quotes-flow';
 
 
 // Schema for individual legs in the form
@@ -106,6 +107,8 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
 
   const [crewRoster, setCrewRoster] = useState<CrewMember[]>([]);
   const [isLoadingCrewRoster, setIsLoadingCrewRoster] = useState(false);
+  const [isLoadingInitialData, setIsLoadingInitialData] = useState(false);
+
 
   const form = useForm<FullTripFormData>({
     resolver: zodResolver(TripFormSchema),
@@ -161,16 +164,16 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
           fetchFleetAircraft(),
           fetchCrewMembers()
         ]);
-        setCustomers(fetchedCustomersData.filter(c => c.id)); // Filter out customers with empty IDs
+        setCustomers(fetchedCustomersData.filter(c => c.id)); 
         const options = fetchedFleetData
-          .filter(ac => ac.id) // Filter out aircraft with empty IDs
+          .filter(ac => ac.id) 
           .map(ac => ({
             value: ac.id,
             label: `${ac.tailNumber} - ${ac.model}`,
             model: ac.model
           }));
         setAircraftSelectOptions(options);
-        setCrewRoster(fetchedCrewData.filter(cr => cr.id)); // Filter out crew with empty IDs
+        setCrewRoster(fetchedCrewData.filter(cr => cr.id)); 
       } catch (error) {
         console.error("Failed to load initial data for trip form:", error);
         toast({ title: "Error loading initial data", description: "Could not load customers, aircraft, or crew.", variant: "destructive" });
@@ -184,67 +187,90 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
   }, [toast]);
   
   useEffect(() => {
-    if (isEditMode && initialTripData && aircraftSelectOptions.length > 0) { 
-      const currentAircraftIdFromData = initialTripData.aircraftId || undefined;
-      const aircraftModelForEstimates = aircraftSelectOptions.find(ac => ac.value === currentAircraftIdFromData)?.model || 'Unknown Model';
-      const knownCruiseSpeedForEstimates = currentAircraftIdFromData === selectedAircraftPerformance?.aircraftId
-        ? selectedAircraftPerformance?.cruiseSpeed 
-        : undefined;
+    const processInitialData = async () => {
+      if (isEditMode && initialTripData && aircraftSelectOptions.length > 0) {
+        setIsLoadingInitialData(true);
+        reset({
+          tripId: initialTripData.tripId || '',
+          selectedCustomerId: initialTripData.selectedCustomerId || initialTripData.customerId || undefined,
+          clientName: initialTripData.clientName || '',
+          clientEmail: initialTripData.clientEmail || '',
+          clientPhone: initialTripData.clientPhone || '',
+          aircraftId: initialTripData.aircraftId || undefined,
+          status: initialTripData.status || "Scheduled",
+          legs: (initialTripData.legs || []).map((leg: DbTripLeg) => ({
+            ...leg,
+            origin: leg.origin || '',
+            destination: leg.destination || '',
+            departureDateTime: leg.departureDateTime ? parseISO(leg.departureDateTime) : undefined,
+            passengerCount: leg.passengerCount || 1, 
+            originFbo: leg.originFbo || '',
+            destinationFbo: leg.destinationFbo || '',
+            originTaxiTimeMinutes: leg.originTaxiTimeMinutes === undefined ? 15 : leg.originTaxiTimeMinutes,
+            destinationTaxiTimeMinutes: leg.destinationTaxiTimeMinutes === undefined ? 15 : leg.destinationTaxiTimeMinutes,
+            flightTimeHours: leg.flightTimeHours,
+          })),
+          notes: initialTripData.notes || '',
+          initialQuoteId: initialQuoteId || initialTripData.quoteId || undefined,
+          assignedPilotId: initialTripData.assignedPilotId || undefined,
+          assignedCoPilotId: initialTripData.assignedCoPilotId || undefined,
+          assignedFlightAttendantId1: initialTripData.assignedFlightAttendantIds?.[0] || undefined,
+          assignedFlightAttendantId2: initialTripData.assignedFlightAttendantIds?.[1] || undefined,
+        });
+        setLegEstimates(new Array((initialTripData.legs || []).length).fill(null));
+        setIsLoadingInitialData(false);
 
-      reset({ 
-        tripId: initialTripData.tripId || '',
-        selectedCustomerId: initialTripData.selectedCustomerId || initialTripData.customerId || undefined,
-        clientName: initialTripData.clientName || '',
-        clientEmail: initialTripData.clientEmail || '',
-        clientPhone: initialTripData.clientPhone || '',
-        aircraftId: currentAircraftIdFromData,
-        status: initialTripData.status || "Scheduled",
-        legs: (initialTripData.legs || []).map((leg: DbTripLeg) => ({
-          ...leg,
-          origin: leg.origin || '',
-          destination: leg.destination || '',
-          departureDateTime: leg.departureDateTime ? parseISO(leg.departureDateTime) : undefined,
-          passengerCount: leg.passengerCount || 1, 
-          originFbo: leg.originFbo || '',
-          destinationFbo: leg.destinationFbo || '',
-          originTaxiTimeMinutes: leg.originTaxiTimeMinutes === undefined ? 15 : leg.originTaxiTimeMinutes,
-          destinationTaxiTimeMinutes: leg.destinationTaxiTimeMinutes === undefined ? 15 : leg.destinationTaxiTimeMinutes,
-          flightTimeHours: leg.flightTimeHours,
-        })),
-        notes: initialTripData.notes || '',
-        initialQuoteId: initialQuoteId || initialTripData.quoteId || undefined,
-        assignedPilotId: initialTripData.assignedPilotId || undefined,
-        assignedCoPilotId: initialTripData.assignedCoPilotId || undefined,
-        assignedFlightAttendantId1: initialTripData.assignedFlightAttendantIds?.[0] || undefined,
-        assignedFlightAttendantId2: initialTripData.assignedFlightAttendantIds?.[1] || undefined,
-      });
-
-      const newLegEstimates = (initialTripData.legs || []).map((leg: DbTripLeg) => {
-        if (leg.flightTimeHours !== undefined && leg.flightTimeHours !== null) {
-          return {
-            estimatedMileageNM: undefined, 
-            estimatedFlightTimeHours: leg.flightTimeHours,
-            assumedCruiseSpeedKts: undefined, 
-            briefExplanation: "Using existing flight time from saved trip data.",
-            error: undefined,
-            estimatedForInputs: { 
-              origin: leg.origin.toUpperCase(),
-              destination: leg.destination.toUpperCase(),
-              aircraftModel: aircraftModelForEstimates,
-              knownCruiseSpeedKts: knownCruiseSpeedForEstimates, 
-            }
-          } as LegEstimate;
+      } else if (!isEditMode && initialQuoteId) {
+        setIsLoadingInitialData(true);
+        try {
+          const quoteData = await fetchQuoteById({ id: initialQuoteId });
+          if (quoteData) {
+            reset({
+              tripId: generateNewTripIdIfApplicable(),
+              selectedCustomerId: quoteData.selectedCustomerId,
+              clientName: quoteData.clientName,
+              clientEmail: quoteData.clientEmail,
+              clientPhone: quoteData.clientPhone || '',
+              aircraftId: quoteData.aircraftId,
+              status: "Scheduled",
+              legs: quoteData.legs.map(leg => ({
+                origin: leg.origin || '',
+                destination: leg.destination || '',
+                departureDateTime: leg.departureDateTime ? parseISO(leg.departureDateTime) : undefined,
+                legType: leg.legType,
+                passengerCount: leg.passengerCount || 1,
+                originFbo: leg.originFbo || '',
+                destinationFbo: leg.destinationFbo || '',
+                originTaxiTimeMinutes: leg.originTaxiTimeMinutes === undefined ? 15 : leg.originTaxiTimeMinutes,
+                destinationTaxiTimeMinutes: leg.destinationTaxiTimeMinutes === undefined ? 15 : leg.destinationTaxiTimeMinutes,
+                flightTimeHours: leg.flightTimeHours,
+              })),
+              notes: `Sourced from Quote ID: ${quoteData.quoteId}\n\n${quoteData.options.notes || ''}`,
+              initialQuoteId: quoteData.id,
+            });
+            setLegEstimates(new Array(quoteData.legs.length).fill(null));
+            toast({ title: "Quote Loaded", description: `Trip details pre-filled from quote ${quoteData.quoteId}.`});
+          } else {
+            toast({ title: "Error", description: `Quote with ID ${initialQuoteId} not found.`, variant: "destructive"});
+            setValue('tripId', generateNewTripIdIfApplicable());
+          }
+        } catch (error) {
+          toast({ title: "Error Loading Quote", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive"});
+          setValue('tripId', generateNewTripIdIfApplicable());
+        } finally {
+          setIsLoadingInitialData(false);
         }
-        return null;
-      });
-      setLegEstimates(newLegEstimates);
+      } else if (!isEditMode && !getValues('tripId')) {
+        setValue('tripId', generateNewTripIdIfApplicable());
+        setValue('status', "Scheduled");
+        setLegEstimates(new Array(getValues('legs').length).fill(null));
+      }
+    };
 
-    } else if (!isEditMode && !getValues('tripId')) {
-      setValue('tripId', generateNewTripIdIfApplicable());
-      setValue('status', "Scheduled");
-      setLegEstimates(new Array(getValues('legs').length).fill(null));
+    if (aircraftSelectOptions.length > 0) { // Ensure aircraft options are loaded before processing
+        processInitialData();
     }
-  }, [isEditMode, initialTripData, reset, getValues, setValue, aircraftSelectOptions, selectedAircraftPerformance, initialQuoteId, generateNewTripIdIfApplicable]);
+  }, [isEditMode, initialTripData, initialQuoteId, reset, getValues, setValue, toast, aircraftSelectOptions, generateNewTripIdIfApplicable]);
 
 
   useEffect(() => {
@@ -358,7 +384,7 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : "AI failed to estimate details.";
       toast({ title: "Estimation Error", description: errorMessage, variant: "destructive" });
-      setValue(`legs.${legIndex}.flightTimeHours`, undefined);
+      setValue(`legs.${index}.flightTimeHours`, undefined);
       setLegEstimates(prev => { const newEstimates = [...prev]; newEstimates[legIndex] = { error: errorMessage, estimatedForInputs: {origin: legData.origin.toUpperCase(), destination: legData.destination.toUpperCase(), aircraftModel: aircraftModelForFlow, knownCruiseSpeedKts: knownCruiseSpeedForFlow} } as LegEstimate; return newEstimates; });
     } finally {
       setEstimatingLegIndex(null);
@@ -378,6 +404,22 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
   const flightAttendants = crewRoster.filter(c => c.isActive && c.role === 'Flight Attendant');
 
 
+  if (isLoadingInitialData) {
+    return (
+      <div className="space-y-6">
+        <Card className="shadow-sm">
+          <CardHeader> <Skeleton className="h-8 w-3/4 mb-2" /> <Skeleton className="h-4 w-1/2" /> </CardHeader>
+          <CardContent className="space-y-4"> <Skeleton className="h-10 w-full" /> <Skeleton className="h-10 w-full" /> </CardContent>
+        </Card>
+        <Card className="shadow-sm">
+          <CardHeader> <Skeleton className="h-8 w-1/4 mb-2" /> </CardHeader>
+          <CardContent className="space-y-4"> <Skeleton className="h-20 w-full" /> <Skeleton className="h-10 w-1/3" /> </CardContent>
+        </Card>
+        <CardFooter><Skeleton className="h-10 w-32" /></CardFooter>
+      </div>
+    );
+  }
+
   return (
     <Card className="shadow-lg max-w-4xl mx-auto">
       <Form {...form}>
@@ -394,7 +436,7 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
           <CardContent className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField control={control} name="tripId" render={({ field }) => ( <FormItem> <FormLabel>Trip ID</FormLabel> <FormControl><Input {...field} value={field.value || ''} readOnly className="bg-muted/50 cursor-not-allowed" /></FormControl> <FormMessage /> </FormItem> )} />
-                {isEditMode && getValues('initialQuoteId') && (
+                {getValues('initialQuoteId') && (
                      <FormItem>
                         <FormLabel>Sourced From Quote</FormLabel>
                         <Input value={getValues('initialQuoteId') || ''} readOnly className="bg-muted/50 cursor-not-allowed" />

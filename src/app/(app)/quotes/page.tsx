@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect } from 'react';
@@ -12,7 +13,7 @@ import {
   Search,
   Eye,
   Edit,
-  CalendarDays,
+  CalendarPlus,
   MoreVertical,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -24,7 +25,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table';
+} from "@/components/ui/table";
 import {
   Select,
   SelectContent,
@@ -38,7 +39,7 @@ import {
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from '@/components/ui/tooltip';
+} from "@/components/ui/tooltip";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -48,7 +49,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
+} from "@/components/ui/alert-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -277,12 +278,12 @@ export default function AllQuotesPage() {
                                     asChild
                                     className="text-green-600 border-green-600 hover:bg-green-50 hover:text-green-700 p-2 w-9"
                                   >
-                                    <Link href={`/trips/new?quoteId=${q.id}`}> {/* Link to trip creation page */}
-                                      <CalendarDays className="h-4 w-4" />
+                                    <Link href={`/trips/new?quoteId=${q.id}`}>
+                                      <CalendarPlus className="h-4 w-4" />
                                     </Link>
                                   </Button>
                                 </TooltipTrigger>
-                                <TooltipContent>Book Trip</TooltipContent>
+                                <TooltipContent>Book Trip from Quote</TooltipContent>
                               </Tooltip>
                             )}
                           </div>
