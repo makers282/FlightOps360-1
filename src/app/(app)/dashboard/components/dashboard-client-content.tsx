@@ -18,13 +18,12 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from '@/hooks/use-toast';
 import { format, parseISO, isValid } from 'date-fns';
-import { auth } from '@/lib/firebase';
+import { auth } from '@/lib/firebase'; 
 import type { User as FirebaseUser } from 'firebase/auth';
 import type { Bulletin, BulletinType } from '@/ai/flows/manage-bulletins-flow';
 import type { Trip } from '@/ai/flows/manage-trips-flow';
 import type { FleetAircraft } from '@/ai/flows/manage-fleet-flow';
 import type { SystemAlert } from '../page'; // Import the serializable type from the server component
-import { ClientOnly } from '@/components/client-only';
 
 // Define a mapping from icon name string to actual component
 const iconMap = {
@@ -57,6 +56,31 @@ interface DashboardClientContentProps {
   initialFleetList: FleetAircraft[];
   initialAircraftStatusDetails: [string, AircraftStatusDetail][];
   initialActiveSystemAlerts: SystemAlert[];
+}
+
+// A new sub-component to safely render client-side dates
+const UpcomingTripItem = ({ trip }: { trip: Trip & { aircraftLabel?: string } }) => {
+    const [departure, setDeparture] = useState("Loading departure...");
+    
+    useEffect(() => {
+        if (trip.legs[0]?.departureDateTime && isValid(parseISO(trip.legs[0].departureDateTime))) {
+            setDeparture(`Departs ${format(parseISO(trip.legs[0].departureDateTime), 'MM/dd HH:mm')}`);
+        } else {
+            setDeparture("Departure time not set");
+        }
+    }, [trip]);
+
+    return (
+        <ListItem className="py-2 border-b last:border-b-0">
+            <Link href={`/trips/details/${trip.id}`} className="flex justify-between items-center hover:bg-muted/50 rounded-md -mx-2 px-2 py-1">
+                <div>
+                    <p className="font-semibold">{trip.tripId} ({trip.clientName})</p>
+                    <p className="text-xs text-muted-foreground">{departure}</p>
+                </div>
+                <Badge variant="outline">{trip.status}</Badge>
+            </Link>
+        </ListItem>
+    );
 }
 
 export function DashboardClientContent({
@@ -225,17 +249,7 @@ export function DashboardClientContent({
                 ) : (
                      <List>
                         {upcomingTrips.slice(0, 5).map(trip => (
-                            <ListItem key={trip.id} className="py-2 border-b last:border-b-0">
-                                <Link href={`/trips/details/${trip.id}`} className="flex justify-between items-center hover:bg-muted/50 rounded-md -mx-2 px-2 py-1">
-                                    <div>
-                                        <p className="font-semibold">{trip.tripId} ({trip.clientName})</p>
-                                        <ClientOnly fallback={<p className="text-xs text-muted-foreground">Loading departure...</p>}>
-                                          <p className="text-xs text-muted-foreground">Departs {format(parseISO(trip.legs[0].departureDateTime!), 'MM/dd HH:mm')}</p>
-                                        </ClientOnly>
-                                    </div>
-                                    <Badge variant="outline">{trip.status}</Badge>
-                                </Link>
-                            </ListItem>
+                           <UpcomingTripItem key={trip.id} trip={trip} />
                         ))}
                     </List>
                 )}
