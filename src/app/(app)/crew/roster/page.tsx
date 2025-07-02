@@ -5,9 +5,10 @@ import React, { useState, useMemo, useEffect, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { PageHeader } from '@/components/page-header';
-import { Users2, UserPlus, Loader2, Edit3, Trash2, UserCheck, AlertTriangle } from 'lucide-react';
+import { Users2, UserPlus, Loader2, Edit3, Trash2, UserCheck, AlertTriangle, CheckCircle, Clock, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
   Table,
   TableBody,
@@ -18,6 +19,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { fetchCrewMembers, deleteCrewMember, saveCrewMember } from '@/ai/flows/manage-crew-flow';
 import type { CrewMember } from '@/ai/schemas/crew-member-schemas';
@@ -31,6 +33,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { format, formatDistanceToNow, parseISO, isValid } from 'date-fns';
 
 interface CrewRosterSummary {
     totalCrew: number;
@@ -45,6 +48,7 @@ export default function CrewRosterPage() {
   const [isAddingCrew, startAddingCrewTransition] = useTransition();
   const [crewToDelete, setCrewToDelete] = useState<CrewMember | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
   const { toast } = useToast();
   const router = useRouter();
 
@@ -120,6 +124,17 @@ export default function CrewRosterPage() {
     };
   }, [crewList]);
 
+  const filteredCrewList = useMemo(() => {
+    if (!searchTerm) return crewList;
+    const lowerSearchTerm = searchTerm.toLowerCase();
+    return crewList.filter(crew => 
+        (crew.firstName?.toLowerCase().includes(lowerSearchTerm)) ||
+        (crew.lastName?.toLowerCase().includes(lowerSearchTerm)) ||
+        (crew.email?.toLowerCase().includes(lowerSearchTerm)) ||
+        (crew.onboardingData?.roles?.some(role => role.toLowerCase().includes(lowerSearchTerm)))
+    );
+  }, [crewList, searchTerm]);
+
 
   return (
     <>
@@ -135,89 +150,145 @@ export default function CrewRosterPage() {
         }
       />
       
-      <div className="grid gap-6 mb-6 md:grid-cols-3">
-        <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Total Crew Members</CardTitle><Users2 className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold">{summaryData.totalCrew}</div></CardContent></Card>
-        <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Onboarding Complete</CardTitle><UserCheck className="h-4 w-4 text-green-500" /></CardHeader><CardContent><div className="text-2xl font-bold">{summaryData.onboardingComplete}</div></CardContent></Card>
-        <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Onboarding Pending</CardTitle><AlertTriangle className="h-4 w-4 text-yellow-500" /></CardHeader><CardContent><div className="text-2xl font-bold">{summaryData.onboardingPending}</div></CardContent></Card>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+        <Card className="flex items-center p-4">
+            <Users2 className="h-8 w-8 text-primary mr-4" />
+            <div>
+                <div className="text-2xl font-bold">{summaryData.totalCrew}</div>
+                <p className="text-sm text-muted-foreground">Total Crew Members</p>
+            </div>
+        </Card>
+        <Card className="flex items-center p-4">
+            <UserCheck className="h-8 w-8 text-green-500 mr-4" />
+            <div>
+                <div className="text-2xl font-bold">{summaryData.onboardingComplete}</div>
+                <p className="text-sm text-muted-foreground">Onboarding Complete</p>
+            </div>
+        </Card>
+        <Card className="flex items-center p-4">
+            <Clock className="h-8 w-8 text-orange-500 mr-4" />
+            <div>
+                <div className="text-2xl font-bold">{summaryData.onboardingPending}</div>
+                <p className="text-sm text-muted-foreground">Pending Onboarding</p>
+            </div>
+        </Card>
       </div>
 
-      <Card className="shadow-lg">
+      <Card className="shadow-md">
         <CardHeader>
-          <CardTitle>Crew Roster</CardTitle>
-          <CardDescription>All crew members in the system.</CardDescription>
+          <CardTitle>Crew Roster ({summaryData.totalCrew})</CardTitle>
+          <div className="mt-4 relative">
+             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+             <Input 
+                placeholder="Search crew members by name, email, or role..." 
+                className="pl-8 w-full"
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                disabled={isLoading}
+             />
+          </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-0">
           {isLoading ? (
             <div className="flex items-center justify-center py-10">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
               <p className="ml-2 text-muted-foreground">Loading crew members...</p>
             </div>
           ) : (
+            <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Roles</TableHead>
-                  <TableHead>Contact</TableHead>
-                  <TableHead>Home Base</TableHead>
-                  <TableHead>Onboarding</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead className="px-4 py-3">Crew Member</TableHead>
+                  <TableHead className="px-4 py-3">Roles</TableHead>
+                  <TableHead className="px-4 py-3">Onboarding Status</TableHead>
+                  <TableHead className="px-4 py-3">Date Added</TableHead>
+                  <TableHead className="px-4 py-3">Last Activity</TableHead>
+                  <TableHead className="text-right px-4 py-3">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {crewList.length === 0 ? (
+                {filteredCrewList.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={6} className="text-center text-muted-foreground py-10">
                       No crew members found. Click "Add Crew Member" to begin.
                     </TableCell>
                   </TableRow>
                 ) : (
-                  crewList.map((crew) => (
-                    <TableRow key={crew.id} className={crew.onboardingStatus === 'Pending' ? 'bg-yellow-500/5 hover:bg-yellow-500/10' : ''}>
-                      <TableCell className="font-medium">
+                  filteredCrewList.map((crew) => (
+                    <TableRow key={crew.id} className="hover:bg-muted/50">
+                      <TableCell className="font-medium px-4 py-3">
                         <div className="flex items-center gap-3">
                           <Avatar>
+                            <AvatarImage src={`https://placehold.co/40x40.png?text=${getInitials(crew.firstName, crew.lastName)}`} alt={`${crew.firstName} ${crew.lastName}`} />
                             <AvatarFallback>{getInitials(crew.firstName, crew.lastName)}</AvatarFallback>
                           </Avatar>
-                          {`${crew.firstName} ${crew.lastName}`}
+                          <div>
+                            <p className="text-base font-semibold text-foreground">{`${crew.firstName} ${crew.lastName}`}</p>
+                            <p className="text-sm text-muted-foreground">{crew.email || 'No email'}</p>
+                          </div>
                         </div>
                       </TableCell>
-                      <TableCell><Badge variant="outline">{crew.onboardingData?.roles?.join(', ') || 'N/A'}</Badge></TableCell>
-                      <TableCell>
-                        <div className="text-sm">{crew.email || 'N/A'}</div>
-                        <div className="text-xs text-muted-foreground">{crew.phone || 'N/A'}</div>
+                      <TableCell className="px-4 py-3">
+                        <div className="flex flex-wrap gap-1">
+                            {(crew.onboardingData?.roles || []).map(role => (
+                                <Badge key={role} variant="outline">{role}</Badge>
+                            ))}
+                        </div>
                       </TableCell>
-                      <TableCell>{crew.homeBase || 'N/A'}</TableCell>
-                      <TableCell>
-                         <Badge variant={crew.onboardingStatus === 'Completed' ? 'default' : 'secondary'} className={crew.onboardingStatus === 'Completed' ? "bg-green-500 hover:bg-green-600" : "bg-yellow-500 hover:bg-yellow-600"}>
-                          {crew.onboardingStatus === 'Pending' ? 'Attention Needed' : 'Complete'}
-                        </Badge>
+                      <TableCell className="px-4 py-3">
+                        {crew.onboardingStatus === 'Completed' ? (
+                            <Badge variant="default" className="bg-green-100 text-green-800 hover:bg-green-200">
+                                <CheckCircle className="mr-1 h-3.5 w-3.5"/> Complete
+                            </Badge>
+                        ) : (
+                            <Badge variant="destructive" className="bg-orange-100 text-orange-800 hover:bg-orange-200">
+                                <AlertTriangle className="mr-1 h-3.5 w-3.5"/> Attention Needed
+                            </Badge>
+                        )}
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="px-4 py-3 text-sm text-muted-foreground">
+                        {crew.createdAt && isValid(parseISO(crew.createdAt)) ? format(parseISO(crew.createdAt), 'yyyy-MM-dd') : 'N/A'}
+                      </TableCell>
+                      <TableCell className="px-4 py-3 text-sm text-muted-foreground">
+                        {crew.updatedAt && isValid(parseISO(crew.updatedAt)) ? formatDistanceToNow(parseISO(crew.updatedAt), { addSuffix: true }) : 'Never'}
+                      </TableCell>
+                      <TableCell className="text-right px-4 py-3">
                         {crew.onboardingStatus === 'Pending' ? (
                           <Button asChild>
                             <Link href={`/crew/onboarding/${crew.id}`}>
-                              <UserCheck className="mr-2 h-4 w-4" /> Complete Onboarding
+                                Complete Onboarding
                             </Link>
                           </Button>
                         ) : (
                            <Button variant="outline" asChild>
                              <Link href={`/crew/onboarding/${crew.id}`}>
-                                <Edit3 className="mr-2 h-4 w-4" /> Edit Profile
+                                View Profile
                              </Link>
                            </Button>
                         )}
-                         <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDelete(crew)} disabled={isDeleting && crewToDelete?.id === crew.id}>
-                            {isDeleting && crewToDelete?.id === crew.id ? <Loader2 className="h-4 w-4 animate-spin"/> : <Trash2 className="h-4 w-4" />}
-                         </Button>
                       </TableCell>
                     </TableRow>
                   ))
                 )}
               </TableBody>
             </Table>
+            </div>
           )}
         </CardContent>
+        {summaryData.onboardingPending > 0 && (
+            <CardFooter>
+                 <Alert variant="destructive" className="border-l-4 border-orange-500 bg-orange-50 text-orange-800 [&>svg]:text-orange-600 dark:bg-orange-900/20 dark:text-orange-300 dark:[&>svg]:text-orange-400 mt-4">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertTitle className="font-bold">
+                        {summaryData.onboardingPending} crew member(s) need to complete onboarding
+                    </AlertTitle>
+                    <AlertDescription>
+                        Complete their onboarding to ensure full compliance and system access.
+                    </AlertDescription>
+                </Alert>
+            </CardFooter>
+        )}
       </Card>
       
       <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
@@ -240,3 +311,4 @@ export default function CrewRosterPage() {
     </>
   );
 }
+
