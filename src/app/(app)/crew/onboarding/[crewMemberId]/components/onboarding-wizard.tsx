@@ -49,7 +49,10 @@ export function OnboardingWizard({ crewMemberId }: { crewMemberId: string }) {
     mode: 'onChange',
   });
 
-  const watchedFields = methods.watch([
+  const [
+    firstName, lastName, email, phone,
+    roles, qualifications, employmentType, homeBase
+  ] = methods.watch([
     "firstName",
     "lastName",
     "email",
@@ -61,11 +64,6 @@ export function OnboardingWizard({ crewMemberId }: { crewMemberId: string }) {
   ]);
 
   useEffect(() => {
-    const [
-      firstName, lastName, email, phone,
-      roles, qualifications, employmentType, homeBase
-    ] = watchedFields;
-    
     const newMissingFields = [];
     if (!firstName) newMissingFields.push('First Name');
     if (!lastName) newMissingFields.push('Last Name');
@@ -76,9 +74,13 @@ export function OnboardingWizard({ crewMemberId }: { crewMemberId: string }) {
     if (!employmentType) newMissingFields.push('Employment Type');
     if (!homeBase) newMissingFields.push('Home Base');
     
-    setMissingFields(newMissingFields);
-    setCanComplete(newMissingFields.length === 0);
-  }, [watchedFields]);
+    // Only update state if the array of missing fields has actually changed.
+    if (JSON.stringify(missingFields) !== JSON.stringify(newMissingFields)) {
+      setMissingFields(newMissingFields);
+      setCanComplete(newMissingFields.length === 0);
+    }
+  }, [firstName, lastName, email, phone, roles, qualifications, employmentType, homeBase, missingFields]);
+
 
   const loadCrewMemberData = useCallback(async () => {
     setIsLoading(true);
