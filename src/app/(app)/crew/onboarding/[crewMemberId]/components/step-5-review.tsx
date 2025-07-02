@@ -26,7 +26,7 @@ export function Step5Review() {
         <Separator />
         <div>
           <h3 className="font-semibold">Employment Details</h3>
-          <p>Primary Role: {data.role}</p>
+          <p>Roles: {data.onboardingData?.roles?.join(', ') || 'None specified'}</p>
           <p>Employment Type: {data.onboardingData?.employmentType}</p>
           <p>Home Base: {data.homeBase}</p>
         </div>

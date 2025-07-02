@@ -3,6 +3,7 @@
 
 import React, { useState, useMemo, useEffect, useTransition } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { PageHeader } from '@/components/page-header';
 import { Users2, UserPlus, Loader2, Edit3, Trash2, UserCheck, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -18,7 +19,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useToast } from '@/hooks/use-toast';
-import { fetchCrewMembers, deleteCrewMember } from '@/ai/flows/manage-crew-flow';
+import { fetchCrewMembers, deleteCrewMember, saveCrewMember } from '@/ai/flows/manage-crew-flow';
 import type { CrewMember } from '@/ai/schemas/crew-member-schemas';
 import {
   AlertDialog,
@@ -41,9 +42,11 @@ export default function CrewRosterPage() {
   const [crewList, setCrewList] = useState<CrewMember[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isDeleting, startDeletingTransition] = useTransition();
+  const [isAddingCrew, startAddingCrewTransition] = useTransition();
   const [crewToDelete, setCrewToDelete] = useState<CrewMember | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const { toast } = useToast();
+  const router = useRouter();
 
   const loadCrewMembers = async () => {
     setIsLoading(true);
@@ -62,6 +65,24 @@ export default function CrewRosterPage() {
     loadCrewMembers();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  
+  const handleAddNewCrewMember = () => {
+    startAddingCrewTransition(async () => {
+      try {
+        const newCrewMember = await saveCrewMember({
+          firstName: "New",
+          lastName: "Crew Member",
+          isActive: true,
+          onboardingStatus: 'Pending',
+        });
+        toast({ title: "New Crew Profile Created", description: "Redirecting to onboarding wizard..." });
+        router.push(`/crew/onboarding/${newCrewMember.id}`);
+      } catch (error) {
+        console.error("Failed to create new crew member:", error);
+        toast({ title: "Error", description: "Could not create a new crew member profile.", variant: "destructive" });
+      }
+    });
+  };
 
   const handleDelete = (crewMember: CrewMember) => {
     setCrewToDelete(crewMember);
@@ -107,10 +128,9 @@ export default function CrewRosterPage() {
         description="View all crew members and manage their onboarding status."
         icon={Users2}
         actions={
-          <Button asChild>
-            <Link href="/settings/users">
-              <UserPlus className="mr-2 h-4 w-4" /> Add User / Crew
-            </Link>
+          <Button onClick={handleAddNewCrewMember} disabled={isAddingCrew}>
+            {isAddingCrew ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UserPlus className="mr-2 h-4 w-4" />} 
+            Add Crew Member
           </Button>
         }
       />
@@ -124,7 +144,7 @@ export default function CrewRosterPage() {
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle>Crew Roster</CardTitle>
-          <CardDescription>All crew members linked from the User Management system.</CardDescription>
+          <CardDescription>All crew members in the system.</CardDescription>
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -137,7 +157,7 @@ export default function CrewRosterPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
-                  <TableHead>Role</TableHead>
+                  <TableHead>Roles</TableHead>
                   <TableHead>Contact</TableHead>
                   <TableHead>Home Base</TableHead>
                   <TableHead>Onboarding</TableHead>
@@ -148,7 +168,7 @@ export default function CrewRosterPage() {
                 {crewList.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={6} className="text-center text-muted-foreground py-10">
-                      No crew members found. Add a user with a "Flight Crew" role to begin.
+                      No crew members found. Click "Add Crew Member" to begin.
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -162,7 +182,7 @@ export default function CrewRosterPage() {
                           {`${crew.firstName} ${crew.lastName}`}
                         </div>
                       </TableCell>
-                      <TableCell><Badge variant="outline">{crew.role}</Badge></TableCell>
+                      <TableCell><Badge variant="outline">{crew.onboardingData?.roles?.join(', ') || 'N/A'}</Badge></TableCell>
                       <TableCell>
                         <div className="text-sm">{crew.email || 'N/A'}</div>
                         <div className="text-xs text-muted-foreground">{crew.phone || 'N/A'}</div>
@@ -182,8 +202,8 @@ export default function CrewRosterPage() {
                           </Button>
                         ) : (
                            <Button variant="outline" asChild>
-                             <Link href={`/crew/documents?crewMemberId=${crew.id}`}>
-                                View Profile
+                             <Link href={`/crew/onboarding/${crew.id}`}>
+                                <Edit3 className="mr-2 h-4 w-4" /> Edit Profile
                              </Link>
                            </Button>
                         )}

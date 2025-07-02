@@ -4,8 +4,8 @@
  */
 import { z } from 'zod';
 
-export const crewRoles = ["Captain", "First Officer", "Flight Attendant", "Flight Medic", "Mechanic", "Loadmaster", "Other"] as const;
-export type CrewRole = typeof crewRoles[number];
+export const crewRoles = ["Pilot in Command (PIC)", "Second in Command (SIC)", "Flight Nurse", "Flight Paramedic", "Dispatcher", "Maintenance Technician", "Line Service Technician"] as const;
+export type CrewRole = (typeof crewRoles)[number];
 
 export const employmentTypes = ["Full-Time", "Part-Time", "Contractor"] as const;
 export type EmploymentType = typeof employmentTypes[number];
@@ -25,6 +25,7 @@ export const OnboardingDataSchema = z.object({
 
   // Step 2: Employment & Role
   employmentType: z.enum(employmentTypes).optional(),
+  roles: z.array(z.string()).optional().default([]),
   aircraftQualifications: z.array(z.string()).optional().default([]),
   priaEligible: z.boolean().optional().default(false),
   
@@ -38,7 +39,6 @@ export const CrewMemberSchema = z.object({
   employeeId: z.string().optional().describe("Employee ID or similar internal identifier."),
   firstName: z.string().min(1, "First name is required."),
   lastName: z.string().min(1, "Last name is required."),
-  role: z.enum(crewRoles).default("Other").describe("Primary role of the crew member."),
   
   email: z.string().email("Invalid email format.").optional().or(z.literal('')),
   phone: z.string().optional(),

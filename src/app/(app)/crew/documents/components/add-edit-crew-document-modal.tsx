@@ -49,7 +49,7 @@ interface AddEditCrewDocumentModalProps {
   isOpen: boolean; setIsOpen: (isOpen: boolean) => void;
   onSave: (data: SaveCrewDocumentInput, originalDocumentId?: string) => Promise<void>;
   initialData?: CrewDocument | null; isEditing?: boolean; isSaving: boolean;
-  crewMembers: Pick<CrewMember, 'id' | 'firstName' | 'lastName' | 'role'>[];
+  crewMembers: Pick<CrewMember, 'id' | 'firstName' | 'lastName' | 'onboardingData'>[];
   isLoadingCrewMembers: boolean;
   selectedCrewMemberIdForNew?: string; // To pre-select crew member when adding from their specific view
 }
@@ -144,7 +144,7 @@ export function AddEditCrewDocumentModal({
                     >
                       <FormControl><SelectTrigger><SelectValue placeholder={isLoadingCrewMembers ? "Loading crew..." : "Select crew member"} /></SelectTrigger></FormControl>
                       <SelectContent>
-                        {!isLoadingCrewMembers && crewMembers.map(cm => (<SelectItem key={cm.id} value={cm.id}>{cm.firstName} {cm.lastName} ({cm.role})</SelectItem>))}
+                        {!isLoadingCrewMembers && crewMembers.map(cm => (<SelectItem key={cm.id} value={cm.id}>{cm.firstName} {cm.lastName} ({cm.onboardingData?.roles?.join(', ') || 'N/A'})</SelectItem>))}
                       </SelectContent>
                     </Select>
                     {isEditing && initialData?.crewMemberId && <FormDescription className="text-xs">Crew member cannot be changed for an existing document record.</FormDescription>}
@@ -210,4 +210,3 @@ export function AddEditCrewDocumentModal({
     </Dialog>
   );
 }
-    
