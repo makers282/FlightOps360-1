@@ -25,7 +25,7 @@ export function Step1PersonalInfo() {
               <FormItem>
                 <FormLabel>First Name</FormLabel>
                 <FormControl>
-                  <Input placeholder="John" {...field} />
+                  <Input placeholder="John" {...field} value={field.value || ''} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -38,7 +38,7 @@ export function Step1PersonalInfo() {
               <FormItem>
                 <FormLabel>Last Name</FormLabel>
                 <FormControl>
-                  <Input placeholder="Doe" {...field} />
+                  <Input placeholder="Doe" {...field} value={field.value || ''} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -52,7 +52,7 @@ export function Step1PersonalInfo() {
             <FormItem>
               <FormLabel>Email Address</FormLabel>
               <FormControl>
-                <Input type="email" placeholder="john.doe@example.com" {...field} />
+                <Input type="email" placeholder="john.doe@example.com" {...field} value={field.value || ''} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -65,7 +65,7 @@ export function Step1PersonalInfo() {
             <FormItem>
               <FormLabel>Phone Number</FormLabel>
               <FormControl>
-                <Input type="tel" placeholder="(555) 123-4567" {...field} />
+                <Input type="tel" placeholder="(555) 123-4567" {...field} value={field.value || ''} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -78,7 +78,7 @@ export function Step1PersonalInfo() {
             <FormItem>
               <FormLabel>Date of Birth</FormLabel>
               <FormControl>
-                <Input type="date" {...field} />
+                <Input type="date" {...field} value={field.value || ''} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -91,7 +91,7 @@ export function Step1PersonalInfo() {
             <FormItem>
               <FormLabel>Address Street 1</FormLabel>
               <FormControl>
-                <Input placeholder="123 Aviation Way" {...field} />
+                <Input placeholder="123 Aviation Way" {...field} value={field.value || ''} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -105,7 +105,7 @@ export function Step1PersonalInfo() {
                 <FormItem>
                 <FormLabel>City</FormLabel>
                 <FormControl>
-                    <Input placeholder="Anytown" {...field} />
+                    <Input placeholder="Anytown" {...field} value={field.value || ''} />
                 </FormControl>
                 <FormMessage />
                 </FormItem>
@@ -118,7 +118,7 @@ export function Step1PersonalInfo() {
                 <FormItem>
                 <FormLabel>State / Province</FormLabel>
                 <FormControl>
-                    <Input placeholder="CA" {...field} />
+                    <Input placeholder="CA" {...field} value={field.value || ''} />
                 </FormControl>
                 <FormMessage />
                 </FormItem>
