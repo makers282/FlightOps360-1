@@ -6,15 +6,17 @@ import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Users, Search, Loader2, AlertTriangle, CheckCircle, Plane, Ban } from 'lucide-react';
+import { Users, Search, Loader2, Plane, Ban, CalendarOff, CheckCircle2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { fetchCrewMembers, type CrewMember } from '@/ai/flows/manage-crew-flow';
 import { fetchTrips, type Trip } from '@/ai/flows/manage-trips-flow';
-import { isWithinInterval, parseISO } from 'date-fns';
+import { isWithinInterval, parseISO, endOfDay, format } from 'date-fns';
+import { fetchCrewBlockOuts, type CrewBlockOut } from '@/ai/flows/manage-crew-block-outs-flow';
+
 
 interface CrewWithStatus extends CrewMember {
-  status: 'On Trip' | 'Available' | 'Inactive';
+  status: string; // Made generic to hold trip ID or block-out reason
   statusDetails: string;
   statusVariant: "default" | "destructive" | "secondary" | "outline";
   statusIcon: React.ElementType;
@@ -23,6 +25,7 @@ interface CrewWithStatus extends CrewMember {
 export default function CrewStatusPage() {
   const [crewList, setCrewList] = useState<CrewMember[]>([]);
   const [trips, setTrips] = useState<Trip[]>([]);
+  const [blockOuts, setBlockOuts] = useState<CrewBlockOut[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const { toast } = useToast();
@@ -30,12 +33,14 @@ export default function CrewStatusPage() {
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [fetchedCrew, fetchedTrips] = await Promise.all([
+      const [fetchedCrew, fetchedTrips, fetchedBlockOuts] = await Promise.all([
         fetchCrewMembers(),
         fetchTrips(),
+        fetchCrewBlockOuts(),
       ]);
       setCrewList(fetchedCrew);
       setTrips(fetchedTrips);
+      setBlockOuts(fetchedBlockOuts);
     } catch (error) {
       console.error("Failed to load data:", error);
       toast({
@@ -53,6 +58,7 @@ export default function CrewStatusPage() {
   }, [loadData]);
   
   const crewWithStatus = useMemo<CrewWithStatus[]>(() => {
+    const now = new Date();
     return crewList.map(crew => {
       if (!crew.isActive) {
         return { 
@@ -63,12 +69,27 @@ export default function CrewStatusPage() {
           statusIcon: Ban
         };
       }
+      
+      const activeBlockOut = blockOuts.find(bo => 
+        bo.crewMemberId === crew.id &&
+        isWithinInterval(now, { start: parseISO(bo.startDate), end: endOfDay(parseISO(bo.endDate)) })
+      );
+
+      if (activeBlockOut) {
+          return {
+              ...crew,
+              status: activeBlockOut.reason, // e.g., "Training", "Medical Leave"
+              statusDetails: `Blocked out until ${format(parseISO(activeBlockOut.endDate), 'MM/dd/yy')}`,
+              statusVariant: 'secondary', // Grayish/neutral color for block-outs
+              statusIcon: CalendarOff,
+          };
+      }
+
 
       const assignedTrip = trips.find(trip => {
         const isAssigned = trip.assignedPilotId === crew.id || 
                            trip.assignedCoPilotId === crew.id || 
                            trip.assignedFlightAttendantIds?.includes(crew.id);
-        // A trip is considered "active" if it's released.
         return isAssigned && trip.status === 'Released';
       });
 
@@ -85,16 +106,15 @@ export default function CrewStatusPage() {
         };
       }
       
-      // Default to Available if active and not on a released trip
       return {
         ...crew,
         status: 'Available',
         statusDetails: 'On Standby',
         statusVariant: 'default',
-        statusIcon: CheckCircle
+        statusIcon: CheckCircle2
       };
     });
-  }, [crewList, trips]);
+  }, [crewList, trips, blockOuts]);
 
 
   const filteredCrewList = useMemo(() => {
@@ -120,7 +140,7 @@ export default function CrewStatusPage() {
     <>
       <PageHeader 
         title="Crew Status Board" 
-        description="Real-time overview of crew availability based on trip assignments."
+        description="Real-time overview of crew availability based on trip assignments and scheduled block-outs."
         icon={Users}
       />
       <Card className="shadow-lg">
@@ -171,9 +191,9 @@ export default function CrewStatusPage() {
                       {crew.homeBase && `Base: ${crew.homeBase}`}
                     </p>
                   </CardContent>
-                  <div className={`border-t p-3 text-center bg-${crew.statusVariant === 'default' ? 'green' : crew.statusVariant === 'secondary' ? 'blue' : 'red'}-50 dark:bg-muted/50`}>
+                  <div className={`border-t p-3 text-center ${crew.statusVariant === 'default' ? 'bg-green-50 dark:bg-green-900/20' : 'bg-muted/50'}`}>
                      <div className="flex items-center justify-center gap-2">
-                       <crew.statusIcon className={`h-5 w-5 ${crew.statusVariant === 'default' ? 'text-green-500' : crew.statusVariant === 'secondary' ? 'text-blue-500' : 'text-red-500' }`} />
+                       <crew.statusIcon className={`h-5 w-5 ${crew.statusVariant === 'default' ? 'text-green-500' : crew.statusVariant === 'destructive' ? 'text-red-500' : 'text-muted-foreground' }`} />
                        <p className="font-bold text-sm">{crew.status}</p>
                      </div>
                      <p className="text-xs text-muted-foreground truncate" title={crew.statusDetails}>{crew.statusDetails}</p>

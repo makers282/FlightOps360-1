@@ -21,6 +21,7 @@ import '@/ai/flows/manage-users-flow.ts';
 import '@/ai/flows/manage-trips-flow.ts'; 
 import '@/ai/flows/manage-crew-flow.ts'; 
 import '@/ai/flows/manage-aircraft-block-outs-flow.ts'; 
+import '@/ai/flows/manage-crew-block-outs-flow.ts';
 import '@/ai/flows/manage-crew-documents-flow.ts'; 
 import '@/ai/flows/manage-aircraft-documents-flow.ts'; 
 import '@/ai/flows/upload-aircraft-document-flow.ts'; 
