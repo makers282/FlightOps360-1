@@ -14,7 +14,7 @@ import { DollarSign, PlusCircle, Search, Edit, Trash2, Paperclip, ArrowUpDown, C
 import { DateRange } from "react-day-picker"
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
-import { addDays, format, startOfMonth, endOfMonth, subMonths, startOfQuarter, endOfQuarter, subQuarters, isWithinInterval, parseISO, isValid } from "date-fns"
+import { addDays, format, startOfMonth, endOfMonth, subMonths, startOfQuarter, endOfQuarter, subQuarters, isWithinInterval, parseISO, isValid, parse } from "date-fns"
 import { cn } from "@/lib/utils"
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
@@ -101,7 +101,10 @@ export default function MaintenanceCostsPage() {
     const getCostsInDateRange = (startDate: Date, endDate: Date) => {
         return costs.filter(c => {
             try {
-                return isWithinInterval(parseISO(c.invoiceDate), { start: startDate, end: endDate });
+                // The invoiceDate is "yyyy-MM-dd", which parseISO treats as UTC midnight.
+                // We should parse it as a local date to match `new Date()` for `now`.
+                const localInvoiceDate = parse(c.invoiceDate, 'yyyy-MM-dd', new Date());
+                return isWithinInterval(localInvoiceDate, { start: startDate, end: endDate });
             } catch {
                 return false;
             }
@@ -166,7 +169,7 @@ export default function MaintenanceCostsPage() {
       const aircraftMatch = filters.aircraft === 'all' || cost.tailNumber === filters.aircraft;
       const typeMatch = filters.costType === 'all' || cost.costType === filters.costType;
       const categoryMatch = filters.category === 'all' || cost.costBreakdowns.some(b => b.category === filters.category);
-      const dateMatch = !dateRange?.from || isWithinInterval(parseISO(cost.invoiceDate), { start: dateRange.from, end: dateRange.to || dateRange.from });
+      const dateMatch = !dateRange?.from || isWithinInterval(parse(cost.invoiceDate, 'yyyy-MM-dd', new Date()), { start: dateRange.from, end: dateRange.to || dateRange.from });
       return searchMatch && aircraftMatch && typeMatch && categoryMatch && dateMatch;
     });
 
@@ -176,8 +179,8 @@ export default function MaintenanceCostsPage() {
         let bValue: any = b[sortConfig.key];
         
         if (sortConfig.key === 'invoiceDate') {
-            aValue = parseISO(a.invoiceDate).getTime();
-            bValue = parseISO(b.invoiceDate).getTime();
+            aValue = parse(a.invoiceDate, 'yyyy-MM-dd', new Date()).getTime();
+            bValue = parse(b.invoiceDate, 'yyyy-MM-dd', new Date()).getTime();
         }
 
         if (aValue < bValue) return sortConfig.direction === 'ascending' ? -1 : 1;
@@ -214,8 +217,13 @@ export default function MaintenanceCostsPage() {
   const uniqueCategories = [...new Set(costs.flatMap(c => c.costBreakdowns.map(b => b.category)))];
 
   const formatDateForDisplay = (dateString: string) => {
-    if (!dateString || !isValid(parseISO(dateString))) return 'N/A';
-    return format(parseISO(dateString), 'MM/dd/yyyy');
+    if (!dateString) return 'N/A';
+    try {
+      const date = parse(dateString, 'yyyy-MM-dd', new Date());
+      return isValid(date) ? format(date, 'MM/dd/yyyy') : 'Invalid Date';
+    } catch {
+      return 'Invalid Date Format';
+    }
   };
 
   return (
