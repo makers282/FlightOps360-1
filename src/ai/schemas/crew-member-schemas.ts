@@ -4,7 +4,7 @@
  */
 import { z } from 'zod';
 
-export const crewRoles = ["Pilot in Command (PIC)", "Second in Command (SIC)", "Flight Nurse", "Flight Paramedic", "Dispatcher", "Maintenance Technician", "Line Service Technician"] as const;
+export const crewRoles = ["Pilot in Command (PIC)", "Second in Command (SIC)", "Flight Attendant", "Flight Nurse", "Flight Paramedic", "Dispatcher", "Maintenance Technician", "Line Service Technician"] as const;
 export type CrewRole = (typeof crewRoles)[number];
 
 export const employmentTypes = ["Full-Time", "Part-Time", "Contractor"] as const;
