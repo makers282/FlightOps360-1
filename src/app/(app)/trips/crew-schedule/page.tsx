@@ -16,6 +16,7 @@ import {
   setMonth, parseISO, isWithinInterval, differenceInMinutes, startOfDay, endOfDay
 } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
+import { cn } from "@/lib/utils";
 
 type EventType = 'duty' | 'flight' | 'rest' | 'off';
 
