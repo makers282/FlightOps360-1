@@ -1,95 +1,132 @@
 
 "use client";
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Users, Search, Loader2, AlertTriangle } from 'lucide-react';
+import { Users, Search, Loader2, AlertTriangle, CheckCircle, Plane, Ban } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { fetchCrewMembers, type CrewMember } from '@/ai/flows/manage-crew-flow';
+import { fetchTrips, type Trip } from '@/ai/flows/manage-trips-flow';
+import { isWithinInterval, parseISO } from 'date-fns';
 
-const getStatusBadgeVariant = (isActive: boolean): "default" | "destructive" => {
-  return isActive ? 'default' : 'destructive';
-};
-
-const getStatusLabel = (isActive: boolean): string => {
-  return isActive ? 'Active' : 'Inactive';
-};
+interface CrewWithStatus extends CrewMember {
+  status: 'On Trip' | 'Available' | 'Inactive';
+  statusDetails: string;
+  statusVariant: "default" | "destructive" | "secondary" | "outline";
+  statusIcon: React.ElementType;
+}
 
 export default function CrewStatusPage() {
   const [crewList, setCrewList] = useState<CrewMember[]>([]);
+  const [trips, setTrips] = useState<Trip[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const { toast } = useToast();
 
-  useEffect(() => {
-    const loadCrew = async () => {
-      setIsLoading(true);
-      try {
-        const fetchedCrew = await fetchCrewMembers();
-        setCrewList(fetchedCrew);
-      } catch (error) {
-        console.error("Failed to load crew members:", error);
-        toast({
-          title: "Error Loading Crew",
-          description: error instanceof Error ? error.message : "Could not fetch crew data.",
-          variant: "destructive",
-        });
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    loadCrew();
+  const loadData = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const [fetchedCrew, fetchedTrips] = await Promise.all([
+        fetchCrewMembers(),
+        fetchTrips(),
+      ]);
+      setCrewList(fetchedCrew);
+      setTrips(fetchedTrips);
+    } catch (error) {
+      console.error("Failed to load data:", error);
+      toast({
+        title: "Error Loading Data",
+        description: error instanceof Error ? error.message : "Could not fetch crew and trip data.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   }, [toast]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+  
+  const crewWithStatus = useMemo<CrewWithStatus[]>(() => {
+    return crewList.map(crew => {
+      if (!crew.isActive) {
+        return { 
+          ...crew, 
+          status: 'Inactive', 
+          statusDetails: 'Not on active duty roster',
+          statusVariant: 'destructive',
+          statusIcon: Ban
+        };
+      }
+
+      const assignedTrip = trips.find(trip => {
+        const isAssigned = trip.assignedPilotId === crew.id || 
+                           trip.assignedCoPilotId === crew.id || 
+                           trip.assignedFlightAttendantIds?.includes(crew.id);
+        // A trip is considered "active" if it's released.
+        return isAssigned && trip.status === 'Released';
+      });
+
+      if (assignedTrip) {
+         const route = (assignedTrip.legs && assignedTrip.legs.length > 0) 
+            ? `${assignedTrip.legs[0].origin} ➔ ${assignedTrip.legs[assignedTrip.legs.length - 1].destination}` 
+            : 'N/A';
+        return {
+          ...crew,
+          status: 'On Trip',
+          statusDetails: `Assigned to Trip ${assignedTrip.tripId} (${route})`,
+          statusVariant: 'secondary',
+          statusIcon: Plane
+        };
+      }
+      
+      // Default to Available if active and not on a released trip
+      return {
+        ...crew,
+        status: 'Available',
+        statusDetails: 'On Standby',
+        statusVariant: 'default',
+        statusIcon: CheckCircle
+      };
+    });
+  }, [crewList, trips]);
+
 
   const filteredCrewList = useMemo(() => {
     if (!searchTerm) {
-      return crewList;
+      return crewWithStatus;
     }
     const lowerSearchTerm = searchTerm.toLowerCase();
-    return crewList.filter(crew =>
+    return crewWithStatus.filter(crew =>
       `${crew.firstName} ${crew.lastName}`.toLowerCase().includes(lowerSearchTerm) ||
-      crew.role.toLowerCase().includes(lowerSearchTerm) ||
-      (crew.isActive ? "active" : "inactive").includes(lowerSearchTerm) ||
+      (crew.onboardingData?.roles?.some(role => role.toLowerCase().includes(lowerSearchTerm))) ||
+      crew.status.toLowerCase().includes(lowerSearchTerm) ||
       (crew.homeBase && crew.homeBase.toLowerCase().includes(lowerSearchTerm))
     );
-  }, [searchTerm, crewList]);
+  }, [searchTerm, crewWithStatus]);
 
   const getInitials = (firstName?: string, lastName?: string) => {
     const first = firstName?.[0] || '';
     const last = lastName?.[0] || '';
     return `${first}${last}`.toUpperCase() || 'N/A';
   };
-  
-  // Placeholder assignment logic for demonstration
-  const getAssignment = (crewId: string) => {
-    const assignments = [
-        "FL123 (KMIA)", "KHPN Base", "-", "N789EF Hangar 3", "KTEB Base", "FL456 (KORD)",
-        "Training Sim", "Vacation", "Medical Leave"
-    ];
-    // Simple pseudo-random assignment based on ID for visual variety
-    let hash = 0;
-    for (let i = 0; i < crewId.length; i++) {
-        hash = crewId.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    return assignments[Math.abs(hash) % assignments.length] || "-";
-  }
-
 
   return (
     <>
       <PageHeader 
-        title="Crew Status" 
-        description="View current status and assignments of all crew members."
+        title="Crew Status Board" 
+        description="Real-time overview of crew availability based on trip assignments."
         icon={Users}
       />
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle>All Crew Members</CardTitle>
-          <CardDescription>Monitor availability and assignments in real-time. (Assignments are illustrative)</CardDescription>
+          <CardDescription>Monitor availability and current assignments.</CardDescription>
           <div className="mt-4 relative">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input 
@@ -125,20 +162,21 @@ export default function CrewStatusPage() {
                 <Card key={crew.id} className="hover:shadow-md transition-shadow flex flex-col">
                   <CardContent className="p-4 flex flex-col items-center text-center flex-grow">
                     <Avatar className="h-20 w-20 mb-3">
-                      {/* Placeholder for actual avatar URLs when available */}
-                      <AvatarImage src={`https://placehold.co/100x100.png?text=${getInitials(crew.firstName, crew.lastName)}`} alt={`${crew.firstName} ${crew.lastName}`} data-ai-hint="person portrait professional" />
+                      <AvatarImage src={`https://placehold.co/100x100.png?text=${getInitials(crew.firstName, crew.lastName)}`} alt={`${crew.firstName} ${crew.lastName}`} data-ai-hint="pilot portrait professional" />
                       <AvatarFallback>{getInitials(crew.firstName, crew.lastName)}</AvatarFallback>
                     </Avatar>
                     <p className="font-semibold text-lg">{crew.firstName} {crew.lastName}</p>
-                    <p className="text-sm text-muted-foreground">{crew.role}</p>
-                    <Badge variant={getStatusBadgeVariant(crew.isActive)} className="mt-2 capitalize">{getStatusLabel(crew.isActive)}</Badge>
-                    <p className="text-xs text-muted-foreground mt-2">
+                    <p className="text-sm text-muted-foreground">{crew.onboardingData?.roles?.join(', ') || 'No role assigned'}</p>
+                     <p className="text-xs text-muted-foreground mt-2">
                       {crew.homeBase && `Base: ${crew.homeBase}`}
                     </p>
                   </CardContent>
-                  <div className="border-t p-3 bg-muted/50 text-center">
-                     <p className="text-xs font-medium text-muted-foreground">Current Assignment:</p>
-                     <p className="text-sm text-foreground truncate" title={getAssignment(crew.id)}>{getAssignment(crew.id)}</p>
+                  <div className={`border-t p-3 text-center bg-${crew.statusVariant === 'default' ? 'green' : crew.statusVariant === 'secondary' ? 'blue' : 'red'}-50 dark:bg-muted/50`}>
+                     <div className="flex items-center justify-center gap-2">
+                       <crew.statusIcon className={`h-5 w-5 ${crew.statusVariant === 'default' ? 'text-green-500' : crew.statusVariant === 'secondary' ? 'text-blue-500' : 'text-red-500' }`} />
+                       <p className="font-bold text-sm">{crew.status}</p>
+                     </div>
+                     <p className="text-xs text-muted-foreground truncate" title={crew.statusDetails}>{crew.statusDetails}</p>
                   </div>
                 </Card>
               ))}
