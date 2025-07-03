@@ -273,7 +273,7 @@ export default function CrewDocumentsPage() {
                 ) : (
                   allCrewMembers.map(crew => (
                     <SelectItem key={crew.id} value={crew.id}>
-                      {crew.firstName} {crew.lastName} ({crew.role})
+                      {crew.firstName} {crew.lastName} ({crew.onboardingData?.roles?.join(', ') || 'N/A'})
                     </SelectItem>
                   ))
                 )
@@ -372,7 +372,7 @@ export default function CrewDocumentsPage() {
         initialData={currentDocumentToEdit}
         isEditing={isEditingModal}
         isSaving={isSavingDocument}
-        crewMembers={allCrewMembers.map(cm => ({id: cm.id, firstName: cm.firstName, lastName: cm.lastName, role: cm.role}))}
+        crewMembers={allCrewMembers}
         isLoadingCrewMembers={isLoadingCrew}
         selectedCrewMemberIdForNew={selectedCrewMemberId}
       />
@@ -399,4 +399,3 @@ export default function CrewDocumentsPage() {
     </>
   );
 }
-

@@ -401,7 +401,8 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
     onSave(data);
   };
 
-  const flightAttendants = crewRoster.filter(c => c.isActive && c.role === 'Flight Attendant');
+  const pilots = crewRoster.filter(c => c.isActive && c.onboardingData?.roles?.some(role => ["Pilot in Command (PIC)", "Second in Command (SIC)"].includes(role)));
+  const flightAttendants = crewRoster.filter(c => c.isActive && c.onboardingData?.roles?.includes('Flight Attendant'));
 
 
   if (isLoadingInitialData) {
@@ -495,7 +496,7 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
                     <FormControl><SelectTrigger><SelectValue placeholder={isLoadingCrewRoster ? "Loading crew..." : "Select Pilot"} /></SelectTrigger></FormControl>
                     <SelectContent>
                       <SelectItem value={UNASSIGNED_CREW_VALUE}>Unassigned</SelectItem>
-                      {crewRoster.filter(c => c.isActive && (c.role === "Captain" || c.role === "First Officer")).map(c => (<SelectItem key={c.id} value={c.id}>{c.firstName} {c.lastName} ({c.role})</SelectItem>))}
+                      {pilots.map(c => (<SelectItem key={c.id} value={c.id}>{c.firstName} {c.lastName} ({c.onboardingData?.roles?.join(', ')})</SelectItem>))}
                     </SelectContent>
                   </Select>
                   <FormMessage />
@@ -512,7 +513,7 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
                     <FormControl><SelectTrigger><SelectValue placeholder={isLoadingCrewRoster ? "Loading crew..." : "Select Co-Pilot"} /></SelectTrigger></FormControl>
                     <SelectContent>
                       <SelectItem value={UNASSIGNED_CREW_VALUE}>Unassigned</SelectItem>
-                       {crewRoster.filter(c => c.isActive && (c.role === "First Officer" || c.role === "Captain")).map(c => (<SelectItem key={c.id} value={c.id}>{c.firstName} {c.lastName} ({c.role})</SelectItem>))}
+                       {pilots.map(c => (<SelectItem key={c.id} value={c.id}>{c.firstName} {c.lastName} ({c.onboardingData?.roles?.join(', ')})</SelectItem>))}
                     </SelectContent>
                   </Select>
                   <FormMessage />

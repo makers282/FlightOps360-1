@@ -277,7 +277,7 @@ export default function ViewTripDetailsPage() {
     if (!crewId) return "N/A";
     if (isLoadingCrewRosterDetails) return <Loader2 className="h-4 w-4 animate-spin inline-block" />;
     const crewMember = crewRosterDetails.find(c => c.id === crewId);
-    return crewMember ? `${crewMember.firstName} ${crewMember.lastName} (${crewMember.role})` : `Unknown (ID: ${crewId})`;
+    return crewMember ? `${crewMember.firstName} ${crewMember.lastName} (${crewMember.onboardingData?.roles?.join(', ') || 'N/A'})` : `Unknown (ID: ${crewId})`;
   };
 
   const handleOpenFlightLogModal = (legIndex: number) => {
@@ -630,5 +630,3 @@ export default function ViewTripDetailsPage() {
     </TooltipProvider>
   );
 }
-
-    
