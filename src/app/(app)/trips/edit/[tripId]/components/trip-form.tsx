@@ -496,7 +496,7 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
                     <FormControl><SelectTrigger><SelectValue placeholder={isLoadingCrewRoster ? "Loading crew..." : "Select Pilot"} /></SelectTrigger></FormControl>
                     <SelectContent>
                       <SelectItem value={UNASSIGNED_CREW_VALUE}>Unassigned</SelectItem>
-                      {pilots.map(c => (<SelectItem key={c.id} value={c.id}>{c.firstName} {c.lastName} ({c.onboardingData?.roles?.join(', ')})</SelectItem>))}
+                      {pilots.map(c => (<SelectItem key={c.id} value={c.id}>{c.firstName} {c.lastName}</SelectItem>))}
                     </SelectContent>
                   </Select>
                   <FormMessage />
@@ -513,7 +513,7 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
                     <FormControl><SelectTrigger><SelectValue placeholder={isLoadingCrewRoster ? "Loading crew..." : "Select Co-Pilot"} /></SelectTrigger></FormControl>
                     <SelectContent>
                       <SelectItem value={UNASSIGNED_CREW_VALUE}>Unassigned</SelectItem>
-                       {pilots.map(c => (<SelectItem key={c.id} value={c.id}>{c.firstName} {c.lastName} ({c.onboardingData?.roles?.join(', ')})</SelectItem>))}
+                       {pilots.map(c => (<SelectItem key={c.id} value={c.id}>{c.firstName} {c.lastName}</SelectItem>))}
                     </SelectContent>
                   </Select>
                   <FormMessage />
