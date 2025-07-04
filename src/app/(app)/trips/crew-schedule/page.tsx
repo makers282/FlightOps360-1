@@ -1,10 +1,9 @@
-
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { PageHeader } from '@/components/page-header';
-import { CalendarCheck2, Loader2, Filter, ChevronLeft, ChevronRight } from 'lucide-react'; 
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { CalendarCheck2, Loader2, ChevronLeft, ChevronRight } from 'lucide-react'; 
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -13,12 +12,12 @@ import { fetchTrips, type Trip, type TripLeg } from '@/ai/flows/manage-trips-flo
 import { fetchCrewBlockOuts, type CrewBlockOut } from '@/ai/flows/manage-crew-block-outs-flow';
 import { 
   startOfMonth, endOfMonth, getDaysInMonth, format, addMonths, subMonths, getYear, setYear,
-  setMonth, parseISO, isWithinInterval, differenceInMinutes, startOfDay, endOfDay
+  setMonth, parseISO, isWithinInterval, startOfDay
 } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from "@/lib/utils";
 
-type EventType = 'duty' | 'flight' | 'rest' | 'off';
+type EventType = 'duty' | 'revenue_flight' | 'operational_flight' | 'rest' | 'off';
 
 interface CalendarEvent {
   type: EventType;
@@ -34,17 +33,22 @@ interface DayData {
   flightTotal: number;
 }
 
-const getEventTypeStyles = (type: EventType) => {
+const getEventTypeStyles = (type: EventType): string => {
   switch (type) {
     case 'duty': return 'bg-black h-1 absolute top-1/2 -translate-y-1/2';
-    case 'flight': return 'bg-sky-400 h-4 absolute top-1/2 -translate-y-1/2 rounded-sm';
+    case 'revenue_flight': return 'bg-yellow-400 h-4 absolute top-1/2 -translate-y-1/2 rounded-sm border border-yellow-600';
+    case 'operational_flight': return 'bg-sky-400 h-4 absolute top-1/2 -translate-y-1/2 rounded-sm border border-sky-600';
     case 'rest': return 'bg-gray-300 h-px absolute top-1/2 -translate-y-1/2';
-    case 'off': return 'bg-red-400 h-full absolute';
+    case 'off': return 'bg-red-200 h-full absolute';
     default: return 'bg-gray-500';
   }
 };
 
-export default function CrewDutyLogPage() {
+const isRevenueLeg = (legType: TripLeg['legType']) => {
+    return ["Charter", "Owner", "Ambulance", "Cargo"].includes(legType);
+}
+
+export default function CrewSchedulePage() {
   const [selectedCrewId, setSelectedCrewId] = useState<string | null>(null);
   const [crewMembers, setCrewMembers] = useState<CrewMember[]>([]);
   const [trips, setTrips] = useState<Trip[]>([]);
@@ -101,7 +105,7 @@ export default function CrewDutyLogPage() {
       
       const dayBlockOut = blockOuts.find(bo => 
           bo.crewMemberId === selectedCrewId && 
-          isWithinInterval(currentDayDate, { start: parseISO(bo.startDate), end: parseISO(bo.endDate) })
+          isWithinInterval(currentDayDate, { start: startOfDay(parseISO(bo.startDate)), end: startOfDay(parseISO(bo.endDate)) })
       );
 
       if (dayBlockOut) {
@@ -124,12 +128,11 @@ export default function CrewDutyLogPage() {
             
             const firstDeparture = parseISO(legsForDay[0].departureDateTime!);
             const dutyStart = new Date(firstDeparture.getTime() - 60 * 60 * 1000); // Duty 1hr before first departure
-            const dutyStartHour = dutyStart.getHours() + dutyStart.getMinutes() / 60;
-
+            
             let lastArrival: Date | null = null;
             legsForDay.forEach(leg => {
               const departure = parseISO(leg.departureDateTime!);
-              const flightHours = leg.flightTimeHours || 0;
+              const flightHours = leg.blockTimeHours || 0; // Use block time for flight bar
               dailyFlight += flightHours;
               
               const arrival = new Date(departure.getTime() + flightHours * 60 * 60 * 1000);
@@ -138,15 +141,24 @@ export default function CrewDutyLogPage() {
               }
               
               const startHour = departure.getHours() + departure.getMinutes() / 60;
-              eventsForDay.push({ type: 'flight', startHour, durationHours: flightHours });
+              eventsForDay.push({ 
+                type: isRevenueLeg(leg.legType) ? 'revenue_flight' : 'operational_flight', 
+                startHour, 
+                durationHours: flightHours,
+                label: `${leg.origin}-${leg.destination}`
+              });
             });
 
             const dutyEnd = new Date(lastArrival!.getTime() + 30 * 60 * 1000); // Duty 30min after last arrival
-            const dutyEndHour = dutyEnd.getHours() + dutyEnd.getMinutes() / 60;
-
-            const dutyDurationHours = dutyEndHour - dutyStartHour;
+            
+            const dutyDurationMillis = dutyEnd.getTime() - dutyStart.getTime();
+            const dutyDurationHours = dutyDurationMillis / (1000 * 60 * 60);
             dailyDuty = dutyDurationHours > 0 ? dutyDurationHours : 0;
+            
+            const dutyStartHour = dutyStart.getHours() + dutyStart.getMinutes() / 60;
+
             eventsForDay.push({ type: 'duty', startHour: dutyStartHour, durationHours: dutyDurationHours });
+            eventsForDay.push({ type: 'rest', startHour: dutyStartHour + dutyDurationHours, durationHours: 24 - (dutyStartHour + dutyDurationHours)});
         }
       }
 
@@ -169,11 +181,25 @@ export default function CrewDutyLogPage() {
   const years = Array.from({ length: 10 }, (_, i) => getYear(new Date()) - 5 + i);
   const months = Array.from({ length: 12 }, (_, i) => ({ value: i, name: format(new Date(0, i), 'MMMM') }));
 
+  const LegendItem = ({ color, label }: { color: string, label: string }) => (
+    <div className="flex items-center gap-2">
+        <div className={cn("h-4 w-4 border border-black/30", color)}></div>
+        <span className="text-xs">{label}</span>
+    </div>
+  );
+
   if (isLoading) {
     return (
-        <div className="flex items-center justify-center h-96">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <p className="ml-2 text-muted-foreground">Loading schedule data...</p>
+        <div className="space-y-6">
+            <PageHeader title="Crew Schedule" description="Monthly view of crew duty, flight, and rest periods." icon={CalendarCheck2} />
+            <Card>
+                <CardHeader>
+                    <Skeleton className="h-10 w-[450px]" />
+                </CardHeader>
+                <CardContent>
+                    <Skeleton className="h-[500px] w-full" />
+                </CardContent>
+            </Card>
         </div>
     );
   }
@@ -181,92 +207,87 @@ export default function CrewDutyLogPage() {
   return (
     <>
       <PageHeader
-        title="Crew Duty Log"
-        description="Detailed monthly view of crew duty, flight times, and off-duty periods."
+        title="Crew Schedule"
+        description="Monthly view of crew duty, flight, and rest periods."
         icon={CalendarCheck2}
       />
-      <Card>
+      <Card className="shadow-lg">
         <CardHeader>
-            <div className="flex flex-col sm:flex-row gap-4">
-                <Select value={selectedCrewId || ''} onValueChange={setSelectedCrewId}>
-                    <SelectTrigger className="w-[250px]"><SelectValue placeholder="Select Crew Member"/></SelectTrigger>
-                    <SelectContent>{crewMembers.map(c => <SelectItem key={c.id} value={c.id}>{`${c.firstName} ${c.lastName}`}</SelectItem>)}</SelectContent>
-                </Select>
-                <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div className="flex gap-2 items-center flex-wrap">
+                    <Select value={selectedCrewId || ''} onValueChange={setSelectedCrewId}>
+                        <SelectTrigger className="w-[220px]"><SelectValue placeholder="Select Crew Member"/></SelectTrigger>
+                        <SelectContent>{crewMembers.map(c => <SelectItem key={c.id} value={c.id}>{`${c.firstName} ${c.lastName}`}</SelectItem>)}</SelectContent>
+                    </Select>
                     <Select value={String(currentDate.getMonth())} onValueChange={(m) => setCurrentDate(prev => setMonth(prev, parseInt(m)))}>
-                        <SelectTrigger className="w-[150px]"><SelectValue/></SelectTrigger>
+                        <SelectTrigger className="w-[130px]"><SelectValue/></SelectTrigger>
                         <SelectContent>{months.map(m => <SelectItem key={m.value} value={String(m.value)}>{m.name}</SelectItem>)}</SelectContent>
                     </Select>
                     <Select value={String(getYear(currentDate))} onValueChange={(y) => setCurrentDate(prev => setYear(prev, parseInt(y)))}>
-                        <SelectTrigger className="w-[100px]"><SelectValue/></SelectTrigger>
+                        <SelectTrigger className="w-[90px]"><SelectValue/></SelectTrigger>
                         <SelectContent>{years.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
                     </Select>
+                    <div className="flex gap-1">
+                        <Button variant="outline" size="icon" onClick={() => setCurrentDate(subMonths(currentDate, 1))}><ChevronLeft className="h-4 w-4"/></Button>
+                        <Button variant="outline" size="icon" onClick={() => setCurrentDate(addMonths(currentDate, 1))}><ChevronRight className="h-4 w-4"/></Button>
+                    </div>
                 </div>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="icon" onClick={() => setCurrentDate(subMonths(currentDate, 1))}><ChevronLeft className="h-4 w-4"/></Button>
-                  <Button variant="outline" size="icon" onClick={() => setCurrentDate(addMonths(currentDate, 1))}><ChevronRight className="h-4 w-4"/></Button>
-                </div>
-            </div>
-            <div className="flex items-center gap-4 mt-4 text-xs">
-                <div className="flex items-center gap-2"><div className="w-4 h-1 bg-black"/>Duty</div>
-                <div className="flex items-center gap-2"><div className="w-4 h-3 bg-sky-400 rounded-sm"/>Flight Leg</div>
-                <div className="flex items-center gap-2"><div className="w-4 h-px bg-gray-300"/>Rest</div>
-                <div className="flex items-center gap-2"><div className="w-4 h-3 bg-red-400 rounded-sm"/>Day Off</div>
+                 <div className="flex items-center gap-x-4 gap-y-1 flex-wrap border rounded-md p-2 bg-muted/50 text-muted-foreground">
+                    <LegendItem color="bg-black h-1" label="Duty" />
+                    <LegendItem color="bg-sky-400" label="Part 91 Leg" />
+                    <LegendItem color="bg-yellow-400" label="Revenue Leg" />
+                    <LegendItem color="bg-gray-300 h-px" label="Rest" />
+                    <LegendItem color="bg-red-200" label="Day Off" />
+                 </div>
             </div>
         </CardHeader>
-        <CardContent>
-          <div className="border rounded-lg overflow-x-auto">
-            <div className="grid grid-cols-[auto_repeat(24,minmax(40px,1fr))_auto] min-w-[1300px]">
-              {/* Header */}
-              <div className="sticky left-0 bg-muted border-b border-r p-2 text-xs font-semibold text-center z-10">Day</div>
-              {Array.from({length: 24}).map((_, i) => (
-                <div key={`header-${i}`} className="border-b p-2 text-xs font-semibold text-center">{String(i).padStart(2,'0')}</div>
-              ))}
-              <div className="bg-muted border-b border-l p-2 text-xs font-semibold text-center whitespace-nowrap sticky right-0 z-10">Duty | Flight</div>
-
-              {/* Body */}
-              {processedCalendarData.days.map(({ dayOfMonth, events, dutyTotal, flightTotal }) => (
-                <React.Fragment key={dayOfMonth}>
-                  <div className="sticky left-0 bg-muted border-r p-2 text-xs font-semibold text-center z-10">{dayOfMonth}</div>
-                  <div className="col-span-24 border-r relative grid grid-cols-24">
-                      {/* Grid lines */}
-                      {Array.from({ length: 23 }).map((_, i) => (
-                          <div key={`line-${dayOfMonth}-${i}`} className="h-full border-r"></div>
-                      ))}
-                      {/* Events */}
-                      {events.map((event, i) => (
-                          <div
-                              key={`${dayOfMonth}-${i}`}
-                              title={event.label || event.type}
-                              className={cn("rounded", getEventTypeStyles(event.type))}
-                              style={{
-                                  left: `${(event.startHour / 24) * 100}%`,
-                                  width: `${(event.durationHours / 24) * 100}%`,
-                              }}
-                          />
-                      ))}
-                  </div>
-                  <div className="bg-muted border-l p-2 text-xs text-center whitespace-nowrap sticky right-0 z-10">
-                    <span className="font-mono">{formatHourTotal(dutyTotal)}</span>
-                    <span className="mx-1">|</span>
-                    <span className="font-mono">{formatHourTotal(flightTotal)}</span>
-                  </div>
-                </React.Fragment>
-              ))}
-
-              {/* Footer */}
-              <div className="sticky left-0 bg-card border-t border-r p-2 text-xs font-bold text-center z-10">Total</div>
-              <div className="col-span-24 border-t p-2"></div>
-              <div className="bg-card border-t border-l p-2 text-xs font-bold text-center whitespace-nowrap sticky right-0 z-10">
-                  <span className="font-mono">{formatHourTotal(processedCalendarData.monthlyDutyTotal)}</span>
-                  <span className="mx-1">|</span>
-                  <span className="font-mono">{formatHourTotal(processedCalendarData.monthlyFlightTotal)}</span>
-              </div>
-            </div>
+        <CardContent className="overflow-x-auto">
+          <div className="w-max min-w-full">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="bg-muted">
+                    <th className="sticky left-0 bg-muted border p-2 text-xs font-semibold text-center z-10 w-24">Duty Days</th>
+                    {Array.from({length: 24}).map((_, i) => (
+                        <th key={`header-${i}`} className="border p-2 text-xs font-semibold text-center w-12">{String(i).padStart(2,'0')}</th>
+                    ))}
+                    <th className="sticky right-0 bg-muted border p-2 text-xs font-semibold text-center z-10 w-24 whitespace-nowrap">Duty Time</th>
+                    <th className="sticky right-0 bg-muted border p-2 text-xs font-semibold text-center z-10 w-24 whitespace-nowrap">Flight Time</th>
+                </tr>
+              </thead>
+              <tbody>
+                {processedCalendarData.days.map(({ dayOfMonth, events, dutyTotal, flightTotal }) => (
+                    <tr key={dayOfMonth}>
+                        <td className="sticky left-0 bg-muted border p-2 text-sm font-semibold text-center z-10">{dayOfMonth}</td>
+                        <td colSpan={24} className="border p-0 relative h-10">
+                             {events.map((event, i) => (
+                                <div
+                                    key={`${dayOfMonth}-${i}`}
+                                    title={event.label || event.type}
+                                    className={cn("rounded", getEventTypeStyles(event.type))}
+                                    style={{
+                                        left: `${(event.startHour / 24) * 100}%`,
+                                        width: `${(event.durationHours / 24) * 100}%`,
+                                    }}
+                                />
+                            ))}
+                        </td>
+                        <td className="sticky right-0 bg-muted border p-2 text-sm text-center font-mono z-10">{formatHourTotal(dutyTotal)}</td>
+                        <td className="sticky right-0 bg-muted border p-2 text-sm text-center font-mono z-10">{formatHourTotal(flightTotal)}</td>
+                    </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="bg-card font-bold">
+                    <td className="sticky left-0 bg-card border p-2 text-sm text-center z-10">Total</td>
+                    <td colSpan={24} className="border p-2"></td>
+                    <td className="sticky right-0 bg-card border p-2 text-sm text-center font-mono z-10">{formatHourTotal(processedCalendarData.monthlyDutyTotal)}</td>
+                    <td className="sticky right-0 bg-card border p-2 text-sm text-center font-mono z-10">{formatHourTotal(processedCalendarData.monthlyFlightTotal)}</td>
+                </tr>
+              </tfoot>
+            </table>
           </div>
         </CardContent>
       </Card>
     </>
   );
 }
-        
