@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -12,7 +13,7 @@ import { fetchTrips, type Trip, type TripLeg } from '@/ai/flows/manage-trips-flo
 import { fetchCrewBlockOuts, type CrewBlockOut } from '@/ai/flows/manage-crew-block-outs-flow';
 import { 
   startOfMonth, endOfMonth, getDaysInMonth, format, addMonths, subMonths, getYear, setYear,
-  setMonth, parseISO, isWithinInterval, startOfDay
+  setMonth, parseISO, isWithinInterval, startOfDay, endOfDay
 } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from "@/lib/utils";
