@@ -3,20 +3,22 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { PageHeader } from '@/components/page-header';
-import { CalendarCheck2, Loader2, ChevronLeft, ChevronRight } from 'lucide-react'; 
+import { CalendarCheck2, Loader2, ChevronLeft, ChevronRight, Lock } from 'lucide-react'; 
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { fetchCrewMembers, type CrewMember } from '@/ai/flows/manage-crew-flow';
 import { fetchTrips, type Trip, type TripLeg } from '@/ai/flows/manage-trips-flow';
-import { fetchCrewBlockOuts, type CrewBlockOut } from '@/ai/flows/manage-crew-block-outs-flow';
+import { fetchCrewBlockOuts, saveCrewBlockOut, type CrewBlockOut } from '@/ai/flows/manage-crew-block-outs-flow';
 import { 
   startOfMonth, endOfMonth, getDaysInMonth, format, addMonths, subMonths, getYear, setYear,
   setMonth, parseISO, isWithinInterval, startOfDay, endOfDay
 } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from "@/lib/utils";
+import { CreateCrewBlockOutModal, type CrewBlockOutFormData } from '../calendar/components/create-crew-block-out-modal';
+
 
 type EventType = 'duty' | 'revenue_flight' | 'operational_flight' | 'rest' | 'off';
 
@@ -57,6 +59,10 @@ export default function CrewSchedulePage() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
+
+  const [isBlockOutModalOpen, setIsBlockOutModalOpen] = useState(false);
+  const [selectedDateForBlockOut, setSelectedDateForBlockOut] = useState<Date | null>(null);
+
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -172,6 +178,40 @@ export default function CrewSchedulePage() {
 
   }, [selectedCrewId, currentDate, trips, blockOuts]);
   
+  const handleDayClick = (dayOfMonth: number) => {
+    if (!selectedCrewId) {
+      toast({ title: "Select a Crew Member", description: "Please select a crew member before scheduling a block out.", variant: "destructive" });
+      return;
+    }
+    const dateForModal = new Date(getYear(currentDate), currentDate.getMonth(), dayOfMonth);
+    setSelectedDateForBlockOut(dateForModal);
+    setIsBlockOutModalOpen(true);
+  };
+  
+  const handleSaveCrewBlockOut = async (data: CrewBlockOutFormData) => {
+    const selectedCrew = crewMembers.find(c => c.id === selectedCrewId);
+    if (!selectedCrew) {
+      toast({ title: "Error", description: "Selected crew member not found.", variant: "destructive" });
+      return;
+    }
+    const blockOutToSave = {
+      crewMemberId: selectedCrew.id,
+      crewMemberName: `${selectedCrew.firstName} ${selectedCrew.lastName}`,
+      reason: data.reason,
+      notes: data.notes,
+      startDate: format(data.startDate, 'yyyy-MM-dd'),
+      endDate: format(data.endDate, 'yyyy-MM-dd'),
+    };
+    try {
+      await saveCrewBlockOut(blockOutToSave as any);
+      toast({ title: "Crew Block-Out Saved", variant: "default" });
+      await loadData(); // Reload all data to reflect changes
+      setIsBlockOutModalOpen(false);
+    } catch (error) {
+       toast({ title: "Error Saving Block-Out", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
+    }
+  };
+
   const formatHourTotal = (totalHours: number) => {
       if (totalHours <= 0) return '00:00';
       const hours = Math.floor(totalHours);
@@ -188,6 +228,8 @@ export default function CrewSchedulePage() {
         <span className="text-xs">{label}</span>
     </div>
   );
+  
+  const selectedCrewMember = crewMembers.find(c => c.id === selectedCrewId);
 
   if (isLoading) {
     return (
@@ -232,6 +274,9 @@ export default function CrewSchedulePage() {
                         <Button variant="outline" size="icon" onClick={() => setCurrentDate(subMonths(currentDate, 1))}><ChevronLeft className="h-4 w-4"/></Button>
                         <Button variant="outline" size="icon" onClick={() => setCurrentDate(addMonths(currentDate, 1))}><ChevronRight className="h-4 w-4"/></Button>
                     </div>
+                     <Button variant="outline" size="sm" onClick={() => handleDayClick(new Date().getDate())} disabled={!selectedCrewId}>
+                        <Lock className="mr-2 h-4 w-4" /> Schedule Block Out
+                    </Button>
                 </div>
                  <div className="flex items-center gap-x-4 gap-y-1 flex-wrap border rounded-md p-2 bg-muted/50 text-muted-foreground">
                     <LegendItem color="bg-black h-1" label="Duty" />
@@ -258,7 +303,12 @@ export default function CrewSchedulePage() {
               <tbody>
                 {processedCalendarData.days.map(({ dayOfMonth, events, dutyTotal, flightTotal }) => (
                     <tr key={dayOfMonth}>
-                        <td className="sticky left-0 bg-muted border p-2 text-sm font-semibold text-center z-10">{dayOfMonth}</td>
+                        <td 
+                          className="sticky left-0 bg-muted border p-2 text-sm font-semibold text-center z-10 hover:bg-muted/80 cursor-pointer"
+                          onClick={() => handleDayClick(dayOfMonth)}
+                        >
+                          {dayOfMonth}
+                        </td>
                         <td colSpan={24} className="border p-0 relative h-10">
                              {events.map((event, i) => (
                                 <div
@@ -289,6 +339,14 @@ export default function CrewSchedulePage() {
           </div>
         </CardContent>
       </Card>
+      
+      <CreateCrewBlockOutModal
+        isOpen={isBlockOutModalOpen}
+        setIsOpen={setIsBlockOutModalOpen}
+        onSave={handleSaveCrewBlockOut}
+        crewMember={selectedCrewMember || null}
+        initialDate={selectedDateForBlockOut || new Date()}
+      />
     </>
   );
 }
