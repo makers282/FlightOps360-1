@@ -12,8 +12,8 @@ export const CrewBlockOutSchema = z.object({
   crewMemberName: z.string().optional().describe("Denormalized name for easier display."),
   reason: z.enum(crewBlockOutReasons).describe("The reason for the block-out period."),
   notes: z.string().optional().describe("Additional notes about the block-out."),
-  startDate: z.string().describe("ISO string format for the start date of the block-out period (inclusive)."),
-  endDate: z.string().describe("ISO string format for the end date of the block-out period (inclusive)."),
+  startDate: z.string().datetime({ message: "Start date must be a valid ISO date string." }).describe("Full ISO 8601 date-time string for the block-out start."),
+  endDate: z.string().datetime({ message: "End date must be a valid ISO date string." }).describe("Full ISO 8601 date-time string for the block-out end."),
   createdAt: z.string().optional().describe("ISO string format, server-generated timestamp."),
   updatedAt: z.string().optional().describe("ISO string format, server-generated timestamp."),
 });

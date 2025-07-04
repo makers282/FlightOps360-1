@@ -20,21 +20,27 @@ import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { CalendarIcon, Loader2, Lock, Save } from 'lucide-react';
+import { CalendarIcon, Loader2, Lock, Save, Trash2 } from 'lucide-react';
 import { cn } from "@/lib/utils";
-import { format, isValid as isValidDate, startOfDay } from "date-fns";
+import { format, parseISO, startOfDay, setHours, setMinutes } from "date-fns";
 import type { CrewMember } from '@/ai/schemas/crew-member-schemas';
-import { crewBlockOutReasons } from '@/ai/schemas/crew-block-out-schemas';
+import { crewBlockOutReasons, type SaveCrewBlockOutInput } from '@/ai/schemas/crew-block-out-schemas';
 import { Textarea } from '@/components/ui/textarea';
 
 const blockOutFormSchema = z.object({
   reason: z.enum(crewBlockOutReasons, { required_error: "A reason is required." }),
   notes: z.string().optional(),
   startDate: z.date({ required_error: "Start date is required." }),
+  startTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Invalid time format (HH:MM)"),
   endDate: z.date({ required_error: "End date is required." }),
-}).refine(data => data.endDate >= data.startDate, {
-  message: "End date cannot be before start date.",
-  path: ["endDate"],
+  endTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Invalid time format (HH:MM)"),
+}).refine(data => {
+    const startDateTime = setMinutes(setHours(data.startDate, parseInt(data.startTime.split(':')[0])), parseInt(data.startTime.split(':')[1]));
+    const endDateTime = setMinutes(setHours(data.endDate, parseInt(data.endTime.split(':')[0])), parseInt(data.endTime.split(':')[1]));
+    return endDateTime > startDateTime;
+}, {
+  message: "End date and time must be after start date and time.",
+  path: ["endDate"], 
 });
 
 export type CrewBlockOutFormData = z.infer<typeof blockOutFormSchema>;
@@ -42,53 +48,91 @@ export type CrewBlockOutFormData = z.infer<typeof blockOutFormSchema>;
 interface CreateCrewBlockOutModalProps {
   isOpen: boolean;
   setIsOpen: (isOpen: boolean) => void;
-  onSave: (data: CrewBlockOutFormData) => Promise<void>;
+  onSave: (data: SaveCrewBlockOutInput, id?: string) => Promise<void>;
+  onDelete?: (id: string) => Promise<void>;
   crewMember: CrewMember | null;
-  initialDate?: Date;
+  initialData?: {
+    id?: string;
+    reason: (typeof crewBlockOutReasons)[number];
+    notes?: string;
+    startDate: Date;
+    endDate: Date;
+  } | null;
+  isEditing: boolean;
 }
 
 export function CreateCrewBlockOutModal({
   isOpen,
   setIsOpen,
   onSave,
+  onDelete,
   crewMember,
-  initialDate,
+  initialData,
+  isEditing,
 }: CreateCrewBlockOutModalProps) {
   const [isSaving, setIsSaving] = useState(false);
-  const [minStartDate, setMinStartDate] = useState<Date | null>(null);
 
   const form = useForm<CrewBlockOutFormData>({
     resolver: zodResolver(blockOutFormSchema),
     defaultValues: {
       reason: undefined,
       notes: '',
-      startDate: initialDate ? startOfDay(initialDate) : startOfDay(new Date()),
-      endDate: initialDate ? startOfDay(initialDate) : startOfDay(new Date()),
+      startDate: startOfDay(new Date()),
+      startTime: '09:00',
+      endDate: startOfDay(new Date()),
+      endTime: '17:00',
     },
   });
 
   useEffect(() => {
-    const today = new Date();
-    today.setHours(0,0,0,0);
-    setMinStartDate(today);
-  }, []);
-
-  useEffect(() => {
     if (isOpen) {
-      form.reset({
-        reason: undefined,
-        notes: '',
-        startDate: initialDate ? startOfDay(initialDate) : startOfDay(new Date()),
-        endDate: initialDate ? startOfDay(initialDate) : startOfDay(new Date()),
-      });
+      if (isEditing && initialData) {
+        form.reset({
+          reason: initialData.reason,
+          notes: initialData.notes || '',
+          startDate: startOfDay(initialData.startDate),
+          startTime: format(initialData.startDate, 'HH:mm'),
+          endDate: startOfDay(initialData.endDate),
+          endTime: format(initialData.endDate, 'HH:mm'),
+        });
+      } else if (initialData?.startDate) { // For creating new from a specific day click
+         form.reset({
+          reason: undefined,
+          notes: '',
+          startDate: startOfDay(initialData.startDate),
+          startTime: '09:00',
+          endDate: startOfDay(initialData.startDate),
+          endTime: '17:00',
+        });
+      }
     }
-  }, [isOpen, initialDate, form]);
+  }, [isOpen, isEditing, initialData, form]);
 
-  const onSubmit: SubmitHandler<CrewBlockOutFormData> = async (data) => {
+  const onSubmit: SubmitHandler<CrewBlockOutFormData> = async (formData) => {
     setIsSaving(true);
-    await onSave(data);
+    const startDateTime = setMinutes(setHours(formData.startDate, parseInt(formData.startTime.split(':')[0])), parseInt(formData.startTime.split(':')[1]));
+    const endDateTime = setMinutes(setHours(formData.endDate, parseInt(formData.endTime.split(':')[0])), parseInt(formData.endTime.split(':')[1]));
+
+    const dataToSave = {
+        crewMemberId: crewMember!.id,
+        crewMemberName: `${crewMember!.firstName} ${crewMember!.lastName}`,
+        reason: formData.reason,
+        notes: formData.notes,
+        startDate: startDateTime.toISOString(),
+        endDate: endDateTime.toISOString(),
+    };
+    await onSave(dataToSave, isEditing ? initialData?.id : undefined);
     setIsSaving(false);
   };
+  
+  const handleDelete = async () => {
+    if (isEditing && initialData?.id && onDelete) {
+        setIsSaving(true);
+        await onDelete(initialData.id);
+        setIsSaving(false);
+    }
+  };
+
 
   if (!crewMember) return null;
 
@@ -98,134 +142,56 @@ export function CreateCrewBlockOutModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Lock className="h-6 w-6 text-primary" />
-            Schedule Crew Block Out
+            {isEditing ? 'Edit Crew Block Out' : 'Schedule Crew Block Out'}
           </DialogTitle>
           <DialogDescription>
-            Block out {crewMember.firstName} {crewMember.lastName} for a specific period.
+             {isEditing ? `Editing block out for ${crewMember.firstName} ${crewMember.lastName}.` : `Block out ${crewMember.firstName} ${crewMember.lastName} for a specific period.`}
           </DialogDescription>
         </DialogHeader>
         
         <Form {...form}>
           <form id="createCrewBlockOutModalForm" onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-2">
-            <FormField
+             <FormField
               control={form.control}
               name="reason"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Reason</FormLabel>
-                  <Select
-                    onValueChange={field.onChange}
-                    value={field.value}
-                    name={field.name}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a reason for the block out" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {crewBlockOutReasons.map(reason => (
-                        <SelectItem key={reason} value={reason}>{reason}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Select a reason" /></SelectTrigger></FormControl><SelectContent>{crewBlockOutReasons.map(r => (<SelectItem key={r} value={r}>{r}</SelectItem>))}</SelectContent></Select>
                   <FormMessage />
                 </FormItem>
               )}
             />
-            <FormField
-              control={form.control}
-              name="notes"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Notes (Optional)</FormLabel>
-                  <FormControl>
-                    <Textarea placeholder="Add any relevant notes..." {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="startDate"
-                render={({ field }) => (
-                  <FormItem className="flex flex-col">
-                    <FormLabel>Start Date</FormLabel>
-                    <FormControl>
-                      <Popover modal={false}>
-                        <PopoverTrigger asChild>
-                            <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
-                              {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
-                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                            </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0 z-[100]" align="start">
-                          <Calendar
-                            mode="single"
-                            selected={field.value}
-                            onSelect={(date) => {
-                              field.onChange(date ? startOfDay(date) : undefined);
-                              if (date && form.getValues("endDate") < date) {
-                                  form.setValue("endDate", startOfDay(date));
-                              }
-                            }}
-                            initialFocus
-                          />
-                        </PopoverContent>
-                      </Popover>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="endDate"
-                render={({ field }) => (
-                  <FormItem className="flex flex-col">
-                    <FormLabel>End Date</FormLabel>
-                    <FormControl>
-                      <Popover modal={false}>
-                        <PopoverTrigger asChild>
-                            <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
-                              {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
-                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                            </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0 z-[100]" align="start">
-                          <Calendar
-                            mode="single"
-                            selected={field.value}
-                            onSelect={(date) => field.onChange(date ? startOfDay(date) : undefined)}
-                            disabled={(date) => {
-                              const startDate = form.getValues("startDate");
-                              return startDate ? date < startDate : (minStartDate ? date < minStartDate : false);
-                            }}
-                            initialFocus
-                          />
-                        </PopoverContent>
-                      </Popover>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <FormField control={form.control} name="startDate" render={({ field }) => ( <FormItem className="flex flex-col"><FormLabel>Start Date</FormLabel><Popover><PopoverTrigger asChild><Button variant={"outline"} className={cn("pl-3 text-left font-normal", !field.value && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{field.value ? format(field.value, "PPP") : <span>Pick date</span>}</Button></PopoverTrigger><PopoverContent className="w-auto p-0 z-[200]" align="start"><Calendar mode="single" selected={field.value} onSelect={field.onChange} /></PopoverContent></Popover><FormMessage /></FormItem> )} />
+              <FormField control={form.control} name="startTime" render={({ field }) => ( <FormItem className="flex flex-col"><FormLabel>Start Time</FormLabel><FormControl><Input type="time" {...field} /></FormControl><FormMessage /></FormItem> )} />
             </div>
+             <div className="grid grid-cols-2 gap-4">
+              <FormField control={form.control} name="endDate" render={({ field }) => ( <FormItem className="flex flex-col"><FormLabel>End Date</FormLabel><Popover><PopoverTrigger asChild><Button variant={"outline"} className={cn("pl-3 text-left font-normal", !field.value && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{field.value ? format(field.value, "PPP") : <span>Pick date</span>}</Button></PopoverTrigger><PopoverContent className="w-auto p-0 z-[200]" align="start"><Calendar mode="single" selected={field.value} onSelect={field.onChange} disabled={(d) => form.getValues("startDate") ? d < form.getValues("startDate") : false} /></PopoverContent></Popover><FormMessage /></FormItem> )} />
+              <FormField control={form.control} name="endTime" render={({ field }) => ( <FormItem className="flex flex-col"><FormLabel>End Time</FormLabel><FormControl><Input type="time" {...field} /></FormControl><FormMessage /></FormItem> )} />
+            </div>
+             <FormField control={form.control} name="notes" render={({ field }) => (<FormItem><FormLabel>Notes (Optional)</FormLabel><FormControl><Textarea placeholder="Add any relevant notes..." {...field} /></FormControl><FormMessage /></FormItem> )} />
           </form>
         </Form>
         
-        <DialogFooter className="pt-4">
-          <DialogClose asChild><Button type="button" variant="outline" disabled={isSaving}>Cancel</Button></DialogClose>
-          <Button type="submit" form="createCrewBlockOutModalForm" disabled={isSaving}>
-            {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-            Save Block Out
-          </Button>
+        <DialogFooter className="pt-4 justify-between">
+          <div>
+            {isEditing && onDelete && (
+                <Button type="button" variant="destructive" onClick={handleDelete} disabled={isSaving}>
+                    {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                    Delete
+                </Button>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <DialogClose asChild><Button type="button" variant="outline" disabled={isSaving}>Cancel</Button></DialogClose>
+            <Button type="submit" form="createCrewBlockOutModalForm" disabled={isSaving}>
+              {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+              {isEditing ? 'Save Changes' : 'Save Block Out'}
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
-
