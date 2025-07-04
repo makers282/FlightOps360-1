@@ -1,3 +1,4 @@
+
 'use server';
 /**
  * @fileOverview Genkit flows for managing crew member block-out events using Firestore.
@@ -87,11 +88,20 @@ const fetchCrewBlockOutsFlow = ai.defineFlow(
       const snapshot = await db.collection(CREW_BLOCK_OUTS_COLLECTION).orderBy("startDate", "desc").get();
       const blockOutsList = snapshot.docs.map(doc => {
         const data = doc.data();
+
+        // Helper to ensure dates are in full ISO 8601 format to handle legacy data
+        const ensureISO = (dateString: string | undefined): string => {
+            if (!dateString) return new Date(0).toISOString(); // Fallback for bad data
+            if (dateString.includes('T')) return dateString; // Already ISO format
+            // Assumes YYYY-MM-DD format and converts it to a full ISO string at UTC midnight
+            return new Date(dateString).toISOString(); 
+        };
+
         return {
           ...data,
           id: doc.id,
-          startDate: data.startDate,
-          endDate: data.endDate,
+          startDate: ensureISO(data.startDate),
+          endDate: ensureISO(data.endDate),
           createdAt: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
           updatedAt: (data.updatedAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
         } as CrewBlockOut;
