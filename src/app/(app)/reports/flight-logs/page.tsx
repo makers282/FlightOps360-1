@@ -170,7 +170,20 @@ export default function FlightLogsReportPage() {
             return acc;
         }, { airTime: 0, blockTime: 0, landings: 0, eng1Time: 0, eng1Cyc: 0, eng2Time: 0, eng2Cyc: 0, fuelBurn: 0 });
     }, [filteredLegs, aircraftFilter, allFleet]);
-    
+
+    const handleDatePresetChange = (value: string) => {
+      if (value === 'all') {
+        setDateRange(undefined);
+        return;
+      }
+      const days = parseInt(value, 10);
+      if (isNaN(days)) return;
+      
+      const to = new Date();
+      const from = subDays(to, days);
+      setDateRange({ from, to });
+    };
+
     const selectedAircraftLabel = allFleet.find(f => f.id === aircraftFilter)?.tailNumber;
     const selectedCustomerLabel = allCustomers.find(c => c.id === customerFilter)?.name;
 
@@ -180,22 +193,27 @@ export default function FlightLogsReportPage() {
 
             <Card>
                 <CardHeader>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                        <Select value={aircraftFilter} onValueChange={setAircraftFilter}>
-                            <SelectTrigger><SelectValue placeholder="Filter by Aircraft"/></SelectTrigger>
-                            <SelectContent><SelectItem value="all">All Aircraft</SelectItem>{allFleet.map(ac => <SelectItem key={ac.id} value={ac.id}>{ac.tailNumber}</SelectItem>)}</SelectContent>
-                        </Select>
-                        <Select value={customerFilter} onValueChange={setCustomerFilter}>
-                            <SelectTrigger><SelectValue placeholder="Filter by Customer"/></SelectTrigger>
-                            <SelectContent><SelectItem value="all">All Customers</SelectItem>{allCustomers.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
-                        </Select>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-center">
+                        <Select value={aircraftFilter} onValueChange={setAircraftFilter}><SelectTrigger className="lg:col-span-1"><SelectValue placeholder="Filter by Aircraft"/></SelectTrigger><SelectContent><SelectItem value="all">All Aircraft</SelectItem>{allFleet.map(ac => <SelectItem key={ac.id} value={ac.id}>{ac.tailNumber}</SelectItem>)}</SelectContent></Select>
+                        <Select value={customerFilter} onValueChange={setCustomerFilter}><SelectTrigger className="lg:col-span-1"><SelectValue placeholder="Filter by Customer"/></SelectTrigger><SelectContent><SelectItem value="all">All Customers</SelectItem>{allCustomers.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select>
                         <Popover>
                             <PopoverTrigger asChild>
-                                <Button id="date" variant={"outline"} className={cn("justify-start text-left font-normal", !dateRange && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{dateRange?.from ? (dateRange.to ? <>{format(dateRange.from, "LLL dd, y")} - {format(dateRange.to, "LLL dd, y")}</> : format(dateRange.from, "LLL dd, y")) : <span>Pick a date</span>}</Button>
+                                <Button id="date" variant={"outline"} className={cn("lg:col-span-1 justify-start text-left font-normal", !dateRange && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{dateRange?.from ? (dateRange.to ? <>{format(dateRange.from, "LLL dd, y")} - {format(dateRange.to, "LLL dd, y")}</> : format(dateRange.from, "LLL dd, y")) : <span>Pick a date range</span>}</Button>
                             </PopoverTrigger>
                             <PopoverContent className="w-auto p-0" align="start"><Calendar initialFocus mode="range" defaultMonth={dateRange?.from} selected={dateRange} onSelect={setDateRange} numberOfMonths={2}/></PopoverContent>
                         </Popover>
-                         <Button variant="link" onClick={() => { setAircraftFilter('all'); setCustomerFilter('all'); setDateRange(undefined); }}>Clear Filters</Button>
+                        <Select onValueChange={handleDatePresetChange}>
+                          <SelectTrigger className="lg:col-span-1"><SelectValue placeholder="Or select a preset..." /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Time</SelectItem>
+                            <SelectItem value="30">Last 30 Days</SelectItem>
+                            <SelectItem value="60">Last 60 Days</SelectItem>
+                            <SelectItem value="90">Last 90 Days</SelectItem>
+                            <SelectItem value="180">Last 180 Days</SelectItem>
+                            <SelectItem value="365">Last 365 Days</SelectItem>
+                          </SelectContent>
+                        </Select>
+                         <Button variant="link" onClick={() => { setAircraftFilter('all'); setCustomerFilter('all'); setDateRange(undefined); }} className="lg:col-span-1">Clear Filters</Button>
                     </div>
                 </CardHeader>
             </Card>
