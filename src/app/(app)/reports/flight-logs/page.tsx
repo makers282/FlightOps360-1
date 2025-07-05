@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useTransition } from 'react';
 import Link from 'next/link';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -23,6 +23,14 @@ import { fetchTrips, type Trip, type TripLeg } from '@/ai/flows/manage-trips-flo
 import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
 import { fetchCustomers, type Customer } from '@/ai/flows/manage-customers-flow';
 import { fetchCrewMembers, type CrewMember } from '@/ai/flows/manage-crew-flow';
+import { fetchCompanyProfile } from '@/ai/flows/manage-company-profile-flow';
+
+// PDF generation
+import { jsPDF } from 'jspdf';
+import 'jspdf-autotable';
+import type { UserOptions } from 'jspdf-autotable';
+import '@/types/jspdf-autotable';
+
 
 // Helper for time formatting
 const formatHours = (hours: number | undefined) => {
@@ -66,6 +74,7 @@ export default function FlightLogsReportPage() {
         from: subDays(new Date(), 30),
         to: new Date(),
     });
+    const [isPrinting, startPrintTransition] = useTransition();
 
     const loadData = useCallback(async () => {
         setIsLoading(true);
@@ -184,12 +193,103 @@ export default function FlightLogsReportPage() {
       setDateRange({ from, to });
     };
 
+    const handlePrintReport = () => {
+        if (isLoading || filteredLegs.length === 0) {
+            toast({ title: "No Data to Print", description: "Cannot generate a report for an empty or loading dataset.", variant: "destructive" });
+            return;
+        }
+
+        startPrintTransition(async () => {
+            try {
+                const profile = await fetchCompanyProfile();
+                const doc = new jsPDF({ orientation: 'landscape' });
+
+                // Add Logo
+                if (profile?.logoUrl) {
+                    try {
+                        const response = await fetch(profile.logoUrl);
+                        const blob = await response.blob();
+                        const reader = new FileReader();
+                        await new Promise<void>((resolve, reject) => {
+                            reader.onloadend = () => {
+                                doc.addImage(reader.result as string, 'PNG', 15, 10, 40, 15);
+                                resolve();
+                            };
+                            reader.onerror = reject;
+                            reader.readAsDataURL(blob);
+                        });
+                    } catch (e) {
+                        console.error("Could not load company logo for PDF:", e);
+                    }
+                }
+
+                // Header
+                doc.setFontSize(18);
+                doc.text("Flight Log Report", 148, 15, { align: 'center' });
+                doc.setFontSize(10);
+                doc.text(`Generated on: ${format(new Date(), 'MM/dd/yyyy HH:mm')}`, 148, 22, { align: 'center' });
+
+                // Summary Table
+                doc.autoTable({
+                    startY: 30,
+                    head: [['Aircraft', 'Customer', 'Date Range', 'Total Air Time', 'Total Block Time', 'Total Landings', 'Total Fuel Burn']],
+                    body: [[
+                        aircraftFilter === 'all' ? 'All' : allFleet.find(f => f.id === aircraftFilter)?.tailNumber || 'N/A',
+                        customerFilter === 'all' ? 'All' : allCustomers.find(c => c.id === customerFilter)?.name || 'N/A',
+                        dateRange?.from ? `${format(dateRange.from, 'MM/dd/yy')} - ${format(dateRange.to || dateRange.from, 'MM/dd/yy')}` : 'All Time',
+                        formatHours(totalTimes.airTime),
+                        formatHours(totalTimes.blockTime),
+                        totalTimes.landings,
+                        totalTimes.fuelBurn.toLocaleString(undefined, { maximumFractionDigits: 0 })
+                    ]],
+                    theme: 'striped',
+                    headStyles: { fillColor: [41, 128, 185] },
+                });
+                
+                // Detailed Logs Table
+                const detailHead = [['Date', 'Trip ID', 'Depart', 'Arrive', 'Trip Type', 'PIC', 'Air Time', 'Block Time', 'Landings', 'Fuel Burn']];
+                const detailBody = filteredLegs.map(leg => [
+                    format(parseISO(leg.legDate), 'MM/dd/yy HH:mm'),
+                    leg.tripId,
+                    leg.origin,
+                    leg.destination,
+                    leg.legType,
+                    leg.crewName,
+                    formatHours(leg.airTime),
+                    formatHours(leg.blockTime),
+                    leg.landings,
+                    leg.fuelBurn.toLocaleString(undefined, { maximumFractionDigits: 0 })
+                ]);
+
+                doc.autoTable({
+                    head: detailHead,
+                    body: detailBody,
+                    theme: 'grid',
+                    didDrawPage: (data) => {
+                        // Footer
+                        doc.setFontSize(8);
+                        const pageCount = doc.getNumberOfPages();
+                        doc.text(`Page ${data.pageNumber} of ${pageCount}`, data.settings.margin.left, doc.internal.pageSize.height - 10);
+                        doc.text(`${profile?.companyName || 'FlightOps360'} - Confidential`, doc.internal.pageSize.width - data.settings.margin.right, doc.internal.pageSize.height - 10, { align: 'right' });
+                    }
+                });
+
+
+                doc.save(`FlightLogReport_${format(new Date(), 'yyyyMMdd')}.pdf`);
+                toast({ title: "Report Generated", description: "Your PDF report should be downloading." });
+            } catch (error) {
+                console.error("Failed to generate PDF:", error);
+                toast({ title: "Error Generating PDF", description: "There was a problem creating the report.", variant: "destructive" });
+            }
+        });
+    };
+
     const selectedAircraftLabel = allFleet.find(f => f.id === aircraftFilter)?.tailNumber;
     const selectedCustomerLabel = allCustomers.find(c => c.id === customerFilter)?.name;
 
     return (
         <div className="space-y-6">
-            <PageHeader title="Flight Log Report" description="View, sort, and reconcile all completed flights." icon={PlaneTakeoff} actions={<Button variant="outline" disabled><Download className="mr-2 h-4"/> Print Report</Button>} />
+            <PageHeader title="Flight Log Report" description="View, sort, and reconcile all completed flights." icon={PlaneTakeoff} actions={<Button variant="outline" onClick={handlePrintReport} disabled={isLoading || isPrinting || filteredLegs.length === 0}>{isPrinting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Download className="mr-2 h-4"/>} Print Report</Button>} />
 
             <Card>
                 <CardHeader>
