@@ -29,7 +29,6 @@ import { fetchCompanyProfile } from '@/ai/flows/manage-company-profile-flow';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 import type { UserOptions } from 'jspdf-autotable';
-import '@/types/jspdf-autotable';
 
 
 // Helper for time formatting
@@ -298,7 +297,7 @@ export default function FlightLogsReportPage() {
                         <Select value={customerFilter} onValueChange={setCustomerFilter}><SelectTrigger className="lg:col-span-1"><SelectValue placeholder="Filter by Customer"/></SelectTrigger><SelectContent><SelectItem value="all">All Customers</SelectItem>{allCustomers.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select>
                         <Popover>
                             <PopoverTrigger asChild>
-                                <Button id="date" variant={"outline"} className={cn("lg:col-span-1 justify-start text-left font-normal", !dateRange && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{dateRange?.from ? (dateRange.to ? <>{format(dateRange.from, "LLL dd, y")} - {format(dateRange.to, "LLL dd, y")}</> : format(dateRange.from, "LLL dd, y")) : <span>Pick a date range</span>}</Button>
+                                <Button id="date" variant={"outline"} className={cn("lg:col-span-1 justify-start text-left font-normal", !dateRange && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{dateRange?.from ? (dateRange.to ? <>{format(dateRange.from, "LLL dd, y")} - {format(dateRange.to, "LLL dd, y")}</> : format(dateRange.from, "LLL dd, y")) : (<span>Pick a date range</span>)}</Button>
                             </PopoverTrigger>
                             <PopoverContent className="w-auto p-0" align="start"><Calendar initialFocus mode="range" defaultMonth={dateRange?.from} selected={dateRange} onSelect={setDateRange} numberOfMonths={2}/></PopoverContent>
                         </Popover>
