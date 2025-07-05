@@ -5,6 +5,7 @@
  *
  * - saveFlightLogLeg - Saves (adds or updates) a flight log for a specific trip leg and updates aircraft component times.
  * - fetchFlightLogForLeg - Fetches the flight log for a specific trip leg.
+ * - fetchAllFlightLogs - Fetches all flight log entries.
  * - deleteFlightLogLeg - Deletes a flight log entry.
  */
 
@@ -82,6 +83,14 @@ export async function fetchFlightLogForLeg(input: FetchFlightLogLegInput): Promi
   return fetchFlightLogForLegFlow(input);
 }
 
+export async function fetchAllFlightLogs(): Promise<FlightLogLeg[]> {
+    if (!db) {
+    console.error("CRITICAL: Firestore admin instance (db) is not initialized in fetchAllFlightLogs (manage-flight-logs-flow). Admin SDK init likely failed.");
+    throw new Error("Firestore admin instance (db) is not initialized in fetchAllFlightLogs.");
+  }
+  return fetchAllFlightLogsFlow();
+}
+
 export async function deleteFlightLogLeg(input: { flightLogId: string }): Promise<{ success: boolean; flightLogId: string }> {
     if (!db) {
     console.error("CRITICAL: Firestore admin instance (db) is not initialized in deleteFlightLogLeg (manage-flight-logs-flow). Admin SDK init likely failed.");
@@ -141,7 +150,7 @@ const saveFlightLogLegFlow = ai.defineFlow(
           let currentComponentTimes = await fetchComponentTimesForAircraft({ aircraftId }) || {};
           
           const legFlightDuration = calculateFlightDurationFromLog(logDataForDoc as FlightLogLegData);
-          const legCycles = 1; // Assume 1 cycle per leg
+          const legCycles = (logDataForDoc.dayLandings || 0) + (logDataForDoc.nightLandings || 0); // Use actual landings
           const apuTime = Number(logDataForDoc.postLegApuTimeDecimal || 0);
 
           (aircraftDetails.trackedComponentNames || ['Airframe', 'Engine 1']).forEach(componentName => {
@@ -218,6 +227,40 @@ const fetchFlightLogForLegFlow = ai.defineFlow(
     } catch (error) {
       console.error('Error fetching flight log from Firestore:', error);
       throw new Error(`Failed to fetch flight log ${docId}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+);
+
+const fetchAllFlightLogsFlow = ai.defineFlow(
+  {
+    name: 'fetchAllFlightLogsFlow',
+    outputSchema: z.array(FlightLogLegSchema), 
+  },
+  async () => {
+    if (!db) {
+        console.error("CRITICAL: Firestore admin instance (db) is not initialized in fetchAllFlightLogsFlow.");
+        throw new Error("Firestore admin instance (db) is not initialized in fetchAllFlightLogsFlow.");
+    }
+    console.log('Executing fetchAllFlightLogsFlow - Firestore');
+    try {
+      const logsCollectionRef = db.collection(FLIGHT_LOGS_COLLECTION);
+      // Order by creation time descending to get most recent logs first
+      const q = logsCollectionRef.orderBy("createdAt", "desc");
+      const snapshot = await q.get();
+      const logsList = snapshot.docs.map(docSnapshot => {
+        const data = docSnapshot.data();
+        return {
+          ...data,
+          id: docSnapshot.id,
+          createdAt: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
+          updatedAt: (data.updatedAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
+        } as FlightLogLeg;
+      });
+      console.log('Fetched flight logs from Firestore:', logsList.length, 'logs.');
+      return logsList;
+    } catch (error) {
+      console.error('Error fetching all flight logs from Firestore:', error);
+      throw new Error(`Failed to fetch all flight logs: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 );
