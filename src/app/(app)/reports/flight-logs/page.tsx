@@ -25,11 +25,6 @@ import { fetchCustomers, type Customer } from '@/ai/flows/manage-customers-flow'
 import { fetchCrewMembers, type CrewMember } from '@/ai/flows/manage-crew-flow';
 import { fetchCompanyProfile } from '@/ai/flows/manage-company-profile-flow';
 
-// PDF generation
-import { jsPDF } from 'jspdf';
-import 'jspdf-autotable';
-import type { UserOptions } from 'jspdf-autotable';
-
 
 // Helper for time formatting
 const formatHours = (hours: number | undefined) => {
@@ -105,6 +100,36 @@ export default function FlightLogsReportPage() {
         loadData();
     }, [loadData]);
     
+    const calculateFlightTimeFromLog = (log: FlightLogLeg | null): number => {
+        if (!log) return 0;
+        if (typeof log.hobbsTakeOff === 'number' && typeof log.hobbsLanding === 'number' && log.hobbsLanding > log.hobbsTakeOff) {
+            return parseFloat((log.hobbsLanding - log.hobbsTakeOff).toFixed(2));
+        }
+        if (log.takeOffTime && log.landingTime) {
+            try {
+                const takeOff = parseISO(`2000-01-01T${log.takeOffTime}:00Z`);
+                let landing = parseISO(`2000-01-01T${log.landingTime}:00Z`);
+                if (landing < takeOff) { landing.setDate(landing.getDate() + 1); }
+                const diffMs = landing.getTime() - takeOff.getTime();
+                if (diffMs < 0) return 0;
+                return parseFloat((diffMs / (1000 * 60 * 60)).toFixed(2));
+            } catch (e) {
+                console.error("Error parsing flight log times:", e);
+                return 0;
+            }
+        }
+        return 0;
+    };
+    
+    const calculateBlockTimeFromLog = (log: FlightLogLeg | null): number => {
+        if (!log) return 0;
+        const flightTimeDecimal = calculateFlightTimeFromLog(log);
+        const taxiOutMins = Number(log.taxiOutTimeMins || 0);
+        const taxiInMins = Number(log.taxiInTimeMins || 0);
+        return parseFloat(((taxiOutMins / 60) + flightTimeDecimal + (taxiInMins / 60)).toFixed(2));
+    };
+
+
     const reportableLegs = useMemo<ReportableLeg[]>(() => {
         if (isLoading) return [];
         
@@ -118,27 +143,8 @@ export default function FlightLogsReportPage() {
             const leg = trip.legs[log.legIndex];
             if (!leg) return null;
             
-            let airTimeHours = 0;
-            if (typeof log.hobbsTakeOff === 'number' && typeof log.hobbsLanding === 'number' && log.hobbsLanding > log.hobbsTakeOff) {
-                airTimeHours = log.hobbsLanding - log.hobbsTakeOff;
-            } else if (log.takeOffTime && log.landingTime) {
-                try {
-                    const takeOff = parseISO(`2000-01-01T${log.takeOffTime}:00Z`);
-                    let landing = parseISO(`2000-01-01T${log.landingTime}:00Z`);
-        
-                    if (landing < takeOff) { // Handle midnight crossing
-                        landing.setDate(landing.getDate() + 1);
-                    }
-                    
-                    const airTimeMins = (landing.getTime() - takeOff.getTime()) / (1000 * 60);
-                    airTimeHours = airTimeMins > 0 ? airTimeMins / 60 : 0;
-                } catch (e) {
-                    console.error("Error parsing flight log times:", e);
-                    airTimeHours = 0;
-                }
-            }
-
-            const blockTimeHours = airTimeHours + ((log.taxiOutTimeMins || 0) + (log.taxiInTimeMins || 0)) / 60;
+            const airTimeHours = calculateFlightTimeFromLog(log);
+            const blockTimeHours = calculateBlockTimeFromLog(log);
             const landings = (log.dayLandings || 0) + (log.nightLandings || 0);
             const fuelBurn = (log.fobStartingFuel || 0) + (log.fuelPurchasedAmount || 0) - (log.endingFuel || 0);
             
@@ -147,7 +153,7 @@ export default function FlightLogsReportPage() {
             const customer = customerMap.get(trip.customerId || '');
 
             return {
-                legDate: format(parseISO(leg.departureDateTime || log.createdAt), 'yyyy-MM-dd HH:mm'),
+                legDate: leg.departureDateTime || log.createdAt,
                 tripId: trip.tripId,
                 tripDocId: trip.id,
                 origin: leg.origin,
@@ -217,6 +223,9 @@ export default function FlightLogsReportPage() {
 
         startPrintTransition(async () => {
             try {
+                const { jsPDF } = await import('jspdf');
+                const { default: autoTable } = await import('jspdf-autotable');
+
                 const profile = await fetchCompanyProfile();
                 const doc = new jsPDF({ orientation: 'landscape' });
 
@@ -246,7 +255,7 @@ export default function FlightLogsReportPage() {
                 doc.text(`Generated on: ${format(new Date(), 'MM/dd/yyyy HH:mm')}`, 148, 22, { align: 'center' });
 
                 // Summary Table
-                doc.autoTable({
+                autoTable(doc, {
                     startY: 30,
                     head: [['Aircraft', 'Customer', 'Date Range', 'Total Air Time', 'Total Block Time', 'Total Landings', 'Total Fuel Burn']],
                     body: [[
@@ -277,11 +286,11 @@ export default function FlightLogsReportPage() {
                     leg.fuelBurn.toLocaleString(undefined, { maximumFractionDigits: 0 })
                 ]);
 
-                doc.autoTable({
+                autoTable(doc, {
                     head: detailHead,
                     body: detailBody,
                     theme: 'grid',
-                    didDrawPage: (data) => {
+                    didDrawPage: (data: any) => {
                         // Footer
                         doc.setFontSize(8);
                         const pageCount = doc.getNumberOfPages();
@@ -305,7 +314,7 @@ export default function FlightLogsReportPage() {
 
     return (
         <div className="space-y-6">
-            <PageHeader title="Flight Log Report" description="View, sort, and reconcile all completed flights." icon={PlaneTakeoff} actions={<Button variant="outline" onClick={handlePrintReport} disabled={isLoading || isPrinting || filteredLegs.length === 0}>{isPrinting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Download className="mr-2 h-4"/>} Print Report</Button>} />
+            <PageHeader title="Flight Log Report" description="View, sort, and reconcile all completed flights." icon={PlaneTakeoff} actions={<Button variant="outline" onClick={handlePrintReport} disabled={isLoading || isPrinting || filteredLegs.length === 0}>{isPrinting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Download className="mr-2 h-4 w-4" />} Print Report</Button>} />
 
             <Card>
                 <CardHeader>
@@ -373,10 +382,10 @@ export default function FlightLogsReportPage() {
                             ) : (
                                 filteredLegs.map((leg, index) => (
                                     <TableRow key={`${leg.tripDocId}-${index}`}>
-                                        <TableCell className="text-xs">{leg.legDate}</TableCell>
+                                        <TableCell className="text-xs">{format(parseISO(leg.legDate), 'MM/dd/yy HH:mm')}</TableCell>
                                         <TableCell><Link href={`/trips/details/${leg.tripDocId}`} className="text-primary hover:underline font-medium">{leg.tripId}</Link></TableCell>
                                         <TableCell>{leg.origin}</TableCell><TableCell>{leg.destination}</TableCell><TableCell>{leg.legType}</TableCell><TableCell>{leg.crewName}</TableCell>
-                                        <TableCell className="text-right">{formatHours(leg.airTime)}</TableCell><TableCell className="text-right">{formatHours(leg.blockTime)}</TableCell><TableCell className="text-right">{leg.landings}</TableCell><TableCell className="text-right">{leg.fuelBurn.toLocaleString()}</TableCell>
+                                        <TableCell className="text-right">{formatHours(leg.airTime)}</TableCell><TableCell className="text-right">{formatHours(leg.blockTime)}</TableCell><TableCell className="text-right">{leg.landings}</TableCell><TableCell className="text-right">{leg.fuelBurn.toLocaleString(undefined, {maximumFractionDigits: 0})}</TableCell>
                                     </TableRow>
                                 ))
                             )}
@@ -388,3 +397,4 @@ export default function FlightLogsReportPage() {
     );
 
     
+}
