@@ -33,8 +33,11 @@ import type { UserOptions } from 'jspdf-autotable';
 
 // Helper for time formatting
 const formatHours = (hours: number | undefined) => {
-    if (hours === undefined || isNaN(hours)) return '0.0';
-    return hours.toFixed(1);
+    if (hours === undefined || isNaN(hours) || hours < 0) return '00:00';
+    const totalMinutes = Math.round(hours * 60);
+    const h = Math.floor(totalMinutes / 60);
+    const m = totalMinutes % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
 // Combined type for our report row
@@ -115,12 +118,26 @@ export default function FlightLogsReportPage() {
             const leg = trip.legs[log.legIndex];
             if (!leg) return null;
             
-            const takeOff = log.takeOffTime ? parseISO(`2000-01-01T${log.takeOffTime}:00Z`) : new Date(0);
-            const landing = log.landingTime ? parseISO(`2000-01-01T${log.landingTime}:00Z`) : new Date(0);
-            if (landing < takeOff) landing.setDate(landing.getDate() + 1); // Handle midnight crossing
+            let airTimeHours = 0;
+            if (typeof log.hobbsTakeOff === 'number' && typeof log.hobbsLanding === 'number' && log.hobbsLanding > log.hobbsTakeOff) {
+                airTimeHours = log.hobbsLanding - log.hobbsTakeOff;
+            } else if (log.takeOffTime && log.landingTime) {
+                try {
+                    const takeOff = parseISO(`2000-01-01T${log.takeOffTime}:00Z`);
+                    let landing = parseISO(`2000-01-01T${log.landingTime}:00Z`);
+        
+                    if (landing < takeOff) { // Handle midnight crossing
+                        landing.setDate(landing.getDate() + 1);
+                    }
+                    
+                    const airTimeMins = (landing.getTime() - takeOff.getTime()) / (1000 * 60);
+                    airTimeHours = airTimeMins > 0 ? airTimeMins / 60 : 0;
+                } catch (e) {
+                    console.error("Error parsing flight log times:", e);
+                    airTimeHours = 0;
+                }
+            }
 
-            const airTimeMins = (landing.getTime() - takeOff.getTime()) / (1000 * 60);
-            const airTimeHours = airTimeMins > 0 ? airTimeMins / 60 : 0;
             const blockTimeHours = airTimeHours + ((log.taxiOutTimeMins || 0) + (log.taxiInTimeMins || 0)) / 60;
             const landings = (log.dayLandings || 0) + (log.nightLandings || 0);
             const fuelBurn = (log.fobStartingFuel || 0) + (log.fuelPurchasedAmount || 0) - (log.endingFuel || 0);
@@ -369,4 +386,5 @@ export default function FlightLogsReportPage() {
             </Card>
         </div>
     );
-}
+
+    
