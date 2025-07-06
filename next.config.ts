@@ -1,7 +1,7 @@
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  /* your existing config... */
+  serverActions: true,
   typescript: {
     ignoreBuildErrors: true,
   },
@@ -17,9 +17,6 @@ const nextConfig = {
         pathname: '/**',
       },
     ],
-  },
-  experimental: {
-    serverActions: {},
   },
 };
 
