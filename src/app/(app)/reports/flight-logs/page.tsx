@@ -13,7 +13,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Skeleton } from '@/components/ui/skeleton';
 import { PlaneTakeoff, Download, Calendar as CalendarIcon, Loader2 } from 'lucide-react';
 import { DateRange } from "react-day-picker";
-import { format, isWithinInterval, parseISO, subDays } from 'date-fns';
+import { format, isWithinInterval, parseISO, subDays, parse } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from "@/lib/utils";
 
@@ -184,23 +184,32 @@ export default function FlightLogsReportPage() {
     }, [reportableLegs, aircraftFilter, customerFilter, dateRange]);
     
     const totalTimes = useMemo(() => {
-        const aircraft = allFleet.find(ac => ac.id === aircraftFilter);
-        const isTwin = aircraft && (aircraft.engineDetails?.length || 0) > 1;
+        // Create a map for quick lookups inside the reducer
+        const fleetMap = new Map(allFleet.map(ac => [ac.id, ac]));
 
         return filteredLegs.reduce((acc, leg) => {
             acc.airTime += leg.airTime;
             acc.blockTime += leg.blockTime;
             acc.landings += leg.landings;
             acc.fuelBurn += leg.fuelBurn;
+            
+            // Accumulate Eng 1 for every leg, as all aircraft have at least one engine.
             acc.eng1Time += leg.airTime;
             acc.eng1Cyc += leg.landings;
+            
+            // Check if the specific aircraft for THIS leg is a twin.
+            const aircraftForLeg = fleetMap.get(leg.aircraftId);
+            const isTwin = aircraftForLeg && (aircraftForLeg.engineDetails?.length || 0) > 1;
+
             if (isTwin) {
                 acc.eng2Time += leg.airTime;
                 acc.eng2Cyc += leg.landings;
             }
+            
             return acc;
         }, { airTime: 0, blockTime: 0, landings: 0, eng1Time: 0, eng1Cyc: 0, eng2Time: 0, eng2Cyc: 0, fuelBurn: 0 });
-    }, [filteredLegs, aircraftFilter, allFleet]);
+    }, [filteredLegs, allFleet]);
+
 
     const handleDatePresetChange = (value: string) => {
       if (value === 'all') {
@@ -398,3 +407,5 @@ export default function FlightLogsReportPage() {
 
     
 }
+
+    
