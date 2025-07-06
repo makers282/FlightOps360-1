@@ -1,4 +1,3 @@
-
 'use server';
 /**
  * @fileOverview Genkit flows for managing quotes using Firestore.
@@ -23,6 +22,7 @@ import {
     DeleteQuoteInputSchema,
     DeleteQuoteOutputSchema,
 } from '@/ai/schemas/quote-schemas';
+import { differenceInDays, parseISO } from 'date-fns';
 
 const QUOTES_COLLECTION = 'quotes';
 
@@ -134,22 +134,52 @@ const fetchQuotesFlow = ai.defineFlow(
         console.error("CRITICAL: Firestore admin instance (db) is not initialized in fetchQuotesFlow.");
         throw new Error("Firestore admin instance (db) is not initialized in fetchQuotesFlow.");
     }
-    console.log('Executing fetchQuotesFlow - Firestore');
+    console.log('Executing fetchQuotesFlow with auto-expiry logic - Firestore');
     try {
       const quotesCollectionRef = db.collection(QUOTES_COLLECTION);
-      const q = quotesCollectionRef.orderBy("createdAt", "desc");
-      const snapshot = await q.get();
-      const quotesList = snapshot.docs.map(docSnapshot => {
+      const snapshot = await quotesCollectionRef.get();
+      
+      const now = new Date();
+      const quotesToUpdate: { ref: FirebaseFirestore.DocumentReference, data: Quote }[] = [];
+      const allQuotes: Quote[] = [];
+
+      for (const docSnapshot of snapshot.docs) {
         const data = docSnapshot.data();
-        return {
+        let quote: Quote = {
           id: docSnapshot.id,
           ...data,
           createdAt: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
           updatedAt: (data.updatedAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
         } as Quote;
-      });
-      console.log('Fetched quotes from Firestore:', quotesList.length, 'quotes.');
-      return quotesList;
+        
+        // Auto-expiry logic
+        if ((quote.status === 'Draft' || quote.status === 'Sent')) {
+          const createdAtDate = parseISO(quote.createdAt);
+          if (differenceInDays(now, createdAtDate) > 7) {
+            console.log(`[Auto-Expiry] Quote ${quote.quoteId} is older than 7 days. Marking as Expired.`);
+            quote.status = 'Expired'; // Update status in memory for immediate return
+            quotesToUpdate.push({ ref: docSnapshot.ref, data: quote });
+          }
+        }
+        allQuotes.push(quote);
+      }
+
+      // If there are quotes to update, commit them in a batch.
+      if (quotesToUpdate.length > 0) {
+        const batch = db.batch();
+        quotesToUpdate.forEach(({ ref }) => {
+          batch.update(ref, { status: 'Expired', updatedAt: FieldValue.serverTimestamp() });
+        });
+        await batch.commit();
+        console.log(`[Auto-Expiry] Committed updates for ${quotesToUpdate.length} expired quotes.`);
+      }
+
+      // Sort the final list before returning
+      allQuotes.sort((a, b) => parseISO(b.createdAt).getTime() - parseISO(a.createdAt).getTime());
+
+      console.log('Fetched and processed quotes from Firestore:', allQuotes.length, 'quotes.');
+      return allQuotes;
+      
     } catch (error) {
       console.error('Error fetching quotes from Firestore:', error);
       throw new Error(`Failed to fetch quotes: ${error instanceof Error ? error.message : String(error)}`);
@@ -230,9 +260,6 @@ const deleteQuoteFlow = ai.defineFlow(
 
       if (!docSnap.exists) {
           console.warn(`Quote with ID ${input.id} not found for deletion.`);
-          // It's often better to return success: true if the item is already gone,
-          // or success: false if strict confirmation of deletion action is needed.
-          // For user feedback, confirming it's gone is usually fine.
           return { success: true, quoteId: input.id };
       }
       
