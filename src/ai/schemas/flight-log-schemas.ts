@@ -26,10 +26,10 @@ const _FlightLogLegDataBaseSchema = z.object({
   nightTimeDecimal: z.coerce.number().min(0).optional().default(0.0),
   instrumentTimeDecimal: z.coerce.number().min(0).optional().default(0.0),
 
-  fobStartingFuel: z.coerce.number({ required_error: "Starting fuel (FOB) is required."}).min(0),
+  fobStartingFuel: z.coerce.number().min(0).optional().nullable(),
   fuelPurchasedAmount: z.coerce.number().min(0).optional().default(0.0),
   fuelPurchasedUnit: z.enum(fuelUnits).default("Lbs"),
-  endingFuel: z.coerce.number({ required_error: "Ending fuel is required."}).min(0),
+  endingFuel: z.coerce.number().min(0).optional().nullable(),
   fuelCost: z.coerce.number().min(0).optional().default(0.0),
   postLegApuTimeDecimal: z.coerce.number().min(0).optional().default(0.0),
 });
@@ -45,7 +45,12 @@ export const FlightLogLegDataSchema = _FlightLogLegDataBaseSchema
     message: "Hobbs Landing must be greater than Hobbs Take-Off if both are provided.",
     path: ["hobbsLanding"],
   })
-  .refine(data => data.endingFuel <= (data.fobStartingFuel + (data.fuelPurchasedAmount || 0)), {
+  .refine(data => {
+    if (typeof data.endingFuel === 'number' && typeof data.fobStartingFuel === 'number') {
+      return data.endingFuel <= (data.fobStartingFuel + (data.fuelPurchasedAmount || 0));
+    }
+    return true;
+  }, {
     message: "Ending fuel cannot be more than starting fuel plus purchased fuel.",
     path: ["endingFuel"],
   });
