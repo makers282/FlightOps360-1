@@ -163,47 +163,47 @@ export function AddEditJobModal({ isOpen, setIsOpen, initialData, onJobSaved, fl
           <DialogDescription>Fill in the details for the maintenance job.</DialogDescription>
         </DialogHeader>
         <Form {...form}>
-          <form id="job-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-             <ScrollArea className="max-h-[65vh] pr-6">
-                <div className="space-y-4">
-                    <FormField control={form.control} name="aircraftId" render={({ field }) => (
-                    <FormItem><FormLabel>Aircraft</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Select aircraft"/></SelectTrigger></FormControl><SelectContent>{fleet.map(ac => <SelectItem key={ac.id} value={ac.id}>{ac.tailNumber}</SelectItem>)}</SelectContent></Select><FormMessage/></FormItem>
-                    )}/>
-                    <div className="grid grid-cols-2 gap-4">
-                    <FormField control={form.control} name="workOrderNumber" render={({ field }) => (<FormItem><FormLabel>Work Order #</FormLabel><FormControl><Input {...field}/></FormControl><FormMessage/></FormItem>)}/>
-                    <FormField control={form.control} name="shopName" render={({ field }) => (<FormItem><FormLabel>Shop Name</FormLabel><FormControl><Input {...field}/></FormControl><FormMessage/></FormItem>)}/>
-                    </div>
-                     <Card className="p-4 bg-muted/30 border-dashed">
-                        <CardHeader className="p-0 pb-2"><CardTitle className="text-base">Shop Contact (Optional)</CardTitle></CardHeader>
-                        <CardContent className="p-0 grid grid-cols-1 md:grid-cols-2 gap-4">
-                             <FormField control={form.control} name="shopContactName" render={({ field }) => (<FormItem><FormLabel>Contact Name</FormLabel><FormControl><Input {...field}/></FormControl><FormMessage/></FormItem>)}/>
-                            <FormField control={form.control} name="shopContactPhone" render={({ field }) => (<FormItem><FormLabel>Phone</FormLabel><FormControl><Input {...field}/></FormControl><FormMessage/></FormItem>)}/>
-                            <FormField control={form.control} name="shopContactEmail" render={({ field }) => (<FormItem className="md:col-span-2"><FormLabel>Email</FormLabel><FormControl><Input type="email" {...field}/></FormControl><FormMessage/></FormItem>)}/>
-                        </CardContent>
-                    </Card>
-                    <FormField control={form.control} name="status" render={({ field }) => (
-                    <FormItem><FormLabel>Status</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl><SelectContent>{maintenanceJobStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select><FormMessage/></FormItem>
-                    )}/>
-                    <div className="grid grid-cols-2 gap-4">
-                    <FormField control={form.control} name="dateIssued" render={({ field }) => (<FormItem><FormLabel>Date Issued</FormLabel><Popover><PopoverTrigger asChild><Button variant="outline" className={cn("w-full pl-3 text-left font-normal",!field.value&&"text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4"/>{field.value?format(field.value,"PPP"):<span>Pick date</span>}</Button></PopoverTrigger><PopoverContent><Calendar mode="single" selected={field.value} onSelect={field.onChange}/></PopoverContent></Popover><FormMessage/></FormItem>)}/>
-                    <FormField control={form.control} name="dateDue" render={({ field }) => (<FormItem><FormLabel>Date Due</FormLabel><Popover><PopoverTrigger asChild><Button variant="outline" className={cn("w-full pl-3 text-left font-normal",!field.value&&"text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4"/>{field.value?format(field.value,"PPP"):<span>Pick date</span>}</Button></PopoverTrigger><PopoverContent><Calendar mode="single" selected={field.value} onSelect={field.onChange} disabled={d=>form.getValues('dateIssued')?d<form.getValues('dateIssued'):false}/></PopoverContent></Popover><FormMessage/></FormItem>)}/>
-                    </div>
-                     <Card>
-                        <CardHeader><CardTitle className="text-base">Projected Costs</CardTitle></CardHeader>
-                        <CardContent className="space-y-2">
-                            {fields.map((item, index) => (
-                                <div key={item.id} className="grid grid-cols-12 gap-2 items-end">
-                                    <FormField control={form.control} name={`costBreakdowns.${index}.category`} render={({field}) => (<FormItem className="col-span-4"><FormLabel className="text-xs">Category</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl><SelectContent><SelectItem value="Labor">Labor</SelectItem><SelectItem value="Parts">Parts</SelectItem><SelectItem value="Shop Fees">Shop Fees</SelectItem><SelectItem value="Other">Other</SelectItem></SelectContent></Select></FormItem>)} />
-                                    <FormField control={form.control} name={`costBreakdowns.${index}.cost`} render={({field}) => (<FormItem className="col-span-3"><FormLabel className="text-xs">Cost</FormLabel><FormControl><Input type="number" {...field}/></FormControl></FormItem>)} />
-                                    <FormField control={form.control} name={`costBreakdowns.${index}.description`} render={({field}) => (<FormItem className="col-span-4"><FormLabel className="text-xs">Description</FormLabel><FormControl><Input {...field}/></FormControl></FormItem>)} />
-                                    <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)} className="text-destructive"><Trash2 className="h-4 w-4"/></Button>
-                                </div>
-                            ))}
-                            <Button type="button" variant="outline" size="sm" onClick={() => append({category:'Parts', cost:0, description:''})}><PlusCircle className="h-4 w-4 mr-2"/>Add Cost Item</Button>
-                        </CardContent>
-                    </Card>
-                    <FormField control={form.control} name="notes" render={({ field }) => (<FormItem><FormLabel>Notes</FormLabel><FormControl><Textarea {...field} rows={3}/></FormControl><FormMessage/></FormItem>)}/>
+          <form id="job-form" onSubmit={form.handleSubmit(onSubmit)}>
+            <ScrollArea className="max-h-[65vh] pr-6">
+              <div className="space-y-4">
+                <FormField control={form.control} name="aircraftId" render={({ field }) => (
+                <FormItem><FormLabel>Aircraft</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Select aircraft"/></SelectTrigger></FormControl><SelectContent>{fleet.map(ac => <SelectItem key={ac.id} value={ac.id}>{ac.tailNumber}</SelectItem>)}</SelectContent></Select><FormMessage/></FormItem>
+                )}/>
+                <div className="grid grid-cols-2 gap-4">
+                <FormField control={form.control} name="workOrderNumber" render={({ field }) => (<FormItem><FormLabel>Work Order #</FormLabel><FormControl><Input {...field}/></FormControl><FormMessage/></FormItem>)}/>
+                <FormField control={form.control} name="shopName" render={({ field }) => (<FormItem><FormLabel>Shop Name</FormLabel><FormControl><Input {...field}/></FormControl><FormMessage/></FormItem>)}/>
                 </div>
+                 <Card className="p-4 bg-muted/30 border-dashed">
+                    <CardHeader className="p-0 pb-2"><CardTitle className="text-base">Shop Contact (Optional)</CardTitle></CardHeader>
+                    <CardContent className="p-0 grid grid-cols-1 md:grid-cols-2 gap-4">
+                         <FormField control={form.control} name="shopContactName" render={({ field }) => (<FormItem><FormLabel>Contact Name</FormLabel><FormControl><Input {...field}/></FormControl><FormMessage/></FormItem>)}/>
+                        <FormField control={form.control} name="shopContactPhone" render={({ field }) => (<FormItem><FormLabel>Phone</FormLabel><FormControl><Input {...field}/></FormControl><FormMessage/></FormItem>)}/>
+                        <FormField control={form.control} name="shopContactEmail" render={({ field }) => (<FormItem className="md:col-span-2"><FormLabel>Email</FormLabel><FormControl><Input type="email" {...field}/></FormControl><FormMessage/></FormItem>)}/>
+                    </CardContent>
+                </Card>
+                <FormField control={form.control} name="status" render={({ field }) => (
+                <FormItem><FormLabel>Status</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl><SelectContent>{maintenanceJobStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select><FormMessage/></FormItem>
+                )}/>
+                <div className="grid grid-cols-2 gap-4">
+                <FormField control={form.control} name="dateIssued" render={({ field }) => (<FormItem><FormLabel>Date Issued</FormLabel><Popover><PopoverTrigger asChild><Button variant="outline" className={cn("w-full pl-3 text-left font-normal",!field.value&&"text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4"/>{field.value?format(field.value,"PPP"):<span>Pick date</span>}</Button></PopoverTrigger><PopoverContent><Calendar mode="single" selected={field.value} onSelect={field.onChange}/></PopoverContent></Popover><FormMessage/></FormItem>)}/>
+                <FormField control={form.control} name="dateDue" render={({ field }) => (<FormItem><FormLabel>Date Due</FormLabel><Popover><PopoverTrigger asChild><Button variant="outline" className={cn("w-full pl-3 text-left font-normal",!field.value&&"text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4"/>{field.value?format(field.value,"PPP"):<span>Pick date</span>}</Button></PopoverTrigger><PopoverContent><Calendar mode="single" selected={field.value} onSelect={field.onChange} disabled={d=>form.getValues('dateIssued')?d<form.getValues('dateIssued'):false}/></PopoverContent></Popover><FormMessage/></FormItem>)}/>
+                </div>
+                 <Card>
+                    <CardHeader><CardTitle className="text-base">Projected Costs</CardTitle></CardHeader>
+                    <CardContent className="space-y-2">
+                        {fields.map((item, index) => (
+                            <div key={item.id} className="grid grid-cols-12 gap-2 items-end">
+                                <FormField control={form.control} name={`costBreakdowns.${index}.category`} render={({field}) => (<FormItem className="col-span-4"><FormLabel className="text-xs">Category</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl><SelectContent><SelectItem value="Labor">Labor</SelectItem><SelectItem value="Parts">Parts</SelectItem><SelectItem value="Shop Fees">Shop Fees</SelectItem><SelectItem value="Other">Other</SelectItem></SelectContent></Select></FormItem>)} />
+                                <FormField control={form.control} name={`costBreakdowns.${index}.cost`} render={({field}) => (<FormItem className="col-span-3"><FormLabel className="text-xs">Cost</FormLabel><FormControl><Input type="number" {...field}/></FormControl></FormItem>)} />
+                                <FormField control={form.control} name={`costBreakdowns.${index}.description`} render={({field}) => (<FormItem className="col-span-4"><FormLabel className="text-xs">Description</FormLabel><FormControl><Input {...field}/></FormControl></FormItem>)} />
+                                <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)} className="text-destructive"><Trash2 className="h-4 w-4"/></Button>
+                            </div>
+                        ))}
+                        <Button type="button" variant="outline" size="sm" onClick={() => append({category:'Parts', cost:0, description:''})}><PlusCircle className="h-4 w-4 mr-2"/>Add Cost Item</Button>
+                    </CardContent>
+                </Card>
+                <FormField control={form.control} name="notes" render={({ field }) => (<FormItem><FormLabel>Notes</FormLabel><FormControl><Textarea {...field} rows={3}/></FormControl><FormMessage/></FormItem>)}/>
+              </div>
             </ScrollArea>
           </form>
         </Form>
