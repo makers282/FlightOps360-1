@@ -1,8 +1,8 @@
 
 'use client';
 
-import React, { useEffect, useState, useTransition } from 'react';
-import { useForm, type SubmitHandler, useFieldArray } from 'react-hook-form';
+import React, { useEffect, useTransition } from 'react';
+import { useForm, type SubmitHandler, useFieldArray, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
@@ -26,16 +26,14 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from "@/lib/utils";
 import { format, parseISO, startOfDay } from 'date-fns';
 import { saveMaintenanceJob } from '@/ai/flows/manage-maintenance-jobs-flow';
-import type { MaintenanceJob, MaintenanceJobStatus, ProjectedCostBreakdown } from '@/ai/schemas/maintenance-job-schemas';
-import { maintenanceJobStatuses } from '@/ai/schemas/maintenance-job-schemas';
+import type { MaintenanceJob, MaintenanceJobStatus } from '@/ai/schemas/maintenance-job-schemas';
+import { maintenanceJobStatuses, JobCostBreakdownSchema as jobCostBreakdownSchemaFromSchemaFile } from '@/ai/schemas/maintenance-job-schemas';
 import type { FleetAircraft } from '@/ai/schemas/fleet-aircraft-schemas';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
-const projectedCostBreakdownSchema = z.object({
-  category: z.enum(['Labor', 'Parts', 'Shop Fees', 'Other']),
-  description: z.string().optional(),
-  cost: z.coerce.number().min(0).optional().default(0),
-});
+const jobCostBreakdownSchema = jobCostBreakdownSchemaFromSchemaFile;
+type JobCostBreakdownFormData = z.infer<typeof jobCostBreakdownSchema>;
+
 
 const jobFormSchema = z.object({
   aircraftId: z.string().min(1, "Please select an aircraft."),
@@ -48,7 +46,7 @@ const jobFormSchema = z.object({
   dateIssued: z.date({ required_error: "Issue date is required." }),
   dateDue: z.date().optional(),
   notes: z.string().optional(),
-  costBreakdowns: z.array(projectedCostBreakdownSchema).optional(),
+  costBreakdowns: z.array(jobCostBreakdownSchema).optional(),
 }).refine(data => data.dateDue ? data.dateDue >= data.dateIssued : true, {
   message: "Due date cannot be before the issue date.",
   path: ["dateDue"],
@@ -63,6 +61,11 @@ interface AddEditJobModalProps {
   onJobSaved: () => void;
   fleet: FleetAircraft[];
 }
+
+const formatCurrency = (value: number | undefined) => {
+  if (value === undefined || isNaN(value)) return '$0.00';
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
+};
 
 export function AddEditJobModal({ isOpen, setIsOpen, initialData, onJobSaved, fleet }: AddEditJobModalProps) {
   const [isSaving, startSavingTransition] = useTransition();
@@ -84,6 +87,11 @@ export function AddEditJobModal({ isOpen, setIsOpen, initialData, onJobSaved, fl
   });
 
   const { fields, append, remove } = useFieldArray({
+    control: form.control,
+    name: 'costBreakdowns',
+  });
+
+  const watchedBreakdowns = useWatch({
     control: form.control,
     name: 'costBreakdowns',
   });
@@ -116,7 +124,7 @@ export function AddEditJobModal({ isOpen, setIsOpen, initialData, onJobSaved, fl
             dateIssued: startOfDay(new Date()),
             dateDue: undefined,
             notes: '',
-            costBreakdowns: [{ category: 'Parts', cost: 0, description: '' }],
+            costBreakdowns: [{ category: 'Parts', projectedCost: 0, actualCost: 0, description: '' }],
         });
       }
     }
@@ -172,7 +180,7 @@ export function AddEditJobModal({ isOpen, setIsOpen, initialData, onJobSaved, fl
                 <FormField control={form.control} name="workOrderNumber" render={({ field }) => (<FormItem><FormLabel>Work Order #</FormLabel><FormControl><Input {...field}/></FormControl><FormMessage/></FormItem>)}/>
                 <FormField control={form.control} name="shopName" render={({ field }) => (<FormItem><FormLabel>Shop Name</FormLabel><FormControl><Input {...field}/></FormControl><FormMessage/></FormItem>)}/>
                 </div>
-                 <Card className="p-4 bg-muted/30 border-dashed">
+                 <Card className="p-4 border">
                     <CardHeader className="p-0 pb-2"><CardTitle className="text-base">Shop Contact (Optional)</CardTitle></CardHeader>
                     <CardContent className="p-0 grid grid-cols-1 md:grid-cols-2 gap-4">
                          <FormField control={form.control} name="shopContactName" render={({ field }) => (<FormItem><FormLabel>Contact Name</FormLabel><FormControl><Input {...field} value={field.value || ''} /></FormControl><FormMessage/></FormItem>)}/>
@@ -188,17 +196,31 @@ export function AddEditJobModal({ isOpen, setIsOpen, initialData, onJobSaved, fl
                 <FormField control={form.control} name="dateDue" render={({ field }) => (<FormItem><FormLabel>Date Due</FormLabel><Popover><PopoverTrigger asChild><Button variant="outline" className={cn("w-full pl-3 text-left font-normal",!field.value&&"text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4"/>{field.value?format(field.value,"PPP"):<span>Pick date</span>}</Button></PopoverTrigger><PopoverContent><Calendar mode="single" selected={field.value} onSelect={field.onChange} disabled={d=>form.getValues('dateIssued')?d<form.getValues('dateIssued'):false}/></PopoverContent></Popover><FormMessage/></FormItem>)}/>
                 </div>
                  <Card>
-                    <CardHeader><CardTitle className="text-base">Projected Costs</CardTitle></CardHeader>
+                    <CardHeader><CardTitle className="text-base">Cost Breakdown</CardTitle></CardHeader>
                     <CardContent className="space-y-2">
-                        {fields.map((item, index) => (
-                            <div key={item.id} className="grid grid-cols-12 gap-2 items-end">
-                                <FormField control={form.control} name={`costBreakdowns.${index}.category`} render={({field}) => (<FormItem className="col-span-4"><FormLabel className="text-xs">Category</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl><SelectContent><SelectItem value="Labor">Labor</SelectItem><SelectItem value="Parts">Parts</SelectItem><SelectItem value="Shop Fees">Shop Fees</SelectItem><SelectItem value="Other">Other</SelectItem></SelectContent></Select></FormItem>)} />
-                                <FormField control={form.control} name={`costBreakdowns.${index}.cost`} render={({field}) => (<FormItem className="col-span-3"><FormLabel className="text-xs">Cost</FormLabel><FormControl><Input type="number" {...field} /></FormControl></FormItem>)} />
-                                <FormField control={form.control} name={`costBreakdowns.${index}.description`} render={({field}) => (<FormItem className="col-span-4"><FormLabel className="text-xs">Description</FormLabel><FormControl><Input {...field} value={field.value || ''} /></FormControl></FormItem>)} />
-                                <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)} className="text-destructive"><Trash2 className="h-4 w-4"/></Button>
-                            </div>
-                        ))}
-                        <Button type="button" variant="outline" size="sm" onClick={() => append({category:'Parts', cost:0, description:''})}><PlusCircle className="h-4 w-4 mr-2"/>Add Cost Item</Button>
+                        {fields.map((item, index) => {
+                            const projected = watchedBreakdowns?.[index]?.projectedCost || 0;
+                            const actual = watchedBreakdowns?.[index]?.actualCost || 0;
+                            const variance = actual - projected;
+                            return (
+                                <div key={item.id} className="grid grid-cols-12 gap-2 items-end border p-3 rounded-md">
+                                    <FormField control={form.control} name={`costBreakdowns.${index}.category`} render={({field}) => (<FormItem className="col-span-12 md:col-span-4"><FormLabel className="text-xs">Category</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl><SelectContent><SelectItem value="Labor">Labor</SelectItem><SelectItem value="Parts">Parts</SelectItem><SelectItem value="Shop Fees">Shop Fees</SelectItem><SelectItem value="Other">Other</SelectItem></SelectContent></Select></FormItem>)} />
+                                    <FormField control={form.control} name={`costBreakdowns.${index}.description`} render={({field}) => (<FormItem className="col-span-12 md:col-span-8"><FormLabel className="text-xs">Description</FormLabel><FormControl><Input {...field} value={field.value || ''} /></FormControl></FormItem>)} />
+                                    <FormField control={form.control} name={`costBreakdowns.${index}.projectedCost`} render={({field}) => (<FormItem className="col-span-6 md:col-span-4"><FormLabel className="text-xs">Projected Cost</FormLabel><FormControl><Input type="number" placeholder="0.00" {...field} /></FormControl></FormItem>)} />
+                                    <FormField control={form.control} name={`costBreakdowns.${index}.actualCost`} render={({field}) => (<FormItem className="col-span-6 md:col-span-4"><FormLabel className="text-xs">Actual Cost</FormLabel><FormControl><Input type="number" placeholder="0.00" {...field} /></FormControl></FormItem>)} />
+                                    <div className="col-span-12 md:col-span-3">
+                                      <Label className="text-xs">Variance</Label>
+                                      <p className={cn("font-medium p-2 rounded text-sm", variance > 0 ? "text-red-600" : "text-green-600")}>
+                                          {variance >= 0 ? '+' : ''}{formatCurrency(variance)}
+                                      </p>
+                                    </div>
+                                    <div className="col-span-12 md:col-span-1 flex justify-end">
+                                      {fields.length > 1 && <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)} className="text-destructive"><Trash2 className="h-4 w-4"/></Button>}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                        <Button type="button" variant="outline" size="sm" onClick={() => append({category:'Parts', projectedCost:0, actualCost: 0, description:''})}><PlusCircle className="h-4 w-4 mr-2"/>Add Cost Item</Button>
                     </CardContent>
                 </Card>
                 <FormField control={form.control} name="notes" render={({ field }) => (<FormItem><FormLabel>Notes</FormLabel><FormControl><Textarea {...field} value={field.value || ''} rows={3}/></FormControl><FormMessage/></FormItem>)}/>

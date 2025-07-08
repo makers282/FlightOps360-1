@@ -19,8 +19,8 @@ import { cn } from "@/lib/utils"
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 import { fetchMaintenanceCosts, deleteMaintenanceCost, type MaintenanceCost } from '@/ai/flows/manage-maintenance-costs-flow';
-import { fetchMaintenanceJobs, deleteMaintenanceJob, type MaintenanceJob, type MaintenanceJobStatus } from '@/ai/flows/manage-maintenance-jobs-flow';
-import { maintenanceJobStatuses } from '@/ai/schemas/maintenance-job-schemas';
+import { fetchMaintenanceJobs, deleteMaintenanceJob, type MaintenanceJob } from '@/ai/flows/manage-maintenance-jobs-flow';
+import { maintenanceJobStatuses, type MaintenanceJobStatus } from '@/ai/schemas/maintenance-job-schemas';
 import { AddEditJobModal } from '@/app/(app)/maintenance/jobs/components/add-edit-job-modal';
 import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
 
@@ -83,9 +83,9 @@ export default function MaintenanceCostsPage() {
   const [summaryMetrics, setSummaryMetrics] = useState({
     thisMonth: 0,
     monthChange: 0,
+    openWorkOrders: 0,
     thisQuarter: 0,
     quarterChange: 0,
-    avgPerAircraft: 0
   });
   
   const [isJobModalOpen, setIsJobModalOpen] = useState(false);
@@ -149,10 +149,16 @@ export default function MaintenanceCostsPage() {
     const lastQuarterEnd = endOfQuarter(subQuarters(now, 1));
     const lastQuarterTotal = getCostsInDateRange(lastQuarterStart, lastQuarterEnd).reduce((sum, c) => sum + c.actualTotal, 0);
     const quarterChange = lastQuarterTotal > 0 ? ((thisQuarterTotal - lastQuarterTotal) / lastQuarterTotal) * 100 : (thisQuarterTotal > 0 ? 100 : 0);
-    const numAircraftInQuarter = new Set(thisQuarterCosts.map(c => c.tailNumber)).size;
-    const avgPerAircraft = numAircraftInQuarter > 0 ? thisQuarterTotal / numAircraftInQuarter : 0;
-    setSummaryMetrics({ thisMonth: thisMonthTotal, monthChange, thisQuarter: thisQuarterTotal, quarterChange, avgPerAircraft });
-  }, [costs, isLoading]);
+    
+    const openWorkOrders = jobs.filter(j => 
+        j.status === 'Quote' || 
+        j.status === 'Opened' || 
+        j.status === 'Accepted' || 
+        j.status === 'In Progress'
+    ).length;
+
+    setSummaryMetrics({ thisMonth: thisMonthTotal, monthChange, thisQuarter: thisQuarterTotal, quarterChange, openWorkOrders });
+  }, [costs, jobs, isLoading]);
 
   const confirmDelete = (item: DisplayItem) => setItemToDelete(item);
 
@@ -203,7 +209,8 @@ export default function MaintenanceCostsPage() {
     const jobBasedItems: DisplayItem[] = jobs
       .filter(job => !costJobIds.has(job.id))
       .map(job => {
-        const projectedTotal = job.costBreakdowns?.reduce((sum, item) => sum + (item.cost || 0), 0) || 0;
+        const projectedTotal = job.costBreakdowns?.reduce((sum, item) => sum + (item.projectedCost || 0), 0) || 0;
+        const actualTotal = job.costBreakdowns?.reduce((sum, item) => sum + (item.actualCost || 0), 0) || 0;
         return {
           id: job.id,
           type: 'job',
@@ -213,8 +220,8 @@ export default function MaintenanceCostsPage() {
           workOrderNumber: job.workOrderNumber,
           status: job.status,
           projectedTotal: projectedTotal,
-          actualTotal: 0,
-          variance: -projectedTotal,
+          actualTotal: actualTotal,
+          variance: actualTotal - projectedTotal,
           aircraftId: job.aircraftId,
           jobId: job.id,
         };
@@ -226,7 +233,7 @@ export default function MaintenanceCostsPage() {
       const searchMatch = searchTerm
         ? item.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
           item.tailNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          item.workOrderNumber?.toLowerCase().includes(searchTerm.toLowerCase())
+          (item.workOrderNumber && item.workOrderNumber.toLowerCase().includes(searchTerm.toLowerCase()))
         : true;
       const aircraftMatch = filters.aircraft === 'all' || item.aircraftId === filters.aircraft;
       const jobStatusMatch = filters.jobStatus === 'all' || item.status === filters.jobStatus;
@@ -321,10 +328,20 @@ export default function MaintenanceCostsPage() {
             </div>
         } 
       />
-      <div className="grid gap-6 mb-6 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-6 mb-6 md:grid-cols-2 lg:grid-cols-4">
         <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">This Month</CardTitle></CardHeader><CardContent><div className="text-3xl font-bold">{formatCurrency(summaryMetrics.thisMonth)}</div><p className="text-xs text-muted-foreground"><span className={summaryMetrics.monthChange >= 0 ? "text-green-600" : "text-red-600"}>{summaryMetrics.monthChange >= 0 ? '+' : ''}{summaryMetrics.monthChange.toFixed(1)}%</span> from last month</p></CardContent></Card>
         <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">This Quarter</CardTitle></CardHeader><CardContent><div className="text-3xl font-bold">{formatCurrency(summaryMetrics.thisQuarter)}</div><p className="text-xs text-muted-foreground"><span className={summaryMetrics.quarterChange >= 0 ? "text-green-600" : "text-red-600"}>{summaryMetrics.quarterChange >= 0 ? '+' : ''}{summaryMetrics.quarterChange.toFixed(1)}%</span> from last quarter</p></CardContent></Card>
-        <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Avg per Aircraft</CardTitle></CardHeader><CardContent><div className="text-3xl font-bold">{formatCurrency(summaryMetrics.avgPerAircraft)}</div><p className="text-xs text-muted-foreground">Per aircraft this quarter</p></CardContent></Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Open Work Orders</CardTitle>
+            <Hammer className="h-4 w-4 text-muted-foreground"/>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">{summaryMetrics.openWorkOrders}</div>
+            <p className="text-xs text-muted-foreground">Jobs currently in progress</p>
+          </CardContent>
+        </Card>
+        <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Avg per Aircraft (QTR)</CardTitle></CardHeader><CardContent><div className="text-3xl font-bold">N/A</div><p className="text-xs text-muted-foreground">Requires flight hours data</p></CardContent></Card>
       </div>
 
       <Card>

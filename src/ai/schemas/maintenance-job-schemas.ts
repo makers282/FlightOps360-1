@@ -7,13 +7,14 @@ import { z } from 'zod';
 export const maintenanceJobStatuses = ["Quote", "Opened", "Accepted", "In Progress", "Completed", "Closed", "Canceled"] as const;
 export type MaintenanceJobStatus = typeof maintenanceJobStatuses[number];
 
-// Schema for projected costs within a work order
-export const ProjectedCostBreakdownSchema = z.object({
+// Schema for projected and actual costs within a work order
+export const JobCostBreakdownSchema = z.object({
   category: z.enum(['Labor', 'Parts', 'Shop Fees', 'Other']),
   description: z.string().optional(),
-  cost: z.coerce.number().min(0).optional().default(0),
+  projectedCost: z.coerce.number().min(0).optional().default(0),
+  actualCost: z.coerce.number().min(0).optional().default(0),
 });
-export type ProjectedCostBreakdown = z.infer<typeof ProjectedCostBreakdownSchema>;
+export type JobCostBreakdown = z.infer<typeof JobCostBreakdownSchema>;
 
 
 export const MaintenanceJobSchema = z.object({
@@ -33,7 +34,7 @@ export const MaintenanceJobSchema = z.object({
   
   notes: z.string().optional(),
   
-  costBreakdowns: z.array(ProjectedCostBreakdownSchema).optional().default([]).describe("Projected costs for the job."),
+  costBreakdowns: z.array(JobCostBreakdownSchema).optional().default([]).describe("Projected and actual costs for the job."),
   
   createdAt: z.string().datetime({ message: "Creation date must be a valid date." }).describe("ISO string format"),
   updatedAt: z.string().datetime({ message: "Update date must be a valid date." }).describe("ISO string format"),
@@ -46,6 +47,7 @@ export const SaveMaintenanceJobInputSchema = MaintenanceJobSchema.omit({
   updatedAt: true,
 }).extend({
   id: z.string().optional(), // Optional for creation, provided for updates
+  costBreakdowns: z.array(JobCostBreakdownSchema).optional(),
 });
 export type SaveMaintenanceJobInput = z.infer<typeof SaveMaintenanceJobInputSchema>;
 
