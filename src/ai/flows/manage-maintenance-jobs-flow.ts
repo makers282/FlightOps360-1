@@ -22,10 +22,14 @@ const MAINTENANCE_JOBS_COLLECTION = 'maintenanceJobs';
 /**
  * Removes properties with `undefined` values from an object.
  * Firestore does not allow `undefined` as a field value.
+ * This version is aware of Firestore's special FieldValue/Timestamp types.
  * @param obj The object to clean.
  * @returns A new object with `undefined` properties removed.
  */
 function removeUndefined(obj: any): any {
+  if (obj instanceof FieldValue || obj instanceof Timestamp) {
+    return obj;
+  }
   if (typeof obj !== 'object' || obj === null) {
     return obj;
   }
@@ -100,8 +104,6 @@ const saveMaintenanceJobFlow = ai.defineFlow(
         throw new Error("Failed to retrieve saved job data from Firestore.");
       }
 
-      // CORRECTED: savedData.dateIssued and dateDue are already ISO strings.
-      // Do not attempt to call .toDate() on them.
       return {
         ...savedData,
         id: savedDoc.id,
@@ -128,8 +130,6 @@ const fetchMaintenanceJobsFlow = ai.defineFlow(
       const snapshot = await db.collection(MAINTENANCE_JOBS_COLLECTION).orderBy('dateIssued', 'desc').get();
       return snapshot.docs.map(doc => {
         const data = doc.data();
-        // CORRECTED: data.dateIssued and dateDue are already ISO strings.
-        // Do not attempt to call .toDate() on them.
         return {
           ...data,
           id: doc.id,
