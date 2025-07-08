@@ -20,7 +20,8 @@ import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 import { fetchMaintenanceCosts, deleteMaintenanceCost } from '@/ai/flows/manage-maintenance-costs-flow';
 import type { MaintenanceCost } from '@/ai/schemas/maintenance-cost-schemas';
-import { fetchMaintenanceJobs, type MaintenanceJob, type MaintenanceJobStatus } from '@/ai/schemas/maintenance-job-schemas';
+import { fetchMaintenanceJobs } from '@/ai/flows/manage-maintenance-jobs-flow';
+import type { MaintenanceJob, MaintenanceJobStatus } from '@/ai/schemas/maintenance-job-schemas';
 import { maintenanceJobStatuses } from '@/ai/schemas/maintenance-job-schemas';
 
 import {
