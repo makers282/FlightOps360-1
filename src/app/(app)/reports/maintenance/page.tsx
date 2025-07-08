@@ -10,21 +10,24 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import { PieChart, Pie, Cell, LineChart, CartesianGrid, XAxis, YAxis, Tooltip as RechartsTooltip, Line } from 'recharts';
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { DateRange } from "react-day-picker";
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
-import { PieChart, Pie, Cell, LineChart, CartesianGrid, XAxis, YAxis, Tooltip as RechartsTooltip, Line } from 'recharts';
 
 import { Wrench, Download, Calendar as CalendarIcon, Loader2, TrendingUp, AlertCircle } from 'lucide-react';
 
 import { useToast } from '@/hooks/use-toast';
 import { cn } from "@/lib/utils";
-import { format, isWithinInterval, parseISO } from 'date-fns';
+import { format, isWithinInterval, parseISO, parse as parseDate } from 'date-fns';
 
 import { fetchMaintenanceCosts, type MaintenanceCost } from '@/ai/flows/manage-maintenance-costs-flow';
 import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
+import { fetchAllFlightLogs, type FlightLogLeg } from '@/ai/flows/manage-flight-logs-flow';
+import { fetchTrips, type Trip } from '@/ai/flows/manage-trips-flow';
 import { ClientOnly } from '@/components/client-only';
 
 const formatCurrency = (value: number | undefined) => {
@@ -61,9 +64,32 @@ const renderCustomizedLabel = ({ cx, cy, midAngle, outerRadius, percent, name, f
 };
 
 
+const calculateFlightTimeFromLog = (log: FlightLogLeg): number => {
+    if (typeof log.hobbsTakeOff === 'number' && typeof log.hobbsLanding === 'number' && log.hobbsLanding > log.hobbsTakeOff) {
+        return parseFloat((log.hobbsLanding - log.hobbsTakeOff).toFixed(2));
+    }
+    if (log.takeOffTime && log.landingTime) {
+        try {
+            const takeOff = parseISO(`2000-01-01T${log.takeOffTime}:00Z`);
+            let landing = parseISO(`2000-01-01T${log.landingTime}:00Z`);
+            if (landing < takeOff) { landing.setDate(landing.getDate() + 1); }
+            const diffMs = landing.getTime() - takeOff.getTime();
+            if (diffMs < 0) return 0;
+            return parseFloat((diffMs / (1000 * 60 * 60)).toFixed(2));
+        } catch (e) {
+            return 0;
+        }
+    }
+    return 0;
+};
+
+
 export default function MaintenanceReportsPage() {
     const [costs, setCosts] = useState<MaintenanceCost[]>([]);
     const [fleet, setFleet] = useState<FleetAircraft[]>([]);
+    const [allLogs, setAllLogs] = useState<FlightLogLeg[]>([]);
+    const [allTrips, setAllTrips] = useState<Trip[]>([]);
+
     const [isLoading, setIsLoading] = useState(true);
     const { toast } = useToast();
 
@@ -75,12 +101,16 @@ export default function MaintenanceReportsPage() {
         const loadData = async () => {
             setIsLoading(true);
             try {
-                const [fetchedCosts, fetchedFleet] = await Promise.all([
+                const [fetchedCosts, fetchedFleet, fetchedLogs, fetchedTrips] = await Promise.all([
                     fetchMaintenanceCosts(),
                     fetchFleetAircraft(),
+                    fetchAllFlightLogs(),
+                    fetchTrips(),
                 ]);
                 setCosts(fetchedCosts);
                 setFleet(fetchedFleet);
+                setAllLogs(fetchedLogs);
+                setAllTrips(fetchedTrips);
             } catch (error) {
                 console.error("Failed to load report data:", error);
                 toast({ title: "Error", description: "Could not load data for reports.", variant: "destructive" });
@@ -104,12 +134,27 @@ export default function MaintenanceReportsPage() {
         const totalCost = filteredCosts.reduce((sum, cost) => sum + cost.costBreakdowns.reduce((s, b) => s + b.actualCost, 0), 0);
         const unscheduledCosts = filteredCosts.filter(c => c.costType === 'Unscheduled').reduce((sum, cost) => sum + cost.costBreakdowns.reduce((s, b) => s + b.actualCost, 0), 0);
         const ratio = totalCost > 0 ? (unscheduledCosts / totalCost) * 100 : 0;
+        
+        const tripMap = new Map(allTrips.map(t => [t.id, t]));
+        const filteredLogs = allLogs.filter(log => {
+            const trip = tripMap.get(log.tripId);
+            if (!trip) return false;
+            const logDate = log.createdAt ? parseISO(log.createdAt) : new Date(); // Use createdAt from log
+            const dateMatch = dateRange?.from ? isWithinInterval(logDate, { start: dateRange.from, end: dateRange.to || dateRange.from }) : true;
+            const aircraftMatch = aircraftFilter === 'all' || trip.aircraftId === aircraftFilter;
+            return dateMatch && aircraftMatch;
+        });
+
+        const totalFlightHours = filteredLogs.reduce((sum, log) => sum + calculateFlightTimeFromLog(log), 0);
+        const avgCostPerHour = totalFlightHours > 0 ? totalCost / totalFlightHours : 0;
+
         return {
             totalYTD: totalCost,
-            avgCostPerHour: 0, // Placeholder
+            avgCostPerHour: avgCostPerHour,
             unscheduledRatio: ratio,
+            totalFlightHours: totalFlightHours,
         };
-    }, [filteredCosts]);
+    }, [filteredCosts, allLogs, allTrips, dateRange, aircraftFilter]);
 
     const pieChartData = useMemo(() => {
         const dataMap = new Map<string, number>();
@@ -130,20 +175,34 @@ export default function MaintenanceReportsPage() {
         });
 
         const sortedMonths = Object.keys(monthlyData).sort((a,b) => {
-            return new Date(a).getTime() - new Date(b).getTime();
+            return parseDate(a, 'MMM yyyy', new Date()).getTime() - parseDate(b, 'MMM yyyy', new Date()).getTime();
         });
 
         return sortedMonths.map(month => ({
-            name: month,
+            name: month.slice(0,3),
             total: monthlyData[month]
         }));
 
     }, [filteredCosts]);
     
     const aircraftTableData = useMemo(() => {
-        const dataMap = new Map<string, { totalCost: number; scheduledCost: number; unscheduledCost: number; tailNumber: string; aircraftId: string; }>();
+        const dataMap = new Map<string, { totalCost: number; scheduledCost: number; unscheduledCost: number; tailNumber: string; aircraftId: string; totalHours: number }>();
+        const tripMap = new Map(allTrips.map(t => [t.id, t]));
+        
+        const logsByAircraft = new Map<string, number>();
+        allLogs.forEach(log => {
+            const trip = tripMap.get(log.tripId);
+            if (!trip) return;
+            const logDate = log.createdAt ? parseISO(log.createdAt) : new Date();
+            const dateMatch = dateRange?.from ? isWithinInterval(logDate, { start: dateRange.from, end: dateRange.to || dateRange.from }) : true;
+            if (dateMatch) {
+                const flightTime = calculateFlightTimeFromLog(log);
+                logsByAircraft.set(trip.aircraftId, (logsByAircraft.get(trip.aircraftId) || 0) + flightTime);
+            }
+        });
+        
         filteredCosts.forEach(cost => {
-            const entry = dataMap.get(cost.aircraftId) || { totalCost: 0, scheduledCost: 0, unscheduledCost: 0, tailNumber: cost.tailNumber, aircraftId: cost.aircraftId };
+            const entry = dataMap.get(cost.aircraftId) || { totalCost: 0, scheduledCost: 0, unscheduledCost: 0, tailNumber: cost.tailNumber, aircraftId: cost.aircraftId, totalHours: logsByAircraft.get(cost.aircraftId) || 0 };
             const actualTotal = cost.costBreakdowns.reduce((s, b) => s + b.actualCost, 0);
             entry.totalCost += actualTotal;
             if (cost.costType === 'Scheduled') {
@@ -151,11 +210,15 @@ export default function MaintenanceReportsPage() {
             } else {
                 entry.unscheduledCost += actualTotal;
             }
-            entry.tailNumber = cost.tailNumber;
             dataMap.set(cost.aircraftId, entry);
         });
-        return Array.from(dataMap.values());
-    }, [filteredCosts]);
+        
+        return Array.from(dataMap.values()).map(item => ({
+            ...item,
+            costPerHour: item.totalHours > 0 ? item.totalCost / item.totalHours : 0
+        }));
+    }, [filteredCosts, allLogs, allTrips, dateRange]);
+
 
     const CATEGORY_COLORS: { [key: string]: string } = {
         Labor: '#4A90E2', // Blue
@@ -174,7 +237,15 @@ export default function MaintenanceReportsPage() {
             {isLoading ? <Skeleton className="h-24 w-full" /> :
                 <div className="grid gap-6 md:grid-cols-3">
                     <Card><CardHeader><CardTitle className="text-sm font-medium">Total Maintenance Spend</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{formatCurrency(summaryData.totalYTD)}</div><p className="text-xs text-muted-foreground">For selected period</p></CardContent></Card>
-                    <Card><CardHeader><CardTitle className="text-sm font-medium">Avg Cost / Flight Hour</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">N/A</div><p className="text-xs text-muted-foreground">Requires flight log data</p></CardContent></Card>
+                    <Card>
+                        <CardHeader><CardTitle className="text-sm font-medium">Avg Cost / Flight Hour</CardTitle></CardHeader>
+                        <CardContent>
+                            <div className="text-2xl font-bold">{summaryData.avgCostPerHour > 0 ? formatCurrency(summaryData.avgCostPerHour) : 'N/A'}</div>
+                            <p className="text-xs text-muted-foreground">
+                                {summaryData.totalFlightHours > 0 ? `Based on ${summaryData.totalFlightHours.toFixed(1)} flight hours` : 'No flight hours in period'}
+                            </p>
+                        </CardContent>
+                    </Card>
                     <Card><CardHeader><CardTitle className="text-sm font-medium">Unscheduled vs. Scheduled</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{summaryData.unscheduledRatio.toFixed(1)}%</div><p className="text-xs text-muted-foreground">Ratio of unscheduled costs</p></CardContent></Card>
                 </div>
             }
@@ -222,14 +293,14 @@ export default function MaintenanceReportsPage() {
                         }
                     </CardContent>
                 </Card>
-                <Card><CardHeader><CardTitle>Monthly Cost Trend</CardTitle></CardHeader><CardContent>{isLoading ? <Skeleton className="h-64 w-full"/> : <ChartContainer config={{total: { label: "Total Cost", color: "hsl(200, 70%, 55%)"}}} className="aspect-auto h-[300px] w-full"><LineChart data={lineChartData} margin={{left: 12, right: 12}}><CartesianGrid vertical={false} /><XAxis dataKey="name" tickLine={false} axisLine={false} tickMargin={8} tickFormatter={(value) => value.slice(0, 3)} /><YAxis tickLine={false} axisLine={false} tickMargin={8} tickFormatter={(value) => `$${Number(value) / 1000}k`} /><ChartTooltip content={<ChartTooltipContent indicator="dot" />} /><Line type="monotone" dataKey="total" stroke="var(--color-total)" strokeWidth={2} dot={false}/></LineChart></ChartContainer>}</CardContent></Card>
+                <Card><CardHeader><CardTitle>Monthly Cost Trend</CardTitle></CardHeader><CardContent>{isLoading ? <Skeleton className="h-64 w-full"/> : <ChartContainer config={{total: { label: "Total Cost", color: "hsl(200, 70%, 55%)"}}} className="aspect-auto h-[300px] w-full"><LineChart data={lineChartData} margin={{left: 12, right: 12}}><CartesianGrid vertical={false} /><XAxis dataKey="name" tickLine={false} axisLine={false} tickMargin={8} /><YAxis tickLine={false} axisLine={false} tickMargin={8} tickFormatter={(value) => `$${Number(value) / 1000}k`} /><ChartTooltip content={<ChartTooltipContent indicator="dot" />} /><Line type="monotone" dataKey="total" stroke="var(--color-total)" strokeWidth={2} dot={false}/></LineChart></ChartContainer>}</CardContent></Card>
             </div>
 
             <Card><CardHeader><CardTitle>Costs by Aircraft</CardTitle></CardHeader><CardContent>
                 {isLoading ? <Skeleton className="h-48 w-full"/> : 
-                <Table><TableHeader><TableRow><TableHead>Tail Number</TableHead><TableHead className="text-right">Total Cost</TableHead><TableHead className="text-right">Scheduled</TableHead><TableHead className="text-right">Unscheduled</TableHead><TableHead className="text-right">Cost/Hour (TBD)</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
+                <Table><TableHeader><TableRow><TableHead>Tail Number</TableHead><TableHead className="text-right">Total Cost</TableHead><TableHead className="text-right">Scheduled</TableHead><TableHead className="text-right">Unscheduled</TableHead><TableHead className="text-right">Cost/Hour</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
                 <TableBody>{aircraftTableData.length > 0 ? aircraftTableData.map(item => (
-                    <TableRow key={item.tailNumber}><TableCell>{item.tailNumber}</TableCell><TableCell className="text-right font-semibold">{formatCurrency(item.totalCost)}</TableCell><TableCell className="text-right">{formatCurrency(item.scheduledCost)}</TableCell><TableCell className="text-right">{formatCurrency(item.unscheduledCost)}</TableCell><TableCell className="text-right text-muted-foreground">N/A</TableCell><TableCell className="text-right"><Button variant="ghost" size="sm" asChild><Link href={`/aircraft/currency/${item.aircraftId}`}>Details</Link></Button></TableCell></TableRow>
+                    <TableRow key={item.tailNumber}><TableCell>{item.tailNumber}</TableCell><TableCell className="text-right font-semibold">{formatCurrency(item.totalCost)}</TableCell><TableCell className="text-right">{formatCurrency(item.scheduledCost)}</TableCell><TableCell className="text-right">{formatCurrency(item.unscheduledCost)}</TableCell><TableCell className="text-right text-muted-foreground">{item.costPerHour > 0 ? formatCurrency(item.costPerHour) : 'N/A'}</TableCell><TableCell className="text-right"><Button variant="ghost" size="sm" asChild><Link href={`/aircraft/currency/${item.aircraftId}`}>Details</Link></Button></TableCell></TableRow>
                 )) : <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground">No data for selected filters.</TableCell></TableRow>}
                 </TableBody></Table>
                 }
@@ -237,3 +308,5 @@ export default function MaintenanceReportsPage() {
         </div>
     );
 }
+
+    
