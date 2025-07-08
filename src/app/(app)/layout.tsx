@@ -207,13 +207,9 @@ export default function AppLayout({ children }: PropsWithChildren) {
                         <ListChecks /> 
                         Maintenance Currency
                     </SidebarMenuSubButton>
-                    <SidebarMenuSubButton href="/maintenance/jobs" tooltip="Work Orders" isActive={pathname.startsWith('/maintenance/jobs')}>
-                        <Hammer /> 
-                        Work Orders
-                    </SidebarMenuSubButton>
-                    <SidebarMenuSubButton href="/maintenance/costs" tooltip="Maintenance Costs" isActive={pathname.startsWith('/maintenance/costs')}>
+                    <SidebarMenuSubButton href="/maintenance/costs" tooltip="Maintenance Costs & Jobs" isActive={pathname.startsWith('/maintenance/costs')}>
                         <DollarSign />
-                        Maintenance Costs
+                        Costs & Jobs
                     </SidebarMenuSubButton>
                 </SidebarMenuSub>
             </SidebarMenuItem>
