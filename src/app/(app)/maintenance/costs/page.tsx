@@ -23,6 +23,7 @@ import { fetchMaintenanceJobs, deleteMaintenanceJob, type MaintenanceJob } from 
 import { maintenanceJobStatuses, type MaintenanceJobStatus } from '@/ai/schemas/maintenance-job-schemas';
 import { AddEditJobModal } from '@/app/(app)/maintenance/jobs/components/add-edit-job-modal';
 import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
+import { fetchAllFlightLogs, type FlightLogLeg } from '@/ai/flows/manage-flight-logs-flow';
 
 
 import {
@@ -67,6 +68,7 @@ export default function MaintenanceCostsPage() {
   const [costs, setCosts] = useState<Cost[]>([]);
   const [jobs, setJobs] = useState<MaintenanceJob[]>([]);
   const [fleet, setFleet] = useState<FleetAircraft[]>([]);
+  const [allLogs, setAllLogs] = useState<FlightLogLeg[]>([]);
 
   const [isLoading, setIsLoading] = useState(true);
   const [isDeleting, startDeletingTransition] = useTransition();
@@ -86,6 +88,8 @@ export default function MaintenanceCostsPage() {
     openWorkOrders: 0,
     thisQuarter: 0,
     quarterChange: 0,
+    avgCostPerHour: 0,
+    thisQuarterTotalFlightHours: 0,
   });
   
   const [isJobModalOpen, setIsJobModalOpen] = useState(false);
@@ -94,10 +98,11 @@ export default function MaintenanceCostsPage() {
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [fetchedCosts, fetchedJobs, fetchedFleet] = await Promise.all([
+      const [fetchedCosts, fetchedJobs, fetchedFleet, fetchedLogs] = await Promise.all([
         fetchMaintenanceCosts(),
         fetchMaintenanceJobs(),
         fetchFleetAircraft(),
+        fetchAllFlightLogs(),
       ]);
       const jobsMap = new Map(fetchedJobs.map(job => [job.id, job]));
       
@@ -117,6 +122,7 @@ export default function MaintenanceCostsPage() {
       setCosts(processedCosts as Cost[]);
       setJobs(fetchedJobs);
       setFleet(fetchedFleet);
+      setAllLogs(fetchedLogs);
     } catch (error) {
       console.error("Failed to fetch maintenance data:", error);
       toast({ title: "Error", description: "Could not load maintenance costs or jobs.", variant: "destructive" });
@@ -134,6 +140,20 @@ export default function MaintenanceCostsPage() {
     if (isLoading) return;
     const now = new Date();
     const getCostsInDateRange = (startDate: Date, endDate: Date) => costs.filter(c => isWithinInterval(parse(c.invoiceDate, 'yyyy-MM-dd', new Date()), { start: startDate, end: endDate }));
+    
+    // New: filter logs by date range
+    const getLogsInDateRange = (startDate: Date, endDate: Date) => {
+      return allLogs.filter(l => {
+        if (!l.createdAt) return false;
+        try {
+            const logDate = parseISO(l.createdAt);
+            return isWithinInterval(logDate, { start: startDate, end: endDate });
+        } catch {
+            return false;
+        }
+      });
+    };
+    
     const thisMonthStart = startOfMonth(now);
     const thisMonthEnd = endOfMonth(now);
     const thisMonthTotal = getCostsInDateRange(thisMonthStart, thisMonthEnd).reduce((sum, c) => sum + c.actualTotal, 0);
@@ -141,14 +161,27 @@ export default function MaintenanceCostsPage() {
     const lastMonthEnd = endOfMonth(subMonths(now, 1));
     const lastMonthTotal = getCostsInDateRange(lastMonthStart, lastMonthEnd).reduce((sum, c) => sum + c.actualTotal, 0);
     const monthChange = lastMonthTotal > 0 ? ((thisMonthTotal - lastMonthTotal) / lastMonthTotal) * 100 : (thisMonthTotal > 0 ? 100 : 0);
+    
     const thisQuarterStart = startOfQuarter(now);
     const thisQuarterEnd = endOfQuarter(now);
+    
     const thisQuarterCosts = getCostsInDateRange(thisQuarterStart, thisQuarterEnd);
-    const thisQuarterTotal = thisQuarterCosts.reduce((sum, c) => sum + c.actualTotal, 0);
+    const thisQuarterTotalCost = thisQuarterCosts.reduce((sum, c) => sum + c.actualTotal, 0);
+    
+    const thisQuarterLogs = getLogsInDateRange(thisQuarterStart, thisQuarterEnd);
+    const calculateFlightTimeFromLog = (log: FlightLogLeg): number => {
+        if (typeof log.hobbsTakeOff === 'number' && typeof log.hobbsLanding === 'number' && log.hobbsLanding > log.hobbsTakeOff) {
+            return parseFloat((log.hobbsLanding - log.hobbsTakeOff).toFixed(2));
+        }
+        return 0;
+    };
+    const thisQuarterTotalFlightHours = thisQuarterLogs.reduce((sum, log) => sum + calculateFlightTimeFromLog(log), 0);
+    const avgCostPerHour = thisQuarterTotalFlightHours > 0 ? thisQuarterTotalCost / thisQuarterTotalFlightHours : 0;
+    
     const lastQuarterStart = startOfQuarter(subQuarters(now, 1));
     const lastQuarterEnd = endOfQuarter(subQuarters(now, 1));
     const lastQuarterTotal = getCostsInDateRange(lastQuarterStart, lastQuarterEnd).reduce((sum, c) => sum + c.actualTotal, 0);
-    const quarterChange = lastQuarterTotal > 0 ? ((thisQuarterTotal - lastQuarterTotal) / lastQuarterTotal) * 100 : (thisQuarterTotal > 0 ? 100 : 0);
+    const quarterChange = lastQuarterTotal > 0 ? ((thisQuarterTotalCost - lastQuarterTotal) / lastQuarterTotal) * 100 : (thisQuarterTotalCost > 0 ? 100 : 0);
     
     const openWorkOrders = jobs.filter(j => 
         j.status === 'Quote' || 
@@ -157,8 +190,16 @@ export default function MaintenanceCostsPage() {
         j.status === 'In Progress'
     ).length;
 
-    setSummaryMetrics({ thisMonth: thisMonthTotal, monthChange, thisQuarter: thisQuarterTotal, quarterChange, openWorkOrders });
-  }, [costs, jobs, isLoading]);
+    setSummaryMetrics({ 
+        thisMonth: thisMonthTotal, 
+        monthChange, 
+        thisQuarter: thisQuarterTotalCost, 
+        quarterChange, 
+        openWorkOrders,
+        avgCostPerHour,
+        thisQuarterTotalFlightHours,
+    });
+  }, [costs, jobs, allLogs, isLoading]);
 
   const confirmDelete = (item: DisplayItem) => setItemToDelete(item);
 
@@ -319,7 +360,7 @@ export default function MaintenanceCostsPage() {
   return (
     <TooltipProvider>
       <PageHeader 
-        title="Maintenance Costs & Jobs" 
+        title="Maintenance Costs &amp; Jobs" 
         icon={DollarSign} 
         actions={
             <div className="flex gap-2">
@@ -341,7 +382,13 @@ export default function MaintenanceCostsPage() {
             <p className="text-xs text-muted-foreground">Jobs currently in progress</p>
           </CardContent>
         </Card>
-        <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Avg per Aircraft (QTR)</CardTitle></CardHeader><CardContent><div className="text-3xl font-bold">N/A</div><p className="text-xs text-muted-foreground">Requires flight hours data</p></CardContent></Card>
+        <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Avg Cost / Flight Hour (QTR)</CardTitle></CardHeader>
+            <CardContent>
+                <div className="text-3xl font-bold">{summaryMetrics.avgCostPerHour > 0 ? formatCurrency(summaryMetrics.avgCostPerHour) : 'N/A'}</div>
+                <p className="text-xs text-muted-foreground">{summaryMetrics.thisQuarterTotalFlightHours > 0 ? `Based on ${summaryMetrics.thisQuarterTotalFlightHours.toFixed(1)} flight hours` : 'No flight hours this QTR'}</p>
+            </CardContent>
+        </Card>
       </div>
 
       <Card>
