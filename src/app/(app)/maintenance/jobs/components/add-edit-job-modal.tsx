@@ -31,6 +31,8 @@ import type { MaintenanceJob, MaintenanceJobStatus } from '@/ai/schemas/maintena
 import { maintenanceJobStatuses, JobCostBreakdownSchema as jobCostBreakdownSchemaFromSchemaFile } from '@/ai/schemas/maintenance-job-schemas';
 import type { FleetAircraft } from '@/ai/schemas/fleet-aircraft-schemas';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { ScrollArea } from '@/components/ui/scroll-area';
+
 
 const jobCostBreakdownSchema = jobCostBreakdownSchemaFromSchemaFile;
 type JobCostBreakdownFormData = z.infer<typeof jobCostBreakdownSchema>;
@@ -207,8 +209,42 @@ export function AddEditJobModal({ isOpen, setIsOpen, initialData, onJobSaved, fl
                                 <div key={item.id} className="grid grid-cols-12 gap-2 items-end border p-3 rounded-md">
                                     <FormField control={form.control} name={`costBreakdowns.${index}.category`} render={({field}) => (<FormItem className="col-span-12 md:col-span-4"><FormLabel className="text-xs">Category</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl><SelectContent><SelectItem value="Labor">Labor</SelectItem><SelectItem value="Parts">Parts</SelectItem><SelectItem value="Shop Fees">Shop Fees</SelectItem><SelectItem value="Other">Other</SelectItem></SelectContent></Select></FormItem>)} />
                                     <FormField control={form.control} name={`costBreakdowns.${index}.description`} render={({field}) => (<FormItem className="col-span-12 md:col-span-8"><FormLabel className="text-xs">Description</FormLabel><FormControl><Input {...field} value={field.value || ''} /></FormControl></FormItem>)} />
-                                    <FormField control={form.control} name={`costBreakdowns.${index}.projectedCost`} render={({field}) => (<FormItem className="col-span-6 md:col-span-4"><FormLabel className="text-xs">Projected Cost</FormLabel><FormControl><Input type="number" placeholder="0.00" {...field} /></FormControl></FormItem>)} />
-                                    <FormField control={form.control} name={`costBreakdowns.${index}.actualCost`} render={({field}) => (<FormItem className="col-span-6 md:col-span-4"><FormLabel className="text-xs">Actual Cost</FormLabel><FormControl><Input type="number" placeholder="0.00" {...field} /></FormControl></FormItem>)} />
+                                    <FormField control={form.control} name={`costBreakdowns.${index}.projectedCost`} render={({ field }) => (
+                                        <FormItem className="col-span-6 md:col-span-4">
+                                            <FormLabel className="text-xs">Projected Cost</FormLabel>
+                                            <FormControl>
+                                                <Input
+                                                    type="number"
+                                                    placeholder="0.00"
+                                                    {...field}
+                                                    value={field.value === undefined ? '' : String(field.value)}
+                                                    onChange={e => {
+                                                        const valStr = e.target.value;
+                                                        field.onChange(valStr === '' ? undefined : parseFloat(valStr));
+                                                    }}
+                                                />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )} />
+                                    <FormField control={form.control} name={`costBreakdowns.${index}.actualCost`} render={({ field }) => (
+                                        <FormItem className="col-span-6 md:col-span-4">
+                                            <FormLabel className="text-xs">Actual Cost</FormLabel>
+                                            <FormControl>
+                                                <Input
+                                                    type="number"
+                                                    placeholder="0.00"
+                                                    {...field}
+                                                    value={field.value === undefined ? '' : String(field.value)}
+                                                    onChange={e => {
+                                                        const valStr = e.target.value;
+                                                        field.onChange(valStr === '' ? undefined : parseFloat(valStr));
+                                                    }}
+                                                />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )} />
                                     <div className="col-span-12 md:col-span-3">
                                       <Label className="text-xs">Variance</Label>
                                       <p className={cn("font-medium p-2 rounded text-sm", variance > 0 ? "text-red-600" : "text-green-600")}>
