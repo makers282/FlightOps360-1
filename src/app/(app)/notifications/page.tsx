@@ -6,12 +6,13 @@ import Link from 'next/link';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Bell, AlertTriangle, Info, CheckCircle2, Settings, Trash2, Loader2, MailOpen } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { fetchNotifications, markNotificationAsRead } from '@/ai/flows/manage-notifications-flow';
 import type { Notification, NotificationType } from '@/ai/schemas/notification-schemas';
 import { formatDistanceToNow, parseISO, isValid } from 'date-fns';
+import { cn } from '@/lib/utils';
 
 const NotificationIcon = ({ type }: { type: NotificationType }) => {
   switch (type) {
@@ -148,9 +149,9 @@ export default function NotificationsPage() {
                         {isValid(parseISO(notification.timestamp)) ? `${formatDistanceToNow(parseISO(notification.timestamp), { addSuffix: true })}` : 'Invalid date'}
                       </p>
                       {notification.link && (
-                        <Button variant="link" size="xs" className="p-0 h-auto text-xs" asChild>
-                          <Link href={notification.link}>View Details</Link>
-                        </Button>
+                        <Link href={notification.link} className={cn(buttonVariants({ variant: 'link' }), "h-auto p-0 text-xs")}>
+                          View Details
+                        </Link>
                       )}
                     </div>
                   </div>
