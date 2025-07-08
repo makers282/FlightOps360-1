@@ -25,7 +25,8 @@ export async function saveMaintenanceCost(input: SaveMaintenanceCostInput): Prom
     throw new Error("Firestore admin instance is not initialized.");
   }
   const costId = input.id || db.collection(MAINTENANCE_COSTS_COLLECTION).doc().id;
-  return saveMaintenanceCostFlow({ ...input, id: costId });
+  const { id, ...costData } = input;
+  return saveMaintenanceCostFlow({ ...costData, id: costId });
 }
 
 export async function fetchMaintenanceCosts(): Promise<MaintenanceCost[]> {
@@ -58,6 +59,7 @@ const saveMaintenanceCostFlow = ai.defineFlow(
       const docSnap = await docRef.get();
       const dataToSet = {
         ...costData,
+        jobId: costData.jobId || undefined, // Ensure it's either the string or undefined
         updatedAt: FieldValue.serverTimestamp(),
         createdAt: docSnap.exists ? docSnap.data()?.createdAt : FieldValue.serverTimestamp(),
       };
@@ -73,6 +75,7 @@ const saveMaintenanceCostFlow = ai.defineFlow(
       return {
         ...savedData,
         id: savedDoc.id,
+        jobId: savedData.jobId,
         invoiceDate: savedData.invoiceDate, // Already a string
         createdAt: (savedData.createdAt as Timestamp).toDate().toISOString(),
         updatedAt: (savedData.updatedAt as Timestamp).toDate().toISOString(),
@@ -98,6 +101,7 @@ const fetchMaintenanceCostsFlow = ai.defineFlow(
         return {
           ...data,
           id: doc.id,
+          jobId: data.jobId,
           invoiceDate: data.invoiceDate,
           createdAt: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
           updatedAt: (data.updatedAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),

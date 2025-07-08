@@ -38,6 +38,7 @@ import {
   BookOpenCheck,
   BookOpen, 
   FileWarning, 
+  Hammer,
 } from 'lucide-react';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -205,6 +206,10 @@ export default function AppLayout({ children }: PropsWithChildren) {
                     <SidebarMenuSubButton href="/aircraft/currency" tooltip="Maintenance Currency" isActive={pathname.startsWith('/aircraft/currency')}>
                         <ListChecks /> 
                         Maintenance Currency
+                    </SidebarMenuSubButton>
+                    <SidebarMenuSubButton href="/maintenance/jobs" tooltip="Work Orders" isActive={pathname.startsWith('/maintenance/jobs')}>
+                        <Hammer /> 
+                        Work Orders
                     </SidebarMenuSubButton>
                     <SidebarMenuSubButton href="/maintenance/costs" tooltip="Maintenance Costs" isActive={pathname.startsWith('/maintenance/costs')}>
                         <DollarSign />

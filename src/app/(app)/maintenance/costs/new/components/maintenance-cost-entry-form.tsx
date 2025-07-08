@@ -17,15 +17,16 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useToast } from '@/hooks/use-toast';
 import { cn } from "@/lib/utils";
 import { format, parseISO, startOfDay } from "date-fns";
 
-import { DollarSign, ArrowLeft, Save, Loader2, CalendarIcon, PlusCircle, Trash2, UploadCloud } from 'lucide-react';
+import { DollarSign, ArrowLeft, Save, Loader2, CalendarIcon, PlusCircle, Trash2, UploadCloud, Hammer } from 'lucide-react';
 import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
 import { saveMaintenanceCost } from '@/ai/flows/manage-maintenance-costs-flow';
 import type { MaintenanceCost } from '@/ai/schemas/maintenance-cost-schemas';
+import { fetchMaintenanceJobs, type MaintenanceJob } from '@/ai/flows/manage-maintenance-jobs-flow';
+import { AddEditJobModal } from '@/app/(app)/maintenance/jobs/components/add-edit-job-modal';
 
 
 // Form Schemas
@@ -39,6 +40,7 @@ type CostBreakdownFormData = z.infer<typeof costBreakdownSchema>;
 
 const costEntryFormSchema = z.object({
   aircraftId: z.string().min(1, "An aircraft must be selected."),
+  jobId: z.string().optional(),
   invoiceDate: z.date({ required_error: "Invoice date is required." }),
   invoiceNumber: z.string().min(1, "Invoice number is required."),
   costType: z.enum(['Scheduled', 'Unscheduled']),
@@ -66,11 +68,14 @@ export function MaintenanceCostEntryForm({ initialData, isEditing }: Maintenance
   const [isSaving, setIsSaving] = useState(false);
   const [aircraftList, setAircraftList] = useState<FleetAircraft[]>([]);
   const [isLoadingAircraft, setIsLoadingAircraft] = useState(true);
+  const [openJobsForAircraft, setOpenJobsForAircraft] = useState<MaintenanceJob[]>([]);
+  const [isJobModalOpen, setIsJobModalOpen] = useState(false);
   
   const form = useForm<CostEntryFormData>({
     resolver: zodResolver(costEntryFormSchema),
     defaultValues: {
       aircraftId: '',
+      jobId: undefined,
       invoiceDate: startOfDay(new Date()),
       invoiceNumber: '',
       costType: 'Scheduled',
@@ -78,6 +83,27 @@ export function MaintenanceCostEntryForm({ initialData, isEditing }: Maintenance
       notes: '',
     },
   });
+
+  const selectedAircraftId = form.watch('aircraftId');
+
+  const loadJobsForAircraft = useCallback(async (aircraftId: string) => {
+    try {
+        const allJobs = await fetchMaintenanceJobs();
+        const openJobs = allJobs.filter(job => job.aircraftId === aircraftId && job.status !== 'Closed' && job.status !== 'Canceled');
+        setOpenJobsForAircraft(openJobs);
+    } catch (error) {
+        console.error("Failed to fetch jobs for aircraft:", error);
+        setOpenJobsForAircraft([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (selectedAircraftId) {
+        loadJobsForAircraft(selectedAircraftId);
+    } else {
+        setOpenJobsForAircraft([]);
+    }
+  }, [selectedAircraftId, loadJobsForAircraft]);
 
   const { fields, append, remove } = useFieldArray({
     control: form.control,
@@ -106,6 +132,7 @@ export function MaintenanceCostEntryForm({ initialData, isEditing }: Maintenance
     if (initialData) {
       form.reset({
         aircraftId: initialData.aircraftId,
+        jobId: initialData.jobId,
         invoiceDate: parseISO(initialData.invoiceDate),
         invoiceNumber: initialData.invoiceNumber,
         costType: initialData.costType,
@@ -140,6 +167,7 @@ export function MaintenanceCostEntryForm({ initialData, isEditing }: Maintenance
         id: isEditing ? initialData?.id : undefined,
         aircraftId: data.aircraftId,
         tailNumber: aircraft.tailNumber,
+        jobId: data.jobId || undefined,
         invoiceDate: format(data.invoiceDate, 'yyyy-MM-dd'),
         invoiceNumber: data.invoiceNumber,
         costType: data.costType,
@@ -162,16 +190,23 @@ export function MaintenanceCostEntryForm({ initialData, isEditing }: Maintenance
       setIsSaving(false);
     }
   };
+  
+  const handleJobSaved = () => {
+    loadJobsForAircraft(selectedAircraftId);
+  }
 
   return (
+    <>
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} id="maintenance-cost-form" className="pb-24 lg:pb-0">
-          <div className="hidden lg:grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="flex flex-col gap-6">
               <Card><CardHeader><CardTitle>Aircraft & Date</CardTitle></CardHeader><CardContent className="space-y-4"> <FormField control={form.control} name="aircraftId" render={({ field }) => ( <FormItem> <FormLabel>Aircraft</FormLabel> <Select onValueChange={field.onChange} value={field.value} disabled={isLoadingAircraft}> <FormControl><SelectTrigger><SelectValue placeholder="Select an aircraft" /></SelectTrigger></FormControl> <SelectContent>{aircraftList.map(ac => <SelectItem key={ac.id} value={ac.id}>{ac.tailNumber} - {ac.model}</SelectItem>)}</SelectContent> </Select> <FormMessage /> </FormItem> )}/> <FormField control={form.control} name="invoiceDate" render={({ field }) => ( <FormItem> <FormLabel>Invoice Date</FormLabel> <Popover> <PopoverTrigger asChild>
                 <FormControl><Button variant="outline" className={cn("w-full justify-start text-left font-normal", !field.value && "text-muted-foreground")}> <CalendarIcon className="mr-2 h-4 w-4" /> {field.value ? format(field.value, "PPP") : <span>Pick a date</span>} </Button></FormControl>
               </PopoverTrigger> <PopoverContent><Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus /></PopoverContent> </Popover> <FormMessage /> </FormItem> )}/> </CardContent></Card>
-              <Card><CardHeader><CardTitle>Invoice Details</CardTitle></CardHeader><CardContent className="space-y-4"> <FormField control={form.control} name="invoiceNumber" render={({ field }) => ( <FormItem><FormLabel>Invoice #</FormLabel><FormControl><Input placeholder="e.g., INV-12345" {...field} /></FormControl><FormMessage /></FormItem> )}/> <FormField control={form.control} name="costType" render={({ field }) => ( <FormItem><FormLabel>Cost Type</FormLabel> <Select onValueChange={field.onChange} value={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger></FormControl> <SelectContent><SelectItem value="Scheduled">Scheduled</SelectItem><SelectItem value="Unscheduled">Unscheduled</SelectItem></SelectContent> </Select> <FormMessage /> </FormItem> )}/> </CardContent></Card>
+              <Card><CardHeader><CardTitle>Invoice & Job Details</CardTitle></CardHeader><CardContent className="space-y-4"> <FormField control={form.control} name="invoiceNumber" render={({ field }) => ( <FormItem><FormLabel>Invoice #</FormLabel><FormControl><Input placeholder="e.g., INV-12345" {...field} /></FormControl><FormMessage /></FormItem> )}/> <FormField control={form.control} name="costType" render={({ field }) => ( <FormItem><FormLabel>Cost Type</FormLabel> <Select onValueChange={field.onChange} value={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger></FormControl> <SelectContent><SelectItem value="Scheduled">Scheduled</SelectItem><SelectItem value="Unscheduled">Unscheduled</SelectItem></SelectContent> </Select> <FormMessage /> </FormItem> )}/>
+                <FormField control={form.control} name="jobId" render={({ field }) => (<FormItem> <FormLabel className="flex justify-between items-center"><span>Work Order (Optional)</span><Button type="button" variant="link" size="sm" className="p-0 h-auto" onClick={() => setIsJobModalOpen(true)} disabled={!selectedAircraftId}><PlusCircle className="mr-1 h-3 w-3" />New Job</Button></FormLabel> <Select onValueChange={field.onChange} value={field.value || ''} disabled={!selectedAircraftId}> <FormControl><SelectTrigger><SelectValue placeholder="Link to an open work order"/></SelectTrigger></FormControl> <SelectContent>{openJobsForAircraft.map(job => <SelectItem key={job.id} value={job.id}>{job.workOrderNumber} - {job.shopName}</SelectItem>)}</SelectContent> </Select> <FormMessage /> </FormItem>)}/>
+              </CardContent></Card>
               <Card><CardHeader><CardTitle>Cost Summary</CardTitle></CardHeader><CardContent className="grid grid-cols-3 gap-4 text-center"> <div><p className="text-sm text-muted-foreground">Total Projected</p><p className="text-xl font-bold">{formatCurrency(costSummary.projected)}</p></div> <div><p className="text-sm text-muted-foreground">Total Actual</p><p className="text-xl font-bold">{formatCurrency(costSummary.actual)}</p></div> <div><p className="text-sm text-muted-foreground">Total Variance</p><p className={`text-xl font-bold ${costSummary.variance >= 0 ? 'text-red-600' : 'text-green-600'}`}>{costSummary.variance >= 0 ? '+' : ''}{formatCurrency(costSummary.variance)}</p></div> </CardContent></Card>
             </div>
             <div className="flex flex-col gap-6">
@@ -189,14 +224,15 @@ export function MaintenanceCostEntryForm({ initialData, isEditing }: Maintenance
                 </div>
             </div>
           </div>
-          <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-background border-t p-4 flex gap-2">
-              <Button type="button" variant="outline" className="flex-1" onClick={() => router.push('/maintenance/costs')}>Cancel</Button>
-              <Button type="submit" className="flex-1" disabled={isSaving || !form.formState.isValid}>
-                  {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                  Save
-              </Button>
-          </div>
       </form>
     </Form>
+    <AddEditJobModal
+        isOpen={isJobModalOpen}
+        setIsOpen={setIsJobModalOpen}
+        initialData={null}
+        onJobSaved={handleJobSaved}
+        fleet={aircraftList.filter(ac => ac.id === selectedAircraftId)}
+    />
+    </>
   );
 }

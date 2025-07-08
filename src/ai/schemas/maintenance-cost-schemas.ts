@@ -20,6 +20,7 @@ export type MaintenanceCostAttachment = z.infer<typeof MaintenanceCostAttachment
 
 export const MaintenanceCostSchema = z.object({
   id: z.string().describe("Firestore document ID"),
+  jobId: z.string().optional().describe("ID of the associated maintenance job/work order."),
   aircraftId: z.string(),
   tailNumber: z.string(),
   invoiceDate: z.string().describe("ISO date string"),
