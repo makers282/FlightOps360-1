@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { DollarSign, PlusCircle, Search, Edit, Trash2, Paperclip, ArrowUpDown, FileText, TrendingUp, Wrench, Calendar as CalendarIcon, Loader2, Hammer } from 'lucide-react';
@@ -18,10 +18,8 @@ import { addDays, format, startOfMonth, endOfMonth, subMonths, startOfQuarter, e
 import { cn } from "@/lib/utils"
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
-import { fetchMaintenanceCosts, deleteMaintenanceCost } from '@/ai/flows/manage-maintenance-costs-flow';
-import type { MaintenanceCost } from '@/ai/schemas/maintenance-cost-schemas';
-import { fetchMaintenanceJobs } from '@/ai/flows/manage-maintenance-jobs-flow';
-import type { MaintenanceJob, MaintenanceJobStatus } from '@/ai/schemas/maintenance-job-schemas';
+import { fetchMaintenanceCosts, deleteMaintenanceCost, type MaintenanceCost } from '@/ai/flows/manage-maintenance-costs-flow';
+import { fetchMaintenanceJobs, type MaintenanceJob, type MaintenanceJobStatus } from '@/ai/flows/manage-maintenance-jobs-flow';
 import { maintenanceJobStatuses } from '@/ai/schemas/maintenance-job-schemas';
 import { AddEditJobModal } from '@/app/(app)/maintenance/jobs/components/add-edit-job-modal';
 import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
@@ -41,7 +39,22 @@ import { ClientOnly } from '@/components/client-only';
 import { Skeleton } from '@/components/ui/skeleton';
 
 type Cost = MaintenanceCost & { variance: number; projectedTotal: number; actualTotal: number; workOrderNumber?: string };
-type SortKey = 'invoiceDate' | 'tailNumber' | 'invoiceNumber' | 'costType' | 'category' | 'projectedTotal' | 'actualTotal' | 'variance' | 'workOrderNumber';
+type SortKey = 'invoiceDate' | 'tailNumber' | 'invoiceNumber' | 'costType' | 'category' | 'projectedTotal' | 'actualTotal' | 'variance' | 'workOrderNumber' | 'status';
+
+interface DisplayItem {
+    id: string;
+    type: 'cost' | 'job';
+    tailNumber: string;
+    invoiceNumber: string;
+    invoiceDate: string; 
+    workOrderNumber?: string;
+    status: MaintenanceJobStatus | 'Completed';
+    projectedTotal: number;
+    actualTotal: number;
+    variance: number;
+    aircraftId: string;
+    jobId?: string;
+}
 
 
 const formatCurrency = (amount?: number) => {
@@ -57,7 +70,7 @@ export default function MaintenanceCostsPage() {
 
   const [isLoading, setIsLoading] = useState(true);
   const [isDeleting, startDeletingTransition] = useTransition();
-  const [costToDelete, setCostToDelete] = useState<Cost | null>(null);
+  const [itemToDelete, setItemToDelete] = useState<DisplayItem | null>(null);
   const { toast } = useToast();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -141,32 +154,84 @@ export default function MaintenanceCostsPage() {
     setSummaryMetrics({ thisMonth: thisMonthTotal, monthChange, thisQuarter: thisQuarterTotal, quarterChange, avgPerAircraft });
   }, [costs, isLoading]);
 
-  const confirmDelete = (cost: Cost) => setCostToDelete(cost);
+  const confirmDelete = (item: DisplayItem) => setItemToDelete(item);
 
   const executeDelete = () => {
-    if (!costToDelete) return;
+    if (!itemToDelete) return;
     startDeletingTransition(async () => {
       try {
-        await deleteMaintenanceCost({ costId: costToDelete.id });
-        toast({ title: "Success", description: `Invoice ${costToDelete.invoiceNumber} deleted.` });
+        if (itemToDelete.type === 'cost') {
+            await deleteMaintenanceCost({ costId: itemToDelete.id });
+            toast({ title: "Success", description: `Invoice ${itemToDelete.invoiceNumber} deleted.` });
+        } else {
+            // Future: await deleteMaintenanceJob({ jobId: itemToDelete.id });
+             toast({ title: "Action Not Implemented", description: `Deletion for open jobs is not yet configured.` });
+        }
         await loadData();
       } catch (error) {
-        toast({ title: "Error", description: "Failed to delete cost entry.", variant: "destructive" });
+        toast({ title: "Error", description: "Failed to delete item.", variant: "destructive" });
       } finally {
-        setCostToDelete(null);
+        setItemToDelete(null);
       }
     });
   };
 
-  const filteredAndSortedCosts = useMemo(() => {
+  const displayItems = useMemo<DisplayItem[]>(() => {
+    if (isLoading) return [];
+
     const jobMap = new Map(jobs.map(job => [job.id, job]));
-    let filtered = costs.filter(cost => {
-      const associatedJob = cost.jobId ? jobMap.get(cost.jobId) : undefined;
-      const searchMatch = searchTerm ? cost.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) || cost.tailNumber.toLowerCase().includes(searchTerm.toLowerCase()) || (associatedJob?.workOrderNumber.toLowerCase().includes(searchTerm.toLowerCase())) : true;
-      const aircraftMatch = filters.aircraft === 'all' || cost.tailNumber === filters.aircraft;
-      const status = associatedJob?.status ?? 'Completed';
-      const jobStatusMatch = filters.jobStatus === 'all' || status === filters.jobStatus;
-      const dateMatch = !dateRange?.from || isWithinInterval(parse(cost.invoiceDate, 'yyyy-MM-dd', new Date()), { start: dateRange.from, end: dateRange.to || dateRange.from });
+    const costJobIds = new Set(costs.map(c => c.jobId).filter(Boolean));
+
+    const costBasedItems: DisplayItem[] = costs.map(cost => {
+      const job = cost.jobId ? jobMap.get(cost.jobId) : undefined;
+      return {
+        id: cost.id,
+        type: 'cost',
+        tailNumber: cost.tailNumber,
+        invoiceNumber: cost.invoiceNumber,
+        invoiceDate: cost.invoiceDate,
+        workOrderNumber: job?.workOrderNumber,
+        status: job?.status ?? 'Completed',
+        projectedTotal: cost.projectedTotal,
+        actualTotal: cost.actualTotal,
+        variance: cost.variance,
+        aircraftId: cost.aircraftId,
+        jobId: cost.jobId,
+      };
+    });
+
+    const jobBasedItems: DisplayItem[] = jobs
+      .filter(job => !costJobIds.has(job.id))
+      .map(job => {
+        const projectedTotal = job.costBreakdowns?.reduce((sum, item) => sum + (item.cost || 0), 0) || 0;
+        return {
+          id: job.id,
+          type: 'job',
+          tailNumber: job.tailNumber,
+          invoiceNumber: 'N/A',
+          invoiceDate: job.dateIssued,
+          workOrderNumber: job.workOrderNumber,
+          status: job.status,
+          projectedTotal: projectedTotal,
+          actualTotal: 0,
+          variance: -projectedTotal,
+          aircraftId: job.aircraftId,
+          jobId: job.id,
+        };
+      });
+      
+    let combined = [...costBasedItems, ...jobBasedItems];
+
+    let filtered = combined.filter(item => {
+      const searchMatch = searchTerm
+        ? item.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          item.tailNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          item.workOrderNumber?.toLowerCase().includes(searchTerm.toLowerCase())
+        : true;
+      const aircraftMatch = filters.aircraft === 'all' || item.aircraftId === filters.aircraft;
+      const jobStatusMatch = filters.jobStatus === 'all' || item.status === filters.jobStatus;
+      const dateMatch = !dateRange?.from || isWithinInterval(parseISO(item.invoiceDate), { start: dateRange.from, end: dateRange.to || dateRange.from });
+      
       return searchMatch && aircraftMatch && dateMatch && jobStatusMatch;
     });
 
@@ -174,14 +239,21 @@ export default function MaintenanceCostsPage() {
       filtered.sort((a, b) => {
         let aValue: any = a[sortConfig.key];
         let bValue: any = b[sortConfig.key];
-        if (sortConfig.key === 'invoiceDate') { aValue = parse(a.invoiceDate, 'yyyy-MM-dd', new Date()).getTime(); bValue = parse(b.invoiceDate, 'yyyy-MM-dd', new Date()).getTime(); }
-        if (aValue < bValue) return sortConfig.direction === 'ascending' ? -1 : 1;
-        if (aValue > bValue) return sortConfig.direction === 'ascending' ? 1 : -1;
+        if (sortConfig.key === 'invoiceDate') { aValue = parseISO(a.invoiceDate).getTime(); bValue = parseISO(b.invoiceDate).getTime(); }
+        if (aValue === bValue) return 0;
+        if (aValue === undefined || aValue === null) return 1;
+        if (bValue === undefined || bValue === null) return -1;
+        if (typeof aValue === 'string' && typeof bValue === 'string') {
+          return sortConfig.direction === 'ascending' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
+        }
+        if (typeof aValue === 'number' && typeof bValue === 'number') {
+           return sortConfig.direction === 'ascending' ? aValue - bValue : bValue - aValue;
+        }
         return 0;
       });
     }
     return filtered;
-  }, [costs, jobs, searchTerm, filters, sortConfig, dateRange]);
+  }, [costs, jobs, searchTerm, filters, sortConfig, dateRange, isLoading]);
 
   const requestSort = (key: SortKey) => {
     const direction = sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending' ? 'descending' : 'ascending';
@@ -204,21 +276,30 @@ export default function MaintenanceCostsPage() {
       setIsJobModalOpen(true);
   };
 
-  const handleOpenEditJobModal = (workOrderNumber?: string) => {
-    if (!workOrderNumber) return;
-    const job = jobs.find(j => j.workOrderNumber === workOrderNumber);
+  const handleOpenEditJobModal = (jobId?: string) => {
+    if (!jobId) return;
+    const job = jobs.find(j => j.id === jobId);
     if (job) {
         setSelectedJobForEdit(job);
         setIsJobModalOpen(true);
+    } else {
+        toast({title: "Work Order not found", variant: "destructive"});
     }
   };
 
-  const uniqueTailNumbers = [...new Set(costs.map(c => c.tailNumber))].sort();
+  const uniqueTailNumbers = useMemo(() => {
+    const tailNumbers = new Set<string>();
+    costs.forEach(c => tailNumbers.add(c.tailNumber));
+    jobs.forEach(j => tailNumbers.add(j.tailNumber));
+    return Array.from(tailNumbers).sort();
+  }, [costs, jobs]);
+
 
   const getStatusBadgeVariant = (status: MaintenanceJobStatus | 'Completed'): "default" | "secondary" | "destructive" | "outline" => {
     switch (status) {
       case 'Opened': return 'outline';
-      case 'Accepted': return 'secondary';
+      case 'Accepted':
+      case 'Quote':
       case 'In Progress': return 'secondary';
       case 'Completed': return 'default';
       case 'Closed': return 'default';
@@ -258,28 +339,30 @@ export default function MaintenanceCostsPage() {
         </CardHeader>
         <CardContent>
           {isLoading ? ( <div className="py-10 flex justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div> ) :
-            filteredAndSortedCosts.length === 0 ? (
-            <div className="text-center py-20"><DollarSign className="mx-auto h-12 w-12 text-muted-foreground" /><h3 className="mt-2 text-sm font-semibold text-foreground">No maintenance costs found</h3><p className="mt-1 text-sm text-muted-foreground">{searchTerm || Object.values(filters).some(v => v !== 'all') || dateRange ? "No costs match your current filters." : "Get started by adding a new cost entry."}</p><div className="mt-6"><Button asChild><Link href="/maintenance/costs/new"><PlusCircle className="mr-2 h-4 w-4" /> New Cost Entry</Link></Button></div></div>
+            displayItems.length === 0 ? (
+            <div className="text-center py-20"><DollarSign className="mx-auto h-12 w-12 text-muted-foreground" /><h3 className="mt-2 text-sm font-semibold text-foreground">No maintenance costs found</h3><p className="mt-1 text-sm text-muted-foreground">{searchTerm || Object.values(filters).some(v => v !== 'all') || dateRange ? "No items match your current filters." : "Get started by adding a new cost entry or work order."}</p><div className="mt-6 flex justify-center gap-2"><Button asChild><Link href="/maintenance/costs/new"><PlusCircle className="mr-2 h-4 w-4" /> New Cost Entry</Link></Button><Button variant="outline" onClick={handleOpenNewJobModal}><Hammer className="mr-2 h-4 w-4" />New Work Order</Button></div></div>
           ) : (
             <Table>
               <TableHeader><TableRow><TableHead>Aircraft</TableHead><TableHead>Invoice #</TableHead><TableHead>Date</TableHead><TableHead>WO #</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Projected</TableHead><TableHead className="text-right">Actual</TableHead><TableHead className="text-right">Variance</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
               <TableBody>
-                {filteredAndSortedCosts.map(cost => {
-                    const job = cost.jobId ? jobs.find(j => j.id === cost.jobId) : undefined;
-                    const status = job?.status ?? 'Completed';
+                {displayItems.map(item => {
                     return (
-                        <TableRow key={cost.id}>
-                            <TableCell className="font-medium">{cost.tailNumber}</TableCell>
-                            <TableCell>{cost.invoiceNumber}</TableCell>
-                            <TableCell>{format(parse(cost.invoiceDate, 'yyyy-MM-dd', new Date()), 'MM/dd/yyyy')}</TableCell>
-                            <TableCell>{job ? <Button variant="link" className="p-0 h-auto" onClick={() => handleOpenEditJobModal(job.workOrderNumber)}>{job.workOrderNumber}</Button> : 'N/A'}</TableCell>
-                            <TableCell><Badge variant={getStatusBadgeVariant(status as MaintenanceJobStatus)}>{status}</Badge></TableCell>
-                            <TableCell className="text-right">{formatCurrency(cost.projectedTotal)}</TableCell>
-                            <TableCell className="text-right">{formatCurrency(cost.actualTotal)}</TableCell>
-                            <TableCell className={`text-right font-medium ${cost.variance > 0 ? 'text-red-600' : 'text-green-600'}`}>{cost.variance >= 0 ? '+' : ''}{formatCurrency(cost.variance)}</TableCell>
+                        <TableRow key={item.id}>
+                            <TableCell className="font-medium">{item.tailNumber}</TableCell>
+                            <TableCell>{item.invoiceNumber}</TableCell>
+                            <TableCell>{format(parseISO(item.invoiceDate), 'MM/dd/yyyy')}</TableCell>
+                            <TableCell>{item.workOrderNumber ? <Button variant="link" className="p-0 h-auto" onClick={() => handleOpenEditJobModal(item.jobId)}>{item.workOrderNumber}</Button> : 'N/A'}</TableCell>
+                            <TableCell><Badge variant={getStatusBadgeVariant(item.status)}>{item.status}</Badge></TableCell>
+                            <TableCell className="text-right">{formatCurrency(item.projectedTotal)}</TableCell>
+                            <TableCell className="text-right">{formatCurrency(item.actualTotal)}</TableCell>
+                            <TableCell className={`text-right font-medium ${item.variance > 0 ? 'text-red-600' : 'text-green-600'}`}>{item.variance >= 0 ? '+' : ''}{formatCurrency(item.variance)}</TableCell>
                             <TableCell className="text-right">
-                            <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" asChild><Link href={`/maintenance/costs/new?id=${cost.id}`}><Edit className="h-4 w-4"/></Link></Button></TooltipTrigger><TooltipContent>Edit</TooltipContent></Tooltip>
-                            <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="text-destructive" onClick={() => confirmDelete(cost)}><Trash2 className="h-4 w-4"/></Button></TooltipTrigger><TooltipContent>Delete</TooltipContent></Tooltip>
+                            {item.type === 'cost' ? (
+                                <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" asChild><Link href={`/maintenance/costs/new?id=${item.id}`}><Edit className="h-4 w-4"/></Link></Button></TooltipTrigger><TooltipContent>Edit Cost</TooltipContent></Tooltip>
+                            ) : (
+                                <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={() => handleOpenEditJobModal(item.id)}><Edit className="h-4 w-4"/></Button></TooltipTrigger><TooltipContent>Edit Job</TooltipContent></Tooltip>
+                            )}
+                            <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="text-destructive" onClick={() => confirmDelete(item)}><Trash2 className="h-4 w-4"/></Button></TooltipTrigger><TooltipContent>Delete</TooltipContent></Tooltip>
                             </TableCell>
                         </TableRow>
                     );
@@ -298,9 +381,20 @@ export default function MaintenanceCostsPage() {
         fleet={fleet}
       />
       
-      {costToDelete && (
-        <AlertDialog open={!!costToDelete} onOpenChange={(open) => !open && setCostToDelete(null)}>
-          <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Confirm Deletion</AlertDialogTitle><AlertDialogDescription>Are you sure you want to delete invoice "{costToDelete.invoiceNumber}"? This cannot be undone.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel><AlertDialogAction onClick={executeDelete} disabled={isDeleting}>{isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Delete</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+      {itemToDelete && (
+        <AlertDialog open={!!itemToDelete} onOpenChange={(open) => !open && setItemToDelete(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete this {itemToDelete.type === 'cost' ? `invoice (${itemToDelete.invoiceNumber})` : `work order (${itemToDelete.workOrderNumber})`}? This cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={executeDelete} disabled={isDeleting || itemToDelete.type !== 'cost'}>{isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Delete</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
         </AlertDialog>
       )}
     </TooltipProvider>
