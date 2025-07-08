@@ -17,7 +17,31 @@ import {
 } from '@/ai/schemas/maintenance-job-schemas';
 import { z } from 'zod';
 
-const MAINTENANCE_JOBS_COLLECTION = 'maintenanceJobs';
+/**
+ * Safely converts a Firestore Timestamp or an ISO date string to an ISO date string.
+ * @param ts The timestamp to convert.
+ * @returns An ISO date string, or a default date string if conversion fails.
+ */
+const convertTimestampToISO = (ts: any): string => {
+    if (!ts) return new Date(0).toISOString();
+    // Handle Firestore Timestamp object
+    if (typeof ts.toDate === 'function') {
+        return ts.toDate().toISOString();
+    }
+    // Handle if it's already an ISO string
+    if (typeof ts === 'string') {
+        // Basic check to see if it's likely an ISO string
+        if (ts.match(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/)) {
+            return ts;
+        }
+    }
+    // Fallback for other potential date string formats or numbers
+    try {
+        return new Date(ts).toISOString();
+    } catch {
+        return new Date(0).toISOString(); // Ultimate fallback
+    }
+};
 
 /**
  * Removes properties with `undefined` values from an object.
@@ -45,33 +69,6 @@ function removeUndefined(obj: any): any {
   return newObj;
 }
 
-/**
- * Safely converts a Firestore Timestamp or an ISO date string to an ISO date string.
- * @param ts The timestamp to convert.
- * @returns An ISO date string, or a default date string if conversion fails.
- */
-const convertTimestampToISO = (ts: any): string => {
-    if (!ts) return new Date(0).toISOString();
-    // Handle Firestore Timestamp object
-    if (typeof ts.toDate === 'function') {
-        return ts.toDate().toISOString();
-    }
-    // Handle if it's already an ISO string
-    if (typeof ts === 'string') {
-        // Basic check to see if it's likely an ISO string
-        if (ts.match(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/)) {
-            return ts;
-        }
-    }
-    // Fallback for other potential date string formats or numbers
-    try {
-        return new Date(ts).toISOString();
-    } catch {
-        return new Date(0).toISOString(); // Ultimate fallback
-    }
-};
-
-
 // Exported async functions that clients will call
 export async function saveMaintenanceJob(input: SaveMaintenanceJobInput): Promise<MaintenanceJob> {
   if (!db) {
@@ -98,6 +95,8 @@ export async function deleteMaintenanceJob(input: { jobId: string }): Promise<{ 
   }
   return deleteMaintenanceJobFlow(input);
 }
+
+const MAINTENANCE_JOBS_COLLECTION = 'maintenanceJobs';
 
 // Internal Genkit Flow Definitions
 const saveMaintenanceJobFlow = ai.defineFlow(
@@ -135,8 +134,8 @@ const saveMaintenanceJobFlow = ai.defineFlow(
         id: savedDoc.id,
         dateIssued: savedData.dateIssued, // Already a string
         dateDue: savedData.dateDue, // Already a string or undefined
-        createdAt: (savedData.createdAt as Timestamp).toDate().toISOString(),
-        updatedAt: (savedData.updatedAt as Timestamp).toDate().toISOString(),
+        createdAt: convertTimestampToISO(savedData.createdAt),
+        updatedAt: convertTimestampToISO(savedData.updatedAt),
       } as MaintenanceJob;
     } catch (error) {
       console.error(`Error saving maintenance job ${id}:`, error);
