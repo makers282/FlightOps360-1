@@ -26,7 +26,10 @@ export async function saveMaintenanceJob(input: SaveMaintenanceJobInput): Promis
   }
   const jobId = input.id || db.collection(MAINTENANCE_JOBS_COLLECTION).doc().id;
   const { id, ...jobData } = input;
-  return saveMaintenanceJobFlow({ ...jobData, id: jobId });
+  // The 'as any' is a bit of a workaround because the input schema from the client
+  // has `dateIssued` as a string, but the flow input technically expects a Date object
+  // from the Zod schema. The flow handles the string correctly.
+  return saveMaintenanceJobFlow({ ...jobData, id: jobId } as any);
 }
 
 export async function fetchMaintenanceJobs(): Promise<MaintenanceJob[]> {
@@ -76,11 +79,13 @@ const saveMaintenanceJobFlow = ai.defineFlow(
         throw new Error("Failed to retrieve saved job data from Firestore.");
       }
 
+      // CORRECTED: savedData.dateIssued and dateDue are already ISO strings.
+      // Do not attempt to call .toDate() on them.
       return {
         ...savedData,
         id: savedDoc.id,
-        dateIssued: (savedData.dateIssued as Timestamp).toDate().toISOString(),
-        dateDue: (savedData.dateDue as Timestamp)?.toDate().toISOString(),
+        dateIssued: savedData.dateIssued, // Already a string
+        dateDue: savedData.dateDue, // Already a string or undefined
         createdAt: (savedData.createdAt as Timestamp).toDate().toISOString(),
         updatedAt: (savedData.updatedAt as Timestamp).toDate().toISOString(),
       } as MaintenanceJob;
@@ -102,11 +107,13 @@ const fetchMaintenanceJobsFlow = ai.defineFlow(
       const snapshot = await db.collection(MAINTENANCE_JOBS_COLLECTION).orderBy('dateIssued', 'desc').get();
       return snapshot.docs.map(doc => {
         const data = doc.data();
+        // CORRECTED: data.dateIssued and dateDue are already ISO strings.
+        // Do not attempt to call .toDate() on them.
         return {
           ...data,
           id: doc.id,
-          dateIssued: (data.dateIssued as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
-          dateDue: (data.dateDue as Timestamp)?.toDate().toISOString(),
+          dateIssued: data.dateIssued, // Already a string
+          dateDue: data.dateDue, // Already a string or undefined
           createdAt: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
           updatedAt: (data.updatedAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
         } as MaintenanceJob;
