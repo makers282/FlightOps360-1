@@ -30,7 +30,6 @@ import type { MaintenanceJob, MaintenanceJobStatus, ProjectedCostBreakdown } fro
 import { maintenanceJobStatuses } from '@/ai/schemas/maintenance-job-schemas';
 import type { FleetAircraft } from '@/ai/schemas/fleet-aircraft-schemas';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ScrollArea } from '@/components/ui/scroll-area';
 
 const projectedCostBreakdownSchema = z.object({
   category: z.enum(['Labor', 'Parts', 'Shop Fees', 'Other']),
@@ -96,9 +95,9 @@ export function AddEditJobModal({ isOpen, setIsOpen, initialData, onJobSaved, fl
           aircraftId: initialData.aircraftId,
           workOrderNumber: initialData.workOrderNumber,
           shopName: initialData.shopName,
-          shopContactName: initialData.shopContactName,
-          shopContactPhone: initialData.shopContactPhone,
-          shopContactEmail: initialData.shopContactEmail,
+          shopContactName: initialData.shopContactName || '',
+          shopContactPhone: initialData.shopContactPhone || '',
+          shopContactEmail: initialData.shopContactEmail || '',
           status: initialData.status,
           dateIssued: parseISO(initialData.dateIssued),
           dateDue: initialData.dateDue ? parseISO(initialData.dateDue) : undefined,
@@ -157,15 +156,15 @@ export function AddEditJobModal({ isOpen, setIsOpen, initialData, onJobSaved, fl
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent className="sm:max-w-2xl flex flex-col max-h-[90vh]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2"><Hammer className="h-5 w-5"/> {isEditing ? 'Edit Work Order' : 'New Work Order'}</DialogTitle>
           <DialogDescription>Fill in the details for the maintenance job.</DialogDescription>
         </DialogHeader>
-        <Form {...form}>
-          <form id="job-form" onSubmit={form.handleSubmit(onSubmit)}>
-            <ScrollArea className="max-h-[65vh] pr-6">
-              <div className="space-y-4">
+        <div className="flex-1 overflow-y-auto pr-6 -mr-6">
+          <Form {...form}>
+            <form id="job-form" onSubmit={form.handleSubmit(onSubmit)}>
+              <div className="space-y-4 pr-1">
                 <FormField control={form.control} name="aircraftId" render={({ field }) => (
                 <FormItem><FormLabel>Aircraft</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Select aircraft"/></SelectTrigger></FormControl><SelectContent>{fleet.map(ac => <SelectItem key={ac.id} value={ac.id}>{ac.tailNumber}</SelectItem>)}</SelectContent></Select><FormMessage/></FormItem>
                 )}/>
@@ -176,9 +175,9 @@ export function AddEditJobModal({ isOpen, setIsOpen, initialData, onJobSaved, fl
                  <Card className="p-4 bg-muted/30 border-dashed">
                     <CardHeader className="p-0 pb-2"><CardTitle className="text-base">Shop Contact (Optional)</CardTitle></CardHeader>
                     <CardContent className="p-0 grid grid-cols-1 md:grid-cols-2 gap-4">
-                         <FormField control={form.control} name="shopContactName" render={({ field }) => (<FormItem><FormLabel>Contact Name</FormLabel><FormControl><Input {...field}/></FormControl><FormMessage/></FormItem>)}/>
-                        <FormField control={form.control} name="shopContactPhone" render={({ field }) => (<FormItem><FormLabel>Phone</FormLabel><FormControl><Input {...field}/></FormControl><FormMessage/></FormItem>)}/>
-                        <FormField control={form.control} name="shopContactEmail" render={({ field }) => (<FormItem className="md:col-span-2"><FormLabel>Email</FormLabel><FormControl><Input type="email" {...field}/></FormControl><FormMessage/></FormItem>)}/>
+                         <FormField control={form.control} name="shopContactName" render={({ field }) => (<FormItem><FormLabel>Contact Name</FormLabel><FormControl><Input {...field} value={field.value || ''} /></FormControl><FormMessage/></FormItem>)}/>
+                        <FormField control={form.control} name="shopContactPhone" render={({ field }) => (<FormItem><FormLabel>Phone</FormLabel><FormControl><Input {...field} value={field.value || ''} /></FormControl><FormMessage/></FormItem>)}/>
+                        <FormField control={form.control} name="shopContactEmail" render={({ field }) => (<FormItem className="md:col-span-2"><FormLabel>Email</FormLabel><FormControl><Input type="email" {...field} value={field.value || ''} /></FormControl><FormMessage/></FormItem>)}/>
                     </CardContent>
                 </Card>
                 <FormField control={form.control} name="status" render={({ field }) => (
@@ -194,20 +193,20 @@ export function AddEditJobModal({ isOpen, setIsOpen, initialData, onJobSaved, fl
                         {fields.map((item, index) => (
                             <div key={item.id} className="grid grid-cols-12 gap-2 items-end">
                                 <FormField control={form.control} name={`costBreakdowns.${index}.category`} render={({field}) => (<FormItem className="col-span-4"><FormLabel className="text-xs">Category</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl><SelectContent><SelectItem value="Labor">Labor</SelectItem><SelectItem value="Parts">Parts</SelectItem><SelectItem value="Shop Fees">Shop Fees</SelectItem><SelectItem value="Other">Other</SelectItem></SelectContent></Select></FormItem>)} />
-                                <FormField control={form.control} name={`costBreakdowns.${index}.cost`} render={({field}) => (<FormItem className="col-span-3"><FormLabel className="text-xs">Cost</FormLabel><FormControl><Input type="number" {...field}/></FormControl></FormItem>)} />
-                                <FormField control={form.control} name={`costBreakdowns.${index}.description`} render={({field}) => (<FormItem className="col-span-4"><FormLabel className="text-xs">Description</FormLabel><FormControl><Input {...field}/></FormControl></FormItem>)} />
+                                <FormField control={form.control} name={`costBreakdowns.${index}.cost`} render={({field}) => (<FormItem className="col-span-3"><FormLabel className="text-xs">Cost</FormLabel><FormControl><Input type="number" {...field} /></FormControl></FormItem>)} />
+                                <FormField control={form.control} name={`costBreakdowns.${index}.description`} render={({field}) => (<FormItem className="col-span-4"><FormLabel className="text-xs">Description</FormLabel><FormControl><Input {...field} value={field.value || ''} /></FormControl></FormItem>)} />
                                 <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)} className="text-destructive"><Trash2 className="h-4 w-4"/></Button>
                             </div>
                         ))}
                         <Button type="button" variant="outline" size="sm" onClick={() => append({category:'Parts', cost:0, description:''})}><PlusCircle className="h-4 w-4 mr-2"/>Add Cost Item</Button>
                     </CardContent>
                 </Card>
-                <FormField control={form.control} name="notes" render={({ field }) => (<FormItem><FormLabel>Notes</FormLabel><FormControl><Textarea {...field} rows={3}/></FormControl><FormMessage/></FormItem>)}/>
+                <FormField control={form.control} name="notes" render={({ field }) => (<FormItem><FormLabel>Notes</FormLabel><FormControl><Textarea {...field} value={field.value || ''} rows={3}/></FormControl><FormMessage/></FormItem>)}/>
               </div>
-            </ScrollArea>
-          </form>
-        </Form>
-        <DialogFooter>
+            </form>
+          </Form>
+        </div>
+        <DialogFooter className="border-t pt-4 mt-4">
           <DialogClose asChild><Button variant="outline" disabled={isSaving}>Cancel</Button></DialogClose>
           <Button type="submit" form="job-form" disabled={isSaving}>{isSaving?<Loader2 className="mr-2 h-4 w-4 animate-spin"/>:<Save className="mr-2 h-4 w-4"/>} Save</Button>
         </DialogFooter>
