@@ -19,6 +19,29 @@ import { z } from 'zod';
 
 const MAINTENANCE_JOBS_COLLECTION = 'maintenanceJobs';
 
+/**
+ * Removes properties with `undefined` values from an object.
+ * Firestore does not allow `undefined` as a field value.
+ * @param obj The object to clean.
+ * @returns A new object with `undefined` properties removed.
+ */
+function removeUndefined(obj: any): any {
+  if (typeof obj !== 'object' || obj === null) {
+    return obj;
+  }
+  if (Array.isArray(obj)) {
+    return obj.map(removeUndefined);
+  }
+  const newObj: { [key: string]: any } = {};
+  for (const key in obj) {
+    if (obj.hasOwnProperty(key) && obj[key] !== undefined) {
+      newObj[key] = removeUndefined(obj[key]);
+    }
+  }
+  return newObj;
+}
+
+
 // Exported async functions that clients will call
 export async function saveMaintenanceJob(input: SaveMaintenanceJobInput): Promise<MaintenanceJob> {
   if (!db) {
@@ -62,16 +85,14 @@ const saveMaintenanceJobFlow = ai.defineFlow(
       const docSnap = await docRef.get();
       const dataToSet = {
         ...jobData,
-        // Ensure optional fields are handled correctly
-        shopContactName: jobData.shopContactName || undefined,
-        shopContactPhone: jobData.shopContactPhone || undefined,
-        shopContactEmail: jobData.shopContactEmail || undefined,
         costBreakdowns: jobData.costBreakdowns || [],
         updatedAt: FieldValue.serverTimestamp(),
         createdAt: docSnap.exists && docSnap.data()?.createdAt ? docSnap.data()?.createdAt : FieldValue.serverTimestamp(),
       };
 
-      await docRef.set(dataToSet, { merge: true });
+      const cleanedData = removeUndefined(dataToSet);
+
+      await docRef.set(cleanedData, { merge: true });
       const savedDoc = await docRef.get();
       const savedData = savedDoc.data();
 
