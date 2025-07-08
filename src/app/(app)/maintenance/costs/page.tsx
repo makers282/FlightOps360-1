@@ -220,15 +220,18 @@ export default function MaintenanceCostsPage() {
             <div className="text-center py-20"><DollarSign className="mx-auto h-12 w-12 text-muted-foreground" /><h3 className="mt-2 text-sm font-semibold text-foreground">No maintenance costs found</h3><p className="mt-1 text-sm text-muted-foreground">{searchTerm || Object.values(filters).some(v => v !== 'all') || dateRange ? "No costs match your current filters." : "Get started by adding a new cost entry."}</p><div className="mt-6"><Button asChild><Link href="/maintenance/costs/new"><PlusCircle className="mr-2 h-4 w-4" /> New Cost Entry</Link></Button></div></div>
           ) : (
             <Table>
-              <TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Aircraft</TableHead><TableHead>WO #</TableHead><TableHead>Invoice #</TableHead><TableHead className="text-right">Actual Cost</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
+              <TableHeader><TableRow><TableHead>Aircraft</TableHead><TableHead>Invoice #</TableHead><TableHead>Date</TableHead><TableHead>WO #</TableHead><TableHead>Type</TableHead><TableHead className="text-right">Projected</TableHead><TableHead className="text-right">Actual</TableHead><TableHead className="text-right">Variance</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
               <TableBody>
                 {filteredAndSortedCosts.map(cost => (
                   <TableRow key={cost.id}>
-                    <TableCell>{format(parse(cost.invoiceDate, 'yyyy-MM-dd', new Date()), 'MM/dd/yyyy')}</TableCell>
-                    <TableCell>{cost.tailNumber}</TableCell>
-                    <TableCell>{cost.workOrderNumber ? <Link className="text-primary hover:underline" href={`/maintenance/jobs`}>{cost.workOrderNumber}</Link> : 'N/A'}</TableCell>
+                    <TableCell className="font-medium">{cost.tailNumber}</TableCell>
                     <TableCell>{cost.invoiceNumber}</TableCell>
-                    <TableCell className="text-right font-medium">{formatCurrency(cost.actualTotal)}</TableCell>
+                    <TableCell>{format(parse(cost.invoiceDate, 'yyyy-MM-dd', new Date()), 'MM/dd/yyyy')}</TableCell>
+                    <TableCell>{cost.workOrderNumber ? <Link className="text-primary hover:underline" href={`/maintenance/jobs`}>{cost.workOrderNumber}</Link> : 'N/A'}</TableCell>
+                    <TableCell><Badge variant={cost.costType === 'Scheduled' ? 'secondary' : 'outline'}>{cost.costType}</Badge></TableCell>
+                    <TableCell className="text-right">{formatCurrency(cost.projectedTotal)}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(cost.actualTotal)}</TableCell>
+                    <TableCell className={`text-right font-medium ${cost.variance > 0 ? 'text-red-600' : 'text-green-600'}`}>{cost.variance >= 0 ? '+' : ''}{formatCurrency(cost.variance)}</TableCell>
                     <TableCell className="text-right">
                       <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" asChild><Link href={`/maintenance/costs/new?id=${cost.id}`}><Edit className="h-4 w-4"/></Link></Button></TooltipTrigger><TooltipContent>Edit</TooltipContent></Tooltip>
                       <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="text-destructive" onClick={() => confirmDelete(cost)}><Trash2 className="h-4 w-4"/></Button></TooltipTrigger><TooltipContent>Delete</TooltipContent></Tooltip>

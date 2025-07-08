@@ -59,8 +59,13 @@ const saveMaintenanceJobFlow = ai.defineFlow(
       const docSnap = await docRef.get();
       const dataToSet = {
         ...jobData,
+        // Ensure optional fields are handled correctly
+        shopContactName: jobData.shopContactName || undefined,
+        shopContactPhone: jobData.shopContactPhone || undefined,
+        shopContactEmail: jobData.shopContactEmail || undefined,
+        costBreakdowns: jobData.costBreakdowns || [],
         updatedAt: FieldValue.serverTimestamp(),
-        createdAt: docSnap.exists ? docSnap.data()?.createdAt : FieldValue.serverTimestamp(),
+        createdAt: docSnap.exists && docSnap.data()?.createdAt ? docSnap.data()?.createdAt : FieldValue.serverTimestamp(),
       };
 
       await docRef.set(dataToSet, { merge: true });
