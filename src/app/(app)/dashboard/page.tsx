@@ -88,14 +88,6 @@ export default async function DashboardPage() {
         }
     });
 
-    const kpiStats = {
-        activeTrips: currentTrips.length,
-        pendingQuotes: pendingQuotesList.length,
-        pendingQuotesValue: pendingQuotesList.reduce((acc, q) => acc + (q.totalSellPrice || 0), 0),
-        aircraftDue: aircraftWithDueTask.size,
-        alertNotices: notifications.filter(n => !n.isRead).length,
-    };
-    
     const statusMap = new Map<string, AircraftStatusDetail>();
     const alerts: SystemAlert[] = [];
     for (const ac of fleet) {
@@ -125,6 +117,14 @@ export default async function DashboardPage() {
         }));
 
     const finalAlerts = [...alerts, ...unreadNotifications];
+
+    const kpiStats = {
+        activeTrips: currentTrips.length,
+        pendingQuotes: pendingQuotesList.length,
+        pendingQuotesValue: pendingQuotesList.reduce((acc, q) => acc + (q.totalSellPrice || 0), 0),
+        aircraftDue: aircraftWithDueTask.size,
+        alertNotices: finalAlerts.length,
+    };
 
     return (
         <DashboardClientContent
