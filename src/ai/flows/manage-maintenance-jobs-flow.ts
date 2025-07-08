@@ -14,6 +14,7 @@ import {
   FetchMaintenanceJobsOutputSchema,
   DeleteMaintenanceJobInputSchema,
   DeleteMaintenanceJobOutputSchema,
+  MaintenanceJobSchema,
 } from '@/ai/schemas/maintenance-job-schemas';
 import { z } from 'zod';
 
@@ -128,15 +129,26 @@ const saveMaintenanceJobFlow = ai.defineFlow(
       if (!savedData) {
         throw new Error("Failed to retrieve saved job data from Firestore.");
       }
-
-      return {
-        ...savedData,
+      
+      const output: MaintenanceJob = {
         id: savedDoc.id,
+        aircraftId: savedData.aircraftId,
+        tailNumber: savedData.tailNumber,
+        workOrderNumber: savedData.workOrderNumber,
+        shopName: savedData.shopName,
+        shopContactName: savedData.shopContactName ?? undefined,
+        shopContactPhone: savedData.shopContactPhone ?? undefined,
+        shopContactEmail: savedData.shopContactEmail ?? undefined,
+        status: savedData.status,
         dateIssued: savedData.dateIssued, // Already a string
-        dateDue: savedData.dateDue, // Already a string or undefined
+        dateDue: savedData.dateDue ?? undefined,
+        notes: savedData.notes ?? undefined,
+        costBreakdowns: savedData.costBreakdowns || [],
         createdAt: convertTimestampToISO(savedData.createdAt),
         updatedAt: convertTimestampToISO(savedData.updatedAt),
-      } as MaintenanceJob;
+      };
+
+      return output;
     } catch (error) {
       console.error(`Error saving maintenance job ${id}:`, error);
       throw new Error(`Failed to save job: ${error instanceof Error ? error.message : String(error)}`);
@@ -155,14 +167,25 @@ const fetchMaintenanceJobsFlow = ai.defineFlow(
       const snapshot = await db.collection(MAINTENANCE_JOBS_COLLECTION).orderBy('dateIssued', 'desc').get();
       return snapshot.docs.map(doc => {
         const data = doc.data();
-        return {
-          ...data,
+        // This is now the single source of truth for converting DB data to the client-safe MaintenanceJob type.
+        const output: MaintenanceJob = {
           id: doc.id,
+          aircraftId: data.aircraftId,
+          tailNumber: data.tailNumber,
+          workOrderNumber: data.workOrderNumber,
+          shopName: data.shopName,
+          shopContactName: data.shopContactName ?? undefined,
+          shopContactPhone: data.shopContactPhone ?? undefined,
+          shopContactEmail: data.shopContactEmail ?? undefined,
+          status: data.status,
           dateIssued: data.dateIssued, // Already a string
-          dateDue: data.dateDue, // Already a string or undefined
+          dateDue: data.dateDue ?? undefined,
+          notes: data.notes ?? undefined,
+          costBreakdowns: data.costBreakdowns || [],
           createdAt: convertTimestampToISO(data.createdAt),
           updatedAt: convertTimestampToISO(data.updatedAt),
-        } as MaintenanceJob;
+        };
+        return output;
       });
     } catch (error) {
       console.error('Error fetching maintenance jobs:', error);
