@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils"
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 import { fetchMaintenanceCosts, deleteMaintenanceCost, type MaintenanceCost } from '@/ai/flows/manage-maintenance-costs-flow';
-import { fetchMaintenanceJobs, type MaintenanceJob, type MaintenanceJobStatus } from '@/ai/flows/manage-maintenance-jobs-flow';
+import { fetchMaintenanceJobs, deleteMaintenanceJob, type MaintenanceJob, type MaintenanceJobStatus } from '@/ai/flows/manage-maintenance-jobs-flow';
 import { maintenanceJobStatuses } from '@/ai/schemas/maintenance-job-schemas';
 import { AddEditJobModal } from '@/app/(app)/maintenance/jobs/components/add-edit-job-modal';
 import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
@@ -164,8 +164,8 @@ export default function MaintenanceCostsPage() {
             await deleteMaintenanceCost({ costId: itemToDelete.id });
             toast({ title: "Success", description: `Invoice ${itemToDelete.invoiceNumber} deleted.` });
         } else {
-            // Future: await deleteMaintenanceJob({ jobId: itemToDelete.id });
-             toast({ title: "Action Not Implemented", description: `Deletion for open jobs is not yet configured.` });
+            await deleteMaintenanceJob({ jobId: itemToDelete.id });
+            toast({ title: "Work Order Deleted", description: `Work Order ${itemToDelete.workOrderNumber} deleted.` });
         }
         await loadData();
       } catch (error) {
@@ -333,7 +333,7 @@ export default function MaintenanceCostsPage() {
             <Input placeholder="Search invoice, WO#, tail..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="lg:col-span-1"/>
             <Select value={filters.aircraft} onValueChange={(v) => setFilters(f => ({...f, aircraft: v}))}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="all">All Aircraft</SelectItem>{uniqueTailNumbers.map(tn => <SelectItem key={tn} value={tn}>{tn}</SelectItem>)}</SelectContent></Select>
             <Select value={filters.jobStatus} onValueChange={(v) => setFilters(f => ({...f, jobStatus: v as any}))}><SelectTrigger><SelectValue placeholder="Work Order Status" /></SelectTrigger><SelectContent><SelectItem value="all">All Statuses</SelectItem><SelectItem value="Completed">Direct Cost (Completed)</SelectItem>{maintenanceJobStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select>
-             <Popover><PopoverTrigger asChild><Button id="date" variant={"outline"} className={cn("justify-start text-left font-normal", !dateRange && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{dateRange?.from ? (dateRange.to ? <>{format(dateRange.from, "LLL dd, y")} - {format(dateRange.to, "LLL dd, y")}</> : format(dateRange.from, "LLL dd, y")) : (<span>Pick a date range</span>)}</Button></PopoverTrigger><PopoverContent className="w-auto p-0" align="start"><Calendar initialFocus mode="range" defaultMonth={dateRange?.from} selected={dateRange} onSelect={setDateRange} numberOfMonths={2}/></PopoverContent></Popover>
+             <Popover><PopoverTrigger asChild><Button id="date" variant={"outline"} className={cn("lg:col-span-1 justify-start text-left font-normal", !dateRange && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{dateRange?.from ? (dateRange.to ? <>{format(dateRange.from, "LLL dd, y")} - {format(dateRange.to, "LLL dd, y")}</> : format(dateRange.from, "LLL dd, y")) : (<span>Pick a date range</span>)}</Button></PopoverTrigger><PopoverContent className="w-auto p-0" align="start"><Calendar initialFocus mode="range" defaultMonth={dateRange?.from} selected={dateRange} onSelect={setDateRange} numberOfMonths={2}/></PopoverContent></Popover>
              <Button variant="link" onClick={clearAllFilters} className="lg:col-span-1">Clear Filters</Button>
           </div>
         </CardHeader>
@@ -392,7 +392,7 @@ export default function MaintenanceCostsPage() {
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={executeDelete} disabled={isDeleting || itemToDelete.type !== 'cost'}>{isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Delete</AlertDialogAction>
+              <AlertDialogAction onClick={executeDelete} disabled={isDeleting}>{isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Delete</AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
