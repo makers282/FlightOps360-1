@@ -45,6 +45,32 @@ function removeUndefined(obj: any): any {
   return newObj;
 }
 
+/**
+ * Safely converts a Firestore Timestamp or an ISO date string to an ISO date string.
+ * @param ts The timestamp to convert.
+ * @returns An ISO date string, or a default date string if conversion fails.
+ */
+const convertTimestampToISO = (ts: any): string => {
+    if (!ts) return new Date(0).toISOString();
+    // Handle Firestore Timestamp object
+    if (typeof ts.toDate === 'function') {
+        return ts.toDate().toISOString();
+    }
+    // Handle if it's already an ISO string
+    if (typeof ts === 'string') {
+        // Basic check to see if it's likely an ISO string
+        if (ts.match(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/)) {
+            return ts;
+        }
+    }
+    // Fallback for other potential date string formats or numbers
+    try {
+        return new Date(ts).toISOString();
+    } catch {
+        return new Date(0).toISOString(); // Ultimate fallback
+    }
+};
+
 
 // Exported async functions that clients will call
 export async function saveMaintenanceJob(input: SaveMaintenanceJobInput): Promise<MaintenanceJob> {
@@ -135,8 +161,8 @@ const fetchMaintenanceJobsFlow = ai.defineFlow(
           id: doc.id,
           dateIssued: data.dateIssued, // Already a string
           dateDue: data.dateDue, // Already a string or undefined
-          createdAt: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
-          updatedAt: (data.updatedAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
+          createdAt: convertTimestampToISO(data.createdAt),
+          updatedAt: convertTimestampToISO(data.updatedAt),
         } as MaintenanceJob;
       });
     } catch (error) {
