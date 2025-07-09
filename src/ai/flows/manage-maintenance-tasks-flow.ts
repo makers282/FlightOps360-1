@@ -12,7 +12,7 @@
  */
 
 import {ai} from '@/ai/genkit';
-import {z, generate} from 'genkit';
+import {z} from 'genkit';
 import { adminDb as db } from '@/lib/firebase-admin';
 import { fetchFleetAircraft } from './manage-fleet-flow';
 import { gemini15Flash } from '@genkit-ai/googleai';
@@ -301,7 +301,7 @@ ${selectedTasks.map((task, index) => `
 - All work to be performed in accordance with applicable FAA regulations and manufacturer's maintenance manuals.
 `;
 
-        const workOrderResponse = await generate({
+        const workOrderResponse = await ai.generate({
             model: gemini15Flash,
             prompt: workOrderPrompt,
             output: { format: 'text' },
