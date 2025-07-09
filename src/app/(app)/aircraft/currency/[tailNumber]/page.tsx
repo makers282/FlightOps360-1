@@ -5,6 +5,8 @@
 import React, { useState, useEffect, useTransition, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
   Table,
@@ -36,7 +38,7 @@ import { format, parse, addDays, isValid, addMonths, addYears, endOfMonth, parse
 import { useToast } from '@/hooks/use-toast';
 import { fetchFleetAircraft, saveFleetAircraft } from '@/ai/flows/manage-fleet-flow';
 import type { FleetAircraft, SaveFleetAircraftInput } from '@/ai/schemas/fleet-aircraft-schemas';
-import { fetchMaintenanceTasksForAircraft, saveMaintenanceTask, deleteMaintenanceTask, type MaintenanceTask as FlowMaintenanceTask } from '@/ai/flows/manage-maintenance-tasks-flow';
+import { fetchMaintenanceTasksForAircraft, saveMaintenanceTask, deleteMaintenanceTask, generateMaintenanceWorkOrder, type MaintenanceTask as FlowMaintenanceTask } from '@/ai/flows/manage-maintenance-tasks-flow';
 import { fetchComponentTimesForAircraft, saveComponentTimesForAircraft, type AircraftComponentTimes } from '@/ai/flows/manage-component-times-flow';
 import { fetchCompanyProfile, type CompanyProfile } from '@/ai/flows/manage-company-profile-flow';
 import { PageHeader } from '@/components/page-header';
@@ -638,16 +640,56 @@ export default function AircraftMaintenanceDetailPage() {
 
   const handleSelectAllTasks = (checked: boolean) => { if (checked) { setSelectedTaskIds(displayedTasks.map(task => task.id)); } else { setSelectedTaskIds([]); } };
   
-  const generateWorkOrderHtml = ( tasksToReport: DisplayMaintenanceItem[], aircraft: FleetAircraft, componentTimes: Array<{ componentName: string; currentTime: number; currentCycles: number }>, companyProfile: CompanyProfile | null ): string => {
-    return "<html><body>DEBUG: Work Order HTML temporarily simplified for testing.</body></html>";
-  };
-
   const handleGenerateWorkOrder = async () => {
-    if (!currentAircraft) { toast({ title: "Error", description: "Aircraft data not loaded.", variant: "destructive" }); return; }
-    if (selectedTaskIds.length === 0) { toast({ title: "No Tasks Selected", description: "Please select at least one maintenance task to include in the work order.", variant: "info" }); return; }
+    if (!currentAircraft) {
+      toast({ title: 'Error', description: 'Aircraft data not loaded.', variant: 'destructive' });
+      return;
+    }
+    if (selectedTaskIds.length === 0) {
+      toast({ title: 'No Tasks Selected', description: 'Please select at least one maintenance task.', variant: 'info' });
+      return;
+    }
     startReportGenerationTransition(async () => {
-      try { const companyProfile = await fetchCompanyProfile(); const tasksToReport = displayedTasks.filter(task => selectedTaskIds.includes(task.id)); const reportHtml = generateWorkOrderHtml(tasksToReport, currentAircraft, editableComponentTimes, companyProfile); const reportWindow = window.open('', '_blank'); if (reportWindow) { reportWindow.document.open(); reportWindow.document.write(reportHtml); reportWindow.document.close(); } else { toast({ title: "Popup Blocked?", description: "Could not open the report window. Please check your popup blocker.", variant: "destructive" }); } toast({ title: "Work Order Generated", description: "A new window with the work order should have opened.", variant: "default" }); }
-      catch (error) { console.error("Error generating work order:", error); toast({ title: "Error Generating Report", description: (error instanceof Error ? error.message : "Could not fetch company profile."), variant: "destructive" }); }
+      try {
+        const markdownContent = await generateMaintenanceWorkOrder({
+          aircraftId: currentAircraft.id,
+          taskIds: selectedTaskIds,
+        });
+
+        const doc = new jsPDF();
+        
+        const companyProfile = await fetchCompanyProfile();
+        if (companyProfile?.companyName) {
+            doc.setFontSize(18);
+            doc.text(companyProfile.companyName, doc.internal.pageSize.getWidth() / 2, 20, { align: 'center' });
+            doc.setFontSize(12);
+        }
+
+        autoTable(doc, {
+            body: [
+              [markdownContent]
+            ],
+            startY: 30,
+            theme: 'plain',
+            styles: {
+                font: 'Helvetica',
+                fontSize: 10,
+            },
+            didParseCell: (data) => {
+                // Use jspdf-autotable's markdown parser by default if available and suitable
+                // This is a basic implementation; a full markdown-to-pdf would be more complex
+                if (typeof data.cell.text === 'string') {
+                    // Let autotable handle basic newlines
+                }
+            }
+        });
+
+        doc.save(`WorkOrder-${currentAircraft.tailNumber}-${new Date().toISOString().split('T')[0]}.pdf`);
+
+      } catch (error) {
+        console.error('Error generating work order:', error);
+        toast({ title: 'Error Generating Work Order', description: (error instanceof Error ? error.message : 'An unknown error occurred.'), variant: 'destructive' });
+      }
     });
   };
 
@@ -935,3 +977,6 @@ export default function AircraftMaintenanceDetailPage() {
 
 
 
+
+
+    

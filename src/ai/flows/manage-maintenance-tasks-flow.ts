@@ -8,6 +8,7 @@
  * - fetchAllMaintenanceTasks - Fetches all tasks for all aircraft.
  * - saveMaintenanceTask - Saves (adds or updates) a maintenance task.
  * - deleteMaintenanceTask - Deletes a maintenance task.
+ * - generateMaintenanceWorkOrder - Generates a work order PDF from selected tasks.
  */
 
 import {ai} from '@/ai/genkit';
@@ -72,7 +73,7 @@ export type DeleteTaskInput = z.infer<typeof DeleteTaskInputSchema>;
 const GenerateWorkOrderInputSchema = z.object({
     aircraftId: z.string(),
     taskIds: z.array(z.string()),
-    });
+});
 export type GenerateWorkOrderInput = z.infer<typeof GenerateWorkOrderInputSchema>;
 
 const GenerateWorkOrderOutputSchema = z.object({
@@ -309,3 +310,5 @@ ${selectedTasks.map((task, index) => `
         return workOrderResponse.text();
     }
 );
+
+    
