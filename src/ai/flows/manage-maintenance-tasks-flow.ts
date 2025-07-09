@@ -307,7 +307,7 @@ ${selectedTasks.map((task, index) => `
             output: { format: 'text' },
         });
 
-        return workOrderResponse.text();
+        return workOrderResponse.text;
     }
 );
 
