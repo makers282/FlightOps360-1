@@ -1,4 +1,5 @@
 
+
 'use server';
 /**
  * @fileOverview Genkit flows for managing aircraft maintenance tasks using Firestore.
@@ -431,7 +432,7 @@ const generateMaintenanceWorkOrderFlow = ai.defineFlow(
                     <section class="info-section">
                         <div class="info-box">
                           <h2>Company</h2>
-                          <p>${companyProfile?.companyName || 'N/A'}<br/>${companyProfile?.companyAddress || ''}</p>
+                          <p>${companyProfile?.companyName || 'N/A'}<br/>${(companyProfile?.companyAddress || '').replace(/\\n/g, '<br/>')}</p>
                         </div>
                         <div class="info-box">
                            <h2>Service Center</h2>
@@ -459,4 +460,5 @@ const generateMaintenanceWorkOrderFlow = ai.defineFlow(
         return workOrderHtml;
     }
 );
+
 

@@ -654,29 +654,13 @@ export default function AircraftMaintenanceDetailPage() {
           taskIds: selectedTaskIds,
         });
 
-        const doc = new jsPDF({
-          orientation: 'p',
-          unit: 'pt',
-          format: 'a4'
-        });
-
-        doc.html(htmlContent, {
-          callback: function (doc) {
-            const pageCount = (doc as any).internal.getNumberOfPages();
-            for (let i = 1; i <= pageCount; i++) {
-              doc.setPage(i);
-              doc.setFontSize(8);
-              doc.setTextColor(150);
-              doc.text(`Page ${i} of ${pageCount}`, doc.internal.pageSize.getWidth() / 2, doc.internal.pageSize.getHeight() - 10, { align: 'center' });
-            }
-            doc.save(`WorkOrder-${currentAircraft.tailNumber}-${new Date().toISOString().split('T')[0]}.pdf`);
-          },
-          margin: [20, 20, 40, 20], // top, left, bottom, right
-          autoPaging: 'text',
-          width: 555,
-          windowWidth: 800,
-        });
-
+        const newWindow = window.open();
+        if (newWindow) {
+          newWindow.document.write(htmlContent);
+          newWindow.document.close();
+        } else {
+          toast({ title: 'Popup Blocked', description: 'Please allow popups for this site to view the work order.', variant: 'info' });
+        }
       } catch (error) {
         console.error('Error generating work order:', error);
         toast({ title: 'Error Generating Work Order', description: (error instanceof Error ? error.message : 'An unknown error occurred.'), variant: 'destructive' });
@@ -975,4 +959,5 @@ export default function AircraftMaintenanceDetailPage() {
 
 
     
+
 
