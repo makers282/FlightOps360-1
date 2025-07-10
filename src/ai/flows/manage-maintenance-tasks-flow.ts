@@ -15,7 +15,10 @@ import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 import { adminDb as db } from '@/lib/firebase-admin';
 import { fetchFleetAircraft } from './manage-fleet-flow';
-import { gemini15Flash } from '@genkit-ai/googleai';
+import { fetchCompanyProfile } from './manage-company-profile-flow'; // Import company profile
+import { fetchComponentTimesForAircraft } from './manage-component-times-flow'; // Import component times
+import { format, parseISO, isValid, addDays, addMonths, addYears, endOfMonth } from 'date-fns';
+
 
 // This schema should align closely with MaintenanceTaskFormData from the modal,
 // plus an 'id' for the task itself and 'aircraftId' for association.
@@ -75,10 +78,6 @@ const GenerateWorkOrderInputSchema = z.object({
     taskIds: z.array(z.string()),
 });
 export type GenerateWorkOrderInput = z.infer<typeof GenerateWorkOrderInputSchema>;
-
-const GenerateWorkOrderOutputSchema = z.object({
-    workOrderText: z.string(),
-});
 
 const FetchTasksOutputSchema = z.array(MaintenanceTaskSchema);
 const SaveTaskOutputSchema = MaintenanceTaskSchema; // Returns the saved task
@@ -231,9 +230,6 @@ const deleteMaintenanceTaskFlow = ai.defineFlow(
 
       if (!docSnap.exists()) {
           console.warn(`Maintenance task with ID ${input.taskId} not found for deletion in Firestore.`);
-          // Depending on desired behavior, could return success: false or throw an error.
-          // For now, let's say deletion of a non-existent item is "successful" in that it's not there.
-          // Or, to be stricter: return { success: false, taskId: input.taskId };
           throw new Error(`Task ${input.taskId} not found.`);
       }
       
@@ -251,64 +247,118 @@ const generateMaintenanceWorkOrderFlow = ai.defineFlow(
     {
         name: 'generateMaintenanceWorkOrderFlow',
         inputSchema: GenerateWorkOrderInputSchema,
-        outputSchema: z.string(),
+        outputSchema: z.string(), // Returns a single HTML string
     },
     async ({ aircraftId, taskIds }) => {
-        const [allAircraft, allTasks] = await Promise.all([
+        // 1. Fetch all necessary data concurrently
+        const [allAircraft, allTasks, companyProfile, componentTimes] = await Promise.all([
             fetchFleetAircraft(),
             fetchMaintenanceTasksForAircraft({ aircraftId }),
+            fetchCompanyProfile(),
+            fetchComponentTimesForAircraft({ aircraftId }),
         ]);
 
+        // 2. Find the specific aircraft and filter the selected tasks
         const aircraft = allAircraft.find(ac => ac.id === aircraftId);
-        if (!aircraft) {
-            throw new Error(`Aircraft with ID ${aircraftId} not found.`);
-        }
+        if (!aircraft) throw new Error(`Aircraft with ID ${aircraftId} not found.`);
 
         const selectedTasks = allTasks.filter(task => taskIds.includes(task.id));
-        if (selectedTasks.length === 0) {
-            return "No tasks selected or found for work order.";
-        }
+        if (selectedTasks.length === 0) return "<p>No tasks selected or found for work order.</p>";
+        
+        const airframeTime = componentTimes?.['Airframe']?.time?.toFixed(1) || 'N/A';
+        const airframeCycles = componentTimes?.['Airframe']?.cycles?.toLocaleString() || 'N/A';
+        
+        // 3. Construct the HTML string
+        const status = "Opened"; // Default status for new work order
+        const statusColors = {
+            Opened: '#4A90E2', InProgress: '#F5A623', Completed: '#7ED321', 'Closed/Canceled': '#9CA3AF'
+        };
 
-        const workOrderPrompt = `
-Generate a formal maintenance work order with the following information.
-The output should be in clean, well-structured Markdown format.
+        const workOrderHtml = `
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+                <meta charset="UTF-8">
+                <style>
+                    body { font-family: 'Roboto', 'Inter', sans-serif; color: #333333; font-size: 10px; margin: 0;}
+                    .page { width: 100%; page-break-after: always; }
+                    .header { background-color: #0A2540; color: white; padding: 16px; display: flex; justify-content: space-between; align-items: center; border-radius: 6px 6px 0 0; }
+                    .header h1 { font-size: 24px; font-weight: 600; margin: 0; }
+                    .status-pill { padding: 4px 12px; border-radius: 9999px; font-weight: 600; color: white; background-color: ${statusColors[status as keyof typeof statusColors] || '#9CA3AF'}; }
+                    .sub-header { display: flex; justify-content: space-between; padding: 12px 16px; border: 1px solid #e5e7eb; border-top: none; }
+                    .info-section { display: flex; justify-content: space-between; padding: 12px 16px; border: 1px solid #e5e7eb; border-top: none; }
+                    .info-box { width: 48%; }
+                    .table-wrapper { padding: 16px; }
+                    table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+                    th, td { border: 1px solid #e5e7eb; padding: 8px; text-align: left; vertical-align: top; }
+                    th { font-weight: 600; font-size: 11px; background-color: #f7f9fb; text-transform: uppercase; }
+                    tr:nth-child(even) { background-color: #f7f9fb; }
+                    .task-desc { white-space: pre-wrap; }
+                    .overdue { color: #D0021B; font-weight: 600; }
+                    .footer { position: fixed; bottom: 0; width: 100%; text-align: center; }
+                    .sign-off-section { position: absolute; bottom: 40px; left: 16px; right: 16px; display: flex; justify-content: space-between; margin-top: 48px; padding-top: 24px; border-top: 1px solid #e5e7eb; }
+                    .signature-line { width: 30%; border-top: 1px solid #333333; padding-top: 8px; }
+                </style>
+            </head>
+            <body>
+                <div class="page">
+                    <div class="header">
+                        <h1>Work Order</h1>
+                        <span class="status-pill">${status}</span>
+                    </div>
+                    <div class="sub-header">
+                        <div><strong>Aircraft:</strong> ${aircraft.tailNumber} / ${aircraft.model} / ${aircraft.serialNumber || 'N/A'}</div>
+                        <div><strong>A/C Times:</strong> ${airframeTime} hrs / ${airframeCycles} cyc</div>
+                        <div><strong>WO#:</strong> WO-${format(new Date(), 'yyyyMMdd')}-${aircraft.tailNumber || ''}</div>
+                    </div>
+                    <div class="info-section">
+                        <div class="info-box">
+                            <strong>Operator:</strong><br/>
+                            ${companyProfile?.companyName || 'N/A'}<br/>
+                            ${companyProfile?.companyAddress?.replace(/, /g, '<br/>') || ''}
+                        </div>
+                        <div class="info-box">
+                            <strong>Shop:</strong><br/>
+                            ${'N/A'}<br/>
+                            <strong>Analyst:</strong> ${'N/A'}
+                        </div>
+                    </div>
+                    <div class="table-wrapper">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>SEQ</th>
+                                    <th>PN/SN</th>
+                                    <th style="width: 40%;">Description</th>
+                                    <th>Interval</th>
+                                    <th>Due</th>
+                                    <th>State</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${selectedTasks.map((task, index) => `
+                                    <tr>
+                                        <td>${index + 1}</td>
+                                        <td>${task.partNumber || ''}<br/>${task.serialNumber || ''}</td>
+                                        <td class="task-desc"><strong>${task.itemTitle}</strong><br/><small>${task.details || ''}</small></td>
+                                        <td>${task.isHoursDueEnabled ? `${task.hoursDue}h ` : ''}${task.isCyclesDueEnabled ? `${task.cyclesDue}c ` : ''}${task.isDaysDueEnabled ? `${task.daysDueValue}${task.daysIntervalType ? task.daysIntervalType.charAt(0) : 'd'}` : ''}</td>
+                                        <td>${task.daysDueValue && isValid(parseISO(task.daysDueValue)) ? format(parseISO(task.daysDueValue), 'yyyy-MM-dd') : 'N/A'}</td>
+                                        <td>Opened</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                     <div class="sign-off-section">
+                        <div class="signature-line">Mechanic Signature</div>
+                        <div class="signature-line">Inspector Signature</div>
+                        <div class="signature-line">Date</div>
+                    </div>
+                </div>
+            </body>
+            </html>
+        `;
 
-**Work Order Header:**
-- **Work Order Number:** WO-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}${String(new Date().getDate()).padStart(2, '0')}-${aircraft.tailNumber.replace('N', '')}
-- **Date:** ${new Date().toLocaleDateString()}
-- **Aircraft:** ${aircraft.model}
-- **Tail Number:** ${aircraft.tailNumber}
-- **Serial Number:** ${aircraft.serialNumber || 'N/A'}
-
-**Tasks to be Performed:**
-
-${selectedTasks.map((task, index) => `
-**Task ${index + 1}: ${task.itemTitle}**
-- **Type:** ${task.itemType}
-- **Associated Component:** ${task.associatedComponent || 'N/A'}
-- **Reference/Part Number:** ${task.referenceNumber || 'N/A'} / ${task.partNumber || 'N/A'}
-- **Details:** ${task.details || 'No additional details provided.'}
-- **Last Completed:** ${task.lastCompletedDate ? `${task.lastCompletedDate} at ${task.lastCompletedHours || 'N/A'} hours` : 'N/A'}
-`).join('')}
-
-**Sign-off Section:**
-- **Completed By (Name):** _________________________
-- **Signature:** _________________________
-- **Date:** _________________________
-- **Certificate Number:** _________________________
-
-**Notes:**
-- All work to be performed in accordance with applicable FAA regulations and manufacturer's maintenance manuals.
-`;
-
-        const workOrderResponse = await ai.generate({
-            model: gemini15Flash,
-            prompt: workOrderPrompt,
-            output: { format: 'text' },
-        });
-
-        return workOrderResponse.text;
+        return workOrderHtml;
     }
 );
-
-    

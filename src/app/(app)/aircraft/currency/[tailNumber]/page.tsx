@@ -6,7 +6,6 @@ import React, { useState, useEffect, useTransition, useCallback, useMemo } from 
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
   Table,
@@ -640,7 +639,7 @@ export default function AircraftMaintenanceDetailPage() {
 
   const handleSelectAllTasks = (checked: boolean) => { if (checked) { setSelectedTaskIds(displayedTasks.map(task => task.id)); } else { setSelectedTaskIds([]); } };
   
-  const handleGenerateWorkOrder = async () => {
+  const handleGenerateWorkOrder = () => {
     if (!currentAircraft) {
       toast({ title: 'Error', description: 'Aircraft data not loaded.', variant: 'destructive' });
       return;
@@ -651,40 +650,33 @@ export default function AircraftMaintenanceDetailPage() {
     }
     startReportGenerationTransition(async () => {
       try {
-        const markdownContent = await generateMaintenanceWorkOrder({
+        const htmlContent = await generateMaintenanceWorkOrder({
           aircraftId: currentAircraft.id,
           taskIds: selectedTaskIds,
         });
 
-        const doc = new jsPDF();
-        
-        const companyProfile = await fetchCompanyProfile();
-        if (companyProfile?.companyName) {
-            doc.setFontSize(18);
-            doc.text(companyProfile.companyName, doc.internal.pageSize.getWidth() / 2, 20, { align: 'center' });
-            doc.setFontSize(12);
-        }
-
-        autoTable(doc, {
-            body: [
-              [markdownContent]
-            ],
-            startY: 30,
-            theme: 'plain',
-            styles: {
-                font: 'Helvetica',
-                fontSize: 10,
-            },
-            didParseCell: (data) => {
-                // Use jspdf-autotable's markdown parser by default if available and suitable
-                // This is a basic implementation; a full markdown-to-pdf would be more complex
-                if (typeof data.cell.text === 'string') {
-                    // Let autotable handle basic newlines
-                }
-            }
+        const doc = new jsPDF({
+          orientation: 'p',
+          unit: 'pt',
+          format: 'a4'
         });
 
-        doc.save(`WorkOrder-${currentAircraft.tailNumber}-${new Date().toISOString().split('T')[0]}.pdf`);
+        doc.html(htmlContent, {
+          callback: function (doc) {
+            const pageCount = doc.getNumberOfPages();
+            for (let i = 1; i <= pageCount; i++) {
+              doc.setPage(i);
+              doc.setFontSize(8);
+              doc.setTextColor(150);
+              doc.text(`Page ${i} of ${pageCount}`, doc.internal.pageSize.getWidth() / 2, doc.internal.pageSize.getHeight() - 10, { align: 'center' });
+            }
+            doc.save(`WorkOrder-${currentAircraft.tailNumber}-${new Date().toISOString().split('T')[0]}.pdf`);
+          },
+          margin: [20, 20, 40, 20], // top, left, bottom, right
+          autoPaging: 'text',
+          width: 555,
+          windowWidth: 800,
+        });
 
       } catch (error) {
         console.error('Error generating work order:', error);
@@ -878,7 +870,7 @@ export default function AircraftMaintenanceDetailPage() {
       <Card className="mt-6 shadow-lg">
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><Wrench className="h-6 w-6 text-primary" />Maintenance Items</CardTitle>
-          <CardDescription> Overview of scheduled and upcoming maintenance tasks for {currentAircraft.tailNumber}. Calculated "To Go" is based on the values in "Current Hours &amp; Cycles" above. </CardDescription>
+          <CardDescription> Overview of scheduled and upcoming maintenance tasks for {currentAircraft.tailNumber}. Calculated "To Go" is based on the values in "Current Hours & Cycles" above. </CardDescription>
           <div className="mt-4 flex flex-col sm:flex-row gap-2 items-center"> <div className="relative flex-grow w-full sm:w-auto"> <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /> <Input type="search" placeholder="Search tasks (title, ref, type, component)..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-8 w-full" /> {searchTerm && ( <Button variant="ghost" size="icon" className="absolute right-1 top-1 h-7 w-7" onClick={() => setSearchTerm('')}> <XCircleIcon className="h-4 w-4"/> </Button> )} </div> <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as any)}> <SelectTrigger className="w-full sm:w-[180px]"> <SelectValue placeholder="Filter by status" /> </SelectTrigger> <SelectContent> <SelectItem value="all">All Statuses</SelectItem> <SelectItem value="active">Active Items</SelectItem> <SelectItem value="inactive">Inactive Items</SelectItem> <SelectItem value="dueSoon">Due Soon (Active)</SelectItem> <SelectItem value="overdue">Overdue (Active)</SelectItem> <SelectItem value="gracePeriod">Grace Period (Active)</SelectItem> </SelectContent> </Select> <Select value={componentFilter} onValueChange={setComponentFilter}> <SelectTrigger className="w-full sm:w-[200px]"> <FilterIcon className="h-4 w-4 mr-2 opacity-50" /> <SelectValue placeholder="Filter by component" /> </SelectTrigger> <SelectContent> <SelectItem value="all">All Components</SelectItem> {availableComponentsForFilter.map(comp => ( <SelectItem key={comp} value={comp}>{comp}</SelectItem> ))} </SelectContent> </Select> </div>
         </CardHeader>
         <CardContent>{isLoadingTasks ? ( <div className="flex items-center justify-center py-10"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2 text-muted-foreground">Loading maintenance tasks...</p></div> ) : ( <Table><TableHeader><TableRow><TableHead className="w-10"><Checkbox checked={selectedTaskIds.length === displayedTasks.length && displayedTasks.length > 0} onCheckedChange={(checked) => handleSelectAllTasks(Boolean(checked))} aria-label="Select all tasks" disabled={displayedTasks.length === 0} /></TableHead><TableHead>Ref #</TableHead><TableHead><Button variant="ghost" size="sm" onClick={() => requestSort('itemTitle')} className="px-1 -ml-2"> Title {getSortIcon('itemTitle')} </Button></TableHead><TableHead>Type</TableHead><TableHead>Component</TableHead><TableHead>Frequency</TableHead><TableHead>Last Done</TableHead><TableHead>Due At</TableHead><TableHead><Button variant="ghost" size="sm" onClick={() => requestSort('toGoNumeric')} className="px-1 -ml-2"> To Go {getSortIcon('toGoNumeric')} </Button></TableHead><TableHead className="text-center">Status</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader><TableBody>{tableBodyContent}</TableBody></Table> )}
