@@ -1,5 +1,4 @@
 
-
 'use server';
 /**
  * @fileOverview Genkit flows for managing aircraft maintenance tasks using Firestore.
@@ -19,9 +18,6 @@ import { fetchFleetAircraft } from './manage-fleet-flow';
 import { fetchCompanyProfile } from './manage-company-profile-flow'; // Import company profile
 import { fetchComponentTimesForAircraft, type AircraftComponentTimes } from './manage-component-times-flow'; // Import component times
 import { format, parseISO, isValid, addDays, addMonths, addYears, endOfMonth } from 'date-fns';
-import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import type { UserOptions } from 'jspdf-autotable';
 
 
 // This schema should align closely with MaintenanceTaskFormData from the modal,
@@ -276,20 +272,35 @@ const generateMaintenanceWorkOrderFlow = ai.defineFlow(
         
         // Find the furthest due date among selected tasks for the WO due date
         const dueDates = selectedTasks
-            .map(task => task.isDaysDueEnabled && task.daysDueValue ? parseISO(task.daysDueValue) : null)
-            .filter((d): d is Date => d !== null && isValid(d));
-        const furthestDueDate = dueDates.length > 0 ? new Date(Math.max.apply(null, dueDates.map(d => d.getTime()))) : null;
+            .map(task => {
+                if (task.trackType === 'One Time' && task.isDaysDueEnabled && task.daysDueValue && isValid(parseISO(task.daysDueValue))) {
+                    return parseISO(task.daysDueValue);
+                }
+                return null;
+            })
+            .filter((d): d is Date => d !== null);
+
+        const furthestDueDate = dueDates.length > 0 
+            ? new Date(Math.max.apply(null, dueDates.map(d => d.getTime()))) 
+            : null;
 
         const tasksHtml = selectedTasks.map((task, index) => {
              const intervalParts = [];
              if (task.isHoursDueEnabled && task.hoursDue) intervalParts.push(`${task.hoursDue}h`);
              if (task.isCyclesDueEnabled && task.cyclesDue) intervalParts.push(`${task.cyclesDue}c`);
              if (task.isDaysDueEnabled && task.daysDueValue) {
-                const intervalType = task.daysIntervalType?.charAt(0) || 'd';
-                intervalParts.push(`${task.daysDueValue}${intervalType}`);
+                if (task.trackType === 'Interval') {
+                    const intervalType = task.daysIntervalType?.charAt(0) || 'd';
+                    intervalParts.push(`${task.daysDueValue}${intervalType}`);
+                }
              }
-             const interval = intervalParts.join(' / ') || 'One-Time';
-             const dueDateStr = task.isDaysDueEnabled && task.daysDueValue ? task.daysDueValue : 'N/A';
+             const interval = intervalParts.length > 0 ? intervalParts.join(' / ') : 'One-Time';
+             
+             let dueDateStr = 'N/A';
+             if(task.isDaysDueEnabled && task.daysDueValue && task.trackType === 'One Time' && isValid(parseISO(task.daysDueValue))) {
+                dueDateStr = format(parseISO(task.daysDueValue), 'yyyy-MM-dd');
+             }
+
              const isOverdue = dueDateStr !== 'N/A' && isValid(parseISO(dueDateStr)) && parseISO(dueDateStr) < new Date();
 
 
@@ -460,5 +471,3 @@ const generateMaintenanceWorkOrderFlow = ai.defineFlow(
         return workOrderHtml;
     }
 );
-
-
