@@ -6,7 +6,6 @@ import React, { useState, useEffect, useTransition, useCallback, useMemo } from 
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
   Table,
@@ -650,87 +649,33 @@ export default function AircraftMaintenanceDetailPage() {
     }
     startReportGenerationTransition(async () => {
       try {
-        const data = await generateMaintenanceWorkOrder({
+        const htmlContent = await generateMaintenanceWorkOrder({
           aircraftId: currentAircraft.id,
           taskIds: selectedTaskIds,
         });
 
-        const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter' });
-        
-        // Header
-        doc.setFillColor(10, 37, 64); // #0A2540
-        doc.rect(0, 0, doc.internal.pageSize.getWidth(), 60, 'F');
-        doc.setFontSize(24).setTextColor(255, 255, 255).setFont('helvetica', 'bold');
-        doc.text(data.workOrderNumber, doc.internal.pageSize.getWidth() / 2, 35, { align: 'center' });
-        
-        const statusColors = { Opened: [74, 144, 226], 'In Progress': [245, 166, 35], Completed: [126, 211, 33], 'Closed/Canceled': [156, 163, 175] };
-        const statusColor = statusColors[data.status as keyof typeof statusColors] || [156, 163, 175];
-        doc.setFillColor(statusColor[0], statusColor[1], statusColor[2]);
-        doc.roundedRect(doc.internal.pageSize.getWidth() - 95, 25, 80, 20, 10, 10, 'F');
-        doc.setFontSize(10).setTextColor(255, 255, 255).setFont('helvetica', 'bold');
-        doc.text(data.status, doc.internal.pageSize.getWidth() - 55, 37, { align: 'center' });
-
-        // Sub-header
-        let finalY = 75;
-        doc.setFontSize(9).setTextColor(51, 51, 51).setFont('helvetica', 'normal');
-        doc.text(`Aircraft: ${data.aircraft.tailNumber} / ${data.aircraft.model} / ${data.aircraft.serialNumber || 'N/A'}`, 40, finalY);
-        doc.text(`A/C Times: ${data.aircraft.airframeTime} / ${data.aircraft.airframeCycles}`, doc.internal.pageSize.getWidth() / 2, finalY, { align: 'center'});
-        doc.text(`Issued: ${data.dates.issued}${data.dates.due ? ` | Due: ${data.dates.due}` : ''}`, doc.internal.pageSize.getWidth() - 40, finalY, { align: 'right' });
-        finalY += 15;
-
-        // Info Boxes
-        autoTable(doc, {
-            body: [
-                [
-                    { content: `Operator:\n${data.company.name || 'N/A'}\n${data.company.address || ''}`, styles: { cellWidth: 'auto'} },
-                    { content: `Shop:\n${data.shop.name}\nAnalyst: ${data.shop.analyst}`, styles: { cellWidth: 'auto' } },
-                ],
-            ],
-            startY: finalY,
-            theme: 'plain',
-            styles: { fontSize: 9, cellPadding: 5 },
-            columnStyles: { 0: { cellWidth: '50%'}, 1: { cellWidth: '50%'} },
+        const doc = new jsPDF({
+          orientation: 'p',
+          unit: 'pt',
+          format: 'a4'
         });
-        finalY = (doc as any).lastAutoTable.finalY + 15;
 
-        // Tasks Table
-        autoTable(doc, {
-            head: [['SEQ', 'PN/SN', 'Description', 'Interval', 'Due', 'State']],
-            body: data.tasks.map(t => [t.seq, `${t.pn}\n${t.sn}`, t.description, t.interval, t.due, t.state]),
-            startY: finalY,
-            theme: 'grid',
-            headStyles: { fillColor: [247, 249, 251], textColor: 51, fontStyle: 'bold' },
-            styles: { fontSize: 8 },
-            columnStyles: { 2: { cellWidth: '35%' } },
-        });
-        finalY = (doc as any).lastAutoTable.finalY;
-
-        // Sign-off section & Footer
-        const pageCount = (doc as any).internal.getNumberOfPages();
-        for (let i = 1; i <= pageCount; i++) {
-          doc.setPage(i);
-          const isLastPage = i === pageCount;
-          
-          if (isLastPage) {
-            const signatureY = doc.internal.pageSize.getHeight() - 70;
-            if (finalY < signatureY - 20) { // Only add if there's space
-                doc.setFontSize(9).setTextColor(51,51,51).setFont('helvetica', 'normal');
-                const sigWidth = (doc.internal.pageSize.getWidth() - 80) / 3;
-                doc.text('Mechanic Signature', 40 + sigWidth / 2, signatureY + 20, { align: 'center' });
-                doc.line(40, signatureY, 40 + sigWidth, signatureY);
-                doc.text('Inspector Signature', 40 + sigWidth + sigWidth/2, signatureY + 20, { align: 'center' });
-                doc.line(40 + sigWidth + 10, signatureY, 40 + 2*sigWidth, signatureY);
-                doc.text('Date', 40 + 2*sigWidth + 10 + sigWidth/2, signatureY + 20, { align: 'center' });
-                doc.line(40 + 2*sigWidth + 20, signatureY, 40 + 3*sigWidth, signatureY);
+        doc.html(htmlContent, {
+          callback: function (doc) {
+            const pageCount = (doc as any).internal.getNumberOfPages();
+            for (let i = 1; i <= pageCount; i++) {
+              doc.setPage(i);
+              doc.setFontSize(8);
+              doc.setTextColor(150);
+              doc.text(`Page ${i} of ${pageCount}`, doc.internal.pageSize.getWidth() / 2, doc.internal.pageSize.getHeight() - 10, { align: 'center' });
             }
-          }
-
-          doc.setFontSize(8).setTextColor(150, 150, 150);
-          doc.text(`Page ${i} of ${pageCount}`, doc.internal.pageSize.getWidth() / 2, doc.internal.pageSize.getHeight() - 20, { align: 'center' });
-        }
-
-
-        doc.save(`WorkOrder-${currentAircraft.tailNumber}-${new Date().toISOString().split('T')[0]}.pdf`);
+            doc.save(`WorkOrder-${currentAircraft.tailNumber}-${new Date().toISOString().split('T')[0]}.pdf`);
+          },
+          margin: [20, 20, 40, 20], // top, left, bottom, right
+          autoPaging: 'text',
+          width: 555,
+          windowWidth: 800,
+        });
 
       } catch (error) {
         console.error('Error generating work order:', error);
