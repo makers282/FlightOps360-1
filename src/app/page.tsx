@@ -8,8 +8,9 @@ import Image from 'next/image';
 export default function LandingPage() {
   return (
     <div className="flex flex-col min-h-screen bg-gradient-to-br from-sky-100 via-indigo-50 to-purple-100">
+      {/* Header */}
       <header className="sticky top-0 z-40 w-full border-b bg-background/90 backdrop-blur-sm">
-        <div className="container mx-auto flex h-16 items-center justify-between px-4 md:px-6">
+        <div className="container mx-auto flex h-20 items-center justify-between px-4 md:px-6">
           <Link href="/" className="flex items-center gap-2 text-xl font-bold text-primary">
             <Plane className="h-7 w-7" />
             <span>FlightOps360</span>
@@ -29,7 +30,7 @@ export default function LandingPage() {
 
       <main className="flex-1">
         {/* Hero Section */}
-        <section className="container mx-auto flex flex-col items-center justify-center gap-8 px-4 py-16 text-center md:px-6 md:py-24 lg:py-32">
+        <section className="container mx-auto flex flex-col items-center justify-center gap-10 px-4 py-16 text-center md:px-6 md:py-24 lg:py-32">
           <div className="max-w-3xl">
             <h1 className="text-4xl font-extrabold tracking-tight text-gray-900 sm:text-5xl md:text-6xl">
               Elevate Your Flight Operations
@@ -41,9 +42,9 @@ export default function LandingPage() {
           </div>
           <div className="relative mx-auto mt-8 w-full max-w-4xl">
             <Image
-              src="https://placehold.co/1200x600.png"
-              alt="FlightOps360 Dashboard Mockup"
-              width={1200}
+              src="/images/Sunrise.jpg"
+              alt="Sunrise over airfield"
+              width={900}
               height={600}
               className="rounded-xl object-cover shadow-2xl"
               priority
@@ -81,7 +82,7 @@ export default function LandingPage() {
             ].map((feature) => (
               <div key={feature.name} className="flex flex-col items-center rounded-lg bg-card p-8 text-center shadow-lg transition-shadow hover:shadow-xl">
                 <feature.icon className="mb-4 h-10 w-10 text-primary" aria-hidden="true" />
-                <Image src={`https://placehold.co/300x200.png`} alt={feature.name} width={300} height={200} className="mb-4 rounded-md object-cover" data-ai-hint={feature.dataAiHint} />
+                <Image src={`/images/${feature.dataAiHint === 'flight quote' ? 'Quote.jpg' : feature.dataAiHint === 'flight crew' ? 'Crew Schedule.jpg' : 'Aircraft.jpg'}`} alt={feature.name} width={300} height={200} className="mb-4 rounded-md object-cover" data-ai-hint={feature.dataAiHint} />
                 <h3 className="text-xl font-semibold text-gray-900">{feature.name}</h3>
                 <p className="mt-2 text-sm text-gray-600">{feature.description}</p>
               </div>
@@ -89,6 +90,7 @@ export default function LandingPage() {
           </div>
         </section>
       </main>
+      {/* Footer */}
 
       <footer className="border-t bg-background">
         <div className="container mx-auto flex flex-col items-center justify-between gap-4 px-4 py-8 md:flex-row md:px-6">
