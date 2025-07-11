@@ -270,7 +270,6 @@ const generateMaintenanceWorkOrderFlow = ai.defineFlow(
         const workOrderNumber = `WO-${format(new Date(), 'yyyyMMdd')}-${aircraft.tailNumber || ''}`;
         const issuedDate = format(new Date(), 'yyyy-MM-dd');
         
-        // Find the furthest due date among selected tasks for the WO due date
         const dueDates = selectedTasks
             .map(task => {
                 if (task.trackType === 'One Time' && task.isDaysDueEnabled && task.daysDueValue && isValid(parseISO(task.daysDueValue))) {

@@ -36,7 +36,7 @@ import { Wrench, PlusCircle, ArrowLeft, Plane as PlaneIcon, Edit, Loader2, InfoI
 import { format, parse, addDays, isValid, addMonths, addYears, endOfMonth, parseISO, differenceInCalendarDays } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { fetchFleetAircraft, saveFleetAircraft } from '@/ai/flows/manage-fleet-flow';
-import type { FleetAircraft, SaveFleetAircraftInput } from '@/ai/schemas/fleet-aircraft-schemas';
+import type { FleetAircraft, SaveFleetAircraftInput, EngineDetail, PropellerDetail } from '@/ai/schemas/fleet-aircraft-schemas';
 import { fetchMaintenanceTasksForAircraft, saveMaintenanceTask, deleteMaintenanceTask, generateMaintenanceWorkOrder, type MaintenanceTask as FlowMaintenanceTask } from '@/ai/flows/manage-maintenance-tasks-flow';
 import { fetchComponentTimesForAircraft, saveComponentTimesForAircraft, type AircraftComponentTimes } from '@/ai/flows/manage-component-times-flow';
 import { fetchCompanyProfile, type CompanyProfile } from '@/ai/flows/manage-company-profile-flow';
@@ -56,6 +56,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { fetchMelItemsForAircraft, saveMelItem, deleteMelItem } from '@/ai/flows/manage-mel-items-flow';
 import type { MelItem, SaveMelItemInput } from '@/ai/schemas/mel-item-schemas';
+import { ManageEngineDetailsModal } from './components/manage-engine-details-modal';
+import { ManagePropellerDetailsModal } from './components/manage-propeller-details-modal';
 
 
 export interface DisplayMaintenanceItem extends FlowMaintenanceTask {
@@ -330,6 +332,8 @@ export default function AircraftMaintenanceDetailPage() {
 
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
   const [isGeneratingReport, startReportGenerationTransition] = useTransition();
+  const [isEngineModalOpen, setIsEngineModalOpen] = useState(false);
+  const [isPropellerModalOpen, setIsPropellerModalOpen] = useState(false);
 
   const aircraftInfoForm = useForm<AircraftInfoEditFormData>({
     resolver: zodResolver(aircraftInfoEditSchema),
@@ -425,10 +429,33 @@ export default function AircraftMaintenanceDetailPage() {
   };
 
   const handleCancelEditComponentTimes = () => { setEditableComponentTimes(JSON.parse(JSON.stringify(originalComponentTimes))); setIsEditingComponentTimes(false); };
+  
+  const handleEngineDetailsSave = (updatedEngines: EngineDetail[]) => {
+    if (!currentAircraft) return;
+    const updatedAircraft = { ...currentAircraft, engineDetails: updatedEngines };
+    setCurrentAircraft(updatedAircraft);
+  };
+  
+  const handlePropellerDetailsSave = (updatedPropellers: PropellerDetail[]) => {
+      if (!currentAircraft) return;
+      const updatedAircraft = { ...currentAircraft, propellerDetails: updatedPropellers };
+      setCurrentAircraft(updatedAircraft);
+  };
+
   const onSubmitAircraftInfo: SubmitHandler<AircraftInfoEditFormData> = (data) => {
     if (!currentAircraft) return;
     startSavingAircraftInfoTransition(async () => {
-      const aircraftToSave: SaveFleetAircraftInput = { ...currentAircraft, model: data.model, aircraftYear: data.aircraftYear, baseLocation: data.baseLocation, primaryContactName: data.primaryContactName, primaryContactPhone: data.primaryContactPhone, primaryContactEmail: data.primaryContactEmail, internalNotes: data.internalNotes, };
+      const aircraftToSave: SaveFleetAircraftInput = { 
+        ...currentAircraft, 
+        model: data.model, 
+        aircraftYear: data.aircraftYear, 
+        baseLocation: data.baseLocation, 
+        primaryContactName: data.primaryContactName, 
+        primaryContactPhone: data.primaryContactPhone, 
+        primaryContactEmail: data.primaryContactEmail, 
+        internalNotes: data.internalNotes,
+        // Engine and Propeller details are already on currentAircraft state
+      };
       try { const savedData = await saveFleetAircraft(aircraftToSave); setCurrentAircraft(savedData); setIsEditingAircraftInfo(false); toast({ title: "Aircraft Info Saved", description: `Details for ${savedData.tailNumber} updated.` }); }
       catch (error) { console.error("Failed to save aircraft info:", error); toast({ title: "Error Saving Aircraft Info", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" }); }
     });
@@ -654,30 +681,10 @@ export default function AircraftMaintenanceDetailPage() {
           aircraftId: currentAircraft.id,
           taskIds: selectedTaskIds,
         });
-
-        const doc = new jsPDF({
-          orientation: 'p',
-          unit: 'pt',
-          format: 'a4'
-        });
-
-        doc.html(htmlContent, {
-          callback: function (doc) {
-            const pageCount = doc.getNumberOfPages();
-            for (let i = 1; i <= pageCount; i++) {
-              doc.setPage(i);
-              doc.setFontSize(8);
-              doc.setTextColor(150);
-              doc.text(`Page ${i} of ${pageCount}`, doc.internal.pageSize.getWidth() / 2, doc.internal.pageSize.getHeight() - 10, { align: 'center' });
-            }
-            doc.save(`WorkOrder-${currentAircraft.tailNumber}-${new Date().toISOString().split('T')[0]}.pdf`);
-          },
-          margin: [20, 20, 40, 20], // top, left, bottom, right
-          autoPaging: 'text',
-          width: 555,
-          windowWidth: 800,
-        });
-
+        const blob = new Blob([htmlContent], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        window.open(url, '_blank');
+        URL.revokeObjectURL(url);
       } catch (error) {
         console.error('Error generating work order:', error);
         toast({ title: 'Error Generating Work Order', description: (error instanceof Error ? error.message : 'An unknown error occurred.'), variant: 'destructive' });
@@ -740,7 +747,12 @@ export default function AircraftMaintenanceDetailPage() {
         </Card>
         <Card className="shadow-lg">
           <CardHeader> <div className="flex justify-between items-start"> <CardTitle className="flex items-center gap-2"><InfoIcon className="h-6 w-6 text-primary" />Aircraft Information</CardTitle> {!isEditingAircraftInfo ? ( <Button variant="outline" size="icon" onClick={() => setIsEditingAircraftInfo(true)} disabled={isSavingAircraftInfo}> <Edit className="h-4 w-4" /> <span className="sr-only">Edit Aircraft Information</span> </Button> ) : ( <div className="flex gap-2"> <Button variant="ghost" size="icon" onClick={() => { setIsEditingAircraftInfo(false); resetAircraftInfoForm(currentAircraft);}} disabled={isSavingAircraftInfo}> <XCircleIcon className="h-4 w-4" /><span className="sr-only">Cancel</span> </Button> <Button variant="default" size="icon" onClick={aircraftInfoForm.handleSubmit(onSubmitAircraftInfo)} disabled={isSavingAircraftInfo}> {isSavingAircraftInfo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} <span className="sr-only">Save Aircraft Information</span> </Button> </div> )} </div> </CardHeader>
-          <CardContent> {isEditingAircraftInfo ? ( <Form {...aircraftInfoForm}> <form onSubmit={aircraftInfoForm.handleSubmit(onSubmitAircraftInfo)} className="space-y-3"> <p className="text-sm"><strong>Tail Number:</strong> {currentAircraft.tailNumber}</p> <p className="text-sm"><strong>Serial #:</strong> {currentAircraft.serialNumber || 'N/A'} <span className="text-xs text-muted-foreground">(Managed in Company Settings)</span></p> <FormField control={aircraftInfoForm.control} name="model" render={({ field }) => ( <FormItem> <FormLabel>Model</FormLabel> <FormControl><Input {...field} /></FormControl> <FormMessage /> </FormItem> )} /> <FormField control={aircraftInfoForm.control} name="aircraftYear" render={({ field }) => ( <FormItem> <FormLabel>Year</FormLabel> <FormControl><Input type="number" {...field} onChange={e => field.onChange(parseInt(e.target.value, 10))} /></FormControl> <FormMessage /> </FormItem> )} /> <FormField control={aircraftInfoForm.control} name="baseLocation" render={({ field }) => ( <FormItem> <FormLabel>Base Location</FormLabel> <FormControl><Input {...field} /></FormControl> <FormMessage /> </FormItem> )} /> <FormField control={aircraftInfoForm.control} name="primaryContactName" render={({ field }) => ( <FormItem> <FormLabel>Primary Contact Name</FormLabel> <FormControl><Input {...field} /></FormControl> <FormMessage /> </FormItem> )} /> <FormField control={aircraftInfoForm.control} name="primaryContactPhone" render={({ field }) => ( <FormItem> <FormLabel>Primary Contact Phone</FormLabel> <FormControl><Input type="tel" {...field} /></FormControl> <FormMessage /> </FormItem> )} /> <FormField control={aircraftInfoForm.control} name="primaryContactEmail" render={({ field }) => ( <FormItem> <FormLabel>Primary Contact Email</FormLabel> <FormControl><Input type="email" {...field} /></FormControl> <FormMessage /> </FormItem> )} /> <FormField control={aircraftInfoForm.control} name="internalNotes" render={({ field }) => ( <FormItem> <FormLabel>Internal Notes</FormLabel> <FormControl><Textarea {...field} rows={3} /></FormControl> <FormMessage /> </FormItem> )} /> </form> </Form> ) : ( <div className="space-y-1.5 text-sm"> <p><strong className="text-muted-foreground w-28 inline-block">Model:</strong> {currentAircraft.model}</p> <p><strong className="text-muted-foreground w-28 inline-block">Serial #:</strong> {currentAircraft.serialNumber || 'N/A'}</p> <p><strong className="text-muted-foreground w-28 inline-block">Year:</strong> {currentAircraft.aircraftYear || 'N/A'}</p> <p><strong className="text-muted-foreground w-28 inline-block">Base:</strong> {currentAircraft.baseLocation || 'N/A'}</p> <p><strong className="text-muted-foreground w-28 inline-block">Contact:</strong> {currentAircraft.primaryContactName || 'N/A'}</p> <p><strong className="text-muted-foreground w-28 inline-block">Phone:</strong> {currentAircraft.primaryContactPhone || 'N/A'}</p> <p><strong className="text-muted-foreground w-28 inline-block">Email:</strong> {currentAircraft.primaryContactEmail || 'N/A'}</p> <div className="pt-2"> <h4 className="font-semibold text-muted-foreground">Internal Notes:</h4> {currentAircraft.internalNotes ? ( <p className="whitespace-pre-wrap p-2 bg-muted/30 rounded-md text-xs">{currentAircraft.internalNotes}</p> ) : ( <p className="text-xs text-muted-foreground pl-2">N/A</p> )} </div> </div> )} </CardContent>
+          <CardContent> {isEditingAircraftInfo ? ( <Form {...aircraftInfoForm}> <form onSubmit={aircraftInfoForm.handleSubmit(onSubmitAircraftInfo)} className="space-y-3"> <p className="text-sm"><strong>Tail Number:</strong> {currentAircraft.tailNumber}</p> <p className="text-sm"><strong>Serial #:</strong> {currentAircraft.serialNumber || 'N/A'} <span className="text-xs text-muted-foreground">(Managed in Company Settings)</span></p> <FormField control={aircraftInfoForm.control} name="model" render={({ field }) => ( <FormItem> <FormLabel>Model</FormLabel> <FormControl><Input {...field} /></FormControl> <FormMessage /> </FormItem> )} /> <FormField control={aircraftInfoForm.control} name="aircraftYear" render={({ field }) => ( <FormItem> <FormLabel>Year</FormLabel> <FormControl><Input type="number" {...field} onChange={e => field.onChange(parseInt(e.target.value, 10))} /></FormControl> <FormMessage /> </FormItem> )} /> <FormField control={aircraftInfoForm.control} name="baseLocation" render={({ field }) => ( <FormItem> <FormLabel>Base Location</FormLabel> <FormControl><Input {...field} /></FormControl> <FormMessage /> </FormItem> )} />
+            <div className="pt-2 space-y-2">
+                <Button type="button" variant="outline" size="sm" onClick={() => setIsEngineModalOpen(true)}>Manage Engine Details ({currentAircraft.engineDetails?.length || 0})</Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => setIsPropellerModalOpen(true)}>Manage Propeller Details ({currentAircraft.propellerDetails?.length || 0})</Button>
+            </div>
+          <FormField control={aircraftInfoForm.control} name="primaryContactName" render={({ field }) => ( <FormItem> <FormLabel>Primary Contact Name</FormLabel> <FormControl><Input {...field} /></FormControl> <FormMessage /> </FormItem> )} /> <FormField control={aircraftInfoForm.control} name="primaryContactPhone" render={({ field }) => ( <FormItem> <FormLabel>Primary Contact Phone</FormLabel> <FormControl><Input type="tel" {...field} /></FormControl> <FormMessage /> </FormItem> )} /> <FormField control={aircraftInfoForm.control} name="primaryContactEmail" render={({ field }) => ( <FormItem> <FormLabel>Primary Contact Email</FormLabel> <FormControl><Input type="email" {...field} /></FormControl> <FormMessage /> </FormItem> )} /> <FormField control={aircraftInfoForm.control} name="internalNotes" render={({ field }) => ( <FormItem> <FormLabel>Internal Notes</FormLabel> <FormControl><Textarea {...field} rows={3} /></FormControl> <FormMessage /> </FormItem> )} /> </form> </Form> ) : ( <div className="space-y-1.5 text-sm"> <p><strong className="text-muted-foreground w-28 inline-block">Model:</strong> {currentAircraft.model}</p> <p><strong className="text-muted-foreground w-28 inline-block">Serial #:</strong> {currentAircraft.serialNumber || 'N/A'}</p> <p><strong className="text-muted-foreground w-28 inline-block">Year:</strong> {currentAircraft.aircraftYear || 'N/A'}</p> <p><strong className="text-muted-foreground w-28 inline-block">Base:</strong> {currentAircraft.baseLocation || 'N/A'}</p> <p><strong className="text-muted-foreground w-28 inline-block">Contact:</strong> {currentAircraft.primaryContactName || 'N/A'}</p> <p><strong className="text-muted-foreground w-28 inline-block">Phone:</strong> {currentAircraft.primaryContactPhone || 'N/A'}</p> <p><strong className="text-muted-foreground w-28 inline-block">Email:</strong> {currentAircraft.primaryContactEmail || 'N/A'}</p> <div className="pt-2"> <h4 className="font-semibold text-muted-foreground">Internal Notes:</h4> {currentAircraft.internalNotes ? ( <p className="whitespace-pre-wrap p-2 bg-muted/30 rounded-md text-xs">{currentAircraft.internalNotes}</p> ) : ( <p className="text-xs text-muted-foreground pl-2">N/A</p> )} </div> </div> )} </CardContent>
         </Card>
       </div>
 
@@ -972,3 +984,4 @@ export default function AircraftMaintenanceDetailPage() {
 
 
     
+
