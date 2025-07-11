@@ -16,7 +16,7 @@ import {z} from 'genkit';
 import { adminDb as db } from '@/lib/firebase-admin';
 import { fetchFleetAircraft } from './manage-fleet-flow';
 import { fetchCompanyProfile } from './manage-company-profile-flow'; // Import company profile
-import { fetchComponentTimesForAircraft } from './manage-component-times-flow'; // Import component times
+import { fetchComponentTimesForAircraft, type AircraftComponentTimes } from './manage-component-times-flow'; // Import component times
 import { format, parseISO, isValid, addDays, addMonths, addYears, endOfMonth } from 'date-fns';
 
 
@@ -69,7 +69,6 @@ export type SaveTaskInput = z.infer<typeof SaveTaskInputSchema>;
 
 const DeleteTaskInputSchema = z.object({
   taskId: z.string().describe("The ID of the maintenance task to delete."),
-  // aircraftId is not strictly needed for deletion if taskId is globally unique, but can be good for namespacing or validation
 });
 export type DeleteTaskInput = z.infer<typeof DeleteTaskInputSchema>;
 
@@ -268,92 +267,202 @@ const generateMaintenanceWorkOrderFlow = ai.defineFlow(
         const airframeTime = componentTimes?.['Airframe']?.time?.toFixed(1) || 'N/A';
         const airframeCycles = componentTimes?.['Airframe']?.cycles?.toLocaleString() || 'N/A';
         
-        // 3. Construct the HTML string
-        const status = "Opened"; // Default status for new work order
-        const statusColors = {
-            Opened: '#4A90E2', InProgress: '#F5A623', Completed: '#7ED321', 'Closed/Canceled': '#9CA3AF'
-        };
+        const workOrderNumber = `WO-${format(new Date(), 'yyyyMMdd')}-${aircraft.tailNumber || ''}`;
+        const issuedDate = format(new Date(), 'yyyy-MM-dd');
+        
+        // Find the furthest due date among selected tasks for the WO due date
+        const dueDates = selectedTasks
+            .map(task => {
+                if (task.trackType === 'One Time' && task.isDaysDueEnabled && task.daysDueValue && isValid(parseISO(task.daysDueValue))) {
+                    return parseISO(task.daysDueValue);
+                }
+                return null;
+            })
+            .filter((d): d is Date => d !== null);
 
+        const furthestDueDate = dueDates.length > 0 
+            ? new Date(Math.max.apply(null, dueDates.map(d => d.getTime()))) 
+            : null;
+
+        const tasksHtml = selectedTasks.map((task, index) => {
+             const intervalParts = [];
+             if (task.isHoursDueEnabled && task.hoursDue) intervalParts.push(`${task.hoursDue}h`);
+             if (task.isCyclesDueEnabled && task.cyclesDue) intervalParts.push(`${task.cyclesDue}c`);
+             if (task.isDaysDueEnabled && task.daysDueValue) {
+                if (task.trackType === 'Interval') {
+                    const intervalType = task.daysIntervalType?.charAt(0) || 'd';
+                    intervalParts.push(`${task.daysDueValue}${intervalType}`);
+                }
+             }
+             const interval = intervalParts.length > 0 ? intervalParts.join(' / ') : 'One-Time';
+             
+             let dueDateStr = 'N/A';
+             if(task.isDaysDueEnabled && task.daysDueValue && task.trackType === 'One Time' && isValid(parseISO(task.daysDueValue))) {
+                dueDateStr = format(parseISO(task.daysDueValue), 'yyyy-MM-dd');
+             }
+
+             const isOverdue = dueDateStr !== 'N/A' && isValid(parseISO(dueDateStr)) && parseISO(dueDateStr) < new Date();
+
+
+            return `
+            <tr>
+              <td>${index + 1}</td>
+              <td>${task.partNumber || '-'}<br/>${task.serialNumber || '-'}</td>
+              <td class="task-desc"><strong>${task.itemTitle}</strong><br/><small>${task.details || ''}</small></td>
+              <td>${interval}</td>
+              <td class="${isOverdue ? 'overdue' : ''}">${dueDateStr} ${isOverdue ? 'OVD' : ''}</td>
+              <td>Opened</td>
+            </tr>
+          `;
+        }).join('');
+
+        const status = "Opened"; 
+        const statusColors: { [key: string]: string } = { Opened: '#4A90E2', 'In Progress': '#F5A623', Completed: '#7ED321', 'Closed/Canceled': '#9CA3AF' };
+        const statusColor = statusColors[status as keyof typeof statusColors] || '#9CA3AF';
+
+        // 3. Construct the HTML string
         const workOrderHtml = `
             <!DOCTYPE html>
             <html lang="en">
             <head>
                 <meta charset="UTF-8">
+                <link rel="preconnect" href="https://fonts.googleapis.com">
+                <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+                <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Roboto:wght@400;700&display=swap" rel="stylesheet">
                 <style>
-                    body { font-family: 'Roboto', 'Inter', sans-serif; color: #333333; font-size: 10px; margin: 0;}
-                    .page { width: 100%; page-break-after: always; }
-                    .header { background-color: #0A2540; color: white; padding: 16px; display: flex; justify-content: space-between; align-items: center; border-radius: 6px 6px 0 0; }
-                    .header h1 { font-size: 24px; font-weight: 600; margin: 0; }
-                    .status-pill { padding: 4px 12px; border-radius: 9999px; font-weight: 600; color: white; background-color: ${statusColors[status as keyof typeof statusColors] || '#9CA3AF'}; }
-                    .sub-header { display: flex; justify-content: space-between; padding: 12px 16px; border: 1px solid #e5e7eb; border-top: none; }
-                    .info-section { display: flex; justify-content: space-between; padding: 12px 16px; border: 1px solid #e5e7eb; border-top: none; }
-                    .info-box { width: 48%; }
-                    .table-wrapper { padding: 16px; }
-                    table { width: 100%; border-collapse: collapse; margin-top: 16px; }
-                    th, td { border: 1px solid #e5e7eb; padding: 8px; text-align: left; vertical-align: top; }
-                    th { font-weight: 600; font-size: 11px; background-color: #f7f9fb; text-transform: uppercase; }
-                    tr:nth-child(even) { background-color: #f7f9fb; }
-                    .task-desc { white-space: pre-wrap; }
+                    @page { size: A4; margin: 20mm; }
+                    body { 
+                      font-family: 'Inter', 'Roboto', sans-serif; 
+                      color: #333333; 
+                      font-size: 10px; 
+                      margin: 0;
+                    }
+                    .page { width: 100%; }
+                    .pdf-header { 
+                      display: flex; 
+                      background-color: #0A2540; 
+                      color: white; 
+                      padding: 16px; 
+                      align-items: center; 
+                      border-radius: 6px 6px 0 0; 
+                    }
+                    .pdf-header .logo img { height: 48px; width: auto; }
+                    .pdf-header .title { flex: 1; text-align: center; }
+                    .pdf-header .title h1 { margin: 0; font-size: 20px; font-weight: 600; }
+                    .pdf-header .status { 
+                      padding: 4px 12px; 
+                      border-radius: 4px; 
+                      font-size: 12px; 
+                      font-weight: 600;
+                      color: white;
+                      background-color: ${statusColor};
+                    }
+                    .pdf-header .dates { text-align: right; font-size: 12px; line-height: 1.4; }
+                    .sub-header { 
+                      display: flex; 
+                      justify-content: space-between; 
+                      padding: 8px 16px; 
+                      border: 1px solid #e5e7eb; 
+                      border-top: none;
+                      font-size: 11px;
+                    }
+                    .info-section { 
+                      display: flex; 
+                      gap: 16px; 
+                      margin: 16px 0; 
+                    }
+                    .info-box { 
+                      flex: 1; 
+                      border: 1px solid #0A2540; 
+                      padding: 12px; 
+                      border-radius: 4px; 
+                    }
+                    .info-box h2 { 
+                      margin: 0 0 8px; 
+                      font-size: 14px; 
+                      font-weight: 600;
+                      color: #0A2540; 
+                    }
+                    .info-box p { margin: 0; font-size: 12px; line-height: 1.5; color: #333; }
+                    .tasks-table { 
+                      width: 100%; 
+                      border-collapse: collapse; 
+                      margin-top: 16px; 
+                      font-size: 10px;
+                      page-break-inside: auto;
+                    }
+                    .tasks-table th, .tasks-table td { 
+                      border: 1px solid #ccc; 
+                      padding: 4px 8px; 
+                      text-align: left; 
+                      vertical-align: top; 
+                    }
+                    .tasks-table th { font-weight: 600; font-size: 11px; background-color: #E5E7EB; text-transform: uppercase; }
+                    .tasks-table tr { page-break-inside: avoid; page-break-after: auto; }
+                    .tasks-table tbody tr:nth-child(even) { background-color: #F7F9FB; }
+                    .tasks-table tbody tr:nth-child(odd) { background-color: #FFFFFF; }
+                    .task-desc { white-space: pre-wrap; word-break: break-word; }
                     .overdue { color: #D0021B; font-weight: 600; }
-                    .footer { position: fixed; bottom: 0; width: 100%; text-align: center; }
-                    .sign-off-section { position: absolute; bottom: 40px; left: 16px; right: 16px; display: flex; justify-content: space-between; margin-top: 48px; padding-top: 24px; border-top: 1px solid #e5e7eb; }
-                    .signature-line { width: 30%; border-top: 1px solid #333333; padding-top: 8px; }
+                    .signoff-footer {
+                        margin-top: 48px;
+                        padding-top: 24px;
+                        border-top: 1px solid #e5e7eb;
+                        display: flex;
+                        justify-content: space-between;
+                        font-size: 11px;
+                        page-break-inside: avoid;
+                    }
+                    .sig-line {
+                        flex-basis: 30%;
+                        border-top: 1px solid #333;
+                        padding-top: 8px;
+                        text-align: center;
+                    }
                 </style>
             </head>
             <body>
                 <div class="page">
-                    <div class="header">
-                        <h1>Work Order</h1>
-                        <span class="status-pill">${status}</span>
-                    </div>
-                    <div class="sub-header">
-                        <div><strong>Aircraft:</strong> ${aircraft.tailNumber} / ${aircraft.model} / ${aircraft.serialNumber || 'N/A'}</div>
-                        <div><strong>A/C Times:</strong> ${airframeTime} hrs / ${airframeCycles} cyc</div>
-                        <div><strong>WO#:</strong> WO-${format(new Date(), 'yyyyMMdd')}-${aircraft.tailNumber || ''}</div>
-                    </div>
-                    <div class="info-section">
+                    <header class="pdf-header">
+                        <div class="logo">
+                          ${companyProfile?.logoUrl ? `<img src="${companyProfile.logoUrl}" alt="Company Logo">` : `<span>${companyProfile?.companyName || 'FlightOps360'}</span>`}
+                        </div>
+                        <div class="title">
+                            <h1>Work Order</h1>
+                            <span class="status">${status}</span>
+                        </div>
+                        <div class="dates">
+                            <div>In: ${issuedDate}</div>
+                            <div>Out: ${furthestDueDate ? format(furthestDueDate, 'yyyy-MM-dd') : 'N/A'}</div>
+                        </div>
+                    </header>
+                    <section class="sub-header">
+                        <div><strong>Aircraft:</strong> ${aircraft.tailNumber} / ${aircraft.model}</div>
+                        <div><strong>S/N:</strong> ${aircraft.serialNumber || 'N/A'}</div>
+                        <div><strong>Times:</strong> ${airframeTime} hrs / ${airframeCycles} cyc</div>
+                    </section>
+                    <section class="info-section">
                         <div class="info-box">
-                            <strong>Operator:</strong><br/>
-                            ${companyProfile?.companyName || 'N/A'}<br/>
-                            ${companyProfile?.companyAddress?.replace(/, /g, '<br/>') || ''}
+                          <h2>Company</h2>
+                          <p>${companyProfile?.companyName || 'N/A'}<br/>${(companyProfile?.companyAddress || '').replace(/\\n/g, '<br/>')}</p>
                         </div>
                         <div class="info-box">
-                            <strong>Shop:</strong><br/>
-                            ${'N/A'}<br/>
-                            <strong>Analyst:</strong> ${'N/A'}
+                           <h2>Service Center</h2>
+                           <p>N/A<br/>Analyst: N/A</p>
                         </div>
-                    </div>
-                    <div class="table-wrapper">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>SEQ</th>
-                                    <th>PN/SN</th>
-                                    <th style="width: 40%;">Description</th>
-                                    <th>Interval</th>
-                                    <th>Due</th>
-                                    <th>State</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${selectedTasks.map((task, index) => `
-                                    <tr>
-                                        <td>${index + 1}</td>
-                                        <td>${task.partNumber || ''}<br/>${task.serialNumber || ''}</td>
-                                        <td class="task-desc"><strong>${task.itemTitle}</strong><br/><small>${task.details || ''}</small></td>
-                                        <td>${task.isHoursDueEnabled ? `${task.hoursDue}h ` : ''}${task.isCyclesDueEnabled ? `${task.cyclesDue}c ` : ''}${task.isDaysDueEnabled ? `${task.daysDueValue}${task.daysIntervalType ? task.daysIntervalType.charAt(0) : 'd'}` : ''}</td>
-                                        <td>${task.daysDueValue && isValid(parseISO(task.daysDueValue)) ? format(parseISO(task.daysDueValue), 'yyyy-MM-dd') : 'N/A'}</td>
-                                        <td>Opened</td>
-                                    </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
-                    </div>
-                     <div class="sign-off-section">
-                        <div class="signature-line">Mechanic Signature</div>
-                        <div class="signature-line">Inspector Signature</div>
-                        <div class="signature-line">Date</div>
-                    </div>
+                    </section>
+                    <section>
+                      <table class="tasks-table">
+                          <thead>
+                            <tr><th>SEQ</th><th>PN/SN</th><th style="width: 40%;">Description</th><th>Interval</th><th>Due</th><th>State</th></tr>
+                          </thead>
+                          <tbody>${tasksHtml}</tbody>
+                      </table>
+                    </section>
+                    <footer class="signoff-footer">
+                        <div class="sig-line">Mechanic Signature</div>
+                        <div class="sig-line">Inspector Signature</div>
+                        <div class="sig-line">Date</div>
+                    </footer>
                 </div>
             </body>
             </html>
