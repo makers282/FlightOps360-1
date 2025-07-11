@@ -384,8 +384,8 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : "AI failed to estimate details.";
       toast({ title: "Estimation Error", description: errorMessage, variant: "destructive" });
-      setValue(`legs.${index}.flightTimeHours`, undefined);
-      setLegEstimates(prev => { const newEstimates = [...prev]; newEstimates[legIndex] = { error: errorMessage, estimatedForInputs: {origin: legData.origin.toUpperCase(), destination: legData.destination.toUpperCase(), aircraftModel: aircraftModelForFlow, knownCruiseSpeedKts: knownCruiseSpeedForFlow} } as LegEstimate; return newEstimates; });
+      setValue(`legs.${legIndex}.flightTimeHours`, undefined);
+      setLegEstimates(prev => { const newEstimates = [...prev]; newEstimates[legIndex] = { ...newEstimates[legIndex]!, error: errorMessage, estimatedForInputs: {origin: legData.origin.toUpperCase(), destination: legData.destination.toUpperCase(), aircraftModel: aircraftModelForFlow, knownCruiseSpeedKts: knownCruiseSpeedForFlow} } as LegEstimate; return newEstimates; });
     } finally {
       setEstimatingLegIndex(null);
     }
