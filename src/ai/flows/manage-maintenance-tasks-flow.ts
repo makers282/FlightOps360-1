@@ -1,4 +1,5 @@
 
+
 'use server';
 /**
  * @fileOverview Genkit flows for managing aircraft maintenance tasks using Firestore.
@@ -75,6 +76,10 @@ export type DeleteTaskInput = z.infer<typeof DeleteTaskInputSchema>;
 const GenerateWorkOrderInputSchema = z.object({
     aircraftId: z.string(),
     taskIds: z.array(z.string()),
+    workOrderNumber: z.string(),
+    shopName: z.string(),
+    dateDue: z.string().optional(),
+    notes: z.string().optional(),
 });
 export type GenerateWorkOrderInput = z.infer<typeof GenerateWorkOrderInputSchema>;
 
@@ -248,7 +253,7 @@ const generateMaintenanceWorkOrderFlow = ai.defineFlow(
         inputSchema: GenerateWorkOrderInputSchema,
         outputSchema: z.string(), // Returns a single HTML string
     },
-    async ({ aircraftId, taskIds }) => {
+    async ({ aircraftId, taskIds, workOrderNumber, shopName, dateDue, notes }) => {
         // 1. Fetch all necessary data concurrently
         const [allAircraft, allTasks, companyProfile, componentTimes] = await Promise.all([
             fetchFleetAircraft(),
@@ -267,41 +272,26 @@ const generateMaintenanceWorkOrderFlow = ai.defineFlow(
         const airframeTime = componentTimes?.['Airframe']?.time?.toFixed(1) || 'N/A';
         const airframeCycles = componentTimes?.['Airframe']?.cycles?.toLocaleString() || 'N/A';
         
-        const workOrderNumber = `WO-${format(new Date(), 'yyyyMMdd')}-${aircraft.tailNumber || ''}`;
         const issuedDate = format(new Date(), 'yyyy-MM-dd');
-        
-        const dueDates = selectedTasks
-            .map(task => {
-                if (task.trackType === 'One Time' && task.isDaysDueEnabled && task.daysDueValue && isValid(parseISO(task.daysDueValue))) {
-                    return parseISO(task.daysDueValue);
-                }
-                return null;
-            })
-            .filter((d): d is Date => d !== null);
-
-        const furthestDueDate = dueDates.length > 0 
-            ? new Date(Math.max.apply(null, dueDates.map(d => d.getTime()))) 
-            : null;
 
         const tasksHtml = selectedTasks.map((task, index) => {
-             const intervalParts = [];
-             if (task.isHoursDueEnabled && task.hoursDue) intervalParts.push(`${task.hoursDue}h`);
-             if (task.isCyclesDueEnabled && task.cyclesDue) intervalParts.push(`${task.cyclesDue}c`);
-             if (task.isDaysDueEnabled && task.daysDueValue) {
-                if (task.trackType === 'Interval') {
-                    const intervalType = task.daysIntervalType?.charAt(0) || 'd';
-                    intervalParts.push(`${task.daysDueValue}${intervalType}`);
-                }
-             }
-             const interval = intervalParts.length > 0 ? intervalParts.join(' / ') : 'One-Time';
+            const intervalParts = [];
+            if (task.isHoursDueEnabled && task.hoursDue) intervalParts.push(`${task.hoursDue}h`);
+            if (task.isCyclesDueEnabled && task.cyclesDue) intervalParts.push(`${task.cyclesDue}c`);
+            if (task.isDaysDueEnabled && task.daysDueValue) {
+               if (task.trackType === 'Interval') {
+                   const intervalType = task.daysIntervalType?.charAt(0) || 'd';
+                   intervalParts.push(`${task.daysDueValue}${intervalType}`);
+               }
+            }
+            const interval = intervalParts.length > 0 ? intervalParts.join(' / ') : 'One-Time';
              
-             let dueDateStr = 'N/A';
-             if(task.isDaysDueEnabled && task.daysDueValue && task.trackType === 'One Time' && isValid(parseISO(task.daysDueValue))) {
-                dueDateStr = format(parseISO(task.daysDueValue), 'yyyy-MM-dd');
-             }
+            let dueDateStr = 'N/A';
+            if(task.isDaysDueEnabled && task.daysDueValue && task.trackType === 'One Time' && isValid(parseISO(task.daysDueValue))) {
+               dueDateStr = format(parseISO(task.daysDueValue), 'yyyy-MM-dd');
+            }
 
-             const isOverdue = dueDateStr !== 'N/A' && isValid(parseISO(dueDateStr)) && parseISO(dueDateStr) < new Date();
-
+            const isOverdue = dueDateStr !== 'N/A' && isValid(parseISO(dueDateStr)) && parseISO(dueDateStr) < new Date();
 
             return `
             <tr>
@@ -345,18 +335,20 @@ const generateMaintenanceWorkOrderFlow = ai.defineFlow(
                       align-items: center; 
                       border-radius: 6px 6px 0 0; 
                     }
-                    .pdf-header .logo img { height: 48px; width: auto; }
+                    .pdf-header .logo img { height: 48px; width: auto; max-width: 200px; }
                     .pdf-header .title { flex: 1; text-align: center; }
                     .pdf-header .title h1 { margin: 0; font-size: 20px; font-weight: 600; }
                     .pdf-header .status { 
+                      display: inline-block;
                       padding: 4px 12px; 
                       border-radius: 4px; 
                       font-size: 12px; 
                       font-weight: 600;
                       color: white;
                       background-color: ${statusColor};
+                      margin-top: 4px;
                     }
-                    .pdf-header .dates { text-align: right; font-size: 12px; line-height: 1.4; }
+                    .pdf-header .dates { text-align: right; font-size: 12px; line-height: 1.4; min-width: 100px; }
                     .sub-header { 
                       display: flex; 
                       justify-content: space-between; 
@@ -364,6 +356,7 @@ const generateMaintenanceWorkOrderFlow = ai.defineFlow(
                       border: 1px solid #e5e7eb; 
                       border-top: none;
                       font-size: 11px;
+                      background: #f9fafb;
                     }
                     .info-section { 
                       display: flex; 
@@ -402,19 +395,16 @@ const generateMaintenanceWorkOrderFlow = ai.defineFlow(
                     .tasks-table tbody tr:nth-child(odd) { background-color: #FFFFFF; }
                     .task-desc { white-space: pre-wrap; word-break: break-word; }
                     .overdue { color: #D0021B; font-weight: 600; }
+                    .footer-container { margin-top: 48px; padding-top: 24px; border-top: 1px solid #e5e7eb; page-break-inside: avoid; }
                     .signoff-footer {
-                        margin-top: 48px;
-                        padding-top: 24px;
-                        border-top: 1px solid #e5e7eb;
                         display: flex;
                         justify-content: space-between;
                         font-size: 11px;
-                        page-break-inside: avoid;
                     }
                     .sig-line {
                         flex-basis: 30%;
+                        padding-top: 40px; /* Space for signature */
                         border-top: 1px solid #333;
-                        padding-top: 8px;
                         text-align: center;
                     }
                 </style>
@@ -423,15 +413,15 @@ const generateMaintenanceWorkOrderFlow = ai.defineFlow(
                 <div class="page">
                     <header class="pdf-header">
                         <div class="logo">
-                          ${companyProfile?.logoUrl ? `<img src="${companyProfile.logoUrl}" alt="Company Logo">` : `<span>${companyProfile?.companyName || 'FlightOps360'}</span>`}
+                          ${companyProfile?.logoUrl ? `<img src="${companyProfile.logoUrl}" alt="Company Logo">` : `<span style="font-size: 20px; font-weight: bold;">${companyProfile?.companyName || 'FlightOps360'}</span>`}
                         </div>
                         <div class="title">
                             <h1>Work Order</h1>
-                            <span class="status">${status}</span>
+                            <span class="status">${workOrderNumber}</span>
                         </div>
                         <div class="dates">
-                            <div>In: ${issuedDate}</div>
-                            <div>Out: ${furthestDueDate ? format(furthestDueDate, 'yyyy-MM-dd') : 'N/A'}</div>
+                            <div><strong>In:</strong> ${issuedDate}</div>
+                            <div><strong>Out:</strong> ${dateDue || 'N/A'}</div>
                         </div>
                     </header>
                     <section class="sub-header">
@@ -442,11 +432,11 @@ const generateMaintenanceWorkOrderFlow = ai.defineFlow(
                     <section class="info-section">
                         <div class="info-box">
                           <h2>Company</h2>
-                          <p>${companyProfile?.companyName || 'N/A'}<br/>${(companyProfile?.companyAddress || '').replace(/\\n/g, '<br/>')}</p>
+                          <p>${(companyProfile?.companyName || 'N/A').replace(/\\n/g, '<br/>')}<br/>${(companyProfile?.companyAddress || '').replace(/\\n/g, '<br/>')}</p>
                         </div>
                         <div class="info-box">
                            <h2>Service Center</h2>
-                           <p>N/A<br/>Analyst: N/A</p>
+                           <p>${shopName}<br/>${(notes || '').replace(/\\n/g, '<br/>')}</p>
                         </div>
                     </section>
                     <section>
@@ -457,11 +447,13 @@ const generateMaintenanceWorkOrderFlow = ai.defineFlow(
                           <tbody>${tasksHtml}</tbody>
                       </table>
                     </section>
-                    <footer class="signoff-footer">
-                        <div class="sig-line">Mechanic Signature</div>
-                        <div class="sig-line">Inspector Signature</div>
-                        <div class="sig-line">Date</div>
-                    </footer>
+                    <div class="footer-container">
+                        <footer class="signoff-footer">
+                            <div class="sig-line">Mechanic Signature</div>
+                            <div class="sig-line">Inspector Signature</div>
+                            <div class="sig-line">Date</div>
+                        </footer>
+                    </div>
                 </div>
             </body>
             </html>

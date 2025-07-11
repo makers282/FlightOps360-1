@@ -26,6 +26,7 @@ import { AddMaintenanceTaskDialogContent, type MaintenanceTaskFormData, defaultM
 import { AddEditAircraftDiscrepancyModal } from './components/add-edit-aircraft-discrepancy-modal';
 import { SignOffDiscrepancyModal, type SignOffFormData } from './components/sign-off-discrepancy-modal';
 import { AddEditMelItemModal } from './components/add-edit-mel-item-modal';
+import { GenerateWorkOrderModal, type WorkOrderFormData } from './components/generate-work-order-modal';
 import { Dialog } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -38,7 +39,7 @@ import { useToast } from '@/hooks/use-toast';
 import { fetchFleetAircraft, saveFleetAircraft } from '@/ai/flows/manage-fleet-flow';
 import type { FleetAircraft, SaveFleetAircraftInput, EngineDetail, PropellerDetail } from '@/ai/schemas/fleet-aircraft-schemas';
 import { fetchMaintenanceTasksForAircraft, saveMaintenanceTask, deleteMaintenanceTask, generateMaintenanceWorkOrder, type MaintenanceTask as FlowMaintenanceTask } from '@/ai/flows/manage-maintenance-tasks-flow';
-import { fetchComponentTimesForAircraft, saveComponentTimesForAircraft, type AircraftComponentTimes } from '@/ai/flows/manage-component-times-flow';
+import { fetchComponentTimesForAircraft, type AircraftComponentTimes } from '@/ai/flows/manage-component-times-flow';
 import { fetchCompanyProfile, type CompanyProfile } from '@/ai/flows/manage-company-profile-flow';
 import { PageHeader } from '@/components/page-header';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -334,6 +335,7 @@ export default function AircraftMaintenanceDetailPage() {
   const [isGeneratingReport, startReportGenerationTransition] = useTransition();
   const [isEngineModalOpen, setIsEngineModalOpen] = useState(false);
   const [isPropellerModalOpen, setIsPropellerModalOpen] = useState(false);
+  const [isWorkOrderModalOpen, setIsWorkOrderModalOpen] = useState(false);
 
   const aircraftInfoForm = useForm<AircraftInfoEditFormData>({
     resolver: zodResolver(aircraftInfoEditSchema),
@@ -666,13 +668,17 @@ export default function AircraftMaintenanceDetailPage() {
 
   const handleSelectAllTasks = (checked: boolean) => { if (checked) { setSelectedTaskIds(displayedTasks.map(task => task.id)); } else { setSelectedTaskIds([]); } };
   
-  const handleGenerateWorkOrder = () => {
-    if (!currentAircraft) {
-      toast({ title: 'Error', description: 'Aircraft data not loaded.', variant: 'destructive' });
+  const handleOpenWorkOrderModal = () => {
+    if (selectedTaskIds.length === 0) {
+      toast({ title: 'No Tasks Selected', description: 'Please select at least one maintenance task to generate a work order.', variant: 'default' });
       return;
     }
-    if (selectedTaskIds.length === 0) {
-      toast({ title: 'No Tasks Selected', description: 'Please select at least one maintenance task.', variant: 'info' });
+    setIsWorkOrderModalOpen(true);
+  };
+
+  const handleGenerateWorkOrder = (workOrderFormData: WorkOrderFormData) => {
+    if (!currentAircraft) {
+      toast({ title: 'Error', description: 'Aircraft data not loaded.', variant: 'destructive' });
       return;
     }
     startReportGenerationTransition(async () => {
@@ -680,14 +686,25 @@ export default function AircraftMaintenanceDetailPage() {
         const htmlContent = await generateMaintenanceWorkOrder({
           aircraftId: currentAircraft.id,
           taskIds: selectedTaskIds,
+          ...workOrderFormData,
+          dateDue: workOrderFormData.dateDue ? format(workOrderFormData.dateDue, 'yyyy-MM-dd') : undefined,
         });
+
+        // Open the HTML in a new tab for printing
         const blob = new Blob([htmlContent], { type: 'text/html' });
         const url = URL.createObjectURL(blob);
-        window.open(url, '_blank');
-        URL.revokeObjectURL(url);
+        const newWindow = window.open(url, '_blank');
+        if (newWindow) {
+          newWindow.onload = () => {
+            URL.revokeObjectURL(url);
+          };
+        } else {
+          toast({ title: "Popup Blocked", description: "Please allow popups for this site to view the work order.", variant: "destructive" });
+        }
+        setIsWorkOrderModalOpen(false); // Close modal on success
       } catch (error) {
         console.error('Error generating work order:', error);
-        toast({ title: 'Error Generating Work Order', description: (error instanceof Error ? error.message : 'An unknown error occurred.'), variant: 'destructive' });
+        toast({ title: 'Error Generating Work Order', description: (error instanceof Error ? error.message : 'An unknown error occurred.'), variant: "destructive" });
       }
     });
   };
@@ -714,7 +731,7 @@ export default function AircraftMaintenanceDetailPage() {
         actions={
           <div className="flex gap-2">
             <Button asChild variant="outline"><span><Link href="/aircraft/currency"><ArrowLeft className="mr-2 h-4 w-4" /> Back to Overview</Link></span></Button>
-            <Button onClick={handleGenerateWorkOrder} disabled={selectedTaskIds.length === 0 || isGeneratingReport}> {isGeneratingReport ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Printer className="mr-2 h-4 w-4" />} Generate Work Order ({selectedTaskIds.length}) </Button>
+            <Button onClick={handleOpenWorkOrderModal} disabled={selectedTaskIds.length === 0 || isGeneratingReport}> {isGeneratingReport ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Printer className="mr-2 h-4 w-4" />} Generate Work Order ({selectedTaskIds.length}) </Button>
             <Button onClick={handleOpenAddTaskModal}><PlusCircle className="mr-2 h-4 w-4" /> Add New Task</Button>
           </div>
         }
@@ -739,6 +756,14 @@ export default function AircraftMaintenanceDetailPage() {
           />
         )}
       </Dialog>
+      
+      <GenerateWorkOrderModal
+        isOpen={isWorkOrderModalOpen}
+        setIsOpen={setIsWorkOrderModalOpen}
+        onGenerate={handleGenerateWorkOrder}
+        isGenerating={isGeneratingReport}
+        aircraftTailNumber={currentAircraft.tailNumber}
+      />
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         <Card className="shadow-lg lg:col-span-2">
@@ -984,4 +1009,5 @@ export default function AircraftMaintenanceDetailPage() {
 
 
     
+
 
