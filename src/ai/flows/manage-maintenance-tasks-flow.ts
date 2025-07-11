@@ -18,7 +18,7 @@ import { adminDb as db } from '@/lib/firebase-admin';
 import { fetchFleetAircraft } from './manage-fleet-flow';
 import { fetchCompanyProfile } from './manage-company-profile-flow'; // Import company profile
 import { fetchComponentTimesForAircraft, type AircraftComponentTimes } from './manage-component-times-flow'; // Import component times
-import { format, parseISO, isValid, addDays, addMonths, addYears, endOfMonth } from 'date-fns';
+import { format, parseISO, isValid, addDays, addMonths, addYears, endOfMonth, differenceInCalendarDays } from 'date-fns';
 
 
 // This schema should align closely with MaintenanceTaskFormData from the modal,
@@ -268,39 +268,64 @@ const generateMaintenanceWorkOrderFlow = ai.defineFlow(
 
         const selectedTasks = allTasks.filter(task => taskIds.includes(task.id));
         if (selectedTasks.length === 0) return "<p>No tasks selected or found for work order.</p>";
-        
-        const airframeTime = componentTimes?.['Airframe']?.time?.toFixed(1) || 'N/A';
-        const airframeCycles = componentTimes?.['Airframe']?.cycles?.toLocaleString() || 'N/A';
-        
+
         const issuedDate = format(new Date(), 'yyyy-MM-dd');
+        
+        let subHeaderTimes = `<strong>A/F TT:</strong> ${componentTimes?.['Airframe']?.time?.toFixed(1) || 'N/A'} | <strong>A/F TC:</strong> ${componentTimes?.['Airframe']?.cycles?.toLocaleString() || 'N/A'}`;
+        (aircraft.engineDetails || []).forEach((engine, index) => {
+            const engineName = `Engine ${index + 1}`;
+            subHeaderTimes += ` | <strong>${engineName} TT:</strong> ${componentTimes?.[engineName]?.time?.toFixed(1) || 'N/A'} | <strong>TC:</strong> ${componentTimes?.[engineName]?.cycles?.toLocaleString() || 'N/A'}`;
+        });
+        (aircraft.propellerDetails || []).forEach((prop, index) => {
+            const propName = `Propeller ${index + 1}`;
+            subHeaderTimes += ` | <strong>${propName} TT:</strong> ${componentTimes?.[propName]?.time?.toFixed(1) || 'N/A'} | <strong>TC:</strong> ${componentTimes?.[propName]?.cycles?.toLocaleString() || 'N/A'}`;
+        });
 
         const tasksHtml = selectedTasks.map((task, index) => {
             const intervalParts = [];
             if (task.isHoursDueEnabled && task.hoursDue) intervalParts.push(`${task.hoursDue}h`);
             if (task.isCyclesDueEnabled && task.cyclesDue) intervalParts.push(`${task.cyclesDue}c`);
-            if (task.isDaysDueEnabled && task.daysDueValue) {
-               if (task.trackType === 'Interval') {
-                   const intervalType = task.daysIntervalType?.charAt(0) || 'd';
-                   intervalParts.push(`${task.daysDueValue}${intervalType}`);
-               }
+            if (task.isDaysDueEnabled && task.daysDueValue && task.trackType === 'Interval') {
+                const intervalType = task.daysIntervalType?.charAt(0) || 'd';
+                intervalParts.push(`${task.daysDueValue}${intervalType}`);
             }
             const interval = intervalParts.length > 0 ? intervalParts.join(' / ') : 'One-Time';
-             
+
             let dueDateStr = 'N/A';
-            if(task.isDaysDueEnabled && task.daysDueValue && task.trackType === 'One Time' && isValid(parseISO(task.daysDueValue))) {
+            if (task.isDaysDueEnabled && task.daysDueValue && task.trackType === 'One Time' && isValid(parseISO(task.daysDueValue))) {
                dueDateStr = format(parseISO(task.daysDueValue), 'yyyy-MM-dd');
+            } else if (task.isDaysDueEnabled && task.daysDueValue && task.trackType === 'Interval' && task.lastCompletedDate) {
+                const lastDate = parseISO(task.lastCompletedDate);
+                const intervalValue = Number(task.daysDueValue);
+                if (isValid(lastDate) && !isNaN(intervalValue)) {
+                    let nextDueDate;
+                    switch(task.daysIntervalType) {
+                        case 'days': nextDueDate = addDays(lastDate, intervalValue); break;
+                        case 'months_eom': nextDueDate = endOfMonth(addMonths(lastDate, intervalValue)); break;
+                        case 'months_specific_day': nextDueDate = addMonths(lastDate, intervalValue); break;
+                        case 'years_specific_day': nextDueDate = addYears(lastDate, intervalValue); break;
+                        default: nextDueDate = new Date();
+                    }
+                    dueDateStr = format(nextDueDate, 'yyyy-MM-dd');
+                }
+            } else if (task.isHoursDueEnabled && task.hoursDue) {
+                const lastHours = task.lastCompletedHours || 0;
+                dueDateStr = `${(lastHours + task.hoursDue).toLocaleString()}h`;
+            } else if (task.isCyclesDueEnabled && task.cyclesDue) {
+                const lastCycles = task.lastCompletedCycles || 0;
+                 dueDateStr = `${(lastCycles + task.cyclesDue).toLocaleString()}c`;
             }
 
-            const isOverdue = dueDateStr !== 'N/A' && isValid(parseISO(dueDateStr)) && parseISO(dueDateStr) < new Date();
+            const isOverdue = task.isDaysDueEnabled && dueDateStr !== 'N/A' && isValid(parseISO(dueDateStr)) && differenceInCalendarDays(parseISO(dueDateStr), new Date()) < 0;
 
             return `
             <tr>
-              <td>${index + 1}</td>
+              <td>${task.referenceNumber || '-'}</td>
               <td>${task.partNumber || '-'}<br/>${task.serialNumber || '-'}</td>
               <td class="task-desc"><strong>${task.itemTitle}</strong><br/><small>${task.details || ''}</small></td>
               <td>${interval}</td>
               <td class="${isOverdue ? 'overdue' : ''}">${dueDateStr} ${isOverdue ? 'OVD' : ''}</td>
-              <td>Opened</td>
+              <td class="tech-initials"></td>
             </tr>
           `;
         }).join('');
@@ -317,96 +342,35 @@ const generateMaintenanceWorkOrderFlow = ai.defineFlow(
                 <meta charset="UTF-8">
                 <link rel="preconnect" href="https://fonts.googleapis.com">
                 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-                <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+                <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Roboto:wght@400;700&display=swap" rel="stylesheet">
                 <style>
-                    @page { size: A4; margin: 20mm; }
-                    body { 
-                      font-family: 'Inter', 'Roboto', sans-serif; 
-                      color: #333333; 
-                      font-size: 10px; 
-                      margin: 0;
-                    }
+                    @page { size: A4; margin: 15mm; }
+                    body { font-family: 'Inter', 'Roboto', sans-serif; color: #333; font-size: 9px; line-height: 1.4; }
                     .page { width: 100%; }
-                    .pdf-header { 
-                      display: flex; 
-                      background-color: #0A2540; 
-                      color: white; 
-                      padding: 16px; 
-                      align-items: center; 
-                      border-radius: 6px 6px 0 0; 
-                    }
-                    .pdf-header .logo img { height: 48px; width: auto; max-width: 200px; }
+                    .pdf-header { display: flex; background-color: #0A2540; color: white; padding: 12px; align-items: center; border-radius: 6px 6px 0 0; }
+                    .pdf-header .logo img { height: 40px; width: auto; max-width: 180px; }
                     .pdf-header .title { flex: 1; text-align: center; }
                     .pdf-header .title h1 { margin: 0; font-size: 20px; font-weight: 600; }
-                    .pdf-header .status { 
-                      display: inline-block;
-                      padding: 4px 12px; 
-                      border-radius: 4px; 
-                      font-size: 12px; 
-                      font-weight: 600;
-                      color: white;
-                      background-color: ${statusColor};
-                      margin-top: 4px;
-                    }
-                    .pdf-header .dates { text-align: right; font-size: 12px; line-height: 1.4; min-width: 100px; }
-                    .sub-header { 
-                      display: flex; 
-                      justify-content: space-between; 
-                      padding: 8px 16px; 
-                      border: 1px solid #e5e7eb; 
-                      border-top: none;
-                      font-size: 11px;
-                      background: #f9fafb;
-                    }
-                    .info-section { 
-                      display: flex; 
-                      gap: 16px; 
-                      margin: 16px 0; 
-                    }
-                    .info-box { 
-                      flex: 1; 
-                      border: 1px solid #0A2540; 
-                      padding: 12px; 
-                      border-radius: 4px; 
-                    }
-                    .info-box h2 { 
-                      margin: 0 0 8px; 
-                      font-size: 14px; 
-                      font-weight: 600;
-                      color: #0A2540; 
-                    }
-                    .info-box p { margin: 0; font-size: 12px; line-height: 1.5; color: #333; }
-                    .tasks-table { 
-                      width: 100%; 
-                      border-collapse: collapse; 
-                      margin-top: 16px; 
-                      font-size: 10px;
-                      page-break-inside: auto;
-                    }
-                    .tasks-table th, .tasks-table td { 
-                      border: 1px solid #ccc; 
-                      padding: 4px 8px; 
-                      text-align: left; 
-                      vertical-align: top; 
-                    }
-                    .tasks-table th { font-weight: 600; font-size: 11px; background-color: #E5E7EB; text-transform: uppercase; }
+                    .pdf-header .status { display: inline-block; padding: 4px 12px; border-radius: 4px; font-size: 11px; font-weight: 600; color: white; background-color: ${statusColor}; margin-top: 4px; }
+                    .pdf-header .dates { text-align: right; font-size: 11px; line-height: 1.4; min-width: 100px; }
+                    .sub-header { display: flex; justify-content: space-between; padding: 6px 12px; border: 1px solid #e5e7eb; border-top: none; font-size: 9px; background: #f9fafb; flex-wrap: wrap; gap: 8px; }
+                    .info-section { display: flex; gap: 16px; margin: 12px 0; }
+                    .info-box { flex: 1; border: 1px solid #0A2540; padding: 10px; border-radius: 4px; }
+                    .info-box h2 { margin: 0 0 6px; font-size: 12px; font-weight: 600; color: #0A2540; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; }
+                    .info-box p { margin: 0; font-size: 10px; color: #333; white-space: pre-wrap; }
+                    .tasks-table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 9px; page-break-inside: auto; }
+                    .tasks-table th, .tasks-table td { border: 1px solid #ccc; padding: 4px 6px; text-align: left; vertical-align: top; }
+                    .tasks-table th { font-weight: 600; font-size: 10px; background-color: #E5E7EB; text-transform: uppercase; }
                     .tasks-table tr { page-break-inside: avoid; page-break-after: auto; }
                     .tasks-table tbody tr:nth-child(even) { background-color: #F7F9FB; }
                     .tasks-table tbody tr:nth-child(odd) { background-color: #FFFFFF; }
                     .task-desc { white-space: pre-wrap; word-break: break-word; }
+                    .task-desc small { color: #555; }
                     .overdue { color: #D0021B; font-weight: 600; }
-                    .footer-container { margin-top: 48px; padding-top: 24px; border-top: 1px solid #e5e7eb; page-break-inside: avoid; }
-                    .signoff-footer {
-                        display: flex;
-                        justify-content: space-between;
-                        font-size: 11px;
-                    }
-                    .sig-line {
-                        flex-basis: 30%;
-                        padding-top: 40px; /* Space for signature */
-                        border-top: 1px solid #333;
-                        text-align: center;
-                    }
+                    .tech-initials { width: 80px; }
+                    .footer-container { margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e7eb; page-break-inside: avoid; }
+                    .signoff-footer { display: flex; justify-content: space-between; font-size: 10px; gap: 20px; }
+                    .sig-line { flex-basis: 30%; padding-top: 30px; border-top: 1px solid #333; text-align: center; }
                 </style>
             </head>
             <body>
@@ -425,9 +389,8 @@ const generateMaintenanceWorkOrderFlow = ai.defineFlow(
                         </div>
                     </header>
                     <section class="sub-header">
-                        <div><strong>Aircraft:</strong> ${aircraft.tailNumber} / ${aircraft.model}</div>
-                        <div><strong>S/N:</strong> ${aircraft.serialNumber || 'N/A'}</div>
-                        <div><strong>Times:</strong> ${airframeTime} hrs / ${airframeCycles} cyc</div>
+                       <div><strong>A/C:</strong> ${aircraft.tailNumber} / ${aircraft.model} | <strong>S/N:</strong> ${aircraft.serialNumber || 'N/A'}</div>
+                       <div>${subHeaderTimes}</div>
                     </section>
                     <section class="info-section">
                         <div class="info-box">
@@ -436,13 +399,13 @@ const generateMaintenanceWorkOrderFlow = ai.defineFlow(
                         </div>
                         <div class="info-box">
                            <h2>Service Center</h2>
-                           <p>${shopName}<br/>${(notes || '').replace(/\\n/g, '<br/>')}</p>
+                           <p><strong>${shopName}</strong><br/>${(notes || '').replace(/\\n/g, '<br/>')}</p>
                         </div>
                     </section>
                     <section>
                       <table class="tasks-table">
                           <thead>
-                            <tr><th>SEQ</th><th>PN/SN</th><th style="width: 40%;">Description</th><th>Interval</th><th>Due</th><th>State</th></tr>
+                            <tr><th>REF #</th><th>PN/SN</th><th style="width: 45%;">Description</th><th>Interval</th><th>Due</th><th class="tech-initials">Tech Initials</th></tr>
                           </thead>
                           <tbody>${tasksHtml}</tbody>
                       </table>
@@ -462,3 +425,4 @@ const generateMaintenanceWorkOrderFlow = ai.defineFlow(
         return workOrderHtml;
     }
 );
+
