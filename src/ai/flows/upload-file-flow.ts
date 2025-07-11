@@ -31,14 +31,15 @@ export const uploadFile = ai.defineFlow(
         },
       });
 
-      const [url] = await fileRef.getSignedUrl({
-        action: 'read',
-        expires: '03-09-2491', // A long time in the future
-      });
+      // Make the file public to get a permanent URL
+      await fileRef.makePublic();
+
+      // Get the permanent public URL
+      const publicUrl = fileRef.publicUrl();
       
-      console.log(`[UploadFile Flow] Successfully uploaded. Public URL: ${url}`);
+      console.log(`[UploadFile Flow] Successfully uploaded. Public URL: ${publicUrl}`);
       return {
-        downloadUrl: url,
+        downloadUrl: publicUrl,
       };
 
     } catch (error) {
