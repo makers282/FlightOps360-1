@@ -184,17 +184,19 @@ const uploadAircraftDocumentFlow = ai.defineFlow(
         try {
             await fileRef.save(buffer, {
                 metadata: {
-                    contentType,
+                    contentType: contentType,
+                    cacheControl: 'public, max-age=31536000', // Cache for 1 year
                 },
             });
 
-            const [url] = await fileRef.getSignedUrl({
-                action: 'read',
-                expires: '03-09-2491', // A long time in the future
-            });
+            // Make the file public to get a permanent URL
+            await fileRef.makePublic();
+
+            // Get the permanent public URL
+            const publicUrl = fileRef.publicUrl();
 
             return {
-                downloadUrl: url,
+                downloadUrl: publicUrl,
             };
         } catch (error) {
             console.error('File upload process error:', error);
