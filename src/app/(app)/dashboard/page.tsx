@@ -79,10 +79,11 @@ export default async function DashboardPage() {
     }));
 
 
-    const currentTrips = updatedTrips.filter(trip => trip.status === 'Released' || trip.status === 'Awaiting Closeout');
-    const upcomingTrips = updatedTrips.filter(trip => { // Use updatedTrips here as well to avoid re-showing a closed trip
+    const currentTrips = updatedTrips.filter(trip => trip.status === 'Released' || trip.status === 'Awaiting Closeout' || trip.status === 'Confirmed' || trip.status === 'Diverted');
+
+    const upcomingTrips = updatedTrips.filter(trip => {
         const departureTime = trip.legs?.[0]?.departureDateTime ? parseISO(trip.legs[0].departureDateTime) : null;
-        return departureTime && departureTime > now && (trip.status === 'Scheduled' || trip.status === 'Confirmed' || trip.status === 'Released');
+        return departureTime && departureTime > now && trip.status === 'Scheduled';
     }).map(trip => {
       const aircraftLabel = fleet.find(ac => ac.id === trip.aircraftId)?.tailNumber || trip.aircraftId;
       return {...trip, aircraftLabel };
