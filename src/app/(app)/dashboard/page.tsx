@@ -82,8 +82,11 @@ export default async function DashboardPage() {
     const currentTrips = updatedTrips.filter(trip => trip.status === 'Released' || trip.status === 'Awaiting Closeout');
     const upcomingTrips = updatedTrips.filter(trip => { // Use updatedTrips here as well to avoid re-showing a closed trip
         const departureTime = trip.legs?.[0]?.departureDateTime ? parseISO(trip.legs[0].departureDateTime) : null;
-        return departureTime && departureTime > now && trip.status !== 'Completed' && trip.status !== 'Cancelled';
-    }).map(trip => ({...trip, aircraftLabel: fleet.find(ac => ac.id === trip.aircraftId)?.tailNumber || trip.aircraftId }));
+        return departureTime && departureTime > now && (trip.status === 'Scheduled' || trip.status === 'Confirmed' || trip.status === 'Released');
+    }).map(trip => {
+      const aircraftLabel = fleet.find(ac => ac.id === trip.aircraftId)?.tailNumber || trip.aircraftId;
+      return {...trip, aircraftLabel };
+    });
 
 
     const pendingQuotesList = quotes.filter(q => ["Draft", "Sent"].includes(q.status));
