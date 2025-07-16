@@ -95,6 +95,17 @@ export default async function DashboardPage() {
             statusMap.set(ac.id, { label: "Info", variant: "outline", details: "Not Tracked" });
             continue;
         }
+
+        const activeBlockOut = ac.blockOuts?.find(bo => {
+            const startDate = parseISO(bo.startDate);
+            const endDate = parseISO(bo.endDate);
+            return isValid(startDate) && isValid(endDate) && now >= startDate && now <= endDate;
+        });
+
+        if (activeBlockOut) {
+            statusMap.set(ac.id, { label: "Maintenance", variant: "warning", details: "Blocked Out Until " + format(parseISO(activeBlockOut.endDate), 'PPP') });
+            continue;
+        }
         const hasOpenDiscrepancy = discrepancies.some(d => d.aircraftId === ac.id && d.status === 'Open');
         if (hasOpenDiscrepancy) {
              statusMap.set(ac.id, { label: "Maintenance", variant: "destructive", details: "Grounded (Open Write-up)" });
@@ -138,3 +149,4 @@ export default async function DashboardPage() {
         />
     );
 }
+import { format } from 'date-fns';
