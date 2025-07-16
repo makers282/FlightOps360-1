@@ -130,8 +130,16 @@ export async function updateTripStatus(tripId: string, status: string): Promise<
 
     // Fetch the updated trip to return
     const updatedDoc = await tripDocRef.get();
-    const updatedData = updatedDoc.data();
-    return { ...updatedData, id: updatedDoc.id } as Trip; // Assuming data structure matches Trip
+    if (!updatedDoc.exists) {
+      throw new Error(`Trip with ID ${tripId} not found after status update.`);
+    }
+    const updatedData = updatedDoc.data()!;
+    return {
+        ...updatedData,
+        id: updatedDoc.id,
+        createdAt: (updatedData.createdAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
+        updatedAt: (updatedData.updatedAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
+    } as Trip;
   } catch (error) {
     console.error(`Error updating status for trip ${tripId}:`, error);
     throw new Error(`Failed to update status for trip ${tripId}: ${error instanceof Error ? error.message : String(error)}`);
@@ -272,3 +280,5 @@ const deleteTripFlow = ai.defineFlow(
     }
   }
 );
+
+    

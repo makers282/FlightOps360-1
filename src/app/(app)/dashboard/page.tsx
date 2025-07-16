@@ -1,18 +1,20 @@
 
+
 import React from 'react';
 import { fetchBulletins, type Bulletin } from '@/ai/flows/manage-bulletins-flow';
-import { fetchTrips, type Trip } from '@/ai/flows/manage-trips-flow';
+import { fetchTrips, type Trip, updateTripStatus } from '@/ai/flows/manage-trips-flow';
 import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
 import { fetchAllAircraftDiscrepancies } from '@/ai/flows/manage-aircraft-discrepancies-flow';
-import { fetchAllMaintenanceTasks, updateTripStatus } from '@/ai/flows/manage-maintenance-tasks-flow';
+import { fetchAllMaintenanceTasks } from '@/ai/flows/manage-maintenance-tasks-flow';
 import { fetchNotifications } from '@/ai/flows/manage-notifications-flow';
 import { fetchQuotes } from '@/ai/flows/manage-quotes-flow';
+import { fetchAircraftBlockOuts } from '@/ai/flows/manage-aircraft-block-outs-flow'; // Import block-outs
 import { DashboardClientContent } from './components/dashboard-client-content';
-import { parseISO, addDays, isValid, addMonths, addYears, isAfter, subHours } from 'date-fns';
+import { parseISO, addDays, isValid, addMonths, addYears, isWithinInterval, startOfDay, endOfDay, addHours, isAfter } from 'date-fns';
 
 // Define serializable types that can be passed from Server to Client Components
 interface AircraftStatusDetail {
-    label: "Active" | "Maintenance" | "Info";
+    label: "Active" | "Maintenance" | "Info" | "Blocked Out";
     variant: "default" | "secondary" | "destructive" | "outline";
     details?: string;
 }
@@ -37,7 +39,8 @@ export default async function DashboardPage() {
         quotes,
         notifications,
         discrepancies,
-        maintenanceTasks
+        maintenanceTasks,
+        blockOuts, // Fetch block-outs
     ] = await Promise.all([
         fetchBulletins().catch(e => { console.error("Error fetching bulletins on server:", e); return []; }),
         fetchTrips().catch(e => { console.error("Error fetching trips on server:", e); return []; }),
@@ -46,6 +49,7 @@ export default async function DashboardPage() {
         fetchNotifications().catch(e => { console.error("Error fetching notifications on server:", e); return []; }),
         fetchAllAircraftDiscrepancies().catch(e => { console.error("Error fetching discrepancies on server:", e); return []; }),
         fetchAllMaintenanceTasks().catch(e => { console.error("Error fetching maintenance tasks on server:", e); return []; }),
+        fetchAircraftBlockOuts().catch(e => { console.error("Error fetching block-outs on server:", e); return []; }), // Add block-outs fetch
     ]);
 
     console.log(`[Dashboard Server Component] Fetched ${bulletins.length} bulletins.`);
@@ -53,23 +57,28 @@ export default async function DashboardPage() {
     console.log(`[Dashboard Server Component] Fetched ${fleet.length} fleet aircraft.`);
 
     const now = new Date();
-
+    
     const updatedTrips = await Promise.all(trips.map(async (trip) => {
         if (trip.status === 'Released') {
             const lastLeg = trip.legs?.[trip.legs.length - 1];
             if (lastLeg?.arrivalDateTime) {
-                const scheduledArrivalTime = parseISO(lastLeg.arrivalDateTime);
-                // Check if scheduled arrival is more than 2 hours in the past
-                if (isValid(scheduledArrivalTime) && isAfter(now, addHours(scheduledArrivalTime, 2))) {
-                    // Update status in the backend
-                    await updateTripStatus(trip.id, 'Awaiting Closeout');
-                    // Return trip object with updated status for display
-                    return { ...trip, status: 'Awaiting Closeout' };
+                try {
+                    const scheduledArrivalTime = parseISO(lastLeg.arrivalDateTime);
+                    // Check if scheduled arrival is more than 2 hours in the past
+                    if (isValid(scheduledArrivalTime) && isAfter(now, addHours(scheduledArrivalTime, 2))) {
+                        console.log(`[Dashboard Logic] Trip ${trip.tripId} is overdue. Updating status to 'Awaiting Closeout'.`);
+                        // Update status in the backend and get the updated trip object
+                        return await updateTripStatus(trip.id, 'Awaiting Closeout');
+                    }
+                } catch (e) {
+                    console.error(`Error processing trip ${trip.id} for auto-closeout:`, e);
                 }
             }
         }
         return trip; // Return trip as is if no status change is needed
     }));
+
+
     const currentTrips = updatedTrips.filter(trip => trip.status === 'Released' || trip.status === 'Awaiting Closeout');
     const upcomingTrips = trips.filter(trip => {
         const departureTime = trip.legs?.[0]?.departureDateTime ? parseISO(trip.legs[0].departureDateTime) : null;
@@ -112,20 +121,17 @@ export default async function DashboardPage() {
             continue;
         }
 
-        const activeBlockOut = ac.blockOuts?.find(bo => {
-            const startDate = parseISO(bo.startDate);
-            const endDate = parseISO(bo.endDate);
-            return isValid(startDate) && isValid(endDate) && now >= startDate && now <= endDate;
-        });
-
-        if (activeBlockOut) {
-            statusMap.set(ac.id, { label: "Maintenance", variant: "warning", details: "Blocked Out Until " + format(parseISO(activeBlockOut.endDate), 'PPP') });
-            continue;
-        }
         const hasOpenDiscrepancy = discrepancies.some(d => d.aircraftId === ac.id && d.status === 'Open');
+        const activeBlockOut = blockOuts.find(bo => 
+            bo.aircraftId === ac.id && 
+            isWithinInterval(now, { start: startOfDay(parseISO(bo.startDate)), end: endOfDay(parseISO(bo.endDate)) })
+        );
+
         if (hasOpenDiscrepancy) {
              statusMap.set(ac.id, { label: "Maintenance", variant: "destructive", details: "Grounded (Open Write-up)" });
              alerts.push({ id: `alert-disc-${ac.id}`, type: 'aircraft', severity: 'critical', title: `Grounded: ${ac.tailNumber}`, message: 'Aircraft has an open discrepancy.', link: `/aircraft/currency/${ac.tailNumber}`, iconName: 'AlertTriangle' });
+        } else if (activeBlockOut) {
+            statusMap.set(ac.id, { label: "Blocked Out", variant: "secondary", details: activeBlockOut.title });
         } else {
              statusMap.set(ac.id, { label: "Active", variant: "default", details: "All Clear" });
         }
@@ -165,4 +171,5 @@ export default async function DashboardPage() {
         />
     );
 }
-import { format } from 'date-fns';
+
+    
