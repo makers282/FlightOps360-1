@@ -1,6 +1,5 @@
 
 
-
 import React from 'react';
 import { fetchBulletins, type Bulletin } from '@/ai/flows/manage-bulletins-flow';
 import { fetchTrips, type Trip, updateTripStatus } from '@/ai/flows/manage-trips-flow';
@@ -68,10 +67,8 @@ export default async function DashboardPage() {
                     // Check if scheduled arrival is more than 2 hours in the past
                     if (isValid(scheduledArrivalTime) && isAfter(now, addHours(scheduledArrivalTime, 2))) {
                         console.log(`[Dashboard Logic] Trip ${trip.tripId} is overdue. Updating status to 'Awaiting Closeout'.`);
-                        // Update status in the backend
-                        const updatedTrip = await updateTripStatus(trip.id, 'Awaiting Closeout');
-                        // Return trip object with updated status for display
-                        return updatedTrip;
+                        // Update status in the backend and get the updated trip object
+                        return await updateTripStatus(trip.id, 'Awaiting Closeout');
                     }
                 } catch (e) {
                     console.error(`Error processing trip ${trip.id} for auto-closeout:`, e);

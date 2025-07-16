@@ -134,11 +134,16 @@ export async function updateTripStatus(tripId: string, status: string): Promise<
       throw new Error(`Trip with ID ${tripId} not found after status update.`);
     }
     const updatedData = updatedDoc.data()!;
+    // Correctly format the returned trip object
     return {
         ...updatedData,
         id: updatedDoc.id,
         createdAt: (updatedData.createdAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
         updatedAt: (updatedData.updatedAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
+        assignedFlightAttendantIds: updatedData.assignedFlightAttendantIds || [],
+        legs: updatedData.legs || [],
+        assignedPilotId: updatedData.assignedPilotId === null ? undefined : updatedData.assignedPilotId,
+        assignedCoPilotId: updatedData.assignedCoPilotId === null ? undefined : updatedData.assignedCoPilotId,
     } as Trip;
   } catch (error) {
     console.error(`Error updating status for trip ${tripId}:`, error);
