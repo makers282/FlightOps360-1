@@ -24,6 +24,7 @@ import type { Bulletin, BulletinType } from '@/ai/flows/manage-bulletins-flow';
 import type { Trip } from '@/ai/flows/manage-trips-flow';
 import type { FleetAircraft } from '@/ai/schemas/fleet-aircraft-schemas';
 import type { SystemAlert } from '../page'; // Import the serializable type from the server component
+import { cn } from '@/lib/utils';
 
 // Define a mapping from icon name string to actual component
 const iconMap = {
@@ -237,7 +238,7 @@ export function DashboardClientContent({
                                         <p className="font-semibold">{trip.tripId} ({trip.clientName})</p>
                                         <p className="text-xs text-muted-foreground">{trip.legs?.[0]?.origin} &rarr; {trip.legs?.[trip.legs.length -1]?.destination} on {trip.aircraftLabel}</p>
                                     </div>
-                                    <Badge variant={trip.status === 'Awaiting Closeout' ? 'secondary' : 'default'}>{trip.status}</Badge>
+                                    <Badge variant={'default'} className={cn(trip.status === 'Awaiting Closeout' ? 'bg-yellow-500 text-white' : '')}>{trip.status}</Badge>
                                 </Link>
                             </ListItem>
                         ))}
