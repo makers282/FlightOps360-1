@@ -23,7 +23,6 @@ import type { User as FirebaseUser } from 'firebase/auth';
 import type { Bulletin, BulletinType } from '@/ai/flows/manage-bulletins-flow';
 import type { Trip } from '@/ai/flows/manage-trips-flow';
 import type { FleetAircraft } from '@/ai/schemas/fleet-aircraft-schemas';
-import type { BlockOutEvent } from '@/app/(app)/trips/calendar/page';
 import type { SystemAlert } from '../page'; // Import the serializable type from the server component
 
 // Define a mapping from icon name string to actual component
@@ -44,7 +43,7 @@ interface KpiStats {
 }
 
 interface AircraftStatusDetail {
-    label: "Active" | "Maintenance" | "Info";
+    label: "Active" | "Maintenance" | "Info" | "Blocked Out";
     variant: "default" | "secondary" | "destructive" | "outline";
     details?: string;
 }
@@ -56,7 +55,6 @@ interface DashboardClientContentProps {
   initialUpcomingTrips: (Trip & { aircraftLabel?: string })[];
   initialFleetList: FleetAircraft[];
   initialAircraftStatusDetails: [string, AircraftStatusDetail][];
- initialAircraftBlockOuts: BlockOutEvent[];
   initialActiveSystemAlerts: SystemAlert[];
 }
 
@@ -239,7 +237,7 @@ export function DashboardClientContent({
                                         <p className="font-semibold">{trip.tripId} ({trip.clientName})</p>
                                         <p className="text-xs text-muted-foreground">{trip.legs?.[0]?.origin} &rarr; {trip.legs?.[trip.legs.length -1]?.destination} on {trip.aircraftLabel}</p>
                                     </div>
-                                    <Badge variant="default">Released</Badge>
+                                    <Badge variant={trip.status === 'Awaiting Closeout' ? 'secondary' : 'default'}>{trip.status}</Badge>
                                 </Link>
                             </ListItem>
                         ))}

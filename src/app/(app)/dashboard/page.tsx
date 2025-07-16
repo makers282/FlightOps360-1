@@ -4,11 +4,11 @@ import { fetchBulletins, type Bulletin } from '@/ai/flows/manage-bulletins-flow'
 import { fetchTrips, type Trip } from '@/ai/flows/manage-trips-flow';
 import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
 import { fetchAllAircraftDiscrepancies } from '@/ai/flows/manage-aircraft-discrepancies-flow';
-import { fetchAllMaintenanceTasks } from '@/ai/flows/manage-maintenance-tasks-flow';
+import { fetchAllMaintenanceTasks, updateTripStatus } from '@/ai/flows/manage-maintenance-tasks-flow';
 import { fetchNotifications } from '@/ai/flows/manage-notifications-flow';
 import { fetchQuotes } from '@/ai/flows/manage-quotes-flow';
 import { DashboardClientContent } from './components/dashboard-client-content';
-import { parseISO, addDays, isValid, addMonths, addYears } from 'date-fns';
+import { parseISO, addDays, isValid, addMonths, addYears, isAfter, subHours } from 'date-fns';
 
 // Define serializable types that can be passed from Server to Client Components
 interface AircraftStatusDetail {
@@ -54,7 +54,23 @@ export default async function DashboardPage() {
 
     const now = new Date();
 
-    const currentTrips = trips.filter(trip => trip.status === 'Released');
+    const updatedTrips = await Promise.all(trips.map(async (trip) => {
+        if (trip.status === 'Released') {
+            const lastLeg = trip.legs?.[trip.legs.length - 1];
+            if (lastLeg?.arrivalDateTime) {
+                const scheduledArrivalTime = parseISO(lastLeg.arrivalDateTime);
+                // Check if scheduled arrival is more than 2 hours in the past
+                if (isValid(scheduledArrivalTime) && isAfter(now, addHours(scheduledArrivalTime, 2))) {
+                    // Update status in the backend
+                    await updateTripStatus(trip.id, 'Awaiting Closeout');
+                    // Return trip object with updated status for display
+                    return { ...trip, status: 'Awaiting Closeout' };
+                }
+            }
+        }
+        return trip; // Return trip as is if no status change is needed
+    }));
+    const currentTrips = updatedTrips.filter(trip => trip.status === 'Released' || trip.status === 'Awaiting Closeout');
     const upcomingTrips = trips.filter(trip => {
         const departureTime = trip.legs?.[0]?.departureDateTime ? parseISO(trip.legs[0].departureDateTime) : null;
         return departureTime && departureTime > now && trip.status !== 'Completed' && trip.status !== 'Cancelled';
