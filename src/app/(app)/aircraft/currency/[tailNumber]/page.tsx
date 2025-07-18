@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { useState, useEffect, useTransition, useCallback, useMemo } from 'react';
@@ -39,7 +38,7 @@ import { useToast } from '@/hooks/use-toast';
 import { fetchFleetAircraft, saveFleetAircraft } from '@/ai/flows/manage-fleet-flow';
 import type { FleetAircraft, SaveFleetAircraftInput, EngineDetail, PropellerDetail } from '@/ai/schemas/fleet-aircraft-schemas';
 import { fetchMaintenanceTasksForAircraft, saveMaintenanceTask, deleteMaintenanceTask, generateMaintenanceWorkOrder, type MaintenanceTask as FlowMaintenanceTask } from '@/ai/flows/manage-maintenance-tasks-flow';
-import { fetchComponentTimesForAircraft, type AircraftComponentTimes } from '@/ai/flows/manage-component-times-flow';
+import { fetchComponentTimesForAircraft, saveComponentTimesForAircraft, type AircraftComponentTimes } from '@/ai/flows/manage-component-times-flow';
 import { fetchCompanyProfile, type CompanyProfile } from '@/ai/flows/manage-company-profile-flow';
 import { PageHeader } from '@/components/page-header';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -1011,3 +1010,6 @@ export default function AircraftMaintenanceDetailPage() {
     
 
 
+
+
+    
