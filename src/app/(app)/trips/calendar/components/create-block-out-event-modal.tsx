@@ -14,6 +14,7 @@ import {
   DialogDescription,
   DialogFooter,
   DialogClose,
+  DialogPortal,
 } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
@@ -40,7 +41,7 @@ export type BlockOutFormData = z.infer<typeof blockOutFormSchema>;
 interface CreateBlockOutEventModalProps {
   isOpen: boolean;
   setIsOpen: (isOpen: boolean) => void;
-  onSave: (data: BlockOutFormData) => Promise<void>; // Changed to Promise<void>
+  onSave: (data: BlockOutFormData) => Promise<void>; 
   aircraftOptions: AircraftFilterOption[];
   isLoadingAircraft: boolean;
 }
@@ -84,83 +85,84 @@ export function CreateBlockOutEventModal({
 
   const onSubmit: SubmitHandler<BlockOutFormData> = async (data) => {
     setIsSaving(true);
-    await onSave(data); // Call the onSave prop which now handles Firestore interaction
+    await onSave(data);
     setIsSaving(false);
-    // setModalOpen(false) is now handled by the parent component after successful save in onSave
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if(!isSaving) setIsOpen(open);}}>
-      <DialogContent className="sm:max-w-lg overflow-visible">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Lock className="h-6 w-6 text-primary" />
-            Schedule Aircraft Block Out
-          </DialogTitle>
-          <DialogDescription>
-            Block out an aircraft for maintenance, owner use, or other reasons. This will be saved to Firestore.
-          </DialogDescription>
-        </DialogHeader>
-        
-        <Form {...form}>
-          <form id="createBlockOutEventModalFormInternal" onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-2">
-            <FormField
-              control={form.control}
-              name="aircraftId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Aircraft</FormLabel>
-                  <Select
-                    onValueChange={field.onChange}
-                    value={field.value}
-                    name={field.name}
-                    disabled={isLoadingAircraft}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder={isLoadingAircraft ? "Loading aircraft..." : "Select an aircraft"} />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {!isLoadingAircraft && aircraftOptions.length === 0 && <SelectItem value="NO_AIRCRAFT_PLACEHOLDER" disabled>No aircraft available</SelectItem>}
-                      {aircraftOptions.map(option => (
-                        <SelectItem key={option.id} value={option.id}>{option.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="title"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Title / Reason</FormLabel>
-                  <FormControl>
-                    <Input placeholder="e.g., Scheduled Maintenance, Owner Trip" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <DialogPortal>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Lock className="h-6 w-6 text-primary" />
+              Schedule Aircraft Block Out
+            </DialogTitle>
+            <DialogDescription>
+              Block out an aircraft for maintenance, owner use, or other reasons. This will be saved to Firestore.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <Form {...form}>
+            <form id="createBlockOutEventModalFormInternal" onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-2">
               <FormField
                 control={form.control}
-                name="startDate"
+                name="aircraftId"
                 render={({ field }) => (
-                  <FormItem className="flex flex-col">
-                    <FormLabel>Start Date</FormLabel>
+                  <FormItem>
+                    <FormLabel>Aircraft</FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      value={field.value}
+                      name={field.name}
+                      disabled={isLoadingAircraft}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder={isLoadingAircraft ? "Loading aircraft..." : "Select an aircraft"} />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {!isLoadingAircraft && aircraftOptions.length === 0 && <SelectItem value="NO_AIRCRAFT_PLACEHOLDER" disabled>No aircraft available</SelectItem>}
+                        {aircraftOptions.map(option => (
+                          <SelectItem key={option.id} value={option.id}>{option.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="title"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Title / Reason</FormLabel>
                     <FormControl>
-                      <Popover modal={false}>
+                      <Input placeholder="e.g., Scheduled Maintenance, Owner Trip" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="startDate"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-col">
+                      <FormLabel>Start Date</FormLabel>
+                      <Popover>
                         <PopoverTrigger asChild>
-                            <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
-                              {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
-                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                            </Button>
+                            <FormControl>
+                              <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
+                                {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
+                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                              </Button>
+                            </FormControl>
                         </PopoverTrigger>
                         <PopoverContent className="w-auto p-0 z-[100]" align="start">
                           <Calendar
@@ -177,24 +179,24 @@ export function CreateBlockOutEventModal({
                           />
                         </PopoverContent>
                       </Popover>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="endDate"
-                render={({ field }) => (
-                  <FormItem className="flex flex-col">
-                    <FormLabel>End Date</FormLabel>
-                    <FormControl>
-                      <Popover modal={false}>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="endDate"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-col">
+                      <FormLabel>End Date</FormLabel>
+                      <Popover>
                         <PopoverTrigger asChild>
-                            <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
-                              {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
-                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                            </Button>
+                          <FormControl>
+                              <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
+                                {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
+                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                              </Button>
+                          </FormControl>
                         </PopoverTrigger>
                         <PopoverContent className="w-auto p-0 z-[100]" align="start">
                           <Calendar
@@ -209,23 +211,23 @@ export function CreateBlockOutEventModal({
                           />
                         </PopoverContent>
                       </Popover>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-          </form>
-        </Form>
-        
-        <DialogFooter className="pt-4">
-          <DialogClose asChild><Button type="button" variant="outline" disabled={isSaving}>Cancel</Button></DialogClose>
-          <Button type="submit" form="createBlockOutEventModalFormInternal" disabled={isSaving || isLoadingAircraft}>
-            {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-            Save Block Out
-          </Button>
-        </DialogFooter>
-      </DialogContent>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </form>
+          </Form>
+          
+          <DialogFooter className="pt-4">
+            <DialogClose asChild><Button type="button" variant="outline" disabled={isSaving}>Cancel</Button></DialogClose>
+            <Button type="submit" form="createBlockOutEventModalFormInternal" disabled={isSaving || isLoadingAircraft}>
+              {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+              Save Block Out
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </DialogPortal>
     </Dialog>
   );
 }

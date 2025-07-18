@@ -14,6 +14,7 @@ import {
   DialogDescription,
   DialogFooter,
   DialogClose,
+  DialogPortal,
 } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
@@ -138,7 +139,8 @@ export function CreateCrewBlockOutModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if(!isSaving) setIsOpen(open);}}>
-      <DialogContent className="sm:max-w-lg overflow-visible">
+      <DialogPortal>
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Lock className="h-6 w-6 text-primary" />
@@ -192,6 +194,7 @@ export function CreateCrewBlockOutModal({
           </div>
         </DialogFooter>
       </DialogContent>
+      </DialogPortal>
     </Dialog>
   );
 }
