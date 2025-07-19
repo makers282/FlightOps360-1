@@ -1,5 +1,5 @@
 import React, { Suspense } from 'react';
-import DiscrepanciesClient from '../DiscrepanciesClient';
+import DiscrepanciesClient from './DiscrepanciesClient';
 
 export default function DiscrepanciesPage() {
   return (

@@ -63,6 +63,7 @@ const saveTripFlow = ai.defineFlow(
 
       const dataWithDefaults = {
         ...tripData,
+        legs: tripData.legs.map(leg => ({...leg, id: leg.id || db.collection('trips').doc().id})),
         assignedPilotId: tripData.assignedPilotId === undefined ? null : tripData.assignedPilotId,
         assignedCoPilotId: tripData.assignedCoPilotId === undefined ? null : tripData.assignedCoPilotId,
         assignedFlightAttendantIds: tripData.assignedFlightAttendantIds || [],
@@ -280,5 +281,3 @@ const deleteTripFlow = ai.defineFlow(
     }
   }
 );
-
-    

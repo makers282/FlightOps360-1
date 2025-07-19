@@ -1,5 +1,4 @@
 
-
 import React from 'react';
 import { fetchBulletins, type Bulletin } from '@/ai/flows/manage-bulletins-flow';
 import { fetchTrips, type Trip, updateTripStatus } from '@/ai/flows/manage-trips-flow';
@@ -42,14 +41,14 @@ export default async function DashboardPage() {
         maintenanceTasks,
         blockOuts, // Fetch block-outs
     ] = await Promise.all([
-        fetchBulletins().catch(e => { console.error("Error fetching bulletins on server:", e); return []; }),
-        fetchTrips().catch(e => { console.error("Error fetching trips on server:", e); return []; }),
-        fetchFleetAircraft().catch(e => { console.error("Error fetching fleet on server:", e); return []; }),
-        fetchQuotes().catch(e => { console.error("Error fetching quotes on server:", e); return []; }),
-        fetchNotifications().catch(e => { console.error("Error fetching notifications on server:", e); return []; }),
-        fetchAllAircraftDiscrepancies().catch(e => { console.error("Error fetching discrepancies on server:", e); return []; }),
-        fetchAllMaintenanceTasks().catch(e => { console.error("Error fetching maintenance tasks on server:", e); return []; }),
-        fetchAircraftBlockOuts().catch(e => { console.error("Error fetching block-outs on server:", e); return []; }), // Add block-outs fetch
+        fetchBulletins().catch(e => { console.error("Error fetching bulletins on server:", JSON.stringify(e, null, 2)); return []; }),
+        fetchTrips().catch(e => { console.error("Error fetching trips on server:", JSON.stringify(e, null, 2)); return []; }),
+        fetchFleetAircraft().catch(e => { console.error("Error fetching fleet on server:", JSON.stringify(e, null, 2)); return []; }),
+        fetchQuotes().catch(e => { console.error("Error fetching quotes on server:", JSON.stringify(e, null, 2)); return []; }),
+        fetchNotifications().catch(e => { console.error("Error fetching notifications on server:", JSON.stringify(e, null, 2)); return []; }),
+        fetchAllAircraftDiscrepancies().catch(e => { console.error("Error fetching discrepancies on server:", JSON.stringify(e, null, 2)); return []; }),
+        fetchAllMaintenanceTasks().catch(e => { console.error("Error fetching maintenance tasks on server:", JSON.stringify(e, null, 2)); return []; }),
+        fetchAircraftBlockOuts().catch(e => { console.error("Error fetching block-outs on server:", JSON.stringify(e, null, 2)); return []; }), // Add block-outs fetch
     ]);
 
     console.log(`[Dashboard Server Component] Fetched ${bulletins.length} bulletins.`);

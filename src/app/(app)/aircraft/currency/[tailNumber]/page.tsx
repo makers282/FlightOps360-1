@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useEffect, useTransition, useCallback, useMemo } from 'react';
@@ -423,9 +424,19 @@ export default function AircraftMaintenanceDetailPage() {
   const handleSaveComponentTimes = () => {
     if (!currentAircraft || !currentAircraft.id) return;
     startSavingComponentTimesTransition(async () => {
-      const componentTimesMap: AircraftComponentTimes = {}; editableComponentTimes.forEach(comp => { componentTimesMap[comp.componentName] = { time: comp.currentTime, cycles: comp.currentCycles, }; });
-      try { await saveComponentTimesForAircraft({ aircraftId: currentAircraft.id, componentTimes: componentTimesMap }); setOriginalComponentTimes(JSON.parse(JSON.stringify(editableComponentTimes))); setIsEditingComponentTimes(false); toast({ title: "Component Times Saved", description: `Updated for ${currentAircraft.tailNumber} in Firestore.` }); }
-      catch (error) { console.error("Failed to save component times:", error); toast({ title: "Error Saving Component Times", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" }); }
+      const componentTimesMap: AircraftComponentTimes = {};
+      editableComponentTimes.forEach(comp => {
+        componentTimesMap[comp.componentName] = { time: comp.currentTime, cycles: comp.currentCycles, };
+      });
+      try {
+        await saveComponentTimesForAircraft({ aircraftId: currentAircraft.id, componentTimes: componentTimesMap });
+        setOriginalComponentTimes(JSON.parse(JSON.stringify(editableComponentTimes)));
+        setIsEditingComponentTimes(false);
+        toast({ title: "Component Times Saved", description: `Updated for ${currentAircraft.tailNumber} in Firestore.` });
+      } catch (error) {
+        console.error("Failed to save component times:", error);
+        toast({ title: "Error Saving Component Times", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
+      }
     });
   };
 
