@@ -27,6 +27,7 @@ import { format, isValid as isValidDate, startOfDay } from "date-fns";
 import type { AircraftFilterOption } from '../page';
 
 const blockOutFormSchema = z.object({
+  id: z.string().optional(), // Added for editing
   aircraftId: z.string().min(1, "Aircraft selection is required."),
   title: z.string().min(3, "A title or reason is required (e.g., Maintenance, Owner Use)."),
   startDate: z.date({ required_error: "Start date is required." }),
@@ -38,21 +39,23 @@ const blockOutFormSchema = z.object({
 
 export type BlockOutFormData = z.infer<typeof blockOutFormSchema>;
 
-interface CreateBlockOutEventModalProps {
+interface AircraftBlockOutModalProps {
   isOpen: boolean;
   setIsOpen: (isOpen: boolean) => void;
   onSave: (data: BlockOutFormData) => Promise<void>; 
   aircraftOptions: AircraftFilterOption[];
   isLoadingAircraft: boolean;
+  initialData?: BlockOutFormData; // Added for pre-populating form in edit mode
 }
 
-export function CreateBlockOutEventModal({
+export function AircraftBlockOutModal({ // Renamed component
   isOpen,
   setIsOpen,
   onSave,
   aircraftOptions,
   isLoadingAircraft,
-}: CreateBlockOutEventModalProps) {
+  initialData,
+}: AircraftBlockOutModalProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [minStartDate, setMinStartDate] = useState<Date | null>(null);
 
@@ -63,6 +66,7 @@ export function CreateBlockOutEventModal({
       title: '',
       startDate: startOfDay(new Date()),
       endDate: startOfDay(new Date()),
+      ...(initialData || {}), // Apply initialData if provided
     },
   });
 
@@ -74,20 +78,29 @@ export function CreateBlockOutEventModal({
 
   useEffect(() => {
     if (isOpen) {
-      form.reset({
+      // Reset form with initialData if available, otherwise with default new values
+      form.reset(initialData ? {
+        id: initialData.id,
+        aircraftId: initialData.aircraftId,
+        title: initialData.title,
+        startDate: initialData.startDate,
+        endDate: initialData.endDate,
+      } : {
         aircraftId: undefined,
         title: '',
         startDate: startOfDay(new Date()),
         endDate: startOfDay(new Date()),
       });
     }
-  }, [isOpen, form]);
+  }, [isOpen, form, initialData]);
 
   const onSubmit: SubmitHandler<BlockOutFormData> = async (data) => {
     setIsSaving(true);
     await onSave(data);
     setIsSaving(false);
   };
+
+  const isEditMode = !!initialData?.id; // Determine if in edit mode
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if(!isSaving) setIsOpen(open);}}>
@@ -96,10 +109,13 @@ export function CreateBlockOutEventModal({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Lock className="h-6 w-6 text-primary" />
-              Schedule Aircraft Block Out
+              {isEditMode ? "Edit Aircraft Block Out" : "Schedule Aircraft Block Out"}
             </DialogTitle>
             <DialogDescription>
-              Block out an aircraft for maintenance, owner use, or other reasons. This will be saved to Firestore.
+              {isEditMode ? 
+                "Edit the details of the aircraft block out." : 
+                "Block out an aircraft for maintenance, owner use, or other reasons. This will be saved to Firestore."
+              }
             </DialogDescription>
           </DialogHeader>
           
@@ -174,7 +190,13 @@ export function CreateBlockOutEventModal({
                                   form.setValue("endDate", startOfDay(date));
                               }
                             }}
-                            disabled={(date) => minStartDate ? date < minStartDate && !isValidDate(form.getValues("startDate")) : false}
+                            disabled={(date) => {
+                              // If in edit mode, allow dates prior to today if they are the original start date
+                              if (isEditMode && initialData?.startDate && startOfDay(date).getTime() === startOfDay(initialData.startDate).getTime()) {
+                                return false;
+                              }
+                              return minStartDate ? date < minStartDate && !isValidDate(form.getValues("startDate")) : false;
+                            }}
                             initialFocus
                           />
                         </PopoverContent>
@@ -205,6 +227,10 @@ export function CreateBlockOutEventModal({
                             onSelect={(date) => field.onChange(date ? startOfDay(date) : undefined)}
                             disabled={(date) => {
                               const startDate = form.getValues("startDate");
+                              // If in edit mode, allow dates prior to today if they are the original end date
+                              if (isEditMode && initialData?.endDate && startOfDay(date).getTime() === startOfDay(initialData.endDate).getTime()) {
+                                return false;
+                              }
                               return startDate ? date < startDate : (minStartDate ? date < minStartDate : false);
                             }}
                             initialFocus
@@ -223,7 +249,7 @@ export function CreateBlockOutEventModal({
             <DialogClose asChild><Button type="button" variant="outline" disabled={isSaving}>Cancel</Button></DialogClose>
             <Button type="submit" form="createBlockOutEventModalFormInternal" disabled={isSaving || isLoadingAircraft}>
               {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-              Save Block Out
+              {isEditMode ? "Save Changes" : "Save Block Out"}
             </Button>
           </DialogFooter>
         </DialogContent>

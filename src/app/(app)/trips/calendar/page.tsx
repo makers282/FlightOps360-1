@@ -29,7 +29,7 @@ import resourcePlugin from '@fullcalendar/resource'; // Import the main resource
 import { fetchTrips, type Trip } from '@/ai/flows/manage-trips-flow';
 import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
 import { fetchAircraftBlockOuts, saveAircraftBlockOut, type AircraftBlockOut } from '@/ai/flows/manage-aircraft-block-outs-flow';
-import { CreateBlockOutEventModal, type BlockOutFormData } from './components/create-block-out-event-modal';
+import { AircraftBlockOutModal, type BlockOutFormData } from './components/create-block-out-event-modal'; // Updated import
 
 interface FullCalendarEvent {
   id: string;
@@ -90,6 +90,7 @@ export default function TripCalendarPage() {
   }, [aircraftColorMap]);
 
   const [isBlockOutModalOpen, setIsBlockOutModalOpen] = useState(false);
+  const [editingBlockOutData, setEditingBlockOutData] = useState<BlockOutFormData | undefined>(undefined); // New state for editing
 
   const loadInitialData = useCallback(async () => {
     setIsLoadingData(true);
@@ -194,18 +195,22 @@ export default function TripCalendarPage() {
       toast({ title: "Error", description: "Selected aircraft not found.", variant: "destructive" });
       return;
     }
-    const blockOutToSave = {
+
+    const blockOutToSave: Partial<AircraftBlockOut> = {
+      id: data.id, // Include ID if it's an edit operation
       aircraftId: data.aircraftId,
       aircraftLabel: selectedAircraft.label,
       title: data.title,
       startDate: format(data.startDate, "yyyy-MM-dd"),
       endDate: format(data.endDate, "yyyy-MM-dd"),
     };
+    
     try {
-      await saveAircraftBlockOut(blockOutToSave as any);
+      await saveAircraftBlockOut(blockOutToSave as AircraftBlockOut);
       toast({ title: "Aircraft Block-Out Saved", variant: "default" });
-      await loadInitialData();
       setIsBlockOutModalOpen(false);
+      setEditingBlockOutData(undefined); // Clear editing data after save
+      await loadInitialData();
     } catch (error) {
       toast({ title: "Error Saving Block-Out", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" });
     }
@@ -218,11 +223,19 @@ export default function TripCalendarPage() {
       link.href = `/trips/details/${clickInfo.event.id}`;
       link.click();
     } else if (clickInfo.event.extendedProps?.type === 'block_out') {
-      // Optionally, open an edit modal for block-outs or show details
-      toast({
-        title: "Block-Out Event",
-        description: `${clickInfo.event.title}\nFrom: ${format(clickInfo.event.start || new Date(), "PPP")}\nTo: ${format(addDays(clickInfo.event.end || new Date(), -1), "PPP")}`, // Adjust end date for display
-      });
+      const blockOutData = clickInfo.event.extendedProps.blockOutData;
+      if (blockOutData) {
+        // Convert string dates back to Date objects for the form
+        const parsedBlockOutData: BlockOutFormData = {
+          id: blockOutData.id, // Pass the ID for editing
+          aircraftId: blockOutData.aircraftId,
+          title: blockOutData.title,
+          startDate: parseISO(blockOutData.startDate),
+          endDate: parseISO(blockOutData.endDate),
+        };
+        setEditingBlockOutData(parsedBlockOutData);
+        setIsBlockOutModalOpen(true);
+      }
     }
   };
 
@@ -300,7 +313,7 @@ export default function TripCalendarPage() {
                 </PopoverContent>
               </Popover>
             )}
-            <Button variant="outline" size="sm" onClick={() => setIsBlockOutModalOpen(true)} disabled={isLoadingFleetForModal}>
+            <Button variant="outline" size="sm" onClick={() => { setEditingBlockOutData(undefined); setIsBlockOutModalOpen(true); }} disabled={isLoadingFleetForModal}>
               <Lock className="mr-2 h-4 w-4" /> Schedule Block Out
             </Button>
             <Button asChild size="sm">
@@ -337,12 +350,13 @@ export default function TripCalendarPage() {
           )}
         </CardContent>
       </Card>
-      <CreateBlockOutEventModal
+      <AircraftBlockOutModal
         isOpen={isBlockOutModalOpen}
         setIsOpen={setIsBlockOutModalOpen}
         onSave={handleSaveBlockOut}
         aircraftOptions={allFleetAircraftOptions}
         isLoadingAircraft={isLoadingFleetForModal}
+        initialData={editingBlockOutData} // Pass initial data for editing
       />
     </>
   );
