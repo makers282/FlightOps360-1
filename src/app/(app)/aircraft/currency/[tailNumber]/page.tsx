@@ -344,6 +344,9 @@ export default function AircraftMaintenanceDetailPage() {
       primaryContactName: '', primaryContactPhone: '', primaryContactEmail: '', internalNotes: '',
     },
   });
+  
+  const currentEngineDetailsForForm = useMemo(() => currentAircraft?.engineDetails || [], [currentAircraft]);
+  const currentPropellerDetailsForForm = useMemo(() => currentAircraft?.propellerDetails || [], [currentAircraft]);
 
   const resetAircraftInfoForm = useCallback((aircraft: FleetAircraft | null) => {
     if (aircraft) {
