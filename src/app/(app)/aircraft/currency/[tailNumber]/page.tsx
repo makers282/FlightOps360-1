@@ -987,6 +987,10 @@ export default function AircraftMaintenanceDetailPage() {
           </AlertDialogModalFooter>
         </AlertDialogModalContent>
       )}
+
+       <ManageEngineDetailsModal isOpen={isEngineModalOpen} setIsOpen={setIsEngineModalOpen} initialEngineDetails={currentEngineDetailsForForm} onSave={handleEngineDetailsSave}/>
+       <ManagePropellerDetailsModal isOpen={isPropellerModalOpen} setIsOpen={setIsPropellerModalOpen} initialPropellerDetails={currentPropellerDetailsForForm} onSave={handlePropellerDetailsSave} />
+
     </div>
   );
 }

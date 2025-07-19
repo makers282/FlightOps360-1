@@ -80,7 +80,8 @@ const fetchComponentTimesFlow = ai.defineFlow(
       const docRef = db.collection(COMPONENT_TIMES_COLLECTION).doc(input.aircraftId);
       const docSnap = await docRef.get();
       if (docSnap.exists) {
-        const data = docSnap.data()?.componentTimes as AircraftComponentTimes; // Assuming data is stored under a 'componentTimes' field
+        // The document itself contains the map of component times.
+        const data = docSnap.data() as AircraftComponentTimes; 
         console.log('Fetched component times from Firestore for aircraft:', input.aircraftId, data);
         return data || null; // Return data or null if undefined
       } else {
@@ -108,9 +109,9 @@ const saveComponentTimesFlow = ai.defineFlow(
     console.log('Executing saveComponentTimesFlow with input - Firestore:', JSON.stringify(input));
     try {
       const docRef = db.collection(COMPONENT_TIMES_COLLECTION).doc(input.aircraftId);
-      // Store the componentTimes map directly under a field named 'componentTimes' in the document.
-      // The document ID is aircraftId.
-      await docRef.set({ componentTimes: input.componentTimes }, { merge: true }); 
+      // The document's data IS the component times map.
+      // The document ID is the aircraftId.
+      await docRef.set(input.componentTimes); // Store the map directly.
       console.log('Saved component times in Firestore for aircraft:', input.aircraftId);
       return { success: true, aircraftId: input.aircraftId };
     } catch (error) {
