@@ -40,7 +40,7 @@ import { useToast } from '@/hooks/use-toast';
 import { fetchFleetAircraft, saveFleetAircraft } from '@/ai/flows/manage-fleet-flow';
 import type { FleetAircraft, SaveFleetAircraftInput, EngineDetail, PropellerDetail } from '@/ai/schemas/fleet-aircraft-schemas';
 import { fetchMaintenanceTasksForAircraft, saveMaintenanceTask, deleteMaintenanceTask, generateMaintenanceWorkOrder, type MaintenanceTask as FlowMaintenanceTask } from '@/ai/flows/manage-maintenance-tasks-flow';
-import { saveComponentTimesForAircraft, fetchComponentTimesForAircraft, type AircraftComponentTimes } from '@/ai/flows/manage-component-times-flow';
+import { fetchComponentTimesForAircraft, saveComponentTimesForAircraft, type AircraftComponentTimes } from '@/ai/flows/manage-component-times-flow';
 import { fetchCompanyProfile, type CompanyProfile } from '@/ai/flows/manage-company-profile-flow';
 import { PageHeader } from '@/components/page-header';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -730,11 +730,12 @@ export default function AircraftMaintenanceDetailPage() {
   };
 
   const handleCopyTasks = async (targetAircraftIds: string[]) => {
-    if (!currentAircraft) return;
+    if (!currentAircraft || selectedTaskIds.length === 0) return;
     startCopyingTasksTransition(async () => {
       try {
         const result = await copyMaintenanceTasks({
           sourceAircraftId: currentAircraft.id,
+          taskIds: selectedTaskIds,
           targetAircraftIds,
         });
         toast({
@@ -775,7 +776,10 @@ export default function AircraftMaintenanceDetailPage() {
           <div className="flex gap-2">
             <Button asChild variant="outline"><span><Link href="/aircraft/currency"><ArrowLeft className="mr-2 h-4 w-4" /> Back to Overview</Link></span></Button>
             <Button onClick={handleOpenWorkOrderModal} disabled={selectedTaskIds.length === 0 || isGeneratingReport}> {isGeneratingReport ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Printer className="mr-2 h-4 w-4" />} Generate Work Order ({selectedTaskIds.length}) </Button>
-            <Button variant="outline" onClick={() => setIsCopyModalOpen(true)} disabled={maintenanceTasks.length === 0}><Copy className="mr-2 h-4 w-4" />Copy Tasks</Button>
+            <Button variant="outline" onClick={() => setIsCopyModalOpen(true)} disabled={selectedTaskIds.length === 0}>
+              <Copy className="mr-2 h-4 w-4" />
+              Copy Tasks ({selectedTaskIds.length})
+            </Button>
             <Button onClick={handleOpenAddTaskModal}><PlusCircle className="mr-2 h-4 w-4" /> Add New Task</Button>
           </div>
         }
