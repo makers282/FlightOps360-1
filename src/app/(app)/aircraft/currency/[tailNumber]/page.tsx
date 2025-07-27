@@ -993,21 +993,23 @@ export default function AircraftMaintenanceDetailPage() {
       />
 
       {showDeleteDiscrepancyConfirm && discrepancyToDelete && (
-        <AlertDialogModalContent>
-          <AlertDialogModalHeader>
-            <AlertDialogModalTitle>Confirm Delete Discrepancy</AlertDialogModalTitle>
-            <AlertDialogModalDescription>
-              Are you sure you want to delete the discrepancy: "{discrepancyToDelete.description.substring(0,50)}..."? This action cannot be undone.
-            </AlertDialogModalDescription>
-          </AlertDialogModalHeader>
-          <AlertDialogModalFooter>
-            <AlertDialogCancel onClick={() => setShowDeleteDiscrepancyConfirm(false)} disabled={isDeletingDiscrepancy}>Cancel</AlertDialogCancel>
-            <Button variant="destructive" onClick={executeDeleteDiscrepancy} disabled={isDeletingDiscrepancy}>
-              {isDeletingDiscrepancy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Delete
-            </Button>
-          </AlertDialogModalFooter>
-        </AlertDialogModalContent>
+        <AlertDialog open={showDeleteDiscrepancyConfirm} onOpenChange={setShowDeleteDiscrepancyConfirm}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Confirm Delete Discrepancy</AlertDialogTitle>
+                    <AlertDialogDescription>
+                    Are you sure you want to delete the discrepancy: "{discrepancyToDelete.description.substring(0,50)}..."? This action cannot be undone.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel onClick={() => setShowDeleteDiscrepancyConfirm(false)} disabled={isDeletingDiscrepancy}>Cancel</AlertDialogCancel>
+                    <Button variant="destructive" onClick={executeDeleteDiscrepancy} disabled={isDeletingDiscrepancy}>
+                    {isDeletingDiscrepancy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Delete
+                    </Button>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
       )}
 
       <AddEditMelItemModal
@@ -1021,21 +1023,23 @@ export default function AircraftMaintenanceDetailPage() {
       />
 
       {showDeleteMelConfirm && melItemToDelete && (
-        <AlertDialogModalContent>
-          <AlertDialogModalHeader>
-            <AlertDialogModalTitle>Confirm Delete MEL Item</AlertDialogModalTitle>
-            <AlertDialogModalDescription>
-              Are you sure you want to delete MEL Item "{melItemToDelete.melNumber}: {melItemToDelete.description.substring(0,40)}..."? This action cannot be undone.
-            </AlertDialogModalDescription>
-          </AlertDialogModalHeader>
-          <AlertDialogModalFooter>
-            <AlertDialogCancel onClick={() => setShowDeleteMelConfirm(false)} disabled={isDeletingMelItem}>Cancel</AlertDialogCancel>
-            <Button variant="destructive" onClick={executeDeleteMelItem} disabled={isDeletingMelItem}>
-              {isDeletingMelItem && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Delete
-            </Button>
-          </AlertDialogModalFooter>
-        </AlertDialogModalContent>
+        <AlertDialog open={showDeleteMelConfirm} onOpenChange={setShowDeleteMelConfirm}>
+            <AlertDialogContent>
+            <AlertDialogHeader>
+                <AlertDialogTitle>Confirm Delete MEL Item</AlertDialogTitle>
+                <AlertDialogDescription>
+                Are you sure you want to delete MEL Item "{melItemToDelete.melNumber}: {melItemToDelete.description.substring(0,40)}..."? This action cannot be undone.
+                </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+                <AlertDialogCancel onClick={() => setShowDeleteMelConfirm(false)} disabled={isDeletingMelItem}>Cancel</AlertDialogCancel>
+                <Button variant="destructive" onClick={executeDeleteMelItem} disabled={isDeletingMelItem}>
+                {isDeletingMelItem && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Delete
+                </Button>
+            </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
       )}
 
        <ManageEngineDetailsModal isOpen={isEngineModalOpen} setIsOpen={setIsEngineModalOpen} initialEngineDetails={currentEngineDetailsForForm} onSave={handleEngineDetailsSave}/>

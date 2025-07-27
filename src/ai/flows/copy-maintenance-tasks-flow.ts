@@ -43,65 +43,73 @@ const copyMaintenanceTasksFlow = ai.defineFlow(
     if (!db) {
         throw new Error("Firestore admin instance (db) is not initialized in copyMaintenanceTasksFlow.");
     }
+    console.log(`[CopyFlow] Starting copy for ${taskIds.length} tasks from ${sourceAircraftId} to ${targetAircraftIds.length} aircraft.`);
 
-    // 1. Fetch all tasks from the source aircraft to filter from
-    const sourceTasks = await fetchMaintenanceTasksForAircraft({ aircraftId: sourceAircraftId });
-    // Filter the fetched tasks to get only the ones the user selected
-    const tasksToCopy = sourceTasks.filter(task => taskIds.includes(task.id));
-
-    if (tasksToCopy.length === 0) {
-      return {
-        sourceAircraftId,
-        targetAircraftCount: targetAircraftIds.length,
-        copiedTasksCount: 0,
-        status: "No matching tasks found on source aircraft to copy.",
-      };
-    }
-    
-    let totalTasksCreated = 0;
-
-    // 2. Loop through each target aircraft
-    for (const targetId of targetAircraftIds) {
-      if (targetId === sourceAircraftId) continue; // Skip copying to itself
-
-      // 3. Loop through each selected source task and create a new one for the target
-      for (const sourceTask of tasksToCopy) {
+    try {
+        // 1. Fetch all tasks from the source aircraft to filter from
+        const allSourceTasks = await fetchMaintenanceTasksForAircraft({ aircraftId: sourceAircraftId });
         
-        const { 
-            id: originalId, // We will generate a new one
-            lastCompletedDate, 
-            lastCompletedHours, 
-            lastCompletedCycles, 
-            lastCompletedNotes, 
-            ...restOfTask 
-        } = sourceTask;
+        // 2. CRITICAL FIX: Filter the fetched tasks to get only the ones the user selected
+        const tasksToCopy = allSourceTasks.filter(task => taskIds.includes(task.id));
 
-        // This is a complete MaintenanceTask object minus the fields we want to reset or generate anew.
-        // CRITICAL FIX: Generate a new Firestore document ID for the new task to prevent overwrites and hangs.
-        const newTaskForTarget: SaveTaskInput = {
-          ...restOfTask,
-          id: db.collection('maintenanceTasks').doc().id, // Generate new unique ID
-          aircraftId: targetId,
-          // Reset completion details to undefined
-          lastCompletedDate: undefined,
-          lastCompletedHours: undefined,
-          lastCompletedCycles: undefined,
-          lastCompletedNotes: undefined,
+        if (tasksToCopy.length === 0) {
+        console.warn(`[CopyFlow] No matching tasks found on source aircraft ${sourceAircraftId} for given IDs.`);
+        return {
+            sourceAircraftId,
+            targetAircraftCount: targetAircraftIds.length,
+            copiedTasksCount: 0,
+            status: "No matching tasks found on source aircraft to copy.",
+        };
+        }
+        
+        let totalTasksCreated = 0;
+
+        // 3. Loop through each target aircraft
+        for (const targetId of targetAircraftIds) {
+          if (targetId === sourceAircraftId) continue; // Skip copying to itself
+
+          // 4. Loop through each selected source task and create a new one for the target
+          for (const sourceTask of tasksToCopy) {
+            
+            const { 
+                id: originalId, // We will generate a new one
+                lastCompletedDate, 
+                lastCompletedHours, 
+                lastCompletedCycles, 
+                lastCompletedNotes, 
+                ...restOfTask 
+            } = sourceTask;
+
+            const newTaskForTarget: SaveTaskInput = {
+              ...restOfTask,
+              id: db.collection('maintenanceTasks').doc().id, // Generate new unique ID
+              aircraftId: targetId,
+              // Reset completion details to undefined
+              lastCompletedDate: undefined,
+              lastCompletedHours: undefined,
+              lastCompletedCycles: undefined,
+              lastCompletedNotes: undefined,
+            };
+
+            // 5. Save the new task using the service.
+            await saveMaintenanceTask(newTaskForTarget);
+            totalTasksCreated++;
+          }
+        }
+        
+        const successMessage = `Successfully copied ${tasksToCopy.length} task(s) to ${targetAircraftIds.length} aircraft. A total of ${totalTasksCreated} new tasks were created.`;
+        console.log(`[CopyFlow] Success: ${successMessage}`);
+        return {
+          sourceAircraftId,
+          targetAircraftCount: targetAircraftIds.length,
+          copiedTasksCount: tasksToCopy.length,
+          status: successMessage,
         };
 
-        // 4. Save the new task using the service. saveMaintenanceTask expects a complete SaveTaskInput object.
-        await saveMaintenanceTask(newTaskForTarget);
-        totalTasksCreated++;
-      }
+    } catch (error) {
+        console.error("CRITICAL ERROR in copyMaintenanceTasksFlow:", error);
+        throw new Error(`Failed to copy tasks: ${error instanceof Error ? error.message : String(error)}`);
     }
-
-    return {
-      sourceAircraftId,
-      targetAircraftCount: targetAircraftIds.length,
-      copiedTasksCount: tasksToCopy.length, // Number of unique tasks copied to each aircraft
-      status: `Successfully copied ${tasksToCopy.length} tasks to ${targetAircraftIds.length} aircraft. Total new tasks created: ${totalTasksCreated}.`,
-    };
   }
 );
-
     
