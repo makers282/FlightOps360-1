@@ -27,7 +27,7 @@ import { AddEditAircraftDiscrepancyModal } from './components/add-edit-aircraft-
 import { SignOffDiscrepancyModal, type SignOffFormData } from './components/sign-off-discrepancy-modal';
 import { AddEditMelItemModal } from './components/add-edit-mel-item-modal';
 import { GenerateWorkOrderModal, type WorkOrderFormData } from './components/generate-work-order-modal';
-import { CopyTasksModal } from './components/copy-tasks-modal'; // New import
+import { CopyTasksModal } from './components/copy-tasks-modal';
 import { Dialog } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -41,7 +41,7 @@ import { fetchFleetAircraft, saveFleetAircraft } from '@/ai/flows/manage-fleet-f
 import type { FleetAircraft, SaveFleetAircraftInput, EngineDetail, PropellerDetail } from '@/ai/schemas/fleet-aircraft-schemas';
 import { fetchMaintenanceTasksForAircraft, saveMaintenanceTask, deleteMaintenanceTask, generateMaintenanceWorkOrder } from '@/ai/flows/manage-maintenance-tasks-flow';
 import type { MaintenanceTask as FlowMaintenanceTask } from '@/ai/schemas/maintenance-task-schemas';
-import { fetchComponentTimesForAircraft, saveComponentTimesForAircraft, type AircraftComponentTimes } from '@/ai/flows/manage-component-times-flow';
+import { saveComponentTimesForAircraft, fetchComponentTimesForAircraft, type AircraftComponentTimes } from '@/ai/flows/manage-component-times-flow';
 import { fetchCompanyProfile, type CompanyProfile } from '@/ai/flows/manage-company-profile-flow';
 import { PageHeader } from '@/components/page-header';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -341,8 +341,8 @@ export default function AircraftMaintenanceDetailPage() {
   const [isPropellerModalOpen, setIsPropellerModalOpen] = useState(false);
   const [isWorkOrderModalOpen, setIsWorkOrderModalOpen] = useState(false);
 
-  const [isCopyModalOpen, setIsCopyModalOpen] = useState(false); // New state for copy modal
-  const [isCopyingTasks, startCopyingTasksTransition] = useTransition(); // New transition for copy
+  const [isCopyModalOpen, setIsCopyModalOpen] = useState(false);
+  const [isCopyingTasks, startCopyingTasksTransition] = useTransition();
 
   const aircraftInfoForm = useForm<AircraftInfoEditFormData>({
     resolver: zodResolver(aircraftInfoEditSchema),
@@ -418,7 +418,7 @@ export default function AircraftMaintenanceDetailPage() {
       setIsLoadingAircraft(true);
       try {
         const fleet = await fetchFleetAircraft();
-        setFullFleet(fleet); // Store the full fleet list
+        setFullFleet(fleet);
         const foundAircraft = fleet.find(ac => ac.tailNumber === tailNumber);
         if (foundAircraft) { setCurrentAircraft(foundAircraft); resetAircraftInfoForm(foundAircraft); await loadAndInitializeComponentTimes(foundAircraft); await loadMaintenanceTasks(foundAircraft.id); await loadAircraftDiscrepancies(foundAircraft.id); await loadMelItems(foundAircraft.id); }
         else { setCurrentAircraft(null); setMaintenanceTasks([]); await loadAndInitializeComponentTimes(null); setAircraftDiscrepancies([]); setMelItems([]); toast({ title: "Error", description: `Aircraft ${tailNumber} not found in fleet.`, variant: "destructive" }); }
@@ -477,7 +477,6 @@ export default function AircraftMaintenanceDetailPage() {
         primaryContactPhone: data.primaryContactPhone, 
         primaryContactEmail: data.primaryContactEmail, 
         internalNotes: data.internalNotes,
-        // Engine and Propeller details are already on currentAircraft state
       };
       try { const savedData = await saveFleetAircraft(aircraftToSave); setCurrentAircraft(savedData); setIsEditingAircraftInfo(false); toast({ title: "Aircraft Info Saved", description: `Details for ${savedData.tailNumber} updated.` }); }
       catch (error) { console.error("Failed to save aircraft info:", error); toast({ title: "Error Saving Aircraft Info", description: (error instanceof Error ? error.message : "Unknown error"), variant: "destructive" }); }
@@ -778,6 +777,7 @@ export default function AircraftMaintenanceDetailPage() {
         icon={Wrench}
         actions={
           <div className="flex gap-2">
+            <Button asChild variant="outline"><span><Link href="/aircraft/currency"><ArrowLeft className="mr-2 h-4 w-4" /> Back to Overview</Link></span></Button>
             <Button onClick={handleOpenWorkOrderModal} disabled={selectedTaskIds.length === 0 || isGeneratingReport}> {isGeneratingReport ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Printer className="mr-2 h-4 w-4" />} Generate Work Order ({selectedTaskIds.length}) </Button>
             <Button variant="outline" onClick={() => setIsCopyModalOpen(true)} disabled={selectedTaskIds.length === 0}>
               <Copy className="mr-2 h-4 w-4" />

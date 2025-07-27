@@ -8,7 +8,7 @@ import { ai } from '@/ai/genkit';
 import { z } from 'zod';
 import { adminDb as db } from '@/lib/firebase-admin';
 import type { MaintenanceTask, SaveTaskInput } from '@/ai/schemas/maintenance-task-schemas';
-import { fetchMaintenanceTasksForAircraft, saveMaintenanceTask } from './maintenance-task-service'; // UPDATED IMPORT
+import { fetchMaintenanceTasksForAircraft, saveMaintenanceTask } from './maintenance-task-service';
 
 const CopyTasksInputSchema = z.object({
   sourceAircraftId: z.string().describe("The ID of the aircraft to copy tasks from."),
@@ -46,6 +46,7 @@ const copyMaintenanceTasksFlow = ai.defineFlow(
 
     // 1. Fetch all tasks from the source aircraft to filter from
     const sourceTasks = await fetchMaintenanceTasksForAircraft({ aircraftId: sourceAircraftId });
+    // Filter the fetched tasks to get only the ones the user selected
     const tasksToCopy = sourceTasks.filter(task => taskIds.includes(task.id));
 
     if (tasksToCopy.length === 0) {
@@ -57,7 +58,7 @@ const copyMaintenanceTasksFlow = ai.defineFlow(
       };
     }
     
-    let totalCopiedTasks = 0;
+    let totalTasksCreated = 0;
 
     // 2. Loop through each target aircraft
     for (const targetId of targetAircraftIds) {
@@ -66,31 +67,39 @@ const copyMaintenanceTasksFlow = ai.defineFlow(
       // 3. Loop through each selected source task and create a new one for the target
       for (const sourceTask of tasksToCopy) {
         
-        const { id, lastCompletedDate, lastCompletedHours, lastCompletedCycles, lastCompletedNotes, ...restOfTask } = sourceTask;
+        const { 
+            id: originalId, // We will generate a new one
+            lastCompletedDate, 
+            lastCompletedHours, 
+            lastCompletedCycles, 
+            lastCompletedNotes, 
+            ...restOfTask 
+        } = sourceTask;
 
+        // This is a complete MaintenanceTask object minus the fields we want to reset or generate anew.
         const newTaskForTarget: SaveTaskInput = {
           ...restOfTask,
           // Generate a new Firestore ID for the new task
           id: db.collection('maintenanceTasks').doc().id,
           aircraftId: targetId,
-          // Reset completion details
+          // Reset completion details to undefined
           lastCompletedDate: undefined,
           lastCompletedHours: undefined,
           lastCompletedCycles: undefined,
           lastCompletedNotes: undefined,
         };
 
-        // 4. Save the new task using the service
+        // 4. Save the new task using the service. saveMaintenanceTask expects a complete SaveTaskInput object.
         await saveMaintenanceTask(newTaskForTarget);
-        totalCopiedTasks++;
+        totalTasksCreated++;
       }
     }
 
     return {
       sourceAircraftId,
       targetAircraftCount: targetAircraftIds.length,
-      copiedTasksCount: tasksToCopy.length, // tasks copied per aircraft
-      status: `Successfully copied ${tasksToCopy.length} tasks to ${targetAircraftIds.length} aircraft. Total tasks created: ${totalCopiedTasks}.`,
+      copiedTasksCount: tasksToCopy.length, // Number of unique tasks copied to each aircraft
+      status: `Successfully copied ${tasksToCopy.length} tasks to ${targetAircraftIds.length} aircraft. Total new tasks created: ${totalTasksCreated}.`,
     };
   }
 );
