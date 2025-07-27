@@ -77,10 +77,10 @@ const copyMaintenanceTasksFlow = ai.defineFlow(
         } = sourceTask;
 
         // This is a complete MaintenanceTask object minus the fields we want to reset or generate anew.
+        // CRITICAL FIX: Generate a new Firestore document ID for the new task to prevent overwrites and hangs.
         const newTaskForTarget: SaveTaskInput = {
           ...restOfTask,
-          // Generate a new Firestore ID for the new task
-          id: db.collection('maintenanceTasks').doc().id,
+          id: db.collection('maintenanceTasks').doc().id, // Generate new unique ID
           aircraftId: targetId,
           // Reset completion details to undefined
           lastCompletedDate: undefined,
