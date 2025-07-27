@@ -27,19 +27,20 @@ import { AddEditAircraftDiscrepancyModal } from './components/add-edit-aircraft-
 import { SignOffDiscrepancyModal, type SignOffFormData } from './components/sign-off-discrepancy-modal';
 import { AddEditMelItemModal } from './components/add-edit-mel-item-modal';
 import { GenerateWorkOrderModal, type WorkOrderFormData } from './components/generate-work-order-modal';
+import { CopyTasksModal } from './components/copy-tasks-modal'; // New import
 import { Dialog } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-import { Wrench, PlusCircle, ArrowLeft, Plane as PlaneIcon, Edit, Loader2, InfoIcon, Save, XCircle as XCircleIcon, Edit3, AlertTriangle, CheckCircle2, Search, ArrowUpDown, ArrowDown, ArrowUp, Printer, Filter as FilterIcon, ListChecks, BookOpen, Hammer, FileWarning, BookLock, Trash2, ShieldCheck, GripVertical, History as HistoryIcon } from 'lucide-react';
+import { Wrench, PlusCircle, ArrowLeft, Plane as PlaneIcon, Edit, Loader2, InfoIcon, Save, XCircle as XCircleIcon, Edit3, AlertTriangle, CheckCircle2, Search, ArrowUpDown, ArrowDown, ArrowUp, Printer, Filter as FilterIcon, ListChecks, BookOpen, Hammer, FileWarning, BookLock, Trash2, ShieldCheck, GripVertical, History as HistoryIcon, Copy } from 'lucide-react';
 import { format, parse, addDays, isValid, addMonths, addYears, endOfMonth, parseISO, differenceInCalendarDays } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { fetchFleetAircraft, saveFleetAircraft } from '@/ai/flows/manage-fleet-flow';
 import type { FleetAircraft, SaveFleetAircraftInput, EngineDetail, PropellerDetail } from '@/ai/schemas/fleet-aircraft-schemas';
 import { fetchMaintenanceTasksForAircraft, saveMaintenanceTask, deleteMaintenanceTask, generateMaintenanceWorkOrder, type MaintenanceTask as FlowMaintenanceTask } from '@/ai/flows/manage-maintenance-tasks-flow';
-import { fetchComponentTimesForAircraft, saveComponentTimesForAircraft, type AircraftComponentTimes } from '@/ai/flows/manage-component-times-flow';
+import { saveComponentTimesForAircraft, fetchComponentTimesForAircraft, type AircraftComponentTimes } from '@/ai/flows/manage-component-times-flow';
 import { fetchCompanyProfile, type CompanyProfile } from '@/ai/flows/manage-company-profile-flow';
 import { PageHeader } from '@/components/page-header';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -59,6 +60,7 @@ import { fetchMelItemsForAircraft, saveMelItem, deleteMelItem } from '@/ai/flows
 import type { MelItem, SaveMelItemInput } from '@/ai/schemas/mel-item-schemas';
 import { ManageEngineDetailsModal } from './components/manage-engine-details-modal';
 import { ManagePropellerDetailsModal } from './components/manage-propeller-details-modal';
+import { copyMaintenanceTasks } from '@/ai/flows/copy-maintenance-tasks-flow';
 
 
 export interface DisplayMaintenanceItem extends FlowMaintenanceTask {
@@ -287,6 +289,7 @@ export default function AircraftMaintenanceDetailPage() {
   const [maintenanceTasks, setMaintenanceTasks] = useState<FlowMaintenanceTask[]>([]);
   const [aircraftDiscrepancies, setAircraftDiscrepancies] = useState<AircraftDiscrepancy[]>([]);
   const [melItems, setMelItems] = useState<MelItem[]>([]);
+  const [fullFleet, setFullFleet] = useState<FleetAircraft[]>([]); // New state for full fleet list
 
   const [editableComponentTimes, setEditableComponentTimes] = useState<Array<{ componentName: string; currentTime: number; currentCycles: number }>>([]);
   const [originalComponentTimes, setOriginalComponentTimes] = useState<Array<{ componentName: string; currentTime: number; currentCycles: number }>>([]);
@@ -336,6 +339,9 @@ export default function AircraftMaintenanceDetailPage() {
   const [isEngineModalOpen, setIsEngineModalOpen] = useState(false);
   const [isPropellerModalOpen, setIsPropellerModalOpen] = useState(false);
   const [isWorkOrderModalOpen, setIsWorkOrderModalOpen] = useState(false);
+
+  const [isCopyModalOpen, setIsCopyModalOpen] = useState(false); // New state for copy modal
+  const [isCopyingTasks, startCopyingTasksTransition] = useTransition(); // New transition for copy
 
   const aircraftInfoForm = useForm<AircraftInfoEditFormData>({
     resolver: zodResolver(aircraftInfoEditSchema),
@@ -411,6 +417,7 @@ export default function AircraftMaintenanceDetailPage() {
       setIsLoadingAircraft(true);
       try {
         const fleet = await fetchFleetAircraft();
+        setFullFleet(fleet); // Store the full fleet list
         const foundAircraft = fleet.find(ac => ac.tailNumber === tailNumber);
         if (foundAircraft) { setCurrentAircraft(foundAircraft); resetAircraftInfoForm(foundAircraft); await loadAndInitializeComponentTimes(foundAircraft); await loadMaintenanceTasks(foundAircraft.id); await loadAircraftDiscrepancies(foundAircraft.id); await loadMelItems(foundAircraft.id); }
         else { setCurrentAircraft(null); setMaintenanceTasks([]); await loadAndInitializeComponentTimes(null); setAircraftDiscrepancies([]); setMelItems([]); toast({ title: "Error", description: `Aircraft ${tailNumber} not found in fleet.`, variant: "destructive" }); }
@@ -722,6 +729,29 @@ export default function AircraftMaintenanceDetailPage() {
     });
   };
 
+  const handleCopyTasks = async (targetAircraftIds: string[]) => {
+    if (!currentAircraft) return;
+    startCopyingTasksTransition(async () => {
+      try {
+        const result = await copyMaintenanceTasks({
+          sourceAircraftId: currentAircraft.id,
+          targetAircraftIds,
+        });
+        toast({
+          title: "Tasks Copied Successfully",
+          description: `Copied ${result.copiedTasksCount} tasks to ${result.targetAircraftCount} aircraft.`,
+        });
+        setIsCopyModalOpen(false);
+      } catch (error) {
+        toast({
+          title: "Error Copying Tasks",
+          description: error instanceof Error ? error.message : "An unknown error occurred.",
+          variant: "destructive",
+        });
+      }
+    });
+  };
+
   if (isLoadingAircraft || isLoadingComponentTimes) { return <div className="flex items-center justify-center h-screen"><Loader2 className="h-12 w-12 animate-spin text-primary" /><p className="ml-3 text-lg text-muted-foreground">Loading aircraft details &amp; component times...</p></div>; }
   if (!tailNumber || !currentAircraft) { return ( <div> <PageHeader title="Aircraft Not Found" icon={Wrench} actions={ <Button asChild variant="outline"><span><Link href="/aircraft/currency"><ArrowLeft className="mr-2 h-4 w-4" /> Back to Overview</Link></span></Button> } /> <Card> <CardContent className="pt-6"> <p>Aircraft "{tailNumber || 'Unknown'}" not found.</p> </CardContent> </Card> </div> ); }
   if (!currentAircraft.isMaintenanceTracked) { return ( <div> <PageHeader title={`Data for ${currentAircraft.tailNumber}`} icon={PlaneIcon} actions={ <Button asChild variant="outline"><span><Link href="/aircraft/currency"><ArrowLeft className="mr-2 h-4 w-4" /> Back to Overview</Link></span></Button> } /> <Card className="mb-6"> <CardHeader><CardTitle>Aircraft Information</CardTitle></CardHeader> <CardContent><p className="text-sm text-muted-foreground">Model: {currentAircraft.model}</p></CardContent> </Card> <Card> <CardContent className="pt-6"> <p>Maintenance tracking not enabled for "{currentAircraft.tailNumber}".</p> </CardContent> </Card> </div> ); }
@@ -745,6 +775,7 @@ export default function AircraftMaintenanceDetailPage() {
           <div className="flex gap-2">
             <Button asChild variant="outline"><span><Link href="/aircraft/currency"><ArrowLeft className="mr-2 h-4 w-4" /> Back to Overview</Link></span></Button>
             <Button onClick={handleOpenWorkOrderModal} disabled={selectedTaskIds.length === 0 || isGeneratingReport}> {isGeneratingReport ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Printer className="mr-2 h-4 w-4" />} Generate Work Order ({selectedTaskIds.length}) </Button>
+            <Button variant="outline" onClick={() => setIsCopyModalOpen(true)} disabled={maintenanceTasks.length === 0}><Copy className="mr-2 h-4 w-4" />Copy Tasks</Button>
             <Button onClick={handleOpenAddTaskModal}><PlusCircle className="mr-2 h-4 w-4" /> Add New Task</Button>
           </div>
         }
@@ -776,6 +807,15 @@ export default function AircraftMaintenanceDetailPage() {
         onGenerate={handleGenerateWorkOrder}
         isGenerating={isGeneratingReport}
         aircraftTailNumber={currentAircraft.tailNumber}
+      />
+
+      <CopyTasksModal
+        isOpen={isCopyModalOpen}
+        setIsOpen={setIsCopyModalOpen}
+        onCopy={handleCopyTasks}
+        isCopying={isCopyingTasks}
+        sourceAircraft={currentAircraft}
+        fleet={fullFleet}
       />
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -1031,3 +1071,4 @@ export default function AircraftMaintenanceDetailPage() {
 
 
     
+

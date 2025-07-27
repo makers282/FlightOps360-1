@@ -33,6 +33,7 @@ import '@/ai/flows/manage-mel-items-flow.ts';
 import '@/ai/flows/manage-flight-logs-flow.ts';
 import '@/ai/flows/manage-maintenance-costs-flow.ts';
 import '@/ai/flows/manage-maintenance-jobs-flow.ts';
+import '@/ai/flows/copy-maintenance-tasks-flow.ts'; // New flow
 
 // Schemas are not Genkit plugins and should not be imported here for registration.
 // They are imported directly by flows or components that use them.
