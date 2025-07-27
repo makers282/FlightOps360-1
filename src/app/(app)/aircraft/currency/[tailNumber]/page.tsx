@@ -39,7 +39,8 @@ import { format, parse, addDays, isValid, addMonths, addYears, endOfMonth, parse
 import { useToast } from '@/hooks/use-toast';
 import { fetchFleetAircraft, saveFleetAircraft } from '@/ai/flows/manage-fleet-flow';
 import type { FleetAircraft, SaveFleetAircraftInput, EngineDetail, PropellerDetail } from '@/ai/schemas/fleet-aircraft-schemas';
-import { fetchMaintenanceTasksForAircraft, saveMaintenanceTask, deleteMaintenanceTask, generateMaintenanceWorkOrder, type MaintenanceTask as FlowMaintenanceTask } from '@/ai/flows/manage-maintenance-tasks-flow';
+import { fetchMaintenanceTasksForAircraft, saveMaintenanceTask, deleteMaintenanceTask, generateMaintenanceWorkOrder } from '@/ai/flows/manage-maintenance-tasks-flow';
+import type { MaintenanceTask as FlowMaintenanceTask } from '@/ai/schemas/maintenance-task-schemas';
 import { fetchComponentTimesForAircraft, saveComponentTimesForAircraft, type AircraftComponentTimes } from '@/ai/flows/manage-component-times-flow';
 import { fetchCompanyProfile, type CompanyProfile } from '@/ai/flows/manage-company-profile-flow';
 import { PageHeader } from '@/components/page-header';
@@ -730,7 +731,10 @@ export default function AircraftMaintenanceDetailPage() {
   };
 
   const handleCopyTasks = async (targetAircraftIds: string[]) => {
-    if (!currentAircraft || selectedTaskIds.length === 0) return;
+    if (!currentAircraft || selectedTaskIds.length === 0) {
+      toast({ title: "No Tasks Selected", description: "Please select tasks to copy.", variant: "destructive" });
+      return;
+    }
     startCopyingTasksTransition(async () => {
       try {
         const result = await copyMaintenanceTasks({
@@ -1041,37 +1045,3 @@ export default function AircraftMaintenanceDetailPage() {
   );
 }
     
-
-    
-
-    
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    
-
-      
-    
-
-
-
-
-
-    
-
-
-
-
-    
-

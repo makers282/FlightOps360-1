@@ -7,8 +7,8 @@
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
 import { adminDb as db } from '@/lib/firebase-admin';
-import type { MaintenanceTask, SaveTaskInput } from './manage-maintenance-tasks-flow'; // Correctly import types
-import { fetchMaintenanceTasksForAircraft, saveMaintenanceTask } from './manage-maintenance-tasks-flow';
+import type { MaintenanceTask, SaveTaskInput } from '@/ai/schemas/maintenance-task-schemas';
+import { fetchMaintenanceTasksForAircraft, saveMaintenanceTask } from './maintenance-task-service'; // UPDATED IMPORT
 
 const CopyTasksInputSchema = z.object({
   sourceAircraftId: z.string().describe("The ID of the aircraft to copy tasks from."),
@@ -65,21 +65,22 @@ const copyMaintenanceTasksFlow = ai.defineFlow(
 
       // 3. Loop through each selected source task and create a new one for the target
       for (const sourceTask of tasksToCopy) {
-        // Create a new task object, resetting completion details and letting Firestore generate a new ID.
-        // The `saveMaintenanceTask` expects the full task object, so we provide it.
+        
         const { id, lastCompletedDate, lastCompletedHours, lastCompletedCycles, lastCompletedNotes, ...restOfTask } = sourceTask;
 
         const newTaskForTarget: SaveTaskInput = {
           ...restOfTask,
-          id: db.collection('maintenanceTasks').doc().id, // Generate a new Firestore ID
+          // Generate a new Firestore ID for the new task
+          id: db.collection('maintenanceTasks').doc().id,
           aircraftId: targetId,
+          // Reset completion details
           lastCompletedDate: undefined,
           lastCompletedHours: undefined,
           lastCompletedCycles: undefined,
           lastCompletedNotes: undefined,
         };
 
-        // 4. Save the new task.
+        // 4. Save the new task using the service
         await saveMaintenanceTask(newTaskForTarget);
         totalCopiedTasks++;
       }
