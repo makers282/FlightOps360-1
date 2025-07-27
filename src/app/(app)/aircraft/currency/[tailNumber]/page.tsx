@@ -740,7 +740,7 @@ export default function AircraftMaintenanceDetailPage() {
         });
         toast({
           title: "Tasks Copied Successfully",
-          description: `Copied ${result.copiedTasksCount} tasks to ${result.targetAircraftCount} aircraft.`,
+          description: result.status,
         });
         setIsCopyModalOpen(false);
       } catch (error) {
@@ -774,7 +774,6 @@ export default function AircraftMaintenanceDetailPage() {
         icon={Wrench}
         actions={
           <div className="flex gap-2">
-            <Button asChild variant="outline"><span><Link href="/aircraft/currency"><ArrowLeft className="mr-2 h-4 w-4" /> Back to Overview</Link></span></Button>
             <Button onClick={handleOpenWorkOrderModal} disabled={selectedTaskIds.length === 0 || isGeneratingReport}> {isGeneratingReport ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Printer className="mr-2 h-4 w-4" />} Generate Work Order ({selectedTaskIds.length}) </Button>
             <Button variant="outline" onClick={() => setIsCopyModalOpen(true)} disabled={selectedTaskIds.length === 0}>
               <Copy className="mr-2 h-4 w-4" />
