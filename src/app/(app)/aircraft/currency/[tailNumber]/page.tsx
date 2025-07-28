@@ -734,22 +734,32 @@ export default function AircraftMaintenanceDetailPage() {
       toast({ title: "No Tasks Selected", description: "Please select tasks to copy.", variant: "destructive" });
       return;
     }
+
     startCopyingTasksTransition(async () => {
+      setIsCopyModalOpen(false);
       try {
         const result = await copyMaintenanceTasks({
           sourceAircraftId: currentAircraft.id,
           taskIds: selectedTaskIds,
           targetAircraftIds,
         });
-        toast({
-          title: "Tasks Copied Successfully",
-          description: result.status,
-        });
-        setIsCopyModalOpen(false);
+
+        if (result.success) {
+           toast({
+            title: "Copy Successful",
+            description: result.status,
+          });
+        } else {
+           toast({
+            title: "Copy Operation Notice",
+            description: result.status,
+            variant: "destructive",
+          });
+        }
       } catch (error) {
         toast({
-          title: "Error Copying Tasks",
-          description: error instanceof Error ? error.message : "An unknown error occurred.",
+          title: "Error Starting Copy",
+          description: "There was an issue initiating the copy process.",
           variant: "destructive",
         });
       }
@@ -994,7 +1004,7 @@ export default function AircraftMaintenanceDetailPage() {
 
       {showDeleteDiscrepancyConfirm && discrepancyToDelete && (
         <AlertDialog open={showDeleteDiscrepancyConfirm} onOpenChange={setShowDeleteDiscrepancyConfirm}>
-            <AlertDialogContent>
+            <AlertDialogModalContent>
                 <AlertDialogHeader>
                     <AlertDialogTitle>Confirm Delete Discrepancy</AlertDialogTitle>
                     <AlertDialogDescription>
@@ -1008,7 +1018,7 @@ export default function AircraftMaintenanceDetailPage() {
                     Delete
                     </Button>
                 </AlertDialogFooter>
-            </AlertDialogContent>
+            </AlertDialogModalContent>
         </AlertDialog>
       )}
 
