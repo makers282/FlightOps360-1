@@ -53,13 +53,13 @@ const copyMaintenanceTasksFlow = ai.defineFlow(
         const tasksToCopy = allSourceTasks.filter(task => taskIds.includes(task.id));
 
         if (tasksToCopy.length === 0) {
-        console.warn(`[CopyFlow] No matching tasks found on source aircraft ${sourceAircraftId} for given IDs.`);
-        return {
-            sourceAircraftId,
-            targetAircraftCount: targetAircraftIds.length,
-            copiedTasksCount: 0,
-            status: "No matching tasks found on source aircraft to copy.",
-        };
+          console.warn(`[CopyFlow] No matching tasks found on source aircraft ${sourceAircraftId} for given IDs.`);
+          return {
+              sourceAircraftId,
+              targetAircraftCount: targetAircraftIds.length,
+              copiedTasksCount: 0,
+              status: "No matching tasks found on source aircraft to copy.",
+          };
         }
         
         let totalTasksCreated = 0;
@@ -71,6 +71,7 @@ const copyMaintenanceTasksFlow = ai.defineFlow(
           // 4. Loop through each selected source task and create a new one for the target
           for (const sourceTask of tasksToCopy) {
             
+            // Destructure to easily omit instance-specific fields
             const { 
                 id: originalId, // We will generate a new one
                 lastCompletedDate, 
