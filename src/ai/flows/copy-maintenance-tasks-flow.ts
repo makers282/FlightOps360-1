@@ -18,9 +18,9 @@ const CopyTasksInputSchema = z.object({
 export type CopyTasksInput = z.infer<typeof CopyTasksInputSchema>;
 
 const CopyTasksOutputSchema = z.object({
-  sourceAircraftId: z.string(),
-  targetAircraftCount: z.number(),
+  success: z.boolean(),
   copiedTasksCount: z.number(),
+  targetAircraftCount: z.number(),
   status: z.string(),
 });
 export type CopyTasksOutput = z.infer<typeof CopyTasksOutputSchema>;
@@ -40,35 +40,32 @@ const copyMaintenanceTasksFlow = ai.defineFlow(
     outputSchema: CopyTasksOutputSchema,
   },
   async ({ sourceAircraftId, taskIds, targetAircraftIds }) => {
-    if (!db) {
-        throw new Error("Firestore admin instance (db) is not initialized in copyMaintenanceTasksFlow.");
-    }
     console.log(`[CopyFlow] Starting copy for ${taskIds.length} tasks from ${sourceAircraftId} to ${targetAircraftIds.length} aircraft.`);
-
+    
     try {
         // 1. Fetch all tasks from the source aircraft to filter from
         const allSourceTasks = await fetchMaintenanceTasksForAircraft({ aircraftId: sourceAircraftId });
         
-        // 2. CRITICAL FIX: Filter the fetched tasks to get only the ones the user selected
+        // 2. Filter the fetched tasks to get only the ones the user selected
         const tasksToCopy = allSourceTasks.filter(task => taskIds.includes(task.id));
 
         if (tasksToCopy.length === 0) {
           console.warn(`[CopyFlow] No matching tasks found on source aircraft ${sourceAircraftId} for given IDs.`);
           return {
-              sourceAircraftId,
-              targetAircraftCount: targetAircraftIds.length,
+              success: false,
               copiedTasksCount: 0,
+              targetAircraftCount: targetAircraftIds.length,
               status: "No matching tasks found on source aircraft to copy.",
           };
         }
         
-        let totalTasksCreated = 0;
+        const copyPromises: Promise<MaintenanceTask>[] = [];
+        let totalTasksToBeCreated = 0;
 
-        // 3. Loop through each target aircraft
+        // 3. Loop through each target aircraft and each task to create a batch of promises
         for (const targetId of targetAircraftIds) {
           if (targetId === sourceAircraftId) continue; // Skip copying to itself
 
-          // 4. Loop through each selected source task and create a new one for the target
           for (const sourceTask of tasksToCopy) {
             
             // Destructure to easily omit instance-specific fields
@@ -91,17 +88,19 @@ const copyMaintenanceTasksFlow = ai.defineFlow(
               lastCompletedCycles: undefined,
               lastCompletedNotes: undefined,
             };
-
-            // 5. Save the new task using the service.
-            await saveMaintenanceTask(newTaskForTarget);
-            totalTasksCreated++;
+            
+            totalTasksToBeCreated++;
+            copyPromises.push(saveMaintenanceTask(newTaskForTarget));
           }
         }
         
-        const successMessage = `Successfully copied ${tasksToCopy.length} task(s) to ${targetAircraftIds.length} aircraft. A total of ${totalTasksCreated} new tasks were created.`;
+        // 4. Await all save operations concurrently
+        await Promise.all(copyPromises);
+        
+        const successMessage = `Successfully copied ${tasksToCopy.length} task(s) to ${targetAircraftIds.length} aircraft. A total of ${totalTasksToBeCreated} new tasks were created.`;
         console.log(`[CopyFlow] Success: ${successMessage}`);
         return {
-          sourceAircraftId,
+          success: true,
           targetAircraftCount: targetAircraftIds.length,
           copiedTasksCount: tasksToCopy.length,
           status: successMessage,
@@ -109,6 +108,7 @@ const copyMaintenanceTasksFlow = ai.defineFlow(
 
     } catch (error) {
         console.error("CRITICAL ERROR in copyMaintenanceTasksFlow:", error);
+        // Ensure a proper error is thrown back to the client
         throw new Error(`Failed to copy tasks: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
