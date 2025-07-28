@@ -731,38 +731,49 @@ export default function AircraftMaintenanceDetailPage() {
 
   const handleCopyTasks = async (targetAircraftIds: string[]) => {
     if (!currentAircraft || selectedTaskIds.length === 0) {
-      toast({ title: "No Tasks Selected", description: "Please select tasks to copy.", variant: "destructive" });
-      return;
+        toast({ title: "No Tasks Selected", description: "Please select tasks to copy.", variant: "destructive" });
+        return;
     }
 
     startCopyingTasksTransition(async () => {
-      setIsCopyModalOpen(false);
-      try {
-        const result = await copyMaintenanceTasks({
-          sourceAircraftId: currentAircraft.id,
-          taskIds: selectedTaskIds,
-          targetAircraftIds,
-        });
+        setIsCopyModalOpen(false); // Close modal immediately
+        try {
+            const response = await fetch('/api/copy-maintenance-tasks', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    sourceAircraftId: currentAircraft.id,
+                    taskIds: selectedTaskIds,
+                    targetAircraftIds,
+                }),
+            });
 
-        if (result.success) {
-           toast({
-            title: "Copy Successful",
-            description: result.status,
-          });
-        } else {
-           toast({
-            title: "Copy Operation Notice",
-            description: result.status,
-            variant: "destructive",
-          });
+            const result = await response.json();
+
+            if (!response.ok) {
+                // Handle HTTP errors like 500, 400
+                throw new Error(result.status || `Request failed with status ${response.status}`);
+            }
+
+            if (result.success) {
+                toast({
+                    title: "Copy Successful",
+                    description: result.status,
+                });
+            } else {
+                toast({
+                    title: "Copy Operation Notice",
+                    description: result.status,
+                    variant: "destructive",
+                });
+            }
+        } catch (error) {
+            toast({
+                title: "Error During Copy",
+                description: (error instanceof Error ? error.message : "An unknown error occurred."),
+                variant: "destructive",
+            });
         }
-      } catch (error) {
-        toast({
-          title: "Error Starting Copy",
-          description: "There was an issue initiating the copy process.",
-          variant: "destructive",
-        });
-      }
     });
   };
 
@@ -1061,3 +1072,4 @@ export default function AircraftMaintenanceDetailPage() {
     
 
     
+
