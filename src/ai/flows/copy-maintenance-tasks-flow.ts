@@ -1,10 +1,9 @@
 
 'use server';
 /**
- * @fileOverview A Genkit flow for copying selected maintenance tasks from one aircraft to others.
+ * @fileOverview A standard async function for copying selected maintenance tasks from one aircraft to others.
  */
 
-import { ai } from '@/ai/genkit';
 import { z } from 'zod';
 import { runFlow } from 'genkit';
 import { adminDb as db } from '@/lib/firebase-admin';
@@ -26,24 +25,9 @@ const CopyTasksOutputSchema = z.object({
 });
 export type CopyTasksOutput = z.infer<typeof CopyTasksOutputSchema>;
 
-export async function copyMaintenanceTasks(input: CopyTasksInput): Promise<CopyTasksOutput> {
-  if (!db) {
-    throw new Error("Firestore admin instance is not initialized.");
-  }
-  // The 'runFlow' mechanism is more suited for flows that might be triggered by external systems,
-  // or that require complex instrumentation and tracing provided by Genkit's framework.
-  // For a direct client-to-server function call within Next.js, a standard async function
-  // is often simpler and more direct. The developer feedback confirmed that direct invocation
-  // within the server context is the correct pattern here, not `runFlow`.
-  // The primary issue was the client calling a server-only function directly.
-  // Now that this is behind an API route, we can call the logic function directly.
-  return copyMaintenanceTasksLogic(input);
-}
-
-
 // This is a standard async function, not a Genkit flow definition.
 // This resolves the previous invocation issues.
-async function copyMaintenanceTasksLogic(
+export async function copyMaintenanceTasks(
   { sourceAircraftId, taskIds, targetAircraftIds }: CopyTasksInput
 ): Promise<CopyTasksOutput> {
   console.log(`[CopyLogic] Starting copy for ${taskIds.length} tasks from ${sourceAircraftId} to ${targetAircraftIds.length} aircraft.`);
