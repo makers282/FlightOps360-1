@@ -74,16 +74,16 @@ export function CopyTasksModal({
     <Dialog open={isOpen} onOpenChange={(open) => { if (!isCopying) setIsOpen(open); }}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Copy Maintenance Tasks</DialogTitle>
+          <DialogTitle>Copy Selected Maintenance Tasks</DialogTitle>
           <DialogDescription>
-            Copy all tasks from <strong>{sourceAircraft?.tailNumber}</strong> to one or more other aircraft.
+            Copy the selected tasks from <strong>{sourceAircraft?.tailNumber}</strong> to one or more other aircraft.
           </DialogDescription>
         </DialogHeader>
         <Alert>
           <Info className="h-4 w-4" />
           <AlertTitle>Important</AlertTitle>
           <AlertDescription>
-            This will create new copies of all tasks. The 'Last Completed' history (dates, hours, cycles) will be reset on the new tasks.
+            This will create new copies of the selected tasks. The 'Last Completed' history (dates, hours, cycles) will be reset on the new tasks.
           </AlertDescription>
         </Alert>
         <ScrollArea className="max-h-80 pr-4">

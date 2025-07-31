@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { useState, useEffect, useTransition, useCallback, useMemo } from 'react';
@@ -736,7 +735,7 @@ export default function AircraftMaintenanceDetailPage() {
     }
 
     startCopyingTasksTransition(async () => {
-        setIsCopyModalOpen(false); // Close modal immediately
+        setIsCopyModalOpen(false);
         try {
             const response = await fetch('/api/copy-maintenance-tasks', {
                 method: 'POST',
@@ -751,7 +750,6 @@ export default function AircraftMaintenanceDetailPage() {
             const result = await response.json();
 
             if (!response.ok) {
-                // Handle HTTP errors like 500, 400
                 throw new Error(result.status || `Request failed with status ${response.status}`);
             }
 
@@ -797,14 +795,14 @@ export default function AircraftMaintenanceDetailPage() {
         description={pageHeaderDescription}
         icon={Wrench}
         actions={
-          <div className="flex gap-2">
-            <Button asChild variant="outline"><span><Link href="/aircraft/currency"><ArrowLeft className="mr-2 h-4 w-4" /> Back to Overview</Link></span></Button>
-            <Button onClick={handleOpenWorkOrderModal} disabled={selectedTaskIds.length === 0 || isGeneratingReport}> {isGeneratingReport ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Printer className="mr-2 h-4 w-4" />} Generate Work Order ({selectedTaskIds.length}) </Button>
-            <Button variant="outline" onClick={() => setIsCopyModalOpen(true)} disabled={selectedTaskIds.length === 0}>
+          <div className="flex gap-2 flex-wrap">
+            <Button asChild variant="outline" size="sm"><span><Link href="/aircraft/currency"><ArrowLeft className="mr-2 h-4 w-4" /> Back to Overview</Link></span></Button>
+            <Button onClick={handleOpenWorkOrderModal} disabled={selectedTaskIds.length === 0 || isGeneratingReport} size="sm"> {isGeneratingReport ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Printer className="mr-2 h-4 w-4" />} Generate Work Order ({selectedTaskIds.length}) </Button>
+            <Button variant="outline" onClick={() => setIsCopyModalOpen(true)} disabled={selectedTaskIds.length === 0} size="sm">
               <Copy className="mr-2 h-4 w-4" />
               Copy Tasks ({selectedTaskIds.length})
             </Button>
-            <Button onClick={handleOpenAddTaskModal}><PlusCircle className="mr-2 h-4 w-4" /> Add New Task</Button>
+            <Button onClick={handleOpenAddTaskModal} size="sm"><PlusCircle className="mr-2 h-4 w-4" /> Add New Task</Button>
           </div>
         }
       />
@@ -1069,7 +1067,3 @@ export default function AircraftMaintenanceDetailPage() {
     </div>
   );
 }
-    
-
-    
-
