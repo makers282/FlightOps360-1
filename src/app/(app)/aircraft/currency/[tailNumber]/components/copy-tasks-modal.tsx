@@ -60,6 +60,7 @@ export function CopyTasksModal({
   };
 
   const handleCopyClick = () => {
+    // This is the corrected line. It now passes the selected IDs to the onCopy handler.
     onCopy(selectedAircraftIds);
   };
   
