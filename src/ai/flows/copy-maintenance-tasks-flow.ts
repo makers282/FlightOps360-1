@@ -90,7 +90,13 @@ export async function copyMaintenanceTasks(
           alertDaysPrior: sourceTask.alertDaysPrior,
         };
         
-        copyPromises.push(saveMaintenanceTask(newTaskForTarget));
+        try {
+          copyPromises.push(saveMaintenanceTask(newTaskForTarget));
+        } catch (err) {
+          console.error(`[CopyLogic] Failed to queue save for task:`, newTaskForTarget);
+          console.error(`[CopyLogic] Error:`, err);
+          throw err;
+        }
       }
     }
     

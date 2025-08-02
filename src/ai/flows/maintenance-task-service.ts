@@ -39,15 +39,20 @@ export async function saveMaintenanceTask(taskData: SaveTaskInput): Promise<Main
   if (!db) {
     throw new Error("Firestore admin instance is not initialized in saveMaintenanceTask (service).");
   }
-  console.log('Executing saveMaintenanceTask (service) with input:', JSON.stringify(taskData));
+  console.log('[saveTask] Attempting to save task with ID:', taskData.id, 'for aircraft:', taskData.aircraftId);
+  console.log('[saveTask] Data to be written:', JSON.stringify(taskData, null, 2));
+
   try {
     const taskDocRef = db.collection(MAINTENANCE_TASKS_COLLECTION).doc(taskData.id);
     const { id, ...dataToSet } = taskData;
+    
+    // Explicitly return the promise from the set operation
     await taskDocRef.set(dataToSet); 
-    console.log('Saved maintenance task in Firestore via service:', taskData.id);
+    
+    console.log('[saveTask] Successfully saved maintenance task in Firestore:', taskData.id);
     return taskData; // Return the full input object as it was passed (and saved)
   } catch (error) {
-    console.error('Error saving maintenance task to Firestore (service):', error);
+    console.error(`[saveTask] CRITICAL Firestore Error while saving task ${taskData.id}:`, error);
     throw new Error(`Failed to save task ${taskData.id} via service: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
