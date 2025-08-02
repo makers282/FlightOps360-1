@@ -1,13 +1,12 @@
-
 'use server';
 /**
  * @fileOverview A standard async function for copying selected maintenance tasks from one aircraft to others.
  */
 
 import { z } from 'zod';
-import { runFlow } from 'genkit';
 import { adminDb as db } from '@/lib/firebase-admin';
 import type { MaintenanceTask, SaveTaskInput } from '@/ai/schemas/maintenance-task-schemas';
+import { MaintenanceTaskSchema } from '@/ai/schemas/maintenance-task-schemas';
 import { fetchMaintenanceTasksForAircraft, saveMaintenanceTask } from './maintenance-task-service';
 
 const CopyTasksInputSchema = z.object({
@@ -26,7 +25,6 @@ const CopyTasksOutputSchema = z.object({
 export type CopyTasksOutput = z.infer<typeof CopyTasksOutputSchema>;
 
 // This is a standard async function, not a Genkit flow definition.
-// This resolves the previous invocation issues.
 export async function copyMaintenanceTasks(
   { sourceAircraftId, taskIds, targetAircraftIds }: CopyTasksInput
 ): Promise<CopyTasksOutput> {
@@ -34,7 +32,6 @@ export async function copyMaintenanceTasks(
   
   try {
     const allSourceTasks = await fetchMaintenanceTasksForAircraft({ aircraftId: sourceAircraftId });
-    // CRITICAL FIX: Filter the tasks based on the user's selection (taskIds).
     const tasksToCopy = allSourceTasks.filter(task => taskIds.includes(task.id));
 
     if (tasksToCopy.length === 0) {
@@ -53,18 +50,46 @@ export async function copyMaintenanceTasks(
       if (targetId === sourceAircraftId) continue;
 
       for (const sourceTask of tasksToCopy) {
-        // Correctly prepare a new task object for saving.
-        const { id: originalId, lastCompletedDate, lastCompletedHours, lastCompletedCycles, lastCompletedNotes, ...restOfTask } = sourceTask;
-        
+        // Explicitly map fields to prevent extra properties from causing errors.
+        // This is a more robust way to create the new task object.
         const newTaskForTarget: SaveTaskInput = {
-          ...restOfTask,
           id: db.collection('maintenanceTasks').doc().id, // Generate new unique ID
-          aircraftId: targetId,
+          aircraftId: targetId, // Set new aircraft ID
+          
+          // Copy all other fields from the schema
+          itemTitle: sourceTask.itemTitle,
+          referenceNumber: sourceTask.referenceNumber,
+          partNumber: sourceTask.partNumber,
+          serialNumber: sourceTask.serialNumber,
+          itemType: sourceTask.itemType,
+          associatedComponent: sourceTask.associatedComponent,
+          details: sourceTask.details,
+          isActive: sourceTask.isActive,
+          trackType: sourceTask.trackType,
+          isTripsNotAffected: sourceTask.isTripsNotAffected,
+          
+          // Reset history fields
           lastCompletedDate: undefined,
           lastCompletedHours: undefined,
           lastCompletedCycles: undefined,
           lastCompletedNotes: undefined,
+
+          // Copy tracking settings
+          isHoursDueEnabled: sourceTask.isHoursDueEnabled,
+          hoursDue: sourceTask.hoursDue,
+          hoursTolerance: sourceTask.hoursTolerance,
+          alertHoursPrior: sourceTask.alertHoursPrior,
+          isCyclesDueEnabled: sourceTask.isCyclesDueEnabled,
+          cyclesDue: sourceTask.cyclesDue,
+          cyclesTolerance: sourceTask.cyclesTolerance,
+          alertCyclesPrior: sourceTask.alertCyclesPrior,
+          isDaysDueEnabled: sourceTask.isDaysDueEnabled,
+          daysIntervalType: sourceTask.daysIntervalType,
+          daysDueValue: sourceTask.daysDueValue,
+          daysTolerance: sourceTask.daysTolerance,
+          alertDaysPrior: sourceTask.alertDaysPrior,
         };
+        
         copyPromises.push(saveMaintenanceTask(newTaskForTarget));
       }
     }
@@ -77,7 +102,7 @@ export async function copyMaintenanceTasks(
     return {
       success: true,
       targetAircraftCount: targetAircraftIds.length,
-      copiedTasksCount: tasksToCopy.length, // Correctly report the count of unique tasks copied
+      copiedTasksCount: tasksToCopy.length,
       status: successMessage,
     };
 
