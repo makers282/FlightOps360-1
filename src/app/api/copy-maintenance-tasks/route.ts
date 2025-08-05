@@ -1,37 +1,45 @@
-
 import { NextRequest, NextResponse } from 'next/server';
 import type { CopyTasksInput } from '@/ai/flows/copy-maintenance-tasks-flow';
 
 export async function POST(req: NextRequest) {
+  console.log('[API Route] route.ts loaded');
+
   try {
     const input: CopyTasksInput = await req.json();
+    console.log('[API Route] Parsed input:', input);
 
     if (!input.sourceAircraftId || !input.taskIds || !input.targetAircraftIds) {
-        return NextResponse.json({ success: false, status: 'Invalid input provided.' }, { status: 400 });
+      console.log('[API Route] Invalid input:', input);
+      return NextResponse.json({ success: false, status: 'Invalid input provided.' }, { status: 400 });
     }
 
     let copyMaintenanceTasks;
     try {
+      console.log('[API Route] Importing copyMaintenanceTasks...');
       copyMaintenanceTasks = (await import('@/ai/flows/copy-maintenance-tasks-flow')).copyMaintenanceTasks;
       console.log('[API Route] Successfully imported copyMaintenanceTasks');
     } catch (importErr) {
       console.error('[API Route] Failed to import copyMaintenanceTasks:', importErr);
-      const errorMessage = importErr instanceof Error ? importErr.message : String(importErr);
-      return NextResponse.json({ success: false, status: 'Import failure', error: errorMessage }, { status: 500 });
+      return NextResponse.json({ success: false, status: 'Import failure', error: String(importErr) }, { status: 500 });
     }
 
-    const result = await copyMaintenanceTasks(input);
-    console.log('[API Route] copyMaintenanceTasks responded with:', result);
+    try {
+      console.log('[API Route] Invoking copyMaintenanceTasks...');
+      const result = await copyMaintenanceTasks(input);
+      console.log('[API Route] copyMaintenanceTasks result:', result);
 
-    if (result.success) {
-      return NextResponse.json(result, { status: 200 });
-    } else {
-      return NextResponse.json(result, { status: 400 });
+      if (result.success) {
+        return NextResponse.json(result, { status: 200 });
+      } else {
+        return NextResponse.json(result, { status: 400 });
+      }
+    } catch (fnErr) {
+      console.error('[API Route] copyMaintenanceTasks threw:', fnErr);
+      return NextResponse.json({ success: false, status: 'copyMaintenanceTasks failed', error: String(fnErr) }, { status: 500 });
     }
 
-  } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : String(err);
-    console.error('[API Route] Unhandled Server Error in copy-maintenance-tasks:', errorMessage);
-    return NextResponse.json({ success: false, status: `Unhandled Server Error: ${errorMessage}` }, { status: 500 });
+  } catch (outerErr) {
+    console.error('[API Route] Outer catch hit:', outerErr);
+    return NextResponse.json({ success: false, status: 'Unhandled Server Error', error: String(outerErr) }, { status: 500 });
   }
 }

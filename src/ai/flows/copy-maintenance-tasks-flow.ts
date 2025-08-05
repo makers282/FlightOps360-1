@@ -1,62 +1,65 @@
 'use server';
-/**
- * @fileOverview A standard async function for copying selected maintenance tasks from one aircraft to others.
- */
 
 import { z } from 'zod';
 import { adminDb as db } from '@/lib/firebase-admin';
 import type { MaintenanceTask, SaveTaskInput } from '@/ai/schemas/maintenance-task-schemas';
-import { MaintenanceTaskSchema } from '@/ai/schemas/maintenance-task-schemas';
 import { fetchMaintenanceTasksForAircraft, saveMaintenanceTask } from './maintenance-task-service';
 
 const CopyTasksInputSchema = z.object({
-  sourceAircraftId: z.string().describe("The ID of the aircraft to copy tasks from."),
-  taskIds: z.array(z.string()).min(1, "At least one task must be selected to copy."),
-  targetAircraftIds: z.array(z.string()).min(1, "At least one target aircraft must be selected."),
+  sourceAircraftId: z.string(),
+  taskIds: z.array(z.string()).min(1),
+  targetAircraftIds: z.array(z.string()).min(1),
 });
 export type CopyTasksInput = z.infer<typeof CopyTasksInputSchema>;
 
-const CopyTasksOutputSchema = z.object({
-  success: z.boolean(),
-  copiedTasksCount: z.number(),
-  targetAircraftCount: z.number(),
-  status: z.string(),
-});
-export type CopyTasksOutput = z.infer<typeof CopyTasksOutputSchema>;
-
-// This is a standard async function, not a Genkit flow definition.
 export async function copyMaintenanceTasks(
   { sourceAircraftId, taskIds, targetAircraftIds }: CopyTasksInput
-): Promise<CopyTasksOutput> {
-  console.log(`[CopyLogic] Starting copy for ${taskIds.length} tasks from ${sourceAircraftId} to ${targetAircraftIds.length} aircraft.`);
-  
+) {
+  console.log('🛠️ [copyMaintenanceTasks] Function called');
+  console.log('🔧 Received input:', {
+    sourceAircraftId,
+    taskIds,
+    targetAircraftIds,
+  });
+
   try {
+    console.log(`[🔍] Fetching tasks for aircraft ${sourceAircraftId}...`);
     const allSourceTasks = await fetchMaintenanceTasksForAircraft({ aircraftId: sourceAircraftId });
+
+    if (!Array.isArray(allSourceTasks)) {
+      console.error('❌ [copyMaintenanceTasks] fetchMaintenanceTasksForAircraft returned non-array:', allSourceTasks);
+      throw new Error('Unexpected response from fetchMaintenanceTasksForAircraft');
+    }
+
     const tasksToCopy = allSourceTasks.filter(task => taskIds.includes(task.id));
+    console.log(`📦 Found ${tasksToCopy.length} matching task(s) to copy`);
 
     if (tasksToCopy.length === 0) {
-      console.warn(`[CopyLogic] No matching tasks found on source aircraft ${sourceAircraftId} for given IDs.`);
+      console.warn(`[⚠️] No tasks matched the selected IDs on source aircraft ${sourceAircraftId}`);
       return {
-          success: false,
-          copiedTasksCount: 0,
-          targetAircraftCount: targetAircraftIds.length,
-          status: "Error: The selected tasks could not be found on the source aircraft. They may have been deleted.",
+        success: false,
+        copiedTasksCount: 0,
+        targetAircraftCount: targetAircraftIds.length,
+        status: "No tasks matched the selected IDs on the source aircraft.",
       };
     }
-    
+
     const copyPromises: Promise<any>[] = [];
 
     for (const targetId of targetAircraftIds) {
-      if (targetId === sourceAircraftId) continue;
+      if (targetId === sourceAircraftId) {
+        console.log(`[⏩] Skipping self-copy for ${targetId}`);
+        continue;
+      }
+
+      console.log(`[🛫] Copying tasks to ${targetId}`);
 
       for (const sourceTask of tasksToCopy) {
-        // Explicitly map fields to prevent extra properties from causing errors.
-        // This is a more robust way to create the new task object.
-        const newTaskForTarget: SaveTaskInput = {
-          id: db.collection('maintenanceTasks').doc().id, // Generate new unique ID
-          aircraftId: targetId, // Set new aircraft ID
-          
-          // Copy all other fields from the schema
+        const newTaskId = db.collection('maintenanceTasks').doc().id;
+
+        const newTask: SaveTaskInput = {
+          id: newTaskId,
+          aircraftId: targetId,
           itemTitle: sourceTask.itemTitle,
           referenceNumber: sourceTask.referenceNumber,
           partNumber: sourceTask.partNumber,
@@ -67,14 +70,14 @@ export async function copyMaintenanceTasks(
           isActive: sourceTask.isActive,
           trackType: sourceTask.trackType,
           isTripsNotAffected: sourceTask.isTripsNotAffected,
-          
-          // Reset history fields
+
+          // Reset usage
           lastCompletedDate: undefined,
           lastCompletedHours: undefined,
           lastCompletedCycles: undefined,
           lastCompletedNotes: undefined,
 
-          // Copy tracking settings
+          // Tracking
           isHoursDueEnabled: sourceTask.isHoursDueEnabled,
           hoursDue: sourceTask.hoursDue,
           hoursTolerance: sourceTask.hoursTolerance,
@@ -89,33 +92,29 @@ export async function copyMaintenanceTasks(
           daysTolerance: sourceTask.daysTolerance,
           alertDaysPrior: sourceTask.alertDaysPrior,
         };
-        
-        try {
-          copyPromises.push(saveMaintenanceTask(newTaskForTarget));
-        } catch (err) {
-          console.error(`[CopyLogic] Failed to queue save for task:`, newTaskForTarget);
-          console.error(`[CopyLogic] Error:`, err);
-          throw err;
-        }
+
+        console.log(`[📄] Queuing task copy for ${targetId}:`, {
+          title: newTask.itemTitle,
+          id: newTask.id,
+        });
+
+        copyPromises.push(saveMaintenanceTask(newTask));
       }
     }
-    
+
+    console.log(`[📨] Awaiting ${copyPromises.length} save operations...`);
     await Promise.all(copyPromises);
-    
-    const successMessage = `Successfully copied ${tasksToCopy.length} task(s) to ${targetAircraftIds.length} aircraft. A total of ${copyPromises.length} new tasks were created.`;
-    console.log(`[CopyLogic] Success: ${successMessage}`);
-    
+    console.log(`[✅] All tasks saved.`);
+
     return {
       success: true,
-      targetAircraftCount: targetAircraftIds.length,
       copiedTasksCount: tasksToCopy.length,
-      status: successMessage,
+      targetAircraftCount: targetAircraftIds.length,
+      status: `Copied ${tasksToCopy.length} task(s) to ${targetAircraftIds.length} aircraft.`,
     };
 
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error("CRITICAL ERROR in copyMaintenanceTasksLogic:", errorMessage);
-    // This error will be caught by the API route's catch block and returned to the client.
-    throw new Error(`Failed to copy tasks: ${errorMessage}`);
+    console.error('❌ [copyMaintenanceTasks] Caught error:', error);
+    throw new Error(`Failed to copy tasks: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
