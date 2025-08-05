@@ -57,12 +57,16 @@ const saveMaintenanceCostFlow = ai.defineFlow(
 
     try {
       const docSnap = await docRef.get();
-      const dataToSet = {
+      const dataToSet: { [key: string]: any } = {
         ...costData,
-        jobId: costData.jobId || undefined, // Ensure it's either the string or undefined
         updatedAt: FieldValue.serverTimestamp(),
         createdAt: docSnap.exists ? docSnap.data()?.createdAt : FieldValue.serverTimestamp(),
       };
+
+      // Conditionally add jobId to avoid passing 'undefined' to Firestore
+      if (costData.jobId) {
+        dataToSet.jobId = costData.jobId;
+      }
 
       await docRef.set(dataToSet, { merge: true });
       const savedDoc = await docRef.get();
