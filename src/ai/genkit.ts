@@ -13,11 +13,7 @@ export const ai = genkit({
   plugins: [
     googleAI(),
   ],
-  telemetry: {
-    instrumentation: {
-      // You can add other OTel instrumentations here if needed
-    },
-    // The logger can be configured here if you don't want the default
-  },
+  // The 'telemetry' and 'logLevel' options are configured via plugins or environment variables in Genkit 1.x
+  // The 'enableFirebaseTelemetry()' call above handles the necessary setup.
   model: 'gemini-1.5-flash', // Example model
 });
