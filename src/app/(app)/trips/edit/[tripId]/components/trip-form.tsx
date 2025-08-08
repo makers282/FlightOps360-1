@@ -12,7 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
-import { Plane, Edit3, UserSearch, Loader2, CalendarIcon, PlusCircle, Trash2, GripVertical, Wand2, PlaneTakeoff, PlaneLanding, Building, Users as PaxIcon, Save, InfoIcon, UserCircle2 } from 'lucide-react';
+import { Plane, Edit3, UserSearch, Loader2, CalendarIcon, PlusCircle, Trash2, GripVertical, Wand2, PlaneTakeoff, PlaneLanding, Building, Users as PaxIcon, Save, InfoIcon, UserCircle2, HeartPulse } from 'lucide-react';
 import { useForm, useFieldArray, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -66,6 +66,8 @@ const TripFormSchema = z.object({
   assignedCoPilotId: z.string().optional(),
   assignedFlightAttendantId1: z.string().optional(),
   assignedFlightAttendantId2: z.string().optional(),
+  assignedMedicalCrewId1: z.string().optional(), // New
+  assignedMedicalCrewId2: z.string().optional(), // New
 });
 
 export type FullTripFormData = z.infer<typeof TripFormSchema>;
@@ -131,6 +133,8 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
       assignedCoPilotId: undefined,
       assignedFlightAttendantId1: undefined,
       assignedFlightAttendantId2: undefined,
+      assignedMedicalCrewId1: undefined,
+      assignedMedicalCrewId2: undefined,
     },
   });
 
@@ -216,6 +220,8 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
           assignedCoPilotId: initialTripData.assignedCoPilotId || undefined,
           assignedFlightAttendantId1: initialTripData.assignedFlightAttendantIds?.[0] || undefined,
           assignedFlightAttendantId2: initialTripData.assignedFlightAttendantIds?.[1] || undefined,
+          assignedMedicalCrewId1: initialTripData.assignedMedicalCrewIds?.[0] || undefined,
+          assignedMedicalCrewId2: initialTripData.assignedMedicalCrewIds?.[1] || undefined,
         });
         setLegEstimates(new Array((initialTripData.legs || []).length).fill(null));
         setIsLoadingInitialData(false);
@@ -403,7 +409,7 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
 
   const pilots = crewRoster.filter(c => c.isActive && c.onboardingData?.roles?.some(role => ["Pilot in Command (PIC)", "Second in Command (SIC)"].includes(role)));
   const flightAttendants = crewRoster.filter(c => c.isActive && c.onboardingData?.roles?.includes('Flight Attendant'));
-
+  const medicalCrew = crewRoster.filter(c => c.isActive && c.onboardingData?.roles?.some(role => ["Flight Nurse", "Flight Paramedic"].includes(role)));
 
   if (isLoadingInitialData) {
     return (
@@ -550,6 +556,42 @@ export function TripForm({ isEditMode, initialTripData, onSave, isSaving, initia
                             <SelectContent>
                                 <SelectItem value={UNASSIGNED_CREW_VALUE}>Unassigned</SelectItem>
                                 {flightAttendants.map(c => (<SelectItem key={c.id} value={c.id}>{c.firstName} {c.lastName}</SelectItem>))}
+                            </SelectContent>
+                        </Select>
+                        <FormMessage />
+                    </FormItem>
+                )} />
+            </div>
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                <FormField control={control} name="assignedMedicalCrewId1" render={({ field }) => (
+                    <FormItem>
+                        <FormLabel className="flex items-center gap-1"><HeartPulse className="h-4 w-4 text-red-500" />Medical Crew 1</FormLabel>
+                        <Select 
+                            onValueChange={value => field.onChange(value === UNASSIGNED_CREW_VALUE ? undefined : value)} 
+                            value={field.value || UNASSIGNED_CREW_VALUE} 
+                            disabled={isLoadingCrewRoster}
+                        >
+                            <FormControl><SelectTrigger><SelectValue placeholder={isLoadingCrewRoster ? "Loading..." : "Select Medical Crew"} /></SelectTrigger></FormControl>
+                            <SelectContent>
+                                <SelectItem value={UNASSIGNED_CREW_VALUE}>Unassigned</SelectItem>
+                                {medicalCrew.map(c => (<SelectItem key={c.id} value={c.id}>{c.firstName} {c.lastName}</SelectItem>))}
+                            </SelectContent>
+                        </Select>
+                        <FormMessage />
+                    </FormItem>
+                )} />
+                <FormField control={control} name="assignedMedicalCrewId2" render={({ field }) => (
+                    <FormItem>
+                        <FormLabel className="flex items-center gap-1"><HeartPulse className="h-4 w-4 text-red-500" />Medical Crew 2</FormLabel>
+                        <Select 
+                            onValueChange={value => field.onChange(value === UNASSIGNED_CREW_VALUE ? undefined : value)} 
+                            value={field.value || UNASSIGNED_CREW_VALUE} 
+                            disabled={isLoadingCrewRoster}
+                        >
+                            <FormControl><SelectTrigger><SelectValue placeholder={isLoadingCrewRoster ? "Loading..." : "Select Medical Crew"} /></SelectTrigger></FormControl>
+                            <SelectContent>
+                                <SelectItem value={UNASSIGNED_CREW_VALUE}>Unassigned</SelectItem>
+                                {medicalCrew.map(c => (<SelectItem key={c.id} value={c.id}>{c.firstName} {c.lastName}</SelectItem>))}
                             </SelectContent>
                         </Select>
                         <FormMessage />

@@ -34,6 +34,7 @@ function NewTripPageContent() {
       }
       
       const flightAttendantIds = [data.assignedFlightAttendantId1, data.assignedFlightAttendantId2].filter(faId => faId && faId !== "--UNASSIGNED--") as string[];
+      const medicalCrewIds = [data.assignedMedicalCrewId1, data.assignedMedicalCrewId2].filter(mcId => mcId && mcId !== "--UNASSIGNED--") as string[];
 
       const tripToSave: SaveTripInput = {
         tripId: data.tripId,
@@ -60,6 +61,7 @@ function NewTripPageContent() {
         assignedPilotId: data.assignedPilotId,
         assignedCoPilotId: data.assignedCoPilotId,
         assignedFlightAttendantIds: flightAttendantIds,
+        assignedMedicalCrewIds: medicalCrewIds,
       };
       
       if (data.selectedCustomerId) {

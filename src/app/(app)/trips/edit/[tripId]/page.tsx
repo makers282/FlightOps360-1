@@ -62,6 +62,8 @@ function EditTripPageContent() {
       const aircraftSelectOptions = await fetchFleetAircraft().then(fleet => fleet.map(ac => ({ value: ac.id, label: `${ac.tailNumber} - ${ac.model}`, model: ac.model })));
       
       const flightAttendantIds = [formData.assignedFlightAttendantId1, formData.assignedFlightAttendantId2].filter(faId => faId && faId !== "--UNASSIGNED--") as string[];
+      const medicalCrewIds = [formData.assignedMedicalCrewId1, formData.assignedMedicalCrewId2].filter(mcId => mcId && mcId !== "--UNASSIGNED--") as string[];
+
 
       const tripToSave: Trip = {
         ...tripData, 
@@ -90,6 +92,7 @@ function EditTripPageContent() {
         assignedPilotId: formData.assignedPilotId,
         assignedCoPilotId: formData.assignedCoPilotId,
         assignedFlightAttendantIds: flightAttendantIds,
+        assignedMedicalCrewIds: medicalCrewIds,
       };
       
       try {

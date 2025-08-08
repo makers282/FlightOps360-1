@@ -22,7 +22,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Loader2, ArrowLeft, Plane, User, CalendarDays, DollarSign, InfoIcon, Edit3, Trash2, Send, Users as CrewIcon, FileText as FileIcon, Package as LoadManifestIcon, Save, PlaneTakeoff, CheckCircle } from 'lucide-react'; // Added CheckCircle
+import { Loader2, ArrowLeft, Plane, User, CalendarDays, DollarSign, InfoIcon, Edit3, Trash2, Send, Users as CrewIcon, FileText as FileIcon, Package as LoadManifestIcon, Save, PlaneTakeoff, CheckCircle, HeartPulse } from 'lucide-react';
 import { fetchTripById, deleteTrip, saveTrip } from '@/ai/flows/manage-trips-flow';
 import type { Trip, TripLeg, TripStatus, SaveTripInput } from '@/ai/schemas/trip-schemas';
 import { useToast } from '@/hooks/use-toast';
@@ -512,6 +512,13 @@ export default function ViewTripDetailsPage() {
                 ))
             ) : (
                 <p><strong>Flight Attendants:</strong> N/A</p>
+            )}
+            {(trip.assignedMedicalCrewIds && trip.assignedMedicalCrewIds.length > 0) ? (
+                trip.assignedMedicalCrewIds.map((mcId, index) => (
+                    <p key={mcId}><strong>Medical Crew {index + 1}:</strong> {getCrewMemberDisplay(mcId)}</p>
+                ))
+            ) : (
+                <p><strong>Medical Crew:</strong> N/A</p>
             )}
             <Button variant="outline" className="w-full mt-2" asChild>
                 <Link href={`/trips/edit/${trip.id}`}>
