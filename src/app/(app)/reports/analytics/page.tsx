@@ -1,29 +1,27 @@
 
+"use client";
+
+import React, { Suspense } from 'react';
 import { PageHeader } from '@/components/page-header';
-import { TrendingUp } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { TrendingUp, Loader2 } from 'lucide-react';
+import { AnalyticsClient } from './components/analytics-client';
 
 export default function OperationalAnalyticsPage() {
   return (
     <>
       <PageHeader 
         title="Operational Analytics" 
-        description="This section will provide insights and analytics on various operational aspects."
+        description="Insights and analytics on various operational aspects."
         icon={TrendingUp}
       />
-      <Card>
-        <CardHeader>
-          <CardTitle>Analytics Content Area</CardTitle>
-          <CardDescription>
-            Key performance indicators (KPIs), trend analysis, and custom operational reports will be available here.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <p className="text-muted-foreground">
-            Operational analytics and reporting functionality is pending implementation.
-          </p>
-        </CardContent>
-      </Card>
+      <Suspense fallback={
+        <div className="flex items-center justify-center py-10">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="ml-2 text-muted-foreground">Loading analytics dashboard...</p>
+        </div>
+      }>
+        <AnalyticsClient />
+      </Suspense>
     </>
   );
 }
