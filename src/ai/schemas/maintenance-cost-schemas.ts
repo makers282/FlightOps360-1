@@ -58,3 +58,4 @@ export const DeleteMaintenanceCostOutputSchema = z.object({
   success: z.boolean(),
   costId: z.string(),
 });
+

@@ -21,12 +21,13 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from "@/lib/utils";
 import { format, parseISO, startOfDay } from "date-fns";
 
-import { DollarSign, ArrowLeft, Save, Loader2, CalendarIcon, PlusCircle, Trash2, UploadCloud, Hammer } from 'lucide-react';
+import { DollarSign, ArrowLeft, Save, Loader2, CalendarIcon, PlusCircle, Trash2, Hammer } from 'lucide-react';
 import { fetchFleetAircraft, type FleetAircraft } from '@/ai/flows/manage-fleet-flow';
 import { saveMaintenanceCost } from '@/ai/flows/manage-maintenance-costs-flow';
-import type { MaintenanceCost } from '@/ai/schemas/maintenance-cost-schemas';
+import type { MaintenanceCost, MaintenanceCostAttachment } from '@/ai/schemas/maintenance-cost-schemas';
 import { fetchMaintenanceJobs, type MaintenanceJob } from '@/ai/flows/manage-maintenance-jobs-flow';
 import { AddEditJobModal } from '@/app/(app)/maintenance/jobs/components/add-edit-job-modal';
+import { FileUpload } from '@/components/file-upload';
 
 
 // Form Schemas
@@ -36,7 +37,11 @@ const costBreakdownSchema = z.object({
   actualCost: z.coerce.number().min(0, "Must be non-negative.").optional().default(0),
   description: z.string().optional(),
 });
-type CostBreakdownFormData = z.infer<typeof costBreakdownSchema>;
+
+const attachmentSchema = z.object({
+  name: z.string(),
+  url: z.string().url(),
+});
 
 const costEntryFormSchema = z.object({
   aircraftId: z.string().min(1, "An aircraft must be selected."),
@@ -46,6 +51,7 @@ const costEntryFormSchema = z.object({
   costType: z.enum(['Scheduled', 'Unscheduled']),
   costBreakdowns: z.array(costBreakdownSchema).min(1, "At least one cost breakdown item is required."),
   notes: z.string().optional(),
+  attachments: z.array(attachmentSchema).optional().default([]),
 });
 export type CostEntryFormData = z.infer<typeof costEntryFormSchema>;
 
@@ -81,6 +87,7 @@ export function MaintenanceCostEntryForm({ initialData, isEditing }: Maintenance
       costType: 'Scheduled',
       costBreakdowns: [{ category: 'Parts', projectedCost: 0, actualCost: 0, description: '' }],
       notes: '',
+      attachments: [],
     },
   });
 
@@ -108,6 +115,11 @@ export function MaintenanceCostEntryForm({ initialData, isEditing }: Maintenance
   const { fields, append, remove } = useFieldArray({
     control: form.control,
     name: 'costBreakdowns',
+  });
+  
+  const { fields: attachmentFields, append: appendAttachment, remove: removeAttachment } = useFieldArray({
+    control: form.control,
+    name: "attachments"
   });
 
   const watchedBreakdowns = useWatch({
@@ -138,6 +150,7 @@ export function MaintenanceCostEntryForm({ initialData, isEditing }: Maintenance
         costType: initialData.costType,
         costBreakdowns: initialData.costBreakdowns,
         notes: initialData.notes,
+        attachments: initialData.attachments || [],
       });
     }
   }, [initialData, form]);
@@ -173,6 +186,7 @@ export function MaintenanceCostEntryForm({ initialData, isEditing }: Maintenance
         costType: data.costType,
         costBreakdowns: data.costBreakdowns,
         notes: data.notes,
+        attachments: data.attachments,
       };
 
       await saveMaintenanceCost(payload);
@@ -212,7 +226,26 @@ export function MaintenanceCostEntryForm({ initialData, isEditing }: Maintenance
             <div className="flex flex-col gap-6">
                 <Card><CardHeader><CardTitle>Cost Breakdown</CardTitle></CardHeader><CardContent className="space-y-3"> {fields.map((item, index) => ( <div key={item.id} className="p-3 border rounded-md space-y-2 relative bg-background"> <div className="grid grid-cols-1 md:grid-cols-2 gap-2"> <FormField control={form.control} name={`costBreakdowns.${index}.category`} render={({ field }) => ( <FormItem><FormLabel>Category</FormLabel> <Select onValueChange={field.onChange} value={field.value}> <FormControl><SelectTrigger><SelectValue placeholder="Select category"/></SelectTrigger></FormControl> <SelectContent> <SelectItem value="Labor">Labor</SelectItem><SelectItem value="Parts">Parts</SelectItem> <SelectItem value="Shop Fees">Shop Fees</SelectItem><SelectItem value="Other">Other</SelectItem> </SelectContent> </Select><FormMessage /> </FormItem> )}/> <div className="flex items-end"> <p className="text-sm font-medium text-right w-full">Variance: <span className={`font-bold ${((watchedBreakdowns[index]?.actualCost || 0) - (watchedBreakdowns[index]?.projectedCost || 0)) >= 0 ? 'text-red-600' : 'text-green-600'}`}>{formatCurrency((watchedBreakdowns[index]?.actualCost || 0) - (watchedBreakdowns[index]?.projectedCost || 0))}</span></p> </div> </div> <div className="grid grid-cols-1 md:grid-cols-2 gap-2"> <FormField control={form.control} name={`costBreakdowns.${index}.projectedCost`} render={({ field }) => ( <FormItem><FormLabel>Projected</FormLabel><FormControl><Input type="number" placeholder="0.00" {...field} /></FormControl><FormMessage /> </FormItem> )}/> <FormField control={form.control} name={`costBreakdowns.${index}.actualCost`} render={({ field }) => ( <FormItem><FormLabel>Actual</FormLabel><FormControl><Input type="number" placeholder="0.00" {...field} /></FormControl><FormMessage /> </FormItem> )}/> </div> {fields.length > 1 && <Button type="button" variant="ghost" size="icon" className="absolute top-1 right-1 text-destructive" onClick={() => remove(index)}><Trash2 className="h-4 w-4" /></Button>} </div> ))} <Button type="button" variant="outline" size="sm" className="w-full mt-2" onClick={() => append({ category: 'Labor', projectedCost: 0, actualCost: 0, description: '' })}> <PlusCircle className="mr-2 h-4 w-4" />Add Category </Button> </CardContent></Card>
                 <Card><CardHeader><CardTitle>Additional Notes</CardTitle></CardHeader><CardContent> <FormField control={form.control} name="notes" render={({ field }) => (<FormItem><FormControl><Textarea placeholder="Any notes relevant to this cost entry..." {...field} rows={4} /></FormControl><FormMessage /></FormItem>)} /> </CardContent></Card>
-                <Card><CardHeader><CardTitle>Attachments</CardTitle></CardHeader><CardContent> <div className="flex items-center justify-center w-full"> <label htmlFor="file-upload-desktop" className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer bg-card hover:bg-muted"> <div className="flex flex-col items-center justify-center pt-5 pb-6"> <UploadCloud className="w-8 h-8 mb-2 text-muted-foreground" /> <p className="mb-1 text-sm text-muted-foreground"><span className="font-semibold">Click to upload</span> or drag and drop</p> <p className="text-xs text-muted-foreground">PDF, PNG, JPG (MAX. 10MB)</p> </div> <Input id="file-upload-desktop" type="file" className="hidden" /> </label> </div> </CardContent></Card>
+                <Card>
+                  <CardHeader><CardTitle>Attachments</CardTitle></CardHeader>
+                  <CardContent>
+                    <FileUpload
+                      endpoint="maintenanceCost"
+                      value={attachmentFields.map(f => f.url)}
+                      onChange={(url) => {
+                        if (url) {
+                          appendAttachment({ name: url.split('/').pop() || 'file', url: url});
+                        }
+                      }}
+                      onRemove={(url) => {
+                          const indexToRemove = attachmentFields.findIndex(f => f.url === url);
+                          if (indexToRemove !== -1) {
+                              removeAttachment(indexToRemove);
+                          }
+                      }}
+                    />
+                  </CardContent>
+                </Card>
                 <div className="flex justify-end gap-2">
                     <Button type="button" variant="outline" onClick={() => router.push('/maintenance/costs')} className="mr-2">
                         <ArrowLeft className="mr-2 h-4 w-4"/> Cancel

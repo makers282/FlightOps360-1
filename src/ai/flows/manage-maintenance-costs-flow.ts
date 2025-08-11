@@ -59,6 +59,7 @@ const saveMaintenanceCostFlow = ai.defineFlow(
       const docSnap = await docRef.get();
       const dataToSet: { [key: string]: any } = {
         ...costData,
+        attachments: costData.attachments || [],
         updatedAt: FieldValue.serverTimestamp(),
         createdAt: docSnap.exists ? docSnap.data()?.createdAt : FieldValue.serverTimestamp(),
       };
@@ -107,6 +108,7 @@ const fetchMaintenanceCostsFlow = ai.defineFlow(
           id: doc.id,
           jobId: data.jobId,
           invoiceDate: data.invoiceDate,
+          attachments: data.attachments || [],
           createdAt: (data.createdAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
           updatedAt: (data.updatedAt as Timestamp)?.toDate().toISOString() || new Date(0).toISOString(),
         } as MaintenanceCost;
@@ -127,6 +129,7 @@ const deleteMaintenanceCostFlow = ai.defineFlow(
   async ({ costId }) => {
     if (!db) throw new Error("Firestore is not initialized in flow.");
     try {
+      // TODO: Add logic to delete associated files from Storage if needed
       await db.collection(MAINTENANCE_COSTS_COLLECTION).doc(costId).delete();
       return { success: true, costId };
     } catch (error) {
