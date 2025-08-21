@@ -140,17 +140,17 @@ export function FlightLogModal({
         ...initialData, // Then spread initialData to override defaults
         // Ensure numbers are numbers, not strings, if they come from initialData
         taxiOutTimeMins: Number(initialData.taxiOutTimeMins ?? 15),
-        hobbsTakeOff: Number(initialData.hobbsTakeOff),
-        hobbsLanding: Number(initialData.hobbsLanding),
+        hobbsTakeOff: initialData.hobbsTakeOff !== undefined && initialData.hobbsTakeOff !== null ? Number(initialData.hobbsTakeOff) : undefined,
+        hobbsLanding: initialData.hobbsLanding !== undefined && initialData.hobbsLanding !== null ? Number(initialData.hobbsLanding) : undefined,
         taxiInTimeMins: Number(initialData.taxiInTimeMins ?? 15),
         approaches: Number(initialData.approaches ?? 0),
         dayLandings: Number(initialData.dayLandings ?? 0),
         nightLandings: Number(initialData.nightLandings ?? 0),
         nightTimeDecimal: Number(initialData.nightTimeDecimal ?? 0.0),
         instrumentTimeDecimal: Number(initialData.instrumentTimeDecimal ?? 0.0),
-        fobStartingFuel: Number(initialData.fobStartingFuel),
+        fobStartingFuel: initialData.fobStartingFuel !== undefined ? Number(initialData.fobStartingFuel) : undefined,
         fuelPurchasedAmount: Number(initialData.fuelPurchasedAmount ?? 0.0),
-        endingFuel: Number(initialData.endingFuel),
+        endingFuel: initialData.endingFuel !== undefined ? Number(initialData.endingFuel) : undefined,
         fuelCost: Number(initialData.fuelCost ?? 0.0),
         postLegApuTimeDecimal: Number(initialData.postLegApuTimeDecimal ?? 0.0),
       });
@@ -181,12 +181,12 @@ export function FlightLogModal({
               <section className="space-y-4 p-4 border rounded-md shadow-sm">
                 <h3 className="text-lg font-semibold text-primary border-b pb-1">Flight Log Times</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-3">
-                  <FormField control={control} name="taxiOutTimeMins" render={({ field }) => (<FormItem><FormLabel>Taxi-Out Time (mins)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                  <FormField control={control} name="taxiOutTimeMins" render={({ field }) => (<FormItem><FormLabel>Taxi-Out Time (mins)</FormLabel><FormControl><Input type="number" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>)} />
                   <FormField control={control} name="takeOffTime" render={({ field }) => (<FormItem><FormLabel>Take-Off Time (HH:MM 24hr)</FormLabel><FormControl><Input type="time" {...field} /></FormControl><FormMessage /></FormItem>)} />
-                  <FormField control={control} name="hobbsTakeOff" render={({ field }) => (<FormItem><FormLabel>Hobbs Take-Off</FormLabel><FormControl><Input type="number" step="0.1" {...field} /></FormControl><FormMessage /></FormItem>)} />
-                  <FormField control={control} name="hobbsLanding" render={({ field }) => (<FormItem><FormLabel>Hobbs Landing</FormLabel><FormControl><Input type="number" step="0.1" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                  <FormField control={control} name="hobbsTakeOff" render={({ field }) => (<FormItem><FormLabel>Hobbs Take-Off</FormLabel><FormControl><Input type="number" step="0.1" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)} />
+                  <FormField control={control} name="hobbsLanding" render={({ field }) => (<FormItem><FormLabel>Hobbs Landing</FormLabel><FormControl><Input type="number" step="0.1" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)} />
                   <FormField control={control} name="landingTime" render={({ field }) => (<FormItem><FormLabel>Landing Time (HH:MM 24hr)</FormLabel><FormControl><Input type="time" {...field} /></FormControl><FormMessage /></FormItem>)} />
-                  <FormField control={control} name="taxiInTimeMins" render={({ field }) => (<FormItem><FormLabel>Taxi-In Time (mins)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                  <FormField control={control} name="taxiInTimeMins" render={({ field }) => (<FormItem><FormLabel>Taxi-In Time (mins)</FormLabel><FormControl><Input type="number" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>)} />
                 </div>
                 <div className="mt-3 grid grid-cols-2 gap-4 text-sm p-2 bg-muted rounded-md">
                   <div><strong>Flight Time:</strong> <span className="text-green-600 font-semibold">{decimalToHHMM(calculatedFlightTimeDecimal)} ({calculatedFlightTimeDecimal.toFixed(1)})</span></div>
@@ -197,28 +197,28 @@ export function FlightLogModal({
               <section className="space-y-4 p-4 border rounded-md shadow-sm">
                 <h3 className="text-lg font-semibold text-primary border-b pb-1">Approaches, Landings, Fuel, etc.</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-3">
-                  <FormField control={control} name="approaches" render={({ field }) => (<FormItem><FormLabel>Approaches</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                  <FormField control={control} name="approaches" render={({ field }) => (<FormItem><FormLabel>Approaches</FormLabel><FormControl><Input type="number" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>)} />
                   <FormField control={control} name="approachType" render={({ field }) => (<FormItem><FormLabel>Approach Type</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger></FormControl><SelectContent>{approachTypes.map(type => (<SelectItem key={type} value={type}>{type}</SelectItem>))}</SelectContent></Select><FormMessage /></FormItem>)} />
-                  <FormField control={control} name="dayLandings" render={({ field }) => (<FormItem><FormLabel>Day Landings</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>)} />
-                  <FormField control={control} name="nightLandings" render={({ field }) => (<FormItem><FormLabel>Night Landings</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                  <FormField control={control} name="dayLandings" render={({ field }) => (<FormItem><FormLabel>Day Landings</FormLabel><FormControl><Input type="number" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>)} />
+                  <FormField control={control} name="nightLandings" render={({ field }) => (<FormItem><FormLabel>Night Landings</FormLabel><FormControl><Input type="number" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>)} />
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-3">
-                  <FormField control={control} name="nightTimeDecimal" render={({ field }) => (<FormItem><FormLabel>Night Time (decimal)</FormLabel><FormControl><Input type="number" step="0.1" {...field} /></FormControl><FormMessage /></FormItem>)} />
-                  <FormField control={control} name="instrumentTimeDecimal" render={({ field }) => (<FormItem><FormLabel>Instrument Time (decimal)</FormLabel><FormControl><Input type="number" step="0.1" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                  <FormField control={control} name="nightTimeDecimal" render={({ field }) => (<FormItem><FormLabel>Night Time (decimal)</FormLabel><FormControl><Input type="number" step="0.1" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>)} />
+                  <FormField control={control} name="instrumentTimeDecimal" render={({ field }) => (<FormItem><FormLabel>Instrument Time (decimal)</FormLabel><FormControl><Input type="number" step="0.1" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>)} />
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-3 items-end">
-                  <FormField control={control} name="fobStartingFuel" render={({ field }) => (<FormItem><FormLabel>Starting Fuel (FOB)</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl><FormMessage /></FormItem>)} />
-                  <FormField control={control} name="fuelPurchasedAmount" render={({ field }) => (<FormItem><FormLabel>Fuel Purchased</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                  <FormField control={control} name="fobStartingFuel" render={({ field }) => (<FormItem><FormLabel>Starting Fuel (FOB)</FormLabel><FormControl><Input type="number" step="0.01" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)} />
+                  <FormField control={control} name="fuelPurchasedAmount" render={({ field }) => (<FormItem><FormLabel>Fuel Purchased</FormLabel><FormControl><Input type="number" step="0.01" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>)} />
                   <FormField control={control} name="fuelPurchasedUnit" render={({ field }) => (<FormItem><FormLabel>Unit</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{fuelUnits.map(unit => (<SelectItem key={unit} value={unit}>{unit}</SelectItem>))}</SelectContent></Select><FormMessage /></FormItem>)} />
-                  <FormField control={control} name="endingFuel" render={({ field }) => (<FormItem><FormLabel>Ending Fuel</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                  <FormField control={control} name="endingFuel" render={({ field }) => (<FormItem><FormLabel>Ending Fuel</FormLabel><FormControl><Input type="number" step="0.01" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)} />
                 </div>
                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-3">
-                    <FormField control={control} name="fuelCost" render={({ field }) => (<FormItem><FormLabel>Total Fuel Cost</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                    <FormField control={control} name="fuelCost" render={({ field }) => (<FormItem><FormLabel>Total Fuel Cost</FormLabel><FormControl><Input type="number" step="0.01" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>)} />
                     <FormItem>
                         <FormLabel>Calculated Fuel Burn</FormLabel>
                         <Input type="number" value={calculatedFuelBurn.toFixed(1)} readOnly className="bg-muted/50 cursor-not-allowed" />
                     </FormItem>
-                    <FormField control={control} name="postLegApuTimeDecimal" render={({ field }) => (<FormItem><FormLabel>Post-Leg APU Time</FormLabel><FormControl><Input type="number" step="0.1" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                    <FormField control={control} name="postLegApuTimeDecimal" render={({ field }) => (<FormItem><FormLabel>Post-Leg APU Time</FormLabel><FormControl><Input type="number" step="0.1" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>)} />
                  </div>
               </section>
             </form>
