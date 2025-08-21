@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useEffect, useTransition } from 'react';
@@ -33,6 +34,8 @@ import { FlightLogModal } from '../../components/flight-log-modal';
 import { FlightLogSummaryCard } from './components/flight-log-summary-card';
 import type { FlightLogLeg, FlightLogLegData, SaveFlightLogLegInput } from '@/ai/schemas/flight-log-schemas'; // Ensure SaveFlightLogLegInput is imported
 import { saveFlightLogLeg, fetchFlightLogForLeg } from '@/ai/flows/manage-flight-logs-flow';
+import { fetchComponentTimesForAircraft, type AircraftComponentTimes } from '@/ai/flows/manage-component-times-flow';
+
 
 // Helper to get badge variant for status
 const getStatusBadgeVariant = (status?: TripStatus): "default" | "secondary" | "outline" | "destructive" => {
@@ -110,6 +113,9 @@ export default function ViewTripDetailsPage() {
   const [isLoadingCrewRosterDetails, setIsLoadingCrewRosterDetails] = useState(true);
   const [isUpdatingStatus, startUpdatingStatusTransition] = useTransition();
   const [isClosingTrip, startClosingTripTransition] = useTransition();
+  
+  const [componentTimes, setComponentTimes] = useState<AircraftComponentTimes | null>(null);
+  const [isLoadingComponentTimes, setIsLoadingComponentTimes] = useState(true);
 
   const [isFlightLogModalOpen, setIsFlightLogModalOpen] = useState(false);
   const [currentLegForLog, setCurrentLegForLog] = useState<{ tripId: string; legIndex: number; origin: string; destination: string; initialData?: FlightLogLegData } | null>(null);
@@ -137,20 +143,32 @@ export default function ViewTripDetailsPage() {
           setTrip(tripData);
           setEditableNotes(tripData.notes || '');
 
-          // Fetch associated flight logs
-          setIsLoadingFlightLogs(true);
-          const logPromises = tripData.legs.map((leg, index) =>
-            fetchFlightLogForLeg({ tripId: tripData.id, legIndex: index })
-          );
-          const logs = await Promise.all(logPromises);
+          // Fetch associated data
+          const promises = [
+              fetchCrewMembers(),
+              fetchComponentTimesForAircraft({ aircraftId: tripData.aircraftId }),
+              ...tripData.legs.map((_leg, index) =>
+                  fetchFlightLogForLeg({ tripId: tripData.id, legIndex: index })
+              ),
+          ];
+
+          const [roster, times, ...logs] = await Promise.all(promises);
+          
           if (isMounted) {
+            setCrewRosterDetails(roster || []);
+            setComponentTimes(times);
+
             const logsMap: Record<number, FlightLogLeg | null> = {};
             logs.forEach((log, index) => {
-              logsMap[index] = log;
+              logsMap[index] = log as FlightLogLeg | null;
             });
             setTripFlightLogs(logsMap);
+
+            setIsLoadingCrewRosterDetails(false);
+            setIsLoadingComponentTimes(false);
             setIsLoadingFlightLogs(false);
           }
+
         } else {
           setError("Trip not found.");
           toast({ title: "Error", description: `Trip with ID ${id} not found.`, variant: "destructive" });
@@ -158,34 +176,19 @@ export default function ViewTripDetailsPage() {
         }
       } catch (err) {
         if (isMounted) {
-          console.error("Failed to fetch trip or logs:", err);
+          console.error("Failed to fetch trip or associated data:", err);
           setError(err instanceof Error ? err.message : "An unknown error occurred.");
           toast({ title: "Error Fetching Trip Data", description: (err instanceof Error ? err.message : "Unknown error"), variant: "destructive" });
           setIsLoadingFlightLogs(false);
+          setIsLoadingCrewRosterDetails(false);
+          setIsLoadingComponentTimes(false);
         }
       } finally {
         if (isMounted) setIsLoading(false);
       }
     };
 
-    const loadCrewRoster = async () => {
-        setIsLoadingCrewRosterDetails(true);
-        try {
-            const roster = await fetchCrewMembers();
-            if (isMounted) setCrewRosterDetails(roster || []);
-        } catch (crewError) {
-            if (isMounted) {
-                console.error("Failed to fetch crew roster:", crewError);
-                toast({ title: "Error Fetching Crew", description: "Could not load crew roster for display.", variant: "destructive" });
-                setCrewRosterDetails([]);
-            }
-        } finally {
-           if (isMounted) setIsLoadingCrewRosterDetails(false);
-        }
-    };
-
     loadTripData();
-    loadCrewRoster();
 
     return () => { isMounted = false; };
   }, [id, toast]);
@@ -284,33 +287,35 @@ export default function ViewTripDetailsPage() {
     if (!trip) return;
     const leg = trip.legs[legIndex];
     if (!leg) return;
-
+  
     const existingLog = tripFlightLogs[legIndex];
+    
+    // Determine the hobbs take-off value
+    let hobbsTakeOffValue: number | undefined;
+    if (legIndex > 0) {
+      // It's not the first leg, use the landing hobbs from the previous log
+      const previousLog = tripFlightLogs[legIndex - 1];
+      hobbsTakeOffValue = previousLog?.hobbsLanding;
+    } else {
+      // It's the first leg, use the aircraft's current airframe time
+      hobbsTakeOffValue = componentTimes?.['Airframe']?.time;
+    }
+  
     const initialLogData = existingLog ? {
       ...existingLog,
-      taxiOutTimeMins: Number(existingLog.taxiOutTimeMins ?? 0),
-      hobbsTakeOff: existingLog.hobbsTakeOff !== undefined && existingLog.hobbsTakeOff !== null ? Number(existingLog.hobbsTakeOff) : undefined,
-      hobbsLanding: existingLog.hobbsLanding !== undefined && existingLog.hobbsLanding !== null ? Number(existingLog.hobbsLanding) : undefined,
-      taxiInTimeMins: Number(existingLog.taxiInTimeMins ?? 0),
-      approaches: Number(existingLog.approaches ?? 0),
-      dayLandings: Number(existingLog.dayLandings ?? 0),
-      nightLandings: Number(existingLog.nightLandings ?? 0),
-      nightTimeDecimal: Number(existingLog.nightTimeDecimal ?? 0.0),
-      instrumentTimeDecimal: Number(existingLog.instrumentTimeDecimal ?? 0.0),
-      fobStartingFuel: existingLog.fobStartingFuel !== undefined ? Number(existingLog.fobStartingFuel) : undefined,
-      fuelPurchasedAmount: Number(existingLog.fuelPurchasedAmount ?? 0.0),
-      endingFuel: existingLog.endingFuel !== undefined ? Number(existingLog.endingFuel) : undefined,
-      fuelCost: Number(existingLog.fuelCost ?? 0.0),
-      postLegApuTimeDecimal: Number(existingLog.postLegApuTimeDecimal ?? 0.0),
-    } : undefined;
-
-
+    } : {
+      // Pre-populate for a new log entry
+      takeOffTime: leg.departureDateTime && isValid(parseISO(leg.departureDateTime)) ? format(parseISO(leg.departureDateTime), 'HH:mm') : "12:00",
+      hobbsTakeOff: hobbsTakeOffValue,
+      dayLandings: 1, // Default to 1 landing
+    };
+  
     setCurrentLegForLog({
       tripId: trip.id,
       legIndex: legIndex,
       origin: leg.origin,
       destination: leg.destination,
-      initialData: initialLogData,
+      initialData: initialLogData as FlightLogLegData,
     });
     setIsFlightLogModalOpen(true);
   };
@@ -349,6 +354,11 @@ export default function ViewTripDetailsPage() {
         }));
         toast({ title: "Flight Log Saved", description: `Log for leg ${currentLegForLog.legIndex + 1} saved.` });
         setIsFlightLogModalOpen(false);
+        // Refresh component times after saving a log
+        if (trip.aircraftId) {
+            const times = await fetchComponentTimesForAircraft({ aircraftId: trip.aircraftId });
+            setComponentTimes(times);
+        }
       } catch (err) {
         console.error("Failed to save flight log:", err);
         toast({ title: "Error Saving Log", description: (err instanceof Error ? err.message : "Unknown error"), variant: "destructive" });
