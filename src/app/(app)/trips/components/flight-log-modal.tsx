@@ -96,7 +96,7 @@ export function FlightLogModal({
 
   // Effect to auto-calculate landing time from Hobbs
   useEffect(() => {
-    if (typeof hobbsTakeOff === 'number' && typeof hobbsLanding === 'number' && hobbsLanding > hobbsTakeOff) {
+    if (typeof hobbsTakeOff === 'number' && typeof hobbsLanding === 'number' && hobbsLanding > hobbsTakeOff && takeOffTimeStr) {
       const flightTimeDecimal = hobbsLanding - hobbsTakeOff;
       const flightTimeMinutes = Math.round(flightTimeDecimal * 60);
       try {
@@ -115,11 +115,14 @@ export function FlightLogModal({
         if (typeof hobbsTakeOff === 'number' && typeof hobbsLanding === 'number' && hobbsLanding > hobbsTakeOff) {
             return parseFloat((hobbsLanding - hobbsTakeOff).toFixed(2));
         }
-        const takeOff = parseTime(takeOffTimeStr, "HH:mm", new Date());
-        let landing = parseTime(landingTimeStr, "HH:mm", new Date());
-        if (landing < takeOff) landing.setDate(landing.getDate() + 1);
-        const diffMins = differenceInMinutes(landing, takeOff);
-        return parseFloat((diffMins / 60).toFixed(2));
+        if (takeOffTimeStr && landingTimeStr) {
+          const takeOff = parseTime(takeOffTimeStr, "HH:mm", new Date());
+          let landing = parseTime(landingTimeStr, "HH:mm", new Date());
+          if (landing < takeOff) landing.setDate(landing.getDate() + 1);
+          const diffMins = differenceInMinutes(landing, takeOff);
+          return parseFloat((diffMins / 60).toFixed(2));
+        }
+        return 0;
     } catch (e) {
       return 0;
     }
@@ -142,14 +145,36 @@ export function FlightLogModal({
 
 
   useEffect(() => {
-    if (isOpen && initialData) {
-      form.reset({
+    if (isOpen) {
+      const defaultValues = {
+        taxiOutTimeMins: 15,
+        takeOffTime: "12:00",
+        hobbsTakeOff: undefined,
+        landingTime: "13:00",
+        hobbsLanding: undefined,
+        taxiInTimeMins: 15,
+        approaches: 0,
+        approachType: undefined,
+        dayLandings: 0,
+        nightLandings: 0,
+        nightTimeDecimal: 0.0,
+        instrumentTimeDecimal: 0.0,
+        fobStartingFuel: undefined,
+        fuelPurchasedAmount: 0.0,
+        fuelPurchasedUnit: "Lbs" as const,
+        endingFuel: undefined,
+        fuelCost: 0.0,
+        postLegApuTimeDecimal: 0.0,
+      };
+
+      const finalInitialData = {
+        ...defaultValues,
         ...initialData,
-        hobbsTakeOff: initialData.hobbsTakeOff === null ? undefined : initialData.hobbsTakeOff,
-        hobbsLanding: initialData.hobbsLanding === null ? undefined : initialData.hobbsLanding,
-      });
-    } else if (isOpen && !initialData) {
-      form.reset(); 
+        hobbsTakeOff: initialData?.hobbsTakeOff === null ? undefined : initialData?.hobbsTakeOff,
+        hobbsLanding: initialData?.hobbsLanding === null ? undefined : initialData?.hobbsLanding,
+      };
+      
+      form.reset(finalInitialData);
     }
   }, [isOpen, initialData, form]);
 
