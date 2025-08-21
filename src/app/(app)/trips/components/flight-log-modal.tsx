@@ -22,7 +22,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Loader2, Save, Users } from 'lucide-react';
 import { FlightLogLegDataSchema, type FlightLogLegData, approachTypes, fuelUnits } from '@/ai/schemas/flight-log-schemas';
-import { differenceInMinutes, parse as parseTime, setHours, setMinutes } from 'date-fns';
+import { differenceInMinutes, parse as parseTime, setHours, setMinutes, addMinutes, format as formatDate } from 'date-fns';
 
 interface FlightLogModalProps {
   isOpen: boolean;
@@ -100,6 +100,22 @@ export function FlightLogModal({
     "taxiOutTimeMins", "taxiInTimeMins",
     "fobStartingFuel", "fuelPurchasedAmount", "endingFuel"
   ]);
+
+  // Effect to auto-calculate landing time from Hobbs
+  useEffect(() => {
+    if (typeof hobbsTakeOff === 'number' && typeof hobbsLanding === 'number' && hobbsLanding > hobbsTakeOff) {
+      const flightTimeDecimal = hobbsLanding - hobbsTakeOff;
+      const flightTimeMinutes = Math.round(flightTimeDecimal * 60);
+      try {
+        const takeOffDate = parseTime(takeOffTimeStr, "HH:mm", new Date());
+        const landingDate = addMinutes(takeOffDate, flightTimeMinutes);
+        setValue('landingTime', formatDate(landingDate, "HH:mm"));
+      } catch (e) {
+        console.warn("Could not parse take-off time to auto-calculate landing time.");
+      }
+    }
+  }, [hobbsLanding, hobbsTakeOff, takeOffTimeStr, setValue]);
+
 
   const calculatedFlightTimeDecimal = useMemo(() => {
     try {
